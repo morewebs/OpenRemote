@@ -1,2 +1,27 @@
+bin/
+*.exe
+data/
 ref/
+graphify-out/
+node_modules/
+dist/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.openremote/
+.env
+.env.local
+.env.*.local
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
 
