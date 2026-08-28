@@ -1,0 +1,17 @@
+{
+  "batch_num": 14,
+  "start_index": 131,
+  "end_index": 131,
+  "commits": [
+    {
+      "hash": "46494279f514d7116b08311c32dd6a1c510a6f7a",
+      "short_hash": "46494279",
+      "author": "T\u00f9ng L\u00e2m Nguy\u1ec5n B\u00e1",
+      "date": "2026-05-09 18:43:08 +0700",
+      "subject": "Update README.md",
+      "body": "",
+      "stat": "4649427 Update README.md\n README.md | 4 ++--\n 1 file changed, 2 insertions(+), 2 deletions(-)",
+      "diff": "diff --git a/README.md b/README.md\nindex 37fce9d..4e544b7 100644\n--- a/README.md\n+++ b/README.md\n@@ -2,8 +2,8 @@\n   <img src=\"docs/assets/header.png\" alt=\"agents-ui \u2014 visualize your Claude Code\" width=\"720\" />\n </p>\n \n-<h1 align=\"center\">Claude Code Agents UI <br/>\n-  (aka Claude Code Managements Studio)</h1>\n+<h1 align=\"center\">Claude Code CLI UI <br/>\n+  (aka Claude Code Agents Management Studio)</h1>\n \n <p align=\"center\">\n   <a href=\"#quickstart\"><strong>Quickstart</strong></a> &middot;\n"
+    }
+  ]
+}

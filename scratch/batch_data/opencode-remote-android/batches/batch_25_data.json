@@ -1,0 +1,107 @@
+{
+  "batch_num": 25,
+  "start_index": 241,
+  "end_index": 250,
+  "commits": [
+    {
+      "hash": "3646f5f4ca39bfa5e7f340962743df75f7bfd569",
+      "short_hash": "3646f5f4",
+      "author": "Giulio Ardoino",
+      "date": "2026-07-27 13:57:11 +0200",
+      "subject": "docs: refresh the README screenshots",
+      "body": "The pair in the README was from 1 June and predated most of what the app\nnow looks like. The new shots carry the harness badge in the header, the\nsession cards' relative timestamps and rename/delete actions, the\nAI/Details context chips, a collapsed reasoning bubble, the working\nindicator with the composer's stop button, and the jump-to-end control.",
+      "stat": "3646f5f docs: refresh the README screenshots\n docs/screenshots/detail.jpg   | Bin 615037 -> 387585 bytes\n docs/screenshots/sessions.jpg | Bin 513344 -> 526610 bytes\n 2 files changed, 0 insertions(+), 0 deletions(-)",
+      "diff": "diff --git a/docs/screenshots/detail.jpg b/docs/screenshots/detail.jpg\nindex 76ebc44..dd3248d 100644\nBinary files a/docs/screenshots/detail.jpg and b/docs/screenshots/detail.jpg differ\ndiff --git a/docs/screenshots/sessions.jpg b/docs/screenshots/sessions.jpg\nindex 53d5d24..7420891 100644\nBinary files a/docs/screenshots/sessions.jpg and b/docs/screenshots/sessions.jpg differ\n"
+    },
+    {
+      "hash": "73628897b8ecd9497ac9484b18bfaf7d4f0e9556",
+      "short_hash": "73628897",
+      "author": "giuliastro",
+      "date": "2026-07-27 14:03:13 +0200",
+      "subject": "Merge pull request #63 from giuliastro/docs/refresh-screenshots",
+      "body": "docs: refresh the README screenshots",
+      "stat": "7362889 Merge pull request #63 from giuliastro/docs/refresh-screenshots\n\n docs/screenshots/detail.jpg   | Bin 615037 -> 387585 bytes\n docs/screenshots/sessions.jpg | Bin 513344 -> 526610 bytes\n 2 files changed, 0 insertions(+), 0 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "4fc5a19e966eb0be78498e0e176628ebfa9d8f75",
+      "short_hash": "4fc5a19e",
+      "author": "Giulio Ardoino",
+      "date": "2026-07-27 14:05:45 +0200",
+      "subject": "docs: render both README screenshots at the same size",
+      "body": "The two screenshots are the same 1220x2712, but the README showed the\nright one about 3.5% smaller. GitHub sizes markdown table columns from\ntheir content, and \"Sessions\" is a wider heading than \"Detail\", so its\ncolumn took 418px against 404px and each bare image scaled to fill\nwhichever column it landed in.\n\nPinning the two columns to 50% is what actually fixes it. A fixed width\non the images equalises the desktop view but not a phone: GitHub's\nmax-width: 100% still clamps each image to its own unequal cell, which\nput them 13px apart again at a 420px viewport. Explicit columns hold at\nevery width, and the images keep scaling down responsively inside them.\n\nBoth also gain the alt text that the bare ![]() form never had.",
+      "stat": "4fc5a19 docs: render both README screenshots at the same size\n README.md | 19 ++++++++++++++++---\n 1 file changed, 16 insertions(+), 3 deletions(-)",
+      "diff": "diff --git a/README.md b/README.md\nindex 5aa7660..3efb369 100644\n--- a/README.md\n+++ b/README.md\n@@ -22,9 +22,22 @@ Support levels differ by what each harness exposes. The [OpenCode](#opencode-ser\n \n ## Screenshots\n \n-| Sessions | Detail |\n-|---|---|\n-| ![](docs/screenshots/sessions.jpg) | ![](docs/screenshots/detail.jpg) |\n+<!-- A raw table with 50% columns, rather than a markdown one: GitHub sizes markdown table columns\n+     from their content, and \"Sessions\" is a wider heading than \"Detail\", so that column took ~14px\n+     more and each screenshot scaled to fill whichever column it landed in \u2014 the right one rendered\n+     visibly smaller. Pinning the columns keeps the pair identical at any viewport width, which a\n+     fixed width on the images alone does not: max-width: 100% still clamps each to its own cell. -->\n+\n+<table>\n+  <tr>\n+    <th width=\"50%\">Sessions</th>\n+    <th width=\"50%\">Detail</th>\n+  </tr>\n+  <tr>\n+    <td><img src=\"docs/screenshots/sessions.jpg\" alt=\"Sessions list showing connection status, session cards with relative timestamps, and rename and delete actions\"></td>\n+    <td><img src=\"docs/screenshots/detail.jpg\" alt=\"Session detail showing the model chip, a collapsed reasoning bubble, an assistant reply, and the composer\"></td>\n+  </tr>\n+</table>\n \n ## What It Can Do\n \n"
+    },
+    {
+      "hash": "af241b6fd01f961bd981781c7b8b929d2061dd42",
+      "short_hash": "af241b6f",
+      "author": "Giulio Ardoino",
+      "date": "2026-07-27 14:08:18 +0200",
+      "subject": "docs: drop the hand-kept contributors list",
+      "body": "GitHub already builds this from the commit history, and the repo sidebar\nlinks it. A hand-maintained copy of the same four avatars only adds a\nplace to forget the fifth: the list had gone stale before, and nothing\nmakes it fail loudly when it does.",
+      "stat": "af241b6 docs: drop the hand-kept contributors list\n README.md | 7 -------\n 1 file changed, 7 deletions(-)",
+      "diff": "diff --git a/README.md b/README.md\nindex 3efb369..7d402bd 100644\n--- a/README.md\n+++ b/README.md\n@@ -342,10 +342,3 @@ The app is not limited to LAN. You can also use it over WAN/VPN if your network\n \n Setup, the checks CI expects, how the regression suites work, and the rules that every change has to\n hold on more than one harness and in both layouts are all in [CONTRIBUTING.md](CONTRIBUTING.md).\n-\n-## Contributors\n-\n-<a href=\"https://github.com/giuliastro\"><img src=\"https://github.com/giuliastro.png\" width=\"40\" height=\"40\" alt=\"giuliastro\" title=\"giuliastro\" /></a>\n-<a href=\"https://github.com/gervaso-assistant\"><img src=\"https://github.com/gervaso-assistant.png\" width=\"40\" height=\"40\" alt=\"Gervaso\" title=\"Gervaso\" /></a>\n-<a href=\"https://github.com/ergs0204\"><img src=\"https://github.com/ergs0204.png\" width=\"40\" height=\"40\" alt=\"Eric-Yeh\" title=\"Eric-Yeh\" /></a>\n-<a href=\"https://github.com/birabittoh\"><img src=\"https://github.com/birabittoh.png\" width=\"40\" height=\"40\" alt=\"birabittoh\" title=\"birabittoh\" /></a>\n"
+    },
+    {
+      "hash": "5cce58c40c5ed3451ab1cac7508789fbea949d6f",
+      "short_hash": "5cce58c4",
+      "author": "giuliastro",
+      "date": "2026-07-27 14:08:47 +0200",
+      "subject": "Merge pull request #64 from giuliastro/docs/equal-screenshot-widths",
+      "body": "docs: even out the README screenshots, drop the hand-kept contributors list",
+      "stat": "5cce58c Merge pull request #64 from giuliastro/docs/equal-screenshot-widths\n\n README.md | 26 ++++++++++++++++----------\n 1 file changed, 16 insertions(+), 10 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "1aff32b5bf38829eefd1c0ed432bb60541fd6d8e",
+      "short_hash": "1aff32b5",
+      "author": "Giulio Ardoino",
+      "date": "2026-07-27 14:15:29 +0200",
+      "subject": "ci: credit contributors in release notes instead of the merge",
+      "body": "generate_release_notes listed one line per pull request, each ending in\n\"by @<whoever merged it>\". On this repo that is almost always the\nmaintainer, so the notes read as though the maintainer wrote the desktop\nlayout and everything else, and the people who actually contributed\nappeared as two lines among ten.\n\nCI cannot tell a contribution from the merge that landed it, so it no\nlonger guesses. The annotated tag message \u2014 already written by hand at\nrelease time, and already carrying a credits line in v2.2.0 and v2.3.0 \u2014\nbecomes the release body, with the build notes and a full changelog link\nappended for anyone who wants commit-level detail.\n\nCheckout needs full history for this: the tag annotation and the previous\ntag are both absent from a depth-1 clone. A tag with no annotation body\nyields a terse release rather than a failed one.\n\nCONTRIBUTING gains a \"Cutting a release\" section stating the convention,\nsince it is now a judgement call rather than something the tooling does.",
+      "stat": "1aff32b ci: credit contributors in release notes instead of the merge\n .github/workflows/android-apk.yml | 48 ++++++++++++++++++++++++++++++++-------\n CONTRIBUTING.md                   | 21 +++++++++++++++++\n 2 files changed, 61 insertions(+), 8 deletions(-)",
+      "diff": "diff --git a/.github/workflows/android-apk.yml b/.github/workflows/android-apk.yml\nindex 7986e8e..1e5efad 100644\n--- a/.github/workflows/android-apk.yml\n+++ b/.github/workflows/android-apk.yml\n@@ -23,6 +23,10 @@ jobs:\n     steps:\n       - name: Checkout\n         uses: actions/checkout@v4\n+        with:\n+          # Release notes are built from the tag's own annotation and the tag before it, and a\n+          # depth-1 clone has neither.\n+          fetch-depth: 0\n \n       - name: Setup Node.js\n         uses: actions/setup-node@v4\n@@ -155,6 +159,40 @@ jobs:\n           name: harness-remote-release-apk-v${{ steps.version.outputs.app_version }}\n           path: ${{ steps.apk.outputs.path }}\n \n+      # The release summary and its credits come from the annotated tag message, written by hand when\n+      # the release is cut. generate_release_notes is deliberately off: it lists one line per pull\n+      # request attributed to whoever merged it, which credits the maintainer for work contributors\n+      # did. CI cannot tell those apart, so it does not try \u2014 it publishes the curated text and links\n+      # the full changelog for anyone who wants the commit-level detail.\n+      - name: Compose release notes\n+        id: notes\n+        if: startsWith(github.ref, 'refs/tags/v')\n+        run: |\n+          SUMMARY=$(git tag -l --format='%(contents:body)' \"$GITHUB_REF_NAME\")\n+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 --exclude=\"$GITHUB_REF_NAME\" 2>/dev/null || true)\n+          {\n+            echo 'body<<HARNESS_RELEASE_NOTES_EOF'\n+            echo '## Release'\n+            echo\n+            echo \"Stable Android release APK for Harness Remote \\`${{ steps.version.outputs.app_version }}\\`.\"\n+            # A lightweight tag, or an annotation with only a subject line, leaves this empty. Better a\n+            # terse release than a failed one, so it is skipped rather than treated as an error.\n+            if [ -n \"$SUMMARY\" ]; then\n+              echo\n+              echo \"$SUMMARY\"\n+            fi\n+            echo\n+            echo '## Notes'\n+            echo\n+            echo \"- Built from \\`$GITHUB_SHA\\`\"\n+            echo \"- Version code \\`${{ steps.version.outputs.version_code }}\\`\"\n+            if [ -n \"$PREVIOUS_TAG\" ]; then\n+              echo\n+              echo \"**Full changelog**: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/$PREVIOUS_TAG...$GITHUB_REF_NAME\"\n+            fi\n+            echo 'HARNESS_RELEASE_NOTES_EOF'\n+          } >> \"$GITHUB_OUTPUT\"\n+\n       - name: Publish GitHub release\n         if: startsWith(github.ref, 'refs/tags/v')\n         uses: softprops/action-gh-release@v2\n@@ -162,11 +200,5 @@ jobs:\n           tag_name: ${{ github.ref_name }}\n           name: Harness Remote v${{ steps.version.outputs.app_version }}\n           files: ${{ steps.apk.outputs.path }}\n-          generate_release_notes: true\n-          body: |\n-            ## Release\n-            Stable Android release APK for Harness Remote `${{ steps.version.outputs.app_version }}`.\n-\n-            ## Notes\n-            - Built from `${{ github.sha }}`\n-            - Version code `${{ steps.version.outputs.version_code }}`\n+          generate_release_notes: false\n+          body: ${{ steps.notes.outputs.body }}\ndiff --git a/CONTRIBUTING.md b/CONTRIBUTING.md\nindex d1603e3..c864dd4 100644\n--- a/CONTRIBUTING.md\n+++ b/CONTRIBUTING.md\n@@ -210,6 +210,27 @@ npm run cap:sync:android\n A plain `npx cap sync android` does **not** copy those Java sources into the generated project, so\n your change is silently dropped and the app runs the previous version of the native plugin.\n \n+## Cutting a release\n+\n+Bump `version` in `web/package.json`, commit it as `chore: release vX.Y.Z`, then tag that commit and\n+push both. Everything else \u2014 the version code, the Android metadata, the signed APK, the GitHub\n+release \u2014 is derived from that one field by CI.\n+\n+```bash\n+git tag -a v2.4.0 -F release-notes.txt\n+git push origin main && git push origin v2.4.0\n+```\n+\n+**The tag annotation is the release notes.** CI publishes its body verbatim, so write it for someone\n+deciding whether to update: what changed, then who to thank.\n+\n+**Credit contributors, not the merge.** GitHub's generated notes are switched off deliberately. They\n+list one line per pull request attributed to whoever pressed merge, which on this repo means the\n+maintainer collects credit for work other people did. So do not enumerate pull requests or say who\n+did what task by task. Name the people whose work is in the release, say what they contributed, and\n+give the largest contribution a `Special thanks`. Anyone who wants commit-level detail has the full\n+changelog link that CI appends.\n+\n ## The bridge is a network service\n \n Treat these three areas as security-sensitive and explain your reasoning in the PR when you change\n"
+    },
+    {
+      "hash": "8007bf9c395a76e5ea9c7eb1d554eb3b8d840acf",
+      "short_hash": "8007bf9c",
+      "author": "giuliastro",
+      "date": "2026-07-27 14:16:01 +0200",
+      "subject": "Merge pull request #65 from giuliastro/ci/release-notes-credit-contributors",
+      "body": "ci: credit contributors in release notes instead of the merge",
+      "stat": "8007bf9 Merge pull request #65 from giuliastro/ci/release-notes-credit-contributors\n\n .github/workflows/android-apk.yml | 48 ++++++++++++++++++++++++++++++++-------\n CONTRIBUTING.md                   | 21 +++++++++++++++++\n 2 files changed, 61 insertions(+), 8 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "7dfc0adf8dc667e13f2bbae761969ac520f7d917",
+      "short_hash": "7dfc0adf",
+      "author": "Giulio Ardoino",
+      "date": "2026-07-27 14:22:35 +0200",
+      "subject": "docs: spell out the release notes format, bullets included",
+      "body": "The convention said what to leave out and not what the notes look like, so\nthe first pass at it replaced the changelog bullets with prose paragraphs.\nOnly the \"by @someone in <pull request>\" tail was ever the problem: the\nbullet list itself is the format we want, for the changes and for the\ncredits.\n\nGives the section a template of the two headings CI wraps, so the next\nrelease does not have to infer the shape from a rule about attribution.",
+      "stat": "7dfc0ad docs: spell out the release notes format, bullets included\n CONTRIBUTING.md | 31 ++++++++++++++++++++++++-------\n 1 file changed, 24 insertions(+), 7 deletions(-)",
+      "diff": "diff --git a/CONTRIBUTING.md b/CONTRIBUTING.md\nindex c864dd4..7424892 100644\n--- a/CONTRIBUTING.md\n+++ b/CONTRIBUTING.md\n@@ -221,15 +221,32 @@ git tag -a v2.4.0 -F release-notes.txt\n git push origin main && git push origin v2.4.0\n ```\n \n-**The tag annotation is the release notes.** CI publishes its body verbatim, so write it for someone\n-deciding whether to update: what changed, then who to thank.\n+**The tag annotation is the release notes.** CI publishes its body verbatim between its own\n+`## Release` heading and the build notes, so write those two sections as bullets and nothing else:\n+\n+```\n+Harness Remote v2.4.0\n+\n+## What's Changed\n+\n+* One line per user-visible change, most interesting first\n+* No \"by @someone\", no pull request numbers\n+\n+## Contributors\n+\n+* **Special thanks to [@handle](https://github.com/handle)** (Real Name) \u2014 what they built, and why it stands out\n+* [@handle](https://github.com/handle) (Real Name) \u2014 what they contributed\n+```\n+\n+The first line is the subject and is dropped from the body, so it can repeat the version.\n \n **Credit contributors, not the merge.** GitHub's generated notes are switched off deliberately. They\n-list one line per pull request attributed to whoever pressed merge, which on this repo means the\n-maintainer collects credit for work other people did. So do not enumerate pull requests or say who\n-did what task by task. Name the people whose work is in the release, say what they contributed, and\n-give the largest contribution a `Special thanks`. Anyone who wants commit-level detail has the full\n-changelog link that CI appends.\n+list one bullet per pull request ending in `by @<whoever pressed merge>`, which on this repo means\n+the maintainer collects credit for work other people did \u2014 v2.3.0 read as though the maintainer had\n+written the desktop layout. Keep the bullets; they are the right format. Just describe the change and\n+stop there. Then name the people whose work is in the release, say what each contributed, and give\n+the largest contribution a `Special thanks`. Anyone who wants it attributed commit by commit has the\n+full changelog link that CI appends.\n \n ## The bridge is a network service\n \n"
+    },
+    {
+      "hash": "79bdffde6545f95c5edbae420f37dbb43245f202",
+      "short_hash": "79bdffde",
+      "author": "giuliastro",
+      "date": "2026-07-27 14:22:49 +0200",
+      "subject": "Merge pull request #66 from giuliastro/docs/release-notes-format",
+      "body": "docs: spell out the release notes format, bullets included",
+      "stat": "79bdffd Merge pull request #66 from giuliastro/docs/release-notes-format\n\n CONTRIBUTING.md | 31 ++++++++++++++++++++++++-------\n 1 file changed, 24 insertions(+), 7 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "25cacf833929afe28076a914d66c9bb8426c1645",
+      "short_hash": "25cacf83",
+      "author": "Baylar55",
+      "date": "2026-07-27 18:09:42 +0400",
+      "subject": "fix: prevent long session titles from breaking layout",
+      "body": "",
+      "stat": "25cacf8 fix: prevent long session titles from breaking layout\n web/src/styles.css             | 6 ++++++\n web/src/ui-regression.test.mjs | 2 ++\n 2 files changed, 8 insertions(+)",
+      "diff": "diff --git a/web/src/styles.css b/web/src/styles.css\nindex 72686c5..af00480 100644\n--- a/web/src/styles.css\n+++ b/web/src/styles.css\n@@ -526,8 +526,14 @@ p {\n   grid-template-columns: minmax(0, 1fr);\n   align-items: start;\n   gap: var(--space-3);\n+  min-width: 0;\n }\n \n+.session-card h3 {\n+  overflow: hidden;\n+  text-overflow: ellipsis;\n+  white-space: nowrap;\n+}\n .session-card-main p,\n .session-card > p {\n   margin-top: var(--space-1);\ndiff --git a/web/src/ui-regression.test.mjs b/web/src/ui-regression.test.mjs\nindex 4edde65..eb0e1ae 100644\n--- a/web/src/ui-regression.test.mjs\n+++ b/web/src/ui-regression.test.mjs\n@@ -10,6 +10,8 @@ const refreshButton = app.match(/<button onClick=\\{refreshSessionsWithIndicator\\\n assert.ok(refreshButton, 'sessions refresh button should call refreshSessionsWithIndicator')\n assert.ok(refreshButton[0].includes('RefreshIcon'), 'idle sessions refresh button should render a non-spinning RefreshIcon')\n assert.ok(refreshButton[0].includes('refreshingSessions ? <LoadingIcon'), 'refresh button should spin only during an active manual refresh')\n+assert.match(styles, /\\.session-card-main\\s*\\{[\\s\\S]*?min-width:\\s*0;/, 'session card content should be allowed to shrink inside narrow layouts')\n+assert.match(styles, /\\.session-card h3\\s*\\{[\\s\\S]*?overflow:\\s*hidden;[\\s\\S]*?text-overflow:\\s*ellipsis;[\\s\\S]*?white-space:\\s*nowrap;/, 'long session titles should stay within their card and show an ellipsis')\n \n assert.ok(app.includes('messageScrollSignature'), 'conversation auto-scroll should react to message content changes, not only message count')\n assert.ok(\n"
+    }
+  ]
+}

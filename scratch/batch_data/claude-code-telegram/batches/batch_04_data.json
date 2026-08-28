@@ -1,0 +1,107 @@
+{
+  "batch_num": 4,
+  "start_index": 31,
+  "end_index": 40,
+  "commits": [
+    {
+      "hash": "cd9642dee0be8a99bd53a65336778fe10145dce1",
+      "short_hash": "cd9642de",
+      "author": "Richard A",
+      "date": "2026-02-09 18:47:13 +0200",
+      "subject": "Merge pull request #17 from kkuehlz/fix/env-list-validators",
+      "body": "Fix env list validators for single values and missing tools parser",
+      "stat": "cd9642d Merge pull request #17 from kkuehlz/fix/env-list-validators\n\n src/config/settings.py | 18 ++++++++++++++++++\n 1 file changed, 18 insertions(+)",
+      "diff": ""
+    },
+    {
+      "hash": "c9559d103361acdf7dd1660ed1a3278bb3a483fb",
+      "short_hash": "c9559d10",
+      "author": "Richard A",
+      "date": "2026-02-09 18:47:15 +0200",
+      "subject": "Merge pull request #12 from michaelansel/docs/systemd-setup",
+      "body": "docs: add comprehensive systemd setup guide",
+      "stat": "c9559d1 Merge pull request #12 from michaelansel/docs/systemd-setup\n\n SYSTEMD_SETUP.md | 148 +++++++++++++++++++++++++++++++++++++++++++++++++++++++\n 1 file changed, 148 insertions(+)",
+      "diff": ""
+    },
+    {
+      "hash": "4f7eaceeaed850346453636f2db539fb85477908",
+      "short_hash": "4f7eacee",
+      "author": "Richard A",
+      "date": "2026-02-09 18:54:32 +0200",
+      "subject": "Merge pull request #10 from michaelansel/fix/error-message-escaping",
+      "body": "fix: escape markdown in error messages for Telegram",
+      "stat": "4f7eace Merge pull request #10 from michaelansel/fix/error-message-escaping\n\n src/bot/handlers/message.py | 9 ++++++++-\n 1 file changed, 8 insertions(+), 1 deletion(-)",
+      "diff": ""
+    },
+    {
+      "hash": "d0ce16fdf6f94e8eed2de305ac7287aa59824dfb",
+      "short_hash": "d0ce16fd",
+      "author": "Richard A",
+      "date": "2026-02-09 18:54:35 +0200",
+      "subject": "Merge pull request #9 from michaelansel/fix/ls-markdown-escaping",
+      "body": "fix: escape markdown special characters in /ls command",
+      "stat": "d0ce16f Merge pull request #9 from michaelansel/fix/ls-markdown-escaping\n\n src/bot/handlers/callback.py | 18 +++++++++++++++---\n src/bot/handlers/command.py  | 18 +++++++++++++++---\n 2 files changed, 30 insertions(+), 6 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "6676217a9e0b78d0ee3338c31e2b9e07f75bda28",
+      "short_hash": "6676217a",
+      "author": "Richard A",
+      "date": "2026-02-09 18:54:39 +0200",
+      "subject": "Merge pull request #8 from michaelansel/fix/empty-response-fallback",
+      "body": "fix: add fallback for empty response content",
+      "stat": "6676217 Merge pull request #8 from michaelansel/fix/empty-response-fallback\n\n src/claude/integration.py | 20 +++++++++++++++++++-\n 1 file changed, 19 insertions(+), 1 deletion(-)",
+      "diff": ""
+    },
+    {
+      "hash": "0283c6f2d581bac5cf138bb0a8c9aa32d0e96de6",
+      "short_hash": "0283c6f2",
+      "author": "Richard A",
+      "date": "2026-02-09 18:53:41 +0200",
+      "subject": "Add CLAUDE.md for Claude Code guidance",
+      "body": "Provides build/test/lint commands, architecture overview covering the\ndual SDK/CLI integration, request flow, security model, configuration,\nand common extension patterns.",
+      "stat": "0283c6f Add CLAUDE.md for Claude Code guidance\n CLAUDE.md | 90 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n 1 file changed, 90 insertions(+)",
+      "diff": "diff --git a/CLAUDE.md b/CLAUDE.md\nnew file mode 100644\nindex 0000000..f39e33a\n--- /dev/null\n+++ b/CLAUDE.md\n@@ -0,0 +1,90 @@\n+# CLAUDE.md\n+\n+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.\n+\n+## Project Overview\n+\n+Telegram bot providing remote access to Claude Code. Python 3.10+, built with Poetry, using `python-telegram-bot` for Telegram and `claude-agent-sdk` for Claude Code integration.\n+\n+## Commands\n+\n+```bash\n+make dev              # Install all deps (including dev)\n+make install          # Production deps only\n+make run              # Run the bot\n+make run-debug        # Run with debug logging\n+make test             # Run tests with coverage\n+make lint             # Black + isort + flake8 + mypy\n+make format           # Auto-format with black + isort\n+\n+# Run a single test\n+poetry run pytest tests/unit/test_config.py -k test_name -v\n+\n+# Type checking only\n+poetry run mypy src\n+```\n+\n+## Architecture\n+\n+### Dual Claude Integration (SDK primary, CLI fallback)\n+\n+`ClaudeIntegration` (facade in `src/claude/facade.py`) wraps two backends:\n+- **`ClaudeSDKManager`** (`src/claude/sdk_integration.py`) \u2014 Primary. Uses `claude-agent-sdk` async `query()` with streaming. Session IDs come from Claude's `ResultMessage`, not generated locally.\n+- **`ClaudeProcessManager`** (`src/claude/integration.py`) \u2014 Legacy CLI subprocess fallback. Used when SDK fails with JSON decode or TaskGroup errors.\n+\n+Sessions auto-resume: per user+directory, persisted in SQLite, temporary IDs (`temp_*`) are never sent to Claude for resume.\n+\n+### Request Flow\n+\n+```\n+Telegram message \u2192 Security middleware (group -3) \u2192 Auth middleware (group -2)\n+\u2192 Rate limit (group -1) \u2192 Command/Message handler (group 10)\n+\u2192 ClaudeIntegration.run_command() \u2192 SDK (with CLI fallback)\n+\u2192 Response parsed \u2192 Stored in SQLite \u2192 Sent back to Telegram\n+```\n+\n+### Dependency Injection\n+\n+Bot handlers access dependencies via `context.bot_data`:\n+```python\n+context.bot_data[\"auth_manager\"]\n+context.bot_data[\"claude_integration\"]\n+context.bot_data[\"storage\"]\n+context.bot_data[\"security_validator\"]\n+```\n+\n+### Key Directories\n+\n+- `src/config/` \u2014 Pydantic Settings v2 config with env detection, feature flags (`features.py`)\n+- `src/bot/handlers/` \u2014 Telegram command, message, and callback handlers\n+- `src/bot/middleware/` \u2014 Auth, rate limit, security input validation\n+- `src/bot/features/` \u2014 Git integration, file handling, quick actions, session export\n+- `src/claude/` \u2014 Claude integration facade, SDK/CLI managers, session management, tool monitoring\n+- `src/storage/` \u2014 SQLite via aiosqlite, repository pattern (users, sessions, messages, tool_usage, audit_log, cost_tracking)\n+- `src/security/` \u2014 Multi-provider auth (whitelist + token), input validators, rate limiter, audit logging\n+\n+### Security Model\n+\n+5-layer defense: authentication (whitelist/token) \u2192 directory isolation (APPROVED_DIRECTORY + path traversal prevention) \u2192 input validation (blocks `..`, `;`, `&&`, `$()`, etc.) \u2192 rate limiting (token bucket) \u2192 audit logging.\n+\n+`SecurityValidator` blocks access to secrets (`.env`, `.ssh`, `id_rsa`, `.pem`) and dangerous shell patterns.\n+\n+### Configuration\n+\n+Settings loaded from environment variables via Pydantic Settings. Required: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `APPROVED_DIRECTORY`. Key optional: `ALLOWED_USERS` (comma-separated Telegram IDs), `USE_SDK` (default true), `ANTHROPIC_API_KEY`, `ENABLE_MCP`, `MCP_CONFIG_PATH`.\n+\n+Feature flags in `src/config/features.py` control: MCP, git integration, file uploads, quick actions, session export, image uploads, conversation mode.\n+\n+## Code Style\n+\n+- Black (88 char line length), isort (black profile), flake8, mypy strict\n+- pytest-asyncio with `asyncio_mode = \"auto\"`\n+- structlog for all logging (JSON in prod, console in dev)\n+- Type hints required on all functions (`disallow_untyped_defs = true`)\n+\n+## Adding a New Bot Command\n+\n+1. Add handler function in `src/bot/handlers/command.py`\n+2. Register in `src/bot/core.py` `_register_handlers()`\n+3. Add to `_set_bot_commands()` for Telegram's command menu\n+4. Add audit logging for the command\n"
+    },
+    {
+      "hash": "ffa3164063624f2c218b59b99c05eb33ee8bb8ed",
+      "short_hash": "ffa31640",
+      "author": "Richard A",
+      "date": "2026-02-09 19:57:31 +0200",
+      "subject": "Merge pull request #7 from michaelansel/fix/continue-command",
+      "body": "fix: resolve /continue command errors",
+      "stat": "ffa3164 Merge pull request #7 from michaelansel/fix/continue-command\n\n src/bot/handlers/command.py | 16 ++++++++++------\n src/claude/facade.py        | 11 +++++++----\n 2 files changed, 17 insertions(+), 10 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "ed0a3d6cadbba3e38873882f3254e032000150cb",
+      "short_hash": "ed0a3d6c",
+      "author": "Richard A",
+      "date": "2026-02-13 16:27:20 +0400",
+      "subject": "\"Claude PR Assistant workflow\"",
+      "body": "",
+      "stat": "ed0a3d6 \"Claude PR Assistant workflow\"\n .github/workflows/claude.yml | 50 ++++++++++++++++++++++++++++++++++++++++++++\n 1 file changed, 50 insertions(+)",
+      "diff": "diff --git a/.github/workflows/claude.yml b/.github/workflows/claude.yml\nnew file mode 100644\nindex 0000000..d300267\n--- /dev/null\n+++ b/.github/workflows/claude.yml\n@@ -0,0 +1,50 @@\n+name: Claude Code\n+\n+on:\n+  issue_comment:\n+    types: [created]\n+  pull_request_review_comment:\n+    types: [created]\n+  issues:\n+    types: [opened, assigned]\n+  pull_request_review:\n+    types: [submitted]\n+\n+jobs:\n+  claude:\n+    if: |\n+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||\n+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||\n+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||\n+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))\n+    runs-on: ubuntu-latest\n+    permissions:\n+      contents: read\n+      pull-requests: read\n+      issues: read\n+      id-token: write\n+      actions: read # Required for Claude to read CI results on PRs\n+    steps:\n+      - name: Checkout repository\n+        uses: actions/checkout@v4\n+        with:\n+          fetch-depth: 1\n+\n+      - name: Run Claude Code\n+        id: claude\n+        uses: anthropics/claude-code-action@v1\n+        with:\n+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}\n+\n+          # This is an optional setting that allows Claude to read CI results on PRs\n+          additional_permissions: |\n+            actions: read\n+\n+          # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.\n+          # prompt: 'Update the pull request description to include a summary of changes.'\n+\n+          # Optional: Add claude_args to customize behavior and configuration\n+          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md\n+          # or https://code.claude.com/docs/en/cli-reference for available options\n+          # claude_args: '--allowed-tools Bash(gh pr:*)'\n+\n"
+    },
+    {
+      "hash": "27cf914e6751c30392dfbf43bd6d15d2eda6ba5e",
+      "short_hash": "27cf914e",
+      "author": "Richard A",
+      "date": "2026-02-13 16:27:21 +0400",
+      "subject": "\"Claude Code Review workflow\"",
+      "body": "",
+      "stat": "27cf914 \"Claude Code Review workflow\"\n .github/workflows/claude-code-review.yml | 44 ++++++++++++++++++++++++++++++++\n 1 file changed, 44 insertions(+)",
+      "diff": "diff --git a/.github/workflows/claude-code-review.yml b/.github/workflows/claude-code-review.yml\nnew file mode 100644\nindex 0000000..b5e8cfd\n--- /dev/null\n+++ b/.github/workflows/claude-code-review.yml\n@@ -0,0 +1,44 @@\n+name: Claude Code Review\n+\n+on:\n+  pull_request:\n+    types: [opened, synchronize, ready_for_review, reopened]\n+    # Optional: Only run on specific file changes\n+    # paths:\n+    #   - \"src/**/*.ts\"\n+    #   - \"src/**/*.tsx\"\n+    #   - \"src/**/*.js\"\n+    #   - \"src/**/*.jsx\"\n+\n+jobs:\n+  claude-review:\n+    # Optional: Filter by PR author\n+    # if: |\n+    #   github.event.pull_request.user.login == 'external-contributor' ||\n+    #   github.event.pull_request.user.login == 'new-developer' ||\n+    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'\n+\n+    runs-on: ubuntu-latest\n+    permissions:\n+      contents: read\n+      pull-requests: read\n+      issues: read\n+      id-token: write\n+\n+    steps:\n+      - name: Checkout repository\n+        uses: actions/checkout@v4\n+        with:\n+          fetch-depth: 1\n+\n+      - name: Run Claude Code Review\n+        id: claude-review\n+        uses: anthropics/claude-code-action@v1\n+        with:\n+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}\n+          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'\n+          plugins: 'code-review@claude-code-plugins'\n+          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'\n+          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md\n+          # or https://code.claude.com/docs/en/cli-reference for available options\n+\n"
+    },
+    {
+      "hash": "dd9eb893b5f2d2a682a7c94f6440897dc946e07a",
+      "short_hash": "dd9eb893",
+      "author": "Richard A",
+      "date": "2026-02-13 16:27:41 +0400",
+      "subject": "Merge pull request #20 from RichardAtCT/add-claude-github-actions-1770985637138",
+      "body": "Add Claude Code GitHub Workflow",
+      "stat": "dd9eb89 Merge pull request #20 from RichardAtCT/add-claude-github-actions-1770985637138\n\n .github/workflows/claude-code-review.yml | 44 ++++++++++++++++++++++++++++\n .github/workflows/claude.yml             | 50 ++++++++++++++++++++++++++++++++\n 2 files changed, 94 insertions(+)",
+      "diff": ""
+    }
+  ]
+}

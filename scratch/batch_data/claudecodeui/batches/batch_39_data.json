@@ -1,0 +1,107 @@
+{
+  "batch_num": 39,
+  "start_index": 381,
+  "end_index": 390,
+  "commits": [
+    {
+      "hash": "e85cc746b1289a71be6dc025334cf6304b102c67",
+      "short_hash": "e85cc746",
+      "author": "YuanNiancai",
+      "date": "2026-01-22 15:24:27 +0800",
+      "subject": "fix: add missing translation",
+      "body": "",
+      "stat": "e85cc74 fix: add missing translation\n src/components/Shell.jsx         | 2 +-\n src/i18n/locales/en/chat.json    | 3 ++-\n src/i18n/locales/zh-CN/chat.json | 3 ++-\n 3 files changed, 5 insertions(+), 3 deletions(-)",
+      "diff": "diff --git a/src/components/Shell.jsx b/src/components/Shell.jsx\nindex 5cee346..a549ba9 100644\n--- a/src/components/Shell.jsx\n+++ b/src/components/Shell.jsx\n@@ -483,7 +483,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell\n               </div>\n               <p className=\"text-gray-400 text-sm mt-3 px-2\">\n                 {isPlainShell ?\n-                  t('shell.runCommand', { command: initialCommand || 'command', projectName: selectedProject.displayName }) :\n+                  t('shell.runCommand', { command: initialCommand || t('shell.defaultCommand'), projectName: selectedProject.displayName }) :\n                   t('shell.startCli', { projectName: selectedProject.displayName })\n                 }\n               </p>\ndiff --git a/src/i18n/locales/en/chat.json b/src/i18n/locales/en/chat.json\nindex 6cada03..663c139 100644\n--- a/src/i18n/locales/en/chat.json\n+++ b/src/i18n/locales/en/chat.json\n@@ -199,6 +199,7 @@\n     \"startSession\": \"Start a new Claude session\",\n     \"resumeSession\": \"Resume session: {{displayName}}...\",\n     \"runCommand\": \"Run {{command}} in {{projectName}}\",\n-    \"startCli\": \"Starting Claude CLI in {{projectName}}\"\n+    \"startCli\": \"Starting Claude CLI in {{projectName}}\",\n+    \"defaultCommand\": \"command\"\n   }\n }\ndiff --git a/src/i18n/locales/zh-CN/chat.json b/src/i18n/locales/zh-CN/chat.json\nindex a6d9cd0..2d52ba4 100644\n--- a/src/i18n/locales/zh-CN/chat.json\n+++ b/src/i18n/locales/zh-CN/chat.json\n@@ -199,6 +199,7 @@\n     \"startSession\": \"\u542f\u52a8\u65b0\u7684 Claude \u4f1a\u8bdd\",\n     \"resumeSession\": \"\u6062\u590d\u4f1a\u8bdd\uff1a{{displayName}}...\",\n     \"runCommand\": \"\u5728 {{projectName}} \u4e2d\u8fd0\u884c {{command}}\",\n-    \"startCli\": \"\u5728 {{projectName}} \u4e2d\u542f\u52a8 Claude CLI\"\n+    \"startCli\": \"\u5728 {{projectName}} \u4e2d\u542f\u52a8 Claude CLI\",\n+    \"defaultCommand\": \"\u547d\u4ee4\"\n   }\n }\n"
+    },
+    {
+      "hash": "79f7bf9a6315f47481c25395b671feeae156598e",
+      "short_hash": "79f7bf9a",
+      "author": "Haileyesus Dessie",
+      "date": "2026-01-22 12:51:12 +0300",
+      "subject": "fix: use messageContent instead of `input` for Claude command messages",
+      "body": "",
+      "stat": "79f7bf9 fix: use messageContent instead of `input` for Claude command messages\n src/components/ChatInterface.jsx | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)",
+      "diff": "diff --git a/src/components/ChatInterface.jsx b/src/components/ChatInterface.jsx\nindex 3a22238..2d0820f 100644\n--- a/src/components/ChatInterface.jsx\n+++ b/src/components/ChatInterface.jsx\n@@ -4393,7 +4393,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess\n       // Send Claude command (existing code)\n       sendMessage({\n         type: 'claude-command',\n-        command: input,\n+        command: messageContent,\n         options: {\n           projectPath: selectedProject.path,\n           cwd: selectedProject.fullPath,\n"
+    },
+    {
+      "hash": "053d94ab9d4594cf27efc04d1a8ff824850a8c1b",
+      "short_hash": "053d94ab",
+      "author": "viper151",
+      "date": "2026-01-22 11:39:13 +0100",
+      "subject": "Merge pull request #331 from siteboon/fix/turn-on-extended-thinking-mode",
+      "body": "",
+      "stat": "053d94a Merge pull request #331 from siteboon/fix/turn-on-extended-thinking-mode\n\n src/components/ChatInterface.jsx | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)",
+      "diff": ""
+    },
+    {
+      "hash": "cf0f60bc48fa334c38607c87995d070e2b914801",
+      "short_hash": "cf0f60bc",
+      "author": "Haileyesus Dessie",
+      "date": "2026-01-22 13:40:35 +0300",
+      "subject": "fix: handleSubmit useCalback add thinkingMode to dependencies",
+      "body": "",
+      "stat": "cf0f60b fix: handleSubmit useCalback add thinkingMode to dependencies\n src/components/ChatInterface.jsx | 6 +++---\n 1 file changed, 3 insertions(+), 3 deletions(-)",
+      "diff": "diff --git a/src/components/ChatInterface.jsx b/src/components/ChatInterface.jsx\nindex 2d0820f..f04be23 100644\n--- a/src/components/ChatInterface.jsx\n+++ b/src/components/ChatInterface.jsx\n@@ -4361,7 +4361,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess\n       // Send Cursor command (always use cursor-command; include resume/sessionId when replying)\n       sendMessage({\n         type: 'cursor-command',\n-        command: input,\n+        command: messageContent,\n         sessionId: effectiveSessionId,\n         options: {\n           // Prefer fullPath (actual cwd for project), fallback to path\n@@ -4378,7 +4378,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess\n       // Send Codex command\n       sendMessage({\n         type: 'codex-command',\n-        command: input,\n+        command: messageContent,\n         sessionId: effectiveSessionId,\n         options: {\n           cwd: selectedProject.fullPath || selectedProject.path,\n@@ -4423,7 +4423,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess\n     if (selectedProject) {\n       safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);\n     }\n-  }, [input, isLoading, selectedProject, attachedImages, currentSessionId, selectedSession, provider, permissionMode, onSessionActive, cursorModel, claudeModel, codexModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setIsLoading, setCanAbortSession, setClaudeStatus, setIsUserScrolledUp, scrollToBottom]);\n+  }, [input, isLoading, selectedProject, attachedImages, currentSessionId, selectedSession, provider, permissionMode, onSessionActive, cursorModel, claudeModel, codexModel, sendMessage, setInput, setAttachedImages, setUploadingImages, setImageErrors, setIsTextareaExpanded, textareaRef, setChatMessages, setIsLoading, setCanAbortSession, setClaudeStatus, setIsUserScrolledUp, scrollToBottom, thinkingMode]);\n \n   const handleGrantToolPermission = useCallback((suggestion) => {\n     if (!suggestion || provider !== 'claude') {\n"
+    },
+    {
+      "hash": "09f1021c59ff761e3a16c9ad10fb2ab326830c69",
+      "short_hash": "09f1021c",
+      "author": "viper151",
+      "date": "2026-01-22 11:45:27 +0100",
+      "subject": "Merge pull request #332 from siteboon/fix/turn-on-extended-thinking-mode",
+      "body": "",
+      "stat": "09f1021 Merge pull request #332 from siteboon/fix/turn-on-extended-thinking-mode\n\n src/components/ChatInterface.jsx | 6 +++---\n 1 file changed, 3 insertions(+), 3 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "9cd0cfc88f20a10e8db1c7c7edb26243b161ad34",
+      "short_hash": "9cd0cfc8",
+      "author": "YuanNiancai",
+      "date": "2026-01-23 09:26:43 +0800",
+      "subject": "fix: add missing translation",
+      "body": "",
+      "stat": "9cd0cfc fix: add missing translation\n src/components/Shell.jsx | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)",
+      "diff": "diff --git a/src/components/Shell.jsx b/src/components/Shell.jsx\nindex a549ba9..212ed9b 100644\n--- a/src/components/Shell.jsx\n+++ b/src/components/Shell.jsx\n@@ -464,7 +464,7 @@ function Shell({ selectedProject, selectedSession, initialCommand, isPlainShell\n               </button>\n               <p className=\"text-gray-400 text-sm mt-3 px-2\">\n                 {isPlainShell ?\n-                  t('shell.runCommand', { command: initialCommand || 'command', projectName: selectedProject.displayName }) :\n+                  t('shell.runCommand', { command: initialCommand || t('shell.defaultCommand'), projectName: selectedProject.displayName }) :\n                   selectedSession ?\n                     t('shell.resumeSession', { displayName: sessionDisplayNameLong }) :\n                     t('shell.startSession')\n"
+    },
+    {
+      "hash": "e1c67fd5d0f4d6a854129804a675b4ebe22afe9c",
+      "short_hash": "e1c67fd5",
+      "author": "NobitaYuan",
+      "date": "2026-01-23 09:26:58 +0800",
+      "subject": "Merge branch 'main' into feat/add-i18n",
+      "body": "",
+      "stat": "e1c67fd Merge branch 'main' into feat/add-i18n\n\n src/components/ChatInterface.jsx | 8 ++++----\n 1 file changed, 4 insertions(+), 4 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "844677caee967bf66968a56e4ff7f0babe3a1ce0",
+      "short_hash": "844677ca",
+      "author": "YuanNiancai",
+      "date": "2026-01-23 09:27:14 +0800",
+      "subject": "Merge branch 'feat/add-i18n' of https://github.com/NobitaYuan/claudecodeui into feat/add-i18n",
+      "body": "",
+      "stat": "844677c Merge branch 'feat/add-i18n' of https://github.com/NobitaYuan/claudecodeui into feat/add-i18n\n\n src/components/ChatInterface.jsx | 8 ++++----\n 1 file changed, 4 insertions(+), 4 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "9da7c1cbae5875c7e1bd3e09581d651e871c833c",
+      "short_hash": "9da7c1cb",
+      "author": "Haileyesus Dessie",
+      "date": "2026-01-23 15:13:25 +0300",
+      "subject": "Merge pull request #314 from EricBlanquer/feature/delete-project-with-sessions",
+      "body": "feat: allow deleting projects with sessions and add styled confirmation modal",
+      "stat": "9da7c1c Merge pull request #314 from EricBlanquer/feature/delete-project-with-sessions\n\n server/index.js                     |   5 +-\n server/projects.js                  |  68 ++++++++++----\n src/components/Sidebar.jsx          | 175 ++++++++++++++++++++++++++++++------\n src/i18n/locales/en/sidebar.json    |   9 ++\n src/i18n/locales/zh-CN/sidebar.json |   9 ++\n src/utils/api.js                    |   4 +-\n 6 files changed, 222 insertions(+), 48 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "38745bdf856bc9cf7469e546ef9f581b12346aa3",
+      "short_hash": "38745bdf",
+      "author": "Haileyesus Dessie",
+      "date": "2026-01-23 15:26:51 +0300",
+      "subject": "Merge pull request #327 from NobitaYuan/feat/add-i18n",
+      "body": "update: Add translations for more components",
+      "stat": "38745bd Merge pull request #327 from NobitaYuan/feat/add-i18n\n\n README.zh-CN.md                        |  2 +-\n src/App.jsx                            | 46 ++++++++++++++-------------\n src/components/ChatInterface.jsx       | 38 +++++++++++-----------\n src/components/CodeEditor.jsx          | 36 +++++++++++----------\n src/components/QuickSettingsPanel.jsx  | 16 +++++-----\n src/components/Shell.jsx               | 38 +++++++++++-----------\n src/components/Sidebar.jsx             |  6 ++--\n src/i18n/config.js                     |  6 +++-\n src/i18n/locales/en/chat.json          | 58 ++++++++++++++++++++++++++++++++++\n src/i18n/locales/en/codeEditor.json    | 30 ++++++++++++++++++\n src/i18n/locales/en/common.json        | 28 ++++++++++++++++\n src/i18n/locales/en/settings.json      | 19 ++++++++++-\n src/i18n/locales/en/sidebar.json       |  1 +\n src/i18n/locales/zh-CN/chat.json       | 58 ++++++++++++++++++++++++++++++++++\n src/i18n/locales/zh-CN/codeEditor.json | 30 ++++++++++++++++++\n src/i18n/locales/zh-CN/common.json     | 28 ++++++++++++++++\n src/i18n/locales/zh-CN/settings.json   | 19 ++++++++++-\n src/i18n/locales/zh-CN/sidebar.json    |  1 +\n 18 files changed, 369 insertions(+), 91 deletions(-)",
+      "diff": ""
+    }
+  ]
+}

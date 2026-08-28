@@ -1,0 +1,107 @@
+{
+  "batch_num": 40,
+  "start_index": 391,
+  "end_index": 400,
+  "commits": [
+    {
+      "hash": "dab089b29f2e6bbabe961744e4e6bee1426fa175",
+      "short_hash": "dab089b2",
+      "author": "Tim Smith",
+      "date": "2026-01-24 11:21:43 -0800",
+      "subject": "fix: prevent codex spawn error when codex CLI is not installed",
+      "body": "Return success with empty servers array from the config read endpoint\nwhen no config file exists, so the frontend doesn't fall through to\nthe CLI list endpoint which attempts to spawn the codex binary.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>",
+      "stat": "dab089b fix: prevent codex spawn error when codex CLI is not installed\n server/routes/codex.js | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)",
+      "diff": "diff --git a/server/routes/codex.js b/server/routes/codex.js\nindex 40c02a7..a71bdd7 100644\n--- a/server/routes/codex.js\n+++ b/server/routes/codex.js\n@@ -262,7 +262,7 @@ router.get('/mcp/config/read', async (req, res) => {\n     }\n \n     if (!configData) {\n-      return res.json({ success: false, message: 'No Codex configuration file found', servers: [] });\n+      return res.json({ success: true, servers: [] });\n     }\n \n     const servers = [];\n"
+    },
+    {
+      "hash": "10bfeed614e553872a2bd4b88ccf857530b44546",
+      "short_hash": "10bfeed6",
+      "author": "viper151",
+      "date": "2026-01-25 23:09:16 +0100",
+      "subject": "Merge branch 'main' into feat/add-highlight-to-file-mentions",
+      "body": "",
+      "stat": "10bfeed Merge branch 'main' into feat/add-highlight-to-file-mentions\n\n README.md                                      |   2 +\n README.zh-CN.md                                | 371 ++++++++++++++++++++++\n package-lock.json                              | 377 +++++++++++++++++++++-\n package.json                                   |   4 +\n server/index.js                                |  39 ++-\n server/projects.js                             | 138 ++++++--\n src/App.jsx                                    | 119 ++++---\n src/components/ApiKeysSettings.jsx             |  60 ++--\n src/components/ChatInterface.jsx               | 193 ++++++++----\n src/components/CodeEditor.jsx                  |  36 ++-\n src/components/CredentialsSettings.jsx         |  62 ++--\n src/components/FileTree.jsx                    |  44 +--\n src/components/GitSettings.jsx                 |  18 +-\n src/components/LanguageSelector.jsx            |  74 +++++\n src/components/LoginForm.jsx                   |  30 +-\n src/components/MainContent.jsx                 |  38 +--\n src/components/ProjectCreationWizard.jsx       | 306 +++++++++++++-----\n src/components/QuickSettingsPanel.jsx          |  58 ++--\n src/components/Settings.jsx                    | 170 +++++-----\n src/components/Shell.jsx                       |  38 +--\n src/components/Sidebar.jsx                     | 345 ++++++++++++++------\n src/components/TasksSettings.jsx               |  24 +-\n src/components/ThinkingModeSelector.jsx        | 183 +++++++++++\n src/components/settings/AccountContent.jsx     |  30 +-\n src/components/settings/AgentListItem.jsx      |   8 +-\n src/components/settings/McpServersContent.jsx  |  63 ++--\n src/components/settings/PermissionsContent.jsx | 109 +++----\n src/i18n/config.js                             | 129 ++++++++\n src/i18n/languages.js                          |  48 +++\n src/i18n/locales/en/auth.json                  |  37 +++\n src/i18n/locales/en/chat.json                  | 205 ++++++++++++\n src/i18n/locales/en/codeEditor.json            |  30 ++\n src/i18n/locales/en/common.json                | 218 +++++++++++++\n src/i18n/locales/en/settings.json              | 418 +++++++++++++++++++++++++\n src/i18n/locales/en/sidebar.json               | 112 +++++++\n src/i18n/locales/zh-CN/auth.json               |  37 +++\n src/i18n/locales/zh-CN/chat.json               | 205 ++++++++++++\n src/i18n/locales/zh-CN/codeEditor.json         |  30 ++\n src/i18n/locales/zh-CN/common.json             | 218 +++++++++++++\n src/i18n/locales/zh-CN/settings.json           | 418 +++++++++++++++++++++++++\n src/i18n/locales/zh-CN/sidebar.json            | 112 +++++++\n src/main.jsx                                   |   3 +\n src/utils/api.js                               |   4 +-\n 43 files changed, 4471 insertions(+), 692 deletions(-)",
+      "diff": "diff --cc src/components/ChatInterface.jsx\nindex 909d718,5fa545c..aeb8705\n--- a/src/components/ChatInterface.jsx\n+++ b/src/components/ChatInterface.jsx\n@@@ -5512,10 -5508,9 +5571,10 @@@ function ChatInterface({ selectedProjec\n                input.trim() ? 'opacity-0' : 'opacity-100'\n              }`}>\n                {sendByCtrlEnter\n-                 ? \"Ctrl+Enter to send \u2022 Shift+Enter for new line \u2022 Tab to change modes \u2022 / for slash commands\"\n-                 : \"Enter to send \u2022 Shift+Enter for new line \u2022 Tab to change modes \u2022 / for slash commands\"}\n+                 ? t('input.hintText.ctrlEnter')\n+                 : t('input.hintText.enter')}\n              </div>\n +            </div>\n            </div>\n          </form>\n        </div>\n"
+    },
+    {
+      "hash": "6362d35d66cea43947ca98f311f1fff7f45d9864",
+      "short_hash": "6362d35d",
+      "author": "viper151",
+      "date": "2026-01-25 23:09:24 +0100",
+      "subject": "Merge pull request #299 from siteboon/feat/add-highlight-to-file-mentions",
+      "body": "feat: add highlight for file mentions in chat input",
+      "stat": "6362d35 Merge pull request #299 from siteboon/feat/add-highlight-to-file-mentions\n\n src/components/ChatInterface.jsx | 68 ++++++++++++++++++++++++++++++++++++++--\n 1 file changed, 66 insertions(+), 2 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "80732923b539fd26f376c51abd30e64d5fa83ce4",
+      "short_hash": "80732923",
+      "author": "viper151",
+      "date": "2026-01-25 23:15:23 +0100",
+      "subject": "Merge branch 'main' into fix/session-streamed-to-another-chat",
+      "body": "",
+      "stat": "8073292 Merge branch 'main' into fix/session-streamed-to-another-chat\n\n README.md                                      |   2 +\n README.zh-CN.md                                | 371 ++++++++++++++++++++++\n package-lock.json                              | 109 ++++++-\n package.json                                   |   3 +\n server/index.js                                |  31 +-\n server/projects.js                             | 138 ++++++--\n src/App.jsx                                    | 119 ++++---\n src/components/ApiKeysSettings.jsx             |  60 ++--\n src/components/ChatInterface.jsx               | 224 +++++++++----\n src/components/CodeEditor.jsx                  |  36 ++-\n src/components/CredentialsSettings.jsx         |  62 ++--\n src/components/FileTree.jsx                    |  44 +--\n src/components/GitSettings.jsx                 |  18 +-\n src/components/LanguageSelector.jsx            |  74 +++++\n src/components/LoginForm.jsx                   |  30 +-\n src/components/MainContent.jsx                 |  38 +--\n src/components/ProjectCreationWizard.jsx       |  96 +++---\n src/components/QuickSettingsPanel.jsx          |  58 ++--\n src/components/Settings.jsx                    | 170 +++++-----\n src/components/Shell.jsx                       |  38 +--\n src/components/Sidebar.jsx                     | 345 ++++++++++++++------\n src/components/TasksSettings.jsx               |  24 +-\n src/components/ThinkingModeSelector.jsx        | 183 +++++++++++\n src/components/settings/AccountContent.jsx     |  30 +-\n src/components/settings/AgentListItem.jsx      |   8 +-\n src/components/settings/McpServersContent.jsx  |  63 ++--\n src/components/settings/PermissionsContent.jsx | 109 +++----\n src/i18n/config.js                             | 129 ++++++++\n src/i18n/languages.js                          |  48 +++\n src/i18n/locales/en/auth.json                  |  37 +++\n src/i18n/locales/en/chat.json                  | 205 ++++++++++++\n src/i18n/locales/en/codeEditor.json            |  30 ++\n src/i18n/locales/en/common.json                | 218 +++++++++++++\n src/i18n/locales/en/settings.json              | 418 +++++++++++++++++++++++++\n src/i18n/locales/en/sidebar.json               | 112 +++++++\n src/i18n/locales/zh-CN/auth.json               |  37 +++\n src/i18n/locales/zh-CN/chat.json               | 205 ++++++++++++\n src/i18n/locales/zh-CN/codeEditor.json         |  30 ++\n src/i18n/locales/zh-CN/common.json             | 218 +++++++++++++\n src/i18n/locales/zh-CN/settings.json           | 418 +++++++++++++++++++++++++\n src/i18n/locales/zh-CN/sidebar.json            | 112 +++++++\n src/main.jsx                                   |   3 +\n src/utils/api.js                               |   4 +-\n 43 files changed, 4041 insertions(+), 666 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "0d1a3df1f729c4bd83c13db4ea727505c07fa175",
+      "short_hash": "0d1a3df1",
+      "author": "viper151",
+      "date": "2026-01-25 23:15:31 +0100",
+      "subject": "Merge pull request #318 from siteboon/fix/session-streamed-to-another-chat",
+      "body": "Fix/session streamed to another chat",
+      "stat": "0d1a3df Merge pull request #318 from siteboon/fix/session-streamed-to-another-chat\n\n server/claude-sdk.js             |   9 ++-\n server/cursor-cli.js             |  26 +++++---\n server/openai-codex.js           |   3 +-\n src/components/ChatInterface.jsx | 133 ++++++++++++++++++++++++++++++++++-----\n 4 files changed, 144 insertions(+), 27 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "8825baf5b459e892f2a367e9e3da39d8091680c5",
+      "short_hash": "8825baf5",
+      "author": "viper151",
+      "date": "2026-01-25 23:17:08 +0100",
+      "subject": "Update codex.js",
+      "body": "",
+      "stat": "8825baf Update codex.js\n server/routes/codex.js | 3 +--\n 1 file changed, 1 insertion(+), 2 deletions(-)",
+      "diff": "diff --git a/server/routes/codex.js b/server/routes/codex.js\nindex a71bdd7..9473770 100644\n--- a/server/routes/codex.js\n+++ b/server/routes/codex.js\n@@ -262,8 +262,7 @@ router.get('/mcp/config/read', async (req, res) => {\n     }\n \n     if (!configData) {\n-      return res.json({ success: true, servers: [] });\n-    }\n+      return res.json({ success: true, configPath, servers: [] });    }\n \n     const servers = [];\n \n"
+    },
+    {
+      "hash": "b2c69d6ea81ce25b24fcb289253b2b2cf4985bb9",
+      "short_hash": "b2c69d6e",
+      "author": "viper151",
+      "date": "2026-01-25 23:17:29 +0100",
+      "subject": "Merge branch 'main' into main",
+      "body": "",
+      "stat": "b2c69d6 Merge branch 'main' into main\n\n server/claude-sdk.js             |   9 +-\n server/cursor-cli.js             |  26 +++--\n server/openai-codex.js           |   3 +-\n src/components/ChatInterface.jsx | 201 +++++++++++++++++++++++++++++++++++----\n 4 files changed, 210 insertions(+), 29 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "ae5a21cd6e7dbaa4e836e47566610b30559f869f",
+      "short_hash": "ae5a21cd",
+      "author": "viper151",
+      "date": "2026-01-25 23:18:57 +0100",
+      "subject": "Merge pull request #337 from timbot/main",
+      "body": "fix: prevent codex spawn error when codex CLI is not installed",
+      "stat": "ae5a21c Merge pull request #337 from timbot/main\n\n server/routes/codex.js | 3 +--\n 1 file changed, 1 insertion(+), 2 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "477bc404b092a1920f14cb9e2da10a2043efd5c4",
+      "short_hash": "477bc404",
+      "author": "simosmik",
+      "date": "2026-01-25 23:55:05 +0000",
+      "subject": "fix: switch login mechanism for claude code",
+      "body": "",
+      "stat": "477bc40 fix: switch login mechanism for claude code\n src/components/ChatInterface.jsx | 2 +-\n src/components/LoginModal.jsx    | 8 +++++---\n src/components/Settings.jsx      | 6 ++++++\n 3 files changed, 12 insertions(+), 4 deletions(-)",
+      "diff": "diff --git a/src/components/ChatInterface.jsx b/src/components/ChatInterface.jsx\nindex 6ef4e91..e31583c 100644\n--- a/src/components/ChatInterface.jsx\n+++ b/src/components/ChatInterface.jsx\n@@ -4975,7 +4975,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess\n                     <div className=\"flex flex-col items-center justify-center h-full gap-3\">\n                       <ClaudeLogo className=\"w-10 h-10\" />\n                       <div>\n-                        <p className=\"font-semibold text-gray-900 dark:text-white\">Claude</p>\n+                        <p className=\"font-semibold text-gray-900 dark:text-white\">Claude Code</p>\n                         <p className=\"text-xs text-gray-500 dark:text-gray-400\">{t('providerSelection.providerInfo.anthropic')}</p>\n                       </div>\n                     </div>\ndiff --git a/src/components/LoginModal.jsx b/src/components/LoginModal.jsx\nindex c6f6db5..c431b8a 100644\n--- a/src/components/LoginModal.jsx\n+++ b/src/components/LoginModal.jsx\n@@ -11,6 +11,7 @@ import StandaloneShell from './StandaloneShell';\n  * @param {Object} props.project - Project object containing name and path information\n  * @param {Function} props.onComplete - Callback when login process completes (receives exitCode)\n  * @param {string} props.customCommand - Optional custom command to override defaults\n+ * @param {boolean} props.isAuthenticated - Whether user is already authenticated (for re-auth flow)\n  */\n function LoginModal({\n   isOpen,\n@@ -18,7 +19,8 @@ function LoginModal({\n   provider = 'claude',\n   project,\n   onComplete,\n-  customCommand\n+  customCommand,\n+  isAuthenticated = false\n }) {\n   if (!isOpen) return null;\n \n@@ -29,13 +31,13 @@ function LoginModal({\n \n     switch (provider) {\n       case 'claude':\n-        return 'claude setup-token --dangerously-skip-permissions';\n+        return isAuthenticated ? 'claude /login --dangerously-skip-permissions' : 'claude setup-token --dangerously-skip-permissions';\n       case 'cursor':\n         return 'cursor-agent login';\n       case 'codex':\n         return isPlatform ? 'codex login --device-auth' : 'codex login';\n       default:\n-        return 'claude setup-token --dangerously-skip-permissions';\n+        return isAuthenticated ? 'claude /login --dangerously-skip-permissions' : 'claude setup-token --dangerously-skip-permissions';\n     }\n   };\n \ndiff --git a/src/components/Settings.jsx b/src/components/Settings.jsx\nindex 9f541e9..0d828a8 100644\n--- a/src/components/Settings.jsx\n+++ b/src/components/Settings.jsx\n@@ -1966,6 +1966,12 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }) {\n         provider={loginProvider}\n         project={selectedProject}\n         onComplete={handleLoginComplete}\n+        isAuthenticated={\n+          loginProvider === 'claude' ? claudeAuthStatus.authenticated :\n+          loginProvider === 'cursor' ? cursorAuthStatus.authenticated :\n+          loginProvider === 'codex' ? codexAuthStatus.authenticated :\n+          false\n+        }\n       />\n     </div>\n   );\n"
+    },
+    {
+      "hash": "f16e3e763dffca33fa7b397cb628b98db6c0ceaf",
+      "short_hash": "f16e3e76",
+      "author": "simosmik",
+      "date": "2026-01-26 00:11:12 +0000",
+      "subject": "Release 1.14.0",
+      "body": "",
+      "stat": "f16e3e7 Release 1.14.0\n package-lock.json | 4 ++--\n package.json      | 2 +-\n 2 files changed, 3 insertions(+), 3 deletions(-)",
+      "diff": "diff --git a/package-lock.json b/package-lock.json\nindex 109cf7d..3c67d5b 100644\n--- a/package-lock.json\n+++ b/package-lock.json\n@@ -1,12 +1,12 @@\n {\n   \"name\": \"@siteboon/claude-code-ui\",\n-  \"version\": \"1.13.6\",\n+  \"version\": \"1.14.0\",\n   \"lockfileVersion\": 3,\n   \"requires\": true,\n   \"packages\": {\n     \"\": {\n       \"name\": \"@siteboon/claude-code-ui\",\n-      \"version\": \"1.13.6\",\n+      \"version\": \"1.14.0\",\n       \"license\": \"MIT\",\n       \"dependencies\": {\n         \"@anthropic-ai/claude-agent-sdk\": \"^0.1.29\",\ndiff --git a/package.json b/package.json\nindex 4cb1f1a..3a57edf 100644\n--- a/package.json\n+++ b/package.json\n@@ -1,6 +1,6 @@\n {\n   \"name\": \"@siteboon/claude-code-ui\",\n-  \"version\": \"1.13.6\",\n+  \"version\": \"1.14.0\",\n   \"description\": \"A web-based UI for Claude Code CLI\",\n   \"type\": \"module\",\n   \"main\": \"server/index.js\",\n"
+    }
+  ]
+}

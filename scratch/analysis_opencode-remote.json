@@ -1,0 +1,425 @@
+{
+  "repo_name": "opencode-remote",
+  "total_commits": 11,
+  "total_batches": 2,
+  "batch_size": 10,
+  "batches": [
+    {
+      "batch_num": 1,
+      "start_index": 1,
+      "end_index": 10,
+      "total_commits_in_batch": 10,
+      "commits": [
+        {
+          "hash": "c9880c4f38a1c1ebf391e9724157bf51ace1aac1",
+          "short_hash": "c9880c4f",
+          "author": "youaodu <youao.du@gmail.com>",
+          "date": "2026-02-25 11:46:28 +0800",
+          "subject": "Initial commit",
+          "body": "",
+          "files_changed": [
+            {
+              "file": ".gitignore",
+              "added": "7",
+              "deleted": "0"
+            },
+            {
+              "file": "AGENTS.md",
+              "added": "158",
+              "deleted": "0"
+            },
+            {
+              "file": "App.tsx",
+              "added": "20",
+              "deleted": "0"
+            },
+            {
+              "file": "README.md",
+              "added": "46",
+              "deleted": "0"
+            },
+            {
+              "file": "app.json",
+              "added": "27",
+              "deleted": "0"
+            },
+            {
+              "file": "babel.config.js",
+              "added": "6",
+              "deleted": "0"
+            },
+            {
+              "file": "i18n.ts",
+              "added": "189",
+              "deleted": "0"
+            },
+            {
+              "file": "package-lock.json",
+              "added": "8027",
+              "deleted": "0"
+            },
+            {
+              "file": "package.json",
+              "added": "32",
+              "deleted": "0"
+            },
+            {
+              "file": "src/components/EndpointModal.tsx",
+              "added": "141",
+              "deleted": "0"
+            },
+            {
+              "file": "src/config/storage.ts",
+              "added": "9",
+              "deleted": "0"
+            },
+            {
+              "file": "src/hooks/useAppController.ts",
+              "added": "1138",
+              "deleted": "0"
+            },
+            {
+              "file": "src/navigation/AppNavigator.tsx",
+              "added": "33",
+              "deleted": "0"
+            },
+            {
+              "file": "src/navigation/types.ts",
+              "added": "6",
+              "deleted": "0"
+            },
+            {
+              "file": "src/screens/ChatScreen.tsx",
+              "added": "417",
+              "deleted": "0"
+            },
+            {
+              "file": "src/screens/HomeScreen.tsx",
+              "added": "185",
+              "deleted": "0"
+            },
+            {
+              "file": "src/screens/ProjectsScreen.tsx",
+              "added": "501",
+              "deleted": "0"
+            },
+            {
+              "file": "src/screens/SettingsScreen.tsx",
+              "added": "124",
+              "deleted": "0"
+            },
+            {
+              "file": "src/types/chat.ts",
+              "added": "17",
+              "deleted": "0"
+            },
+            {
+              "file": "src/utils/chatApi.ts",
+              "added": "148",
+              "deleted": "0"
+            },
+            {
+              "file": "tsconfig.json",
+              "added": "10",
+              "deleted": "0"
+            }
+          ],
+          "stat": "c9880c4 Initial commit\n .gitignore                       |    7 +\n AGENTS.md                        |  158 +\n App.tsx                          |   20 +\n README.md                        |   46 +\n app.json                         |   27 +\n babel.config.js                  |    6 +\n i18n.ts                          |  189 +\n package-lock.json                | 8027 ++++++++++++++++++++++++++++++++++++++\n package.json                     |   32 +\n src/components/EndpointModal.tsx |  141 +\n src/config/storage.ts            |    9 +\n src/hooks/useAppController.ts    | 1138 ++++++\n src/navigation/AppNavigator.tsx  |   33 +\n src/navigation/types.ts          |    6 +\n src/screens/ChatScreen.tsx       |  417 ++\n src/screens/HomeScreen.tsx       |  185 +\n src/screens/ProjectsScreen.tsx   |  501 +++\n src/screens/SettingsScreen.tsx   |  124 +\n src/types/chat.ts                |   17 +\n src/utils/chatApi.ts             |  148 +\n tsconfig.json                    |   10 +\n 21 files changed, 11241 insertions(+)"
+        },
+        {
+          "hash": "93bd7b3015d15c5e61f6ba3fac714de95ba6610d",
+          "short_hash": "93bd7b30",
+          "author": "youaodu <youao.du@gmail.com>",
+          "date": "2026-02-25 11:53:28 +0800",
+          "subject": "Add tag-triggered APK release workflow",
+          "body": "",
+          "files_changed": [
+            {
+              "file": ".github/workflows/build-apk.yml",
+              "added": "63",
+              "deleted": "0"
+            }
+          ],
+          "stat": "93bd7b3 Add tag-triggered APK release workflow\n .github/workflows/build-apk.yml | 63 +++++++++++++++++++++++++++++++++++++++++\n 1 file changed, 63 insertions(+)"
+        },
+        {
+          "hash": "223b39a87e1e8cd8cdaaa7f14aa4c340887669c5",
+          "short_hash": "223b39a8",
+          "author": "youaodu <youao.du@gmail.com>",
+          "date": "2026-02-25 13:09:46 +0800",
+          "subject": "Add in-chat handling for permission and question prompts",
+          "body": "",
+          "files_changed": [
+            {
+              "file": "README.md",
+              "added": "1",
+              "deleted": "1"
+            },
+            {
+              "file": "i18n.ts",
+              "added": "72",
+              "deleted": "0"
+            },
+            {
+              "file": "src/hooks/useAppController.ts",
+              "added": "329",
+              "deleted": "1"
+            },
+            {
+              "file": "src/screens/ChatScreen.tsx",
+              "added": "496",
+              "deleted": "1"
+            },
+            {
+              "file": "src/types/chat.ts",
+              "added": "43",
+              "deleted": "0"
+            }
+          ],
+          "stat": "223b39a Add in-chat handling for permission and question prompts\n README.md                     |   2 +-\n i18n.ts                       |  72 ++++++\n src/hooks/useAppController.ts | 330 +++++++++++++++++++++++++++-\n src/screens/ChatScreen.tsx    | 497 +++++++++++++++++++++++++++++++++++++++++-\n src/types/chat.ts             |  43 ++++\n 5 files changed, 941 insertions(+), 3 deletions(-)"
+        },
+        {
+          "hash": "2db164a72e09b639beb4e904d1092c0ee8c3e671",
+          "short_hash": "2db164a7",
+          "author": "youaodu <youao.du@gmail.com>",
+          "date": "2026-02-25 13:30:48 +0800",
+          "subject": "Improve tool event rendering in chat stream",
+          "body": "Track tool-part updates as a single event, show read progress inline in the assistant message, and add localized labels for tool event metadata.",
+          "files_changed": [
+            {
+              "file": "i18n.ts",
+              "added": "27",
+              "deleted": "0"
+            },
+            {
+              "file": "src/hooks/useAppController.ts",
+              "added": "102",
+              "deleted": "1"
+            }
+          ],
+          "stat": "2db164a Improve tool event rendering in chat stream\n i18n.ts                       |  27 +++++++++++\n src/hooks/useAppController.ts | 103 +++++++++++++++++++++++++++++++++++++++++-\n 2 files changed, 129 insertions(+), 1 deletion(-)"
+        },
+        {
+          "hash": "1951c86a487a21d367c0a802f4ffc6e3a0e9d813",
+          "short_hash": "1951c86a",
+          "author": "youaodu <youao.du@gmail.com>",
+          "date": "2026-02-25 13:46:39 +0800",
+          "subject": "Unify top header height across screens",
+          "body": "",
+          "files_changed": [
+            {
+              "file": "src/screens/HomeScreen.tsx",
+              "added": "3",
+              "deleted": "2"
+            },
+            {
+              "file": "src/screens/ProjectsScreen.tsx",
+              "added": "17",
+              "deleted": "12"
+            },
+            {
+              "file": "src/screens/SettingsScreen.tsx",
+              "added": "3",
+              "deleted": "2"
+            }
+          ],
+          "stat": "1951c86 Unify top header height across screens\n src/screens/HomeScreen.tsx     |  5 +++--\n src/screens/ProjectsScreen.tsx | 29 +++++++++++++++++------------\n src/screens/SettingsScreen.tsx |  5 +++--\n 3 files changed, 23 insertions(+), 16 deletions(-)"
+        },
+        {
+          "hash": "e44fec939a34df9eb7fe53f27dcbc826b1098b3a",
+          "short_hash": "e44fec93",
+          "author": "youaodu <youao.du@gmail.com>",
+          "date": "2026-02-25 13:49:07 +0800",
+          "subject": "Align chat screen with app header pattern",
+          "body": "Start chats without a seeded welcome system message and add a dedicated top bar so the conversation view matches other screens and feels less cluttered.",
+          "files_changed": [
+            {
+              "file": "src/hooks/useAppController.ts",
+              "added": "2",
+              "deleted": "29"
+            },
+            {
+              "file": "src/screens/ChatScreen.tsx",
+              "added": "44",
+              "deleted": "0"
+            }
+          ],
+          "stat": "e44fec9 Align chat screen with app header pattern\n src/hooks/useAppController.ts | 31 ++----------------------------\n src/screens/ChatScreen.tsx    | 44 +++++++++++++++++++++++++++++++++++++++++++\n 2 files changed, 46 insertions(+), 29 deletions(-)"
+        },
+        {
+          "hash": "4890f56779ece109ea6a75a3a2b5fd75e496f5e4",
+          "short_hash": "4890f567",
+          "author": "youaodu <youao.du@gmail.com>",
+          "date": "2026-02-25 14:10:16 +0800",
+          "subject": "Update app config for cleartext endpoint support",
+          "body": "",
+          "files_changed": [
+            {
+              "file": "app.json",
+              "added": "8",
+              "deleted": "2"
+            }
+          ],
+          "stat": "4890f56 Update app config for cleartext endpoint support\n app.json | 10 ++++++++--\n 1 file changed, 8 insertions(+), 2 deletions(-)"
+        },
+        {
+          "hash": "ddb28609d607f0ddc9130ee66b46d558561d1086",
+          "short_hash": "ddb28609",
+          "author": "youaodu <youao.du@gmail.com>",
+          "date": "2026-02-25 14:13:05 +0800",
+          "subject": "Remove debug APK from release workflow",
+          "body": "",
+          "files_changed": [
+            {
+              "file": ".github/workflows/build-apk.yml",
+              "added": "0",
+              "deleted": "11"
+            }
+          ],
+          "stat": "ddb2860 Remove debug APK from release workflow\n .github/workflows/build-apk.yml | 11 -----------\n 1 file changed, 11 deletions(-)"
+        },
+        {
+          "hash": "06c69700f6b97ff2c45437505bf6fbf2fe89f96c",
+          "short_hash": "06c69700",
+          "author": "youaodu <youao.du@gmail.com>",
+          "date": "2026-02-25 14:53:49 +0800",
+          "subject": "Clarify HTTPS requirement for mobile deployment",
+          "body": "Document that remote real-device access must use an HTTPS public endpoint via intranet tunneling because Android and iOS block plain HTTP by default.",
+          "files_changed": [
+            {
+              "file": "README.md",
+              "added": "2",
+              "deleted": "0"
+            }
+          ],
+          "stat": "06c6970 Clarify HTTPS requirement for mobile deployment\n README.md | 2 ++\n 1 file changed, 2 insertions(+)"
+        },
+        {
+          "hash": "bfa5745dc2b9eec53f7837a4d9bf319a25ed9019",
+          "short_hash": "bfa5745d",
+          "author": "youaodu <youao.du@gmail.com>",
+          "date": "2026-02-25 15:52:40 +0800",
+          "subject": "Add project maturity and issue reporting note",
+          "body": "Clarify that the project is still improving and ask users to include screenshots when reporting unreasonable behavior in issues.",
+          "files_changed": [
+            {
+              "file": "README.md",
+              "added": "5",
+              "deleted": "0"
+            }
+          ],
+          "stat": "bfa5745 Add project maturity and issue reporting note\n README.md | 5 +++++\n 1 file changed, 5 insertions(+)"
+        }
+      ],
+      "touched_files": [
+        ".github/workflows/build-apk.yml",
+        ".gitignore",
+        "AGENTS.md",
+        "App.tsx",
+        "README.md",
+        "app.json",
+        "babel.config.js",
+        "i18n.ts",
+        "package-lock.json",
+        "package.json",
+        "src/components/EndpointModal.tsx",
+        "src/config/storage.ts",
+        "src/hooks/useAppController.ts",
+        "src/navigation/AppNavigator.tsx",
+        "src/navigation/types.ts",
+        "src/screens/ChatScreen.tsx",
+        "src/screens/HomeScreen.tsx",
+        "src/screens/ProjectsScreen.tsx",
+        "src/screens/SettingsScreen.tsx",
+        "src/types/chat.ts",
+        "src/utils/chatApi.ts",
+        "tsconfig.json"
+      ],
+      "start_commit": "c9880c4f",
+      "end_commit": "bfa5745d"
+    },
+    {
+      "batch_num": 2,
+      "start_index": 11,
+      "end_index": 11,
+      "total_commits_in_batch": 1,
+      "commits": [
+        {
+          "hash": "5e7902f47c3049b7b3cb41fd47db80c8b241d91d",
+          "short_hash": "5e7902f4",
+          "author": "youaodu <youao.du@gmail.com>",
+          "date": "2026-02-26 22:51:50 +0800",
+          "subject": "refactor app controller streaming flow",
+          "body": "",
+          "files_changed": [
+            {
+              "file": "i18n.ts",
+              "added": "7",
+              "deleted": "1"
+            },
+            {
+              "file": "src/hooks/appController/requestHandlers.ts",
+              "added": "210",
+              "deleted": "0"
+            },
+            {
+              "file": "src/hooks/appController/sessionNetworking.ts",
+              "added": "141",
+              "deleted": "0"
+            },
+            {
+              "file": "src/hooks/appController/sessionStreaming.ts",
+              "added": "562",
+              "deleted": "0"
+            },
+            {
+              "file": "src/hooks/appController/types.ts",
+              "added": "50",
+              "deleted": "0"
+            },
+            {
+              "file": "src/hooks/appController/useAppControllerBootstrap.ts",
+              "added": "68",
+              "deleted": "0"
+            },
+            {
+              "file": "src/hooks/useAppController.helpers.ts",
+              "added": "284",
+              "deleted": "0"
+            },
+            {
+              "file": "src/hooks/useAppController.ts",
+              "added": "116",
+              "deleted": "1176"
+            },
+            {
+              "file": "src/screens/ChatScreen.tsx",
+              "added": "1",
+              "deleted": "0"
+            },
+            {
+              "file": "src/types/chat.ts",
+              "added": "8",
+              "deleted": "0"
+            }
+          ],
+          "stat": "5e7902f refactor app controller streaming flow\n i18n.ts                                            |    8 +-\n src/hooks/appController/requestHandlers.ts         |  210 ++++\n src/hooks/appController/sessionNetworking.ts       |  141 +++\n src/hooks/appController/sessionStreaming.ts        |  562 +++++++++\n src/hooks/appController/types.ts                   |   50 +\n .../appController/useAppControllerBootstrap.ts     |   68 ++\n src/hooks/useAppController.helpers.ts              |  284 +++++\n src/hooks/useAppController.ts                      | 1292 ++------------------\n src/screens/ChatScreen.tsx                         |    1 +\n src/types/chat.ts                                  |    8 +\n 10 files changed, 1447 insertions(+), 1177 deletions(-)"
+        }
+      ],
+      "touched_files": [
+        "i18n.ts",
+        "src/hooks/appController/requestHandlers.ts",
+        "src/hooks/appController/sessionNetworking.ts",
+        "src/hooks/appController/sessionStreaming.ts",
+        "src/hooks/appController/types.ts",
+        "src/hooks/appController/useAppControllerBootstrap.ts",
+        "src/hooks/useAppController.helpers.ts",
+        "src/hooks/useAppController.ts",
+        "src/screens/ChatScreen.tsx",
+        "src/types/chat.ts"
+      ],
+      "start_commit": "5e7902f4",
+      "end_commit": "5e7902f4"
+    }
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "batch_num": 68,
+  "start_index": 671,
+  "end_index": 680,
+  "commits": [
+    {
+      "hash": "b7e6bca2e373ce94f00c86549200a4b47e873dd1",
+      "short_hash": "b7e6bca2",
+      "author": "Simos Mikelatos",
+      "date": "2026-06-09 14:41:27 +0200",
+      "subject": "Merge pull request #851 from jakeefr/fix/windows-plugin-env",
+      "body": "Pass Windows-essential env vars to plugin subprocesses",
+      "stat": "b7e6bca Merge pull request #851 from jakeefr/fix/windows-plugin-env\n\n server/utils/plugin-process-manager.js | 43 ++++++++++++++++++++++++++++------\n 1 file changed, 36 insertions(+), 7 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "ca8fd0ee235b6a3210157bd0d9af83024d4a2248",
+      "short_hash": "ca8fd0ee",
+      "author": "Haileyesus",
+      "date": "2026-06-09 15:44:42 +0300",
+      "subject": "fix: align prism plugin name and id with manifest.json",
+      "body": "",
+      "stat": "ca8fd0e fix: align prism plugin name and id with manifest.json\n src/components/plugins/view/PluginSettingsTab.tsx | 4 ++--\n 1 file changed, 2 insertions(+), 2 deletions(-)",
+      "diff": "diff --git a/src/components/plugins/view/PluginSettingsTab.tsx b/src/components/plugins/view/PluginSettingsTab.tsx\nindex 8ebf3db..f668e30 100644\n--- a/src/components/plugins/view/PluginSettingsTab.tsx\n+++ b/src/components/plugins/view/PluginSettingsTab.tsx\n@@ -74,10 +74,10 @@ const UNOFFICIAL_PLUGIN_RECOMMENDATIONS: PluginRecommendation[] = [\n     source: 'unofficial',\n   },\n   {\n-    id: 'prism-cloudcli',\n+    id: 'prism',\n     translationKey: 'prismCloudCLI',\n     repoUrl: PRISM_CLOUDCLI_PLUGIN_URL,\n-    installedNames: ['prism-cloudcli'],\n+    installedNames: ['prism'],\n     icon: Activity,\n     source: 'unofficial'\n   }\n"
+    },
+    {
+      "hash": "f7c0024fe15057ad049c71e15e88adb482a4497f",
+      "short_hash": "f7c0024f",
+      "author": "szmidtpiotr",
+      "date": "2026-06-09 14:56:31 +0200",
+      "subject": "fix: slash command suggestions trigger at any / in input, not only at start (#843)",
+      "body": "Previously the regex ^\\/(\\S*)$ only matched when the entire text before\nthe cursor was a bare /command. Typing a slash mid-sentence (e.g.\n\"please run /he\") produced no suggestions.\n\nChanged pattern to (?:^|\\s)(\\/\\S*)$  which matches / at the start of\ninput or after any whitespace. Also compute slashPos from match.index\ninstead of hardcoding 0, so insertCommandIntoInput replaces the correct\nslice of the input when the command is mid-sentence.\n\nCo-authored-by: Claude Sonnet 4.6 <noreply@anthropic.com>",
+      "stat": "f7c0024 fix: slash command suggestions trigger at any / in input, not only at start (#843)\n src/components/chat/hooks/useSlashCommands.ts | 8 +++++---\n 1 file changed, 5 insertions(+), 3 deletions(-)",
+      "diff": "diff --git a/src/components/chat/hooks/useSlashCommands.ts b/src/components/chat/hooks/useSlashCommands.ts\nindex db6eefa..b64ac6e 100644\n--- a/src/components/chat/hooks/useSlashCommands.ts\n+++ b/src/components/chat/hooks/useSlashCommands.ts\n@@ -393,7 +393,8 @@ export function useSlashCommands({\n         return;\n       }\n \n-      const slashPattern = /^\\/(\\S*)$/;\n+      // Match / at start of input OR after whitespace, capturing the /word up to cursor.\n+      const slashPattern = /(?:^|\\s)(\\/\\S*)$/;\n       const match = textBeforeCursor.match(slashPattern);\n \n       if (!match) {\n@@ -401,8 +402,9 @@ export function useSlashCommands({\n         return;\n       }\n \n-      const slashPos = 0;\n-      const query = match[1];\n+      // Compute actual position of / in the full input string.\n+      const slashPos = match.index! + (match[0].length - match[1].length);\n+      const query = match[1].slice(1); // strip leading /\n \n       setSlashPosition(slashPos);\n       setShowCommandMenu(true);\n"
+    },
+    {
+      "hash": "33a4e72ca4f84df60aadfc4ff3f3467d6f5ae948",
+      "short_hash": "33a4e72c",
+      "author": "ShockStruck",
+      "date": "2026-05-24 18:28:05 -0400",
+      "subject": "fix(chat): re-anchor initial scroll across lazy content reflow",
+      "body": "The previous initial-scroll behavior fired one scrollToBottom() at\n+200ms after the session load and cleared the pending flag. When\nmarkdown, syntax highlighting, or images finished rendering after\nthat window, scrollHeight grew but nothing re-anchored the viewport.\nThe chat tab appeared \"scrolled way up\" with the latest assistant\nmessage off-screen until the user manually scrolled or sent a new\nmessage.\n\nThis replaces the setTimeout with a requestAnimationFrame loop that\nre-scrolls every frame while scrollHeight is still growing, capped\nat ~1s (60 frames) or 3 consecutive stable frames. The loop cancels\ncleanly on session change via the existing pendingInitialScrollRef\nflag, and the cleanup function cancels any in-flight rAF on unmount.\n\nNo behavior change for sessions whose content layout is already stable\nat the first frame.\n\nCo-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>",
+      "stat": "33a4e72 fix(chat): re-anchor initial scroll across lazy content reflow\n src/components/chat/hooks/useChatSessionState.ts | 41 ++++++++++++++++++++++--\n 1 file changed, 38 insertions(+), 3 deletions(-)",
+      "diff": "diff --git a/src/components/chat/hooks/useChatSessionState.ts b/src/components/chat/hooks/useChatSessionState.ts\nindex 20f4255..d11ff3c 100644\n--- a/src/components/chat/hooks/useChatSessionState.ts\n+++ b/src/components/chat/hooks/useChatSessionState.ts\n@@ -383,12 +383,47 @@ export function useChatSessionState({\n     setIsUserScrolledUp(false);\n   }, [selectedProject?.projectId, selectedSession?.id]);\n \n-  // Initial scroll to bottom\n+  // Initial scroll to bottom \u2014 robust to lazy content reflow.\n+  // The previous implementation fired one scrollToBottom() at +200ms and\n+  // cleared the pending flag. When markdown blocks, code highlighting, or\n+  // images finished rendering after that window, scrollHeight grew but\n+  // nothing re-anchored the viewport, leaving the chat tab visually\n+  // \"scrolled way up\" with the latest assistant message off-screen.\n+  //\n+  // This version re-scrolls every animation frame while scrollHeight is\n+  // still growing, capped at ~1s (60 frames) or 3 consecutive stable\n+  // frames. Cancels cleanly on session change via the pending flag.\n   useEffect(() => {\n     if (!pendingInitialScrollRef.current || !scrollContainerRef.current || isLoadingSessionMessages) return;\n     if (chatMessages.length === 0) { pendingInitialScrollRef.current = false; return; }\n-    pendingInitialScrollRef.current = false;\n-    if (!searchScrollActiveRef.current) setTimeout(() => scrollToBottom(), 200);\n+    if (searchScrollActiveRef.current) { pendingInitialScrollRef.current = false; return; }\n+\n+    const container = scrollContainerRef.current;\n+    let frame = 0;\n+    let lastHeight = 0;\n+    let stableCount = 0;\n+    let rafId = 0;\n+\n+    const tick = () => {\n+      if (!pendingInitialScrollRef.current || !scrollContainerRef.current) return;\n+      container.scrollTop = container.scrollHeight;\n+      if (container.scrollHeight === lastHeight) {\n+        stableCount++;\n+      } else {\n+        stableCount = 0;\n+        lastHeight = container.scrollHeight;\n+      }\n+      frame++;\n+      if (stableCount < 3 && frame < 60) {\n+        rafId = requestAnimationFrame(tick);\n+      } else {\n+        pendingInitialScrollRef.current = false;\n+      }\n+    };\n+    rafId = requestAnimationFrame(tick);\n+    return () => {\n+      if (rafId) cancelAnimationFrame(rafId);\n+    };\n   }, [chatMessages.length, isLoadingSessionMessages, scrollToBottom]);\n \n   // Main session loading effect \u2014 store-based\n"
+    },
+    {
+      "hash": "beae8c6513daa7518b9de40d8bfde3bf08e7bc87",
+      "short_hash": "beae8c65",
+      "author": "Jake",
+      "date": "2026-06-09 10:38:27 -0500",
+      "subject": "fix: keep editor toolbar in view on long unwrapped lines",
+      "body": "",
+      "stat": "beae8c6 fix: keep editor toolbar in view on long unwrapped lines\n src/components/code-editor/view/EditorSidebar.tsx | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)",
+      "diff": "diff --git a/src/components/code-editor/view/EditorSidebar.tsx b/src/components/code-editor/view/EditorSidebar.tsx\nindex 91ea969..6b2b466 100644\n--- a/src/components/code-editor/view/EditorSidebar.tsx\n+++ b/src/components/code-editor/view/EditorSidebar.tsx\n@@ -102,7 +102,7 @@ export default function EditorSidebar({\n   const useFlexLayout = editorExpanded || (fillSpace && !hasManualWidth);\n \n   return (\n-    <div ref={containerRef} className={`flex h-full min-w-0 flex-shrink-0 ${editorExpanded ? 'flex-1' : ''}`}>\n+    <div ref={containerRef} className={`flex h-full min-w-0 ${editorExpanded ? 'flex-1' : ''}`}>\n       {!editorExpanded && (\n         <div\n           ref={resizeHandleRef}\n"
+    },
+    {
+      "hash": "23210bc40ee7d43b844919060b5ec5aff9411d3b",
+      "short_hash": "23210bc4",
+      "author": "Simos Mikelatos",
+      "date": "2026-06-09 17:39:56 +0200",
+      "subject": "Merge branch 'main' into feature/chat-completion-notifications",
+      "body": "",
+      "stat": "23210bc Merge branch 'main' into feature/chat-completion-notifications\n\n docs/nginx-subpath-template.conf                   |   2 +-\n server/index.js                                    |  24 +-\n server/utils/plugin-process-manager.js             |  43 +-\n src/components/chat/hooks/useSlashCommands.ts      |   8 +-\n src/components/file-tree/constants/constants.ts    |   8 +\n .../file-tree/hooks/useFileTreeUpload.ts           | 434 ++++++++++++++++-----\n src/components/file-tree/view/FileTree.tsx         |  21 +-\n src/components/file-tree/view/FileTreeHeader.tsx   |  65 ++-\n .../file-tree/view/FileTreeUploadProgress.tsx      |  90 +++++\n 9 files changed, 577 insertions(+), 118 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "f439a8a3d538a1defe8bc7ecdd5005bc74f83555",
+      "short_hash": "f439a8a3",
+      "author": "Simos Mikelatos",
+      "date": "2026-06-09 17:46:47 +0200",
+      "subject": "Merge branch 'main' into chore/add-prism-plugin",
+      "body": "",
+      "stat": "f439a8a Merge branch 'main' into chore/add-prism-plugin\n\n docs/nginx-subpath-template.conf                   |   2 +-\n server/index.js                                    |  24 +-\n server/utils/plugin-process-manager.js             |  43 +-\n src/components/chat/hooks/useSlashCommands.ts      |   8 +-\n src/components/file-tree/constants/constants.ts    |   8 +\n .../file-tree/hooks/useFileTreeUpload.ts           | 434 ++++++++++++++++-----\n src/components/file-tree/view/FileTree.tsx         |  21 +-\n src/components/file-tree/view/FileTreeHeader.tsx   |  65 ++-\n .../file-tree/view/FileTreeUploadProgress.tsx      |  90 +++++\n 9 files changed, 577 insertions(+), 118 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "4a2453fe32754ea04b854b7f8310afd400e40c12",
+      "short_hash": "4a2453fe",
+      "author": "Simos Mikelatos",
+      "date": "2026-06-09 17:46:56 +0200",
+      "subject": "Merge pull request #848 from siteboon/chore/add-prism-plugin",
+      "body": "chore: add prism plugin",
+      "stat": "4a2453f Merge pull request #848 from siteboon/chore/add-prism-plugin\n\n server/utils/plugin-loader.js                     | 3 ++-\n src/components/plugins/view/PluginSettingsTab.tsx | 9 +++++++++\n src/i18n/locales/en/settings.json                 | 6 ++++++\n 3 files changed, 17 insertions(+), 1 deletion(-)",
+      "diff": ""
+    },
+    {
+      "hash": "602e6ad4acba612a7ea66fb3bc7485054f5675ee",
+      "short_hash": "602e6ad4",
+      "author": "Simos Mikelatos",
+      "date": "2026-06-09 16:04:15 +0000",
+      "subject": "fix: address notification review feedback",
+      "body": "",
+      "stat": "602e6ad fix: address notification review feedback\n src/i18n/locales/de/settings.json  | 18 ++++++++++++++++++\n src/i18n/locales/ru/settings.json  | 18 ++++++++++++++++++\n src/utils/pageTitleNotification.ts | 26 ++++++++++++++++++++++++++\n 3 files changed, 62 insertions(+)",
+      "diff": "diff --git a/src/i18n/locales/de/settings.json b/src/i18n/locales/de/settings.json\nindex d2189e8..237e595 100644\n--- a/src/i18n/locales/de/settings.json\n+++ b/src/i18n/locales/de/settings.json\n@@ -94,15 +94,33 @@\n     \"git\": \"Git\",\n     \"apiTokens\": \"API & Token\",\n     \"tasks\": \"Aufgaben\",\n+    \"notifications\": \"Benachrichtigungen\",\n     \"plugins\": \"Plugins\",\n     \"about\": \"Info\"\n   },\n   \"notifications\": {\n+    \"title\": \"Benachrichtigungen\",\n+    \"description\": \"Lege fest, welche Benachrichtigungen du erh\u00e4ltst.\",\n+    \"webPush\": {\n+      \"title\": \"Web-Push-Benachrichtigungen\",\n+      \"enable\": \"Push-Benachrichtigungen aktivieren\",\n+      \"disable\": \"Push-Benachrichtigungen deaktivieren\",\n+      \"enabled\": \"Push-Benachrichtigungen sind aktiviert\",\n+      \"loading\": \"Wird aktualisiert...\",\n+      \"unsupported\": \"Push-Benachrichtigungen werden in diesem Browser nicht unterst\u00fctzt.\",\n+      \"denied\": \"Push-Benachrichtigungen sind blockiert. Bitte erlaube sie in den Browsereinstellungen.\"\n+    },\n     \"sound\": {\n       \"title\": \"Ton\",\n       \"description\": \"Spielt einen kurzen Ton ab, wenn ein Chat-Lauf abgeschlossen ist.\",\n       \"enabled\": \"Aktiviert\",\n       \"test\": \"Ton testen\"\n+    },\n+    \"events\": {\n+      \"title\": \"Ereignistypen\",\n+      \"actionRequired\": \"Aktion erforderlich\",\n+      \"stop\": \"Lauf gestoppt\",\n+      \"error\": \"Lauf fehlgeschlagen\"\n     }\n   },\n   \"appearanceSettings\": {\ndiff --git a/src/i18n/locales/ru/settings.json b/src/i18n/locales/ru/settings.json\nindex 109161f..94e88f3 100644\n--- a/src/i18n/locales/ru/settings.json\n+++ b/src/i18n/locales/ru/settings.json\n@@ -94,15 +94,33 @@\n     \"git\": \"Git\",\n     \"apiTokens\": \"API \u0438 \u0442\u043e\u043a\u0435\u043d\u044b\",\n     \"tasks\": \"\u0417\u0430\u0434\u0430\u0447\u0438\",\n+    \"notifications\": \"\u0423\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f\",\n     \"plugins\": \"\u041f\u043b\u0430\u0433\u0438\u043d\u044b\",\n     \"about\": \"\u041e \u043f\u0440\u043e\u0433\u0440\u0430\u043c\u043c\u0435\"\n   },\n   \"notifications\": {\n+    \"title\": \"\u0423\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f\",\n+    \"description\": \"\u0423\u043f\u0440\u0430\u0432\u043b\u044f\u0439\u0442\u0435 \u0442\u0435\u043c, \u043a\u0430\u043a\u0438\u0435 \u0441\u043e\u0431\u044b\u0442\u0438\u044f \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0439 \u0432\u044b \u043f\u043e\u043b\u0443\u0447\u0430\u0435\u0442\u0435.\",\n+    \"webPush\": {\n+      \"title\": \"Web Push \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f\",\n+      \"enable\": \"\u0412\u043a\u043b\u044e\u0447\u0438\u0442\u044c Push \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f\",\n+      \"disable\": \"\u041e\u0442\u043a\u043b\u044e\u0447\u0438\u0442\u044c Push \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f\",\n+      \"enabled\": \"Push \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f \u0432\u043a\u043b\u044e\u0447\u0435\u043d\u044b\",\n+      \"loading\": \"\u041e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435...\",\n+      \"unsupported\": \"Push \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f \u043d\u0435 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u044e\u0442\u0441\u044f \u0432 \u044d\u0442\u043e\u043c \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0435.\",\n+      \"denied\": \"Push \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f \u0437\u0430\u0431\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u0430\u043d\u044b. \u0420\u0430\u0437\u0440\u0435\u0448\u0438\u0442\u0435 \u0438\u0445 \u0432 \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430\u0445 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0430.\"\n+    },\n     \"sound\": {\n       \"title\": \"\u0417\u0432\u0443\u043a\",\n       \"description\": \"\u0412\u043e\u0441\u043f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0438\u0442\u044c \u043a\u043e\u0440\u043e\u0442\u043a\u0438\u0439 \u0441\u0438\u0433\u043d\u0430\u043b \u043f\u0440\u0438 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0438\u0438 \u0437\u0430\u043f\u0443\u0441\u043a\u0430 \u0447\u0430\u0442\u0430.\",\n       \"enabled\": \"\u0412\u043a\u043b\u044e\u0447\u0435\u043d\u043e\",\n       \"test\": \"\u041f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c \u0437\u0432\u0443\u043a\"\n+    },\n+    \"events\": {\n+      \"title\": \"\u0422\u0438\u043f\u044b \u0441\u043e\u0431\u044b\u0442\u0438\u0439\",\n+      \"actionRequired\": \"\u0422\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044f \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435\",\n+      \"stop\": \"\u0417\u0430\u043f\u0443\u0441\u043a \u043e\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\",\n+      \"error\": \"\u0417\u0430\u043f\u0443\u0441\u043a \u0437\u0430\u0432\u0435\u0440\u0448\u0438\u043b\u0441\u044f \u0441 \u043e\u0448\u0438\u0431\u043a\u043e\u0439\"\n     }\n   },\n   \"appearanceSettings\": {\ndiff --git a/src/utils/pageTitleNotification.ts b/src/utils/pageTitleNotification.ts\nindex 07f00b6..dd786a0 100644\n--- a/src/utils/pageTitleNotification.ts\n+++ b/src/utils/pageTitleNotification.ts\n@@ -33,12 +33,17 @@ const clearTitleIndicator = (): void => {\n   }\n \n   removeReturnListeners();\n+  removePageInactiveListener();\n \n   if (document.title.startsWith(getIndicatorPrefix())) {\n     document.title = stripIndicator(document.title);\n   }\n };\n \n+const removePageInactiveListener = (): void => {\n+  document.removeEventListener('visibilitychange', handlePageInactive);\n+};\n+\n const scheduleClear = (): void => {\n   if (clearTimer !== null) {\n     window.clearTimeout(clearTimer);\n@@ -47,6 +52,9 @@ const scheduleClear = (): void => {\n   clearTimer = window.setTimeout(() => {\n     clearTitleIndicator();\n   }, TITLE_INDICATOR_CLEAR_DELAY_MS);\n+\n+  removePageInactiveListener();\n+  document.addEventListener('visibilitychange', handlePageInactive, { once: true });\n };\n \n function handleUserReturn(): void {\n@@ -59,6 +67,24 @@ function handleUserReturn(): void {\n   scheduleClear();\n }\n \n+function handlePageInactive(): void {\n+  if (document.visibilityState !== 'hidden') {\n+    return;\n+  }\n+\n+  if (clearTimer !== null) {\n+    window.clearTimeout(clearTimer);\n+    clearTimer = null;\n+  }\n+\n+  if (!returnListenersAttached) {\n+    document.addEventListener('visibilitychange', handleUserReturn);\n+    window.addEventListener('focus', handleUserReturn, true);\n+    window.addEventListener('click', handleUserReturn, true);\n+    returnListenersAttached = true;\n+  }\n+}\n+\n export const showCompletionTitleIndicator = (): void => {\n   if (typeof document === 'undefined' || typeof window === 'undefined') {\n     return;\n"
+    },
+    {
+      "hash": "88eb2009bb55b3c71f494917b1c4a54435035b33",
+      "short_hash": "88eb2009",
+      "author": "Simos Mikelatos",
+      "date": "2026-06-09 18:05:41 +0200",
+      "subject": "Merge branch 'main' into fix/chat-initial-scroll-reanchor",
+      "body": "",
+      "stat": "88eb200 Merge branch 'main' into fix/chat-initial-scroll-reanchor\n\n server/utils/plugin-loader.js                     | 3 ++-\n src/components/plugins/view/PluginSettingsTab.tsx | 9 +++++++++\n src/i18n/locales/en/settings.json                 | 6 ++++++\n 3 files changed, 17 insertions(+), 1 deletion(-)",
+      "diff": ""
+    }
+  ]
+}

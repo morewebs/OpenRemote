@@ -1,0 +1,107 @@
+{
+  "batch_num": 19,
+  "start_index": 181,
+  "end_index": 190,
+  "commits": [
+    {
+      "hash": "3f743d82106bd4e6b521fbaa4f6b078a14c834c0",
+      "short_hash": "3f743d82",
+      "author": "viper151",
+      "date": "2025-09-23 10:48:59 +0200",
+      "subject": "Merge branch 'main' into johnhenry/env-claude-path",
+      "body": "",
+      "stat": "3f743d8 Merge branch 'main' into johnhenry/env-claude-path\n\n .release-it.json  |   18 +\n README.md         |   12 +-\n package-lock.json | 2599 +++++++++++++++++++++++++++++++++++++++++++++++++----\n package.json      |   31 +-\n server/index.js   |    1 +\n 5 files changed, 2485 insertions(+), 176 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "1610de1f2279bc3524af84083688b1890d26db7d",
+      "short_hash": "1610de1f",
+      "author": "simos",
+      "date": "2025-09-23 10:51:18 +0200",
+      "subject": "prettifying change logs",
+      "body": "",
+      "stat": "1610de1 prettifying change logs\n .release-it.json | 5 ++++-\n 1 file changed, 4 insertions(+), 1 deletion(-)",
+      "diff": "diff --git a/.release-it.json b/.release-it.json\nindex 8111ab7..ac52131 100644\n--- a/.release-it.json\n+++ b/.release-it.json\n@@ -10,7 +10,10 @@\n   \"github\": {\n     \"release\": true,\n     \"releaseName\": \"Claude Code UI v${version}\",\n-    \"autoGenerate\": true\n+    \"releaseNotes\": {\n+      \"commit\": \"* ${commit.subject} (${commit.hash}) - thanks @${author.login}!\",\n+      \"excludeMatches\": [\"viper151\"]\n+    }\n   },\n   \"hooks\": {\n     \"before:init\": [\"npm run build\"]\n"
+    },
+    {
+      "hash": "b853e8cda19410e9bfd5d24ac90e33cabedc7bbf",
+      "short_hash": "b853e8cd",
+      "author": "simos",
+      "date": "2025-09-23 10:51:45 +0200",
+      "subject": "Release 1.8.9",
+      "body": "",
+      "stat": "b853e8c Release 1.8.9\n package-lock.json | 4 ++--\n package.json      | 2 +-\n 2 files changed, 3 insertions(+), 3 deletions(-)",
+      "diff": "diff --git a/package-lock.json b/package-lock.json\nindex ceb32c5..93450fa 100644\n--- a/package-lock.json\n+++ b/package-lock.json\n@@ -1,12 +1,12 @@\n {\n   \"name\": \"@siteboon/claude-code-ui\",\n-  \"version\": \"1.8.8\",\n+  \"version\": \"1.8.9\",\n   \"lockfileVersion\": 3,\n   \"requires\": true,\n   \"packages\": {\n     \"\": {\n       \"name\": \"@siteboon/claude-code-ui\",\n-      \"version\": \"1.8.8\",\n+      \"version\": \"1.8.9\",\n       \"license\": \"MIT\",\n       \"dependencies\": {\n         \"@codemirror/lang-css\": \"^6.3.1\",\ndiff --git a/package.json b/package.json\nindex b678a0b..6b0cba9 100644\n--- a/package.json\n+++ b/package.json\n@@ -1,6 +1,6 @@\n {\n   \"name\": \"@siteboon/claude-code-ui\",\n-  \"version\": \"1.8.8\",\n+  \"version\": \"1.8.9\",\n   \"description\": \"A web-based UI for Claude Code CLI\",\n   \"type\": \"module\",\n   \"main\": \"server/index.js\",\n"
+    },
+    {
+      "hash": "d1f310161fa3dab0fbfe76fab96d6122d915b133",
+      "short_hash": "d1f31016",
+      "author": "simos",
+      "date": "2025-09-23 10:54:00 +0200",
+      "subject": "fixes on changelog prettify",
+      "body": "",
+      "stat": "d1f3101 fixes on changelog prettify\n .release-it.json | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)",
+      "diff": "diff --git a/.release-it.json b/.release-it.json\nindex ac52131..c4be29f 100644\n--- a/.release-it.json\n+++ b/.release-it.json\n@@ -11,7 +11,7 @@\n     \"release\": true,\n     \"releaseName\": \"Claude Code UI v${version}\",\n     \"releaseNotes\": {\n-      \"commit\": \"* ${commit.subject} (${commit.hash}) - thanks @${author.login}!\",\n+      \"commit\": \"* ${commit.subject} (${sha}){ - thanks @${author.login}!}\",\n       \"excludeMatches\": [\"viper151\"]\n     }\n   },\n"
+    },
+    {
+      "hash": "533d5891325c9b9b7e48d5b1332096e2b69ace44",
+      "short_hash": "533d5891",
+      "author": "simos",
+      "date": "2025-09-23 10:54:35 +0200",
+      "subject": "Release 1.8.10",
+      "body": "",
+      "stat": "533d589 Release 1.8.10\n package-lock.json | 4 ++--\n package.json      | 2 +-\n 2 files changed, 3 insertions(+), 3 deletions(-)",
+      "diff": "diff --git a/package-lock.json b/package-lock.json\nindex 93450fa..103a904 100644\n--- a/package-lock.json\n+++ b/package-lock.json\n@@ -1,12 +1,12 @@\n {\n   \"name\": \"@siteboon/claude-code-ui\",\n-  \"version\": \"1.8.9\",\n+  \"version\": \"1.8.10\",\n   \"lockfileVersion\": 3,\n   \"requires\": true,\n   \"packages\": {\n     \"\": {\n       \"name\": \"@siteboon/claude-code-ui\",\n-      \"version\": \"1.8.9\",\n+      \"version\": \"1.8.10\",\n       \"license\": \"MIT\",\n       \"dependencies\": {\n         \"@codemirror/lang-css\": \"^6.3.1\",\ndiff --git a/package.json b/package.json\nindex 6b0cba9..6e8a814 100644\n--- a/package.json\n+++ b/package.json\n@@ -1,6 +1,6 @@\n {\n   \"name\": \"@siteboon/claude-code-ui\",\n-  \"version\": \"1.8.9\",\n+  \"version\": \"1.8.10\",\n   \"description\": \"A web-based UI for Claude Code CLI\",\n   \"type\": \"module\",\n   \"main\": \"server/index.js\",\n"
+    },
+    {
+      "hash": "7e1f2940d3c618ac729b6725444e1b2b6d04152b",
+      "short_hash": "7e1f2940",
+      "author": "viper151",
+      "date": "2025-09-23 11:25:56 +0200",
+      "subject": "Merge branch 'main' into johnhenry/env-claude-path",
+      "body": "",
+      "stat": "7e1f294 Merge branch 'main' into johnhenry/env-claude-path\n\n .release-it.json  | 5 ++++-\n package-lock.json | 4 ++--\n package.json      | 2 +-\n 3 files changed, 7 insertions(+), 4 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "0fcf906ff06d08d280db3ba73cec8b2f31164b2f",
+      "short_hash": "0fcf906f",
+      "author": "viper151",
+      "date": "2025-09-23 11:26:44 +0200",
+      "subject": "Merge pull request #197 from johnhenry/johnhenry/env-claude-path",
+      "body": "Feat: Use environment variable for Claude path",
+      "stat": "0fcf906 Merge pull request #197 from johnhenry/johnhenry/env-claude-path\n\n server/claude-cli.js | 6 +++++-\n 1 file changed, 5 insertions(+), 1 deletion(-)",
+      "diff": ""
+    },
+    {
+      "hash": "66fad9a6a294d084e9b9117d46fa95cd81fd0125",
+      "short_hash": "66fad9a6",
+      "author": "viper151",
+      "date": "2025-09-23 11:29:15 +0200",
+      "subject": "Update .env.example",
+      "body": "",
+      "stat": "66fad9a Update .env.example\n .env.example | 5 ++++-\n 1 file changed, 4 insertions(+), 1 deletion(-)",
+      "diff": "diff --git a/.env.example b/.env.example\nindex 7cab272..d1f2fa9 100755\n--- a/.env.example\n+++ b/.env.example\n@@ -9,4 +9,7 @@\n #API server\n PORT=3001\n #Frontend port\n-VITE_PORT=5173\n\\ No newline at end of file\n+VITE_PORT=5173\n+\n+# Uncomment the following line if you have a custom claude cli path other than the default \"claude\"\n+# CLAUDE_CLI_PATH=claude\n"
+    },
+    {
+      "hash": "ce9ab0cd162bcc5c3678f97e28001307321190a0",
+      "short_hash": "ce9ab0cd",
+      "author": "viper151",
+      "date": "2025-09-23 11:29:43 +0200",
+      "subject": "Merge branch 'main' into fix-injection",
+      "body": "",
+      "stat": "ce9ab0c Merge branch 'main' into fix-injection\n\n .env.example                                       |    5 +-\n .release-it.json                                   |   21 +\n README.md                                          |   33 +-\n index.html                                         |    4 +-\n package-lock.json                                  | 2599 ++++++++++++++++++--\n package.json                                       |   31 +-\n server/claude-cli.js                               |    6 +-\n server/index.js                                    |  112 +-\n server/projects.js                                 |  314 ++-\n server/routes/mcp-utils.js                         |   48 +\n server/routes/taskmaster.js                        | 1971 +++++++++++++++\n server/utils/mcp-detector.js                       |  198 ++\n server/utils/taskmaster-websocket.js               |  129 +\n src/App.jsx                                        |   87 +-\n src/components/ChatInterface.jsx                   |   39 +-\n src/components/CreateTaskModal.jsx                 |   88 +\n src/components/DiffViewer.jsx                      |   41 +\n src/components/FileTree.jsx                        |  155 +-\n src/components/GitPanel.jsx                        |   28 +-\n src/components/MainContent.jsx                     |  358 ++-\n src/components/MobileNav.jsx                       |   12 +-\n src/components/NextTaskBanner.jsx                  |  695 ++++++\n src/components/PRDEditor.jsx                       |  871 +++++++\n src/components/{ToolsSettings.jsx => Settings.jsx} |  314 ++-\n src/components/Shell.jsx                           |   49 +-\n src/components/Sidebar.jsx                         |  401 ++-\n src/components/StandaloneShell.jsx                 |  106 +\n src/components/TaskCard.jsx                        |  210 ++\n src/components/TaskDetail.jsx                      |  406 +++\n src/components/TaskIndicator.jsx                   |  108 +\n src/components/TaskList.jsx                        | 1054 ++++++++\n src/components/TaskMasterSetupWizard.jsx           |  603 +++++\n src/components/TaskMasterStatus.jsx                |   86 +\n src/components/TodoList.jsx                        |    4 +-\n src/components/Tooltip.jsx                         |   91 +\n src/contexts/TaskMasterContext.jsx                 |  324 +++\n src/contexts/TasksSettingsContext.jsx              |   95 +\n src/contexts/WebSocketContext.jsx                  |   29 +\n src/index.css                                      |   85 +-\n src/utils/api.js                                   |   52 +\n src/utils/websocket.js                             |    2 +-\n store.db-shm                                       |  Bin 32768 -> 0 bytes\n store.db-wal                                       |    0\n test.html                                          |    1 -\n 44 files changed, 11396 insertions(+), 469 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "3c9a4cab821b10a8f093766287fb1e0c0966e7f0",
+      "short_hash": "3c9a4cab",
+      "author": "viper151",
+      "date": "2025-09-23 11:31:51 +0200",
+      "subject": "Fix: Prevent CLI option injection in --print argument",
+      "body": "Fix: Prevent CLI option injection in --print argument",
+      "stat": "3c9a4ca Fix: Prevent CLI option injection in --print argument\n\n server/claude-cli.js | 20 +++++++++++---------\n 1 file changed, 11 insertions(+), 9 deletions(-)",
+      "diff": ""
+    }
+  ]
+}

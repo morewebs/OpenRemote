@@ -1,0 +1,107 @@
+{
+  "batch_num": 9,
+  "start_index": 81,
+  "end_index": 90,
+  "commits": [
+    {
+      "hash": "abca0a42e24bbd7f508831dff3eed410da7ebb16",
+      "short_hash": "abca0a42",
+      "author": "James Goldbach",
+      "date": "2026-04-17 17:03:56 -0400",
+      "subject": "Merge pull request #148 from grandamenium/fix/pr140-hardcoded-name-and-catalog-churn",
+      "body": "fix(pr140): replace hardcoded speaker name, revert catalog churn",
+      "stat": "abca0a4 Merge pull request #148 from grandamenium/fix/pr140-hardcoded-name-and-catalog-churn\n\n community/skills/agentcard-purchase/SKILL.md | 137 +++++++++++++++++++++++++++\n src/daemon/agent-manager.ts                  |   4 +-\n src/daemon/fast-checker.ts                   |   8 +-\n src/telegram/logging.ts                      |  63 ++++++++++++\n 4 files changed, 210 insertions(+), 2 deletions(-)",
+      "diff": "diff --cc src/daemon/fast-checker.ts\nindex b3ac6f6,de2e5ad..424b3b6\n--- a/src/daemon/fast-checker.ts\n+++ b/src/daemon/fast-checker.ts\n@@@ -239,40 -245,9 +245,40 @@@ Reply using: cortextos bus send-messag\n        ? text.trim()\n        : `\\`\\`\\`\\n${text}\\n\\`\\`\\``;\n      return `=== TELEGRAM from [USER: ${from}] (chat_id:${chatId}) ===\n- ${replyCx}${body}\n+ ${replyCx}${historyCx}${body}\n  ${lastSentCtx}Reply using: cortextos bus send-telegram ${chatId} '<your reply>'\n  \n +`;\n +  }\n +\n +  /**\n +   * Format a Telegram message_reaction update for PTY injection.\n +   * Reactions are emoji additions/removals on existing messages \u2014 they\n +   * surface to the agent so it can follow up on positive acknowledgements\n +   * or clarify after a negative reaction.\n +   *\n +   * `newReaction` is the current reaction state (an empty list means the\n +   * user REMOVED their reaction). `oldReaction` lets the formatter\n +   * distinguish \"added X\" from \"removed Y\". Custom emoji (type=custom_emoji)\n +   * render as [custom_emoji] since we don't resolve the custom_emoji_id.\n +   */\n +  static formatTelegramReaction(\n +    from: string,\n +    chatId: string | number,\n +    messageId: number,\n +    oldReaction: Array<{ type: 'emoji'; emoji: string } | { type: 'custom_emoji'; custom_emoji_id: string }>,\n +    newReaction: Array<{ type: 'emoji'; emoji: string } | { type: 'custom_emoji'; custom_emoji_id: string }>,\n +  ): string {\n +    const render = (list: typeof newReaction): string =>\n +      list.length === 0\n +        ? '(none)'\n +        : list.map((r) => (r.type === 'emoji' ? r.emoji : '[custom_emoji]')).join(' ');\n +\n +    const removed = newReaction.length === 0 && oldReaction.length > 0;\n +    const label = removed ? `removed ${render(oldReaction)}` : render(newReaction);\n +\n +    return `=== REACTION from [USER: ${from}] (chat_id:${chatId}) on message ${messageId}: ${label} ===\n +\n  `;\n    }\n  \n"
+    },
+    {
+      "hash": "c9291cf646c4ec905b6235125ec6be1532dcf1a9",
+      "short_hash": "c9291cf6",
+      "author": "James Goldbach",
+      "date": "2026-04-17 17:42:41 -0400",
+      "subject": "Merge pull request #131 from noogalabs/fix/telegram-conflict-org-case-sensitivity",
+      "body": "fix(org): use readdirSync for exact-case match \u2014 fixes macOS case-insensitive fs",
+      "stat": "c9291cf Merge pull request #131 from noogalabs/fix/telegram-conflict-org-case-sensitivity\n\n src/utils/org.ts             | 71 ++++++++++++++++++++++++++++++++++++++++++++\n tests/unit/utils/org.test.ts | 71 ++++++++++++++++++++++++++++++++++++++++++++\n 2 files changed, 142 insertions(+)",
+      "diff": ""
+    },
+    {
+      "hash": "861bd6bd993807d9e7df9d448b25267d3bb75155",
+      "short_hash": "861bd6bd",
+      "author": "James Goldbach",
+      "date": "2026-04-17 17:42:44 -0400",
+      "subject": "Merge pull request #114 from noogalabs/clean/cron-dedup-session-restore",
+      "body": "fix(daemon): prevent duplicate crons on rapid session restarts",
+      "stat": "861bd6b Merge pull request #114 from noogalabs/clean/cron-dedup-session-restore\n\n src/daemon/agent-process.ts | 4 ++--\n 1 file changed, 2 insertions(+), 2 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "8d16468b8132d034763d1e3cb96e9a990664c8fa",
+      "short_hash": "8d16468b",
+      "author": "James Goldbach",
+      "date": "2026-04-17 17:44:55 -0400",
+      "subject": "fix(cli): graceful exit with clear message when BOT_TOKEN or SLACK_BOT_TOKEN not configured",
+      "body": "Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>",
+      "stat": "8d16468 fix(cli): graceful exit with clear message when BOT_TOKEN or SLACK_BOT_TOKEN not configured\n src/cli/bus.ts | 12 +++++++++---\n 1 file changed, 9 insertions(+), 3 deletions(-)",
+      "diff": "diff --git a/src/cli/bus.ts b/src/cli/bus.ts\nindex 8349960..3615e8a 100644\n--- a/src/cli/bus.ts\n+++ b/src/cli/bus.ts\n@@ -937,7 +937,7 @@ busCommand\n     }\n \n     if (!botToken) {\n-      console.error('Error: BOT_TOKEN not set. Set it in your agent .env file or as an environment variable.');\n+      console.error('Error: BOT_TOKEN not configured. Set it in your agent .env file or as an environment variable to enable Telegram.');\n       process.exit(1);\n     }\n \n@@ -1214,7 +1214,10 @@ busCommand\n       }\n     }\n     if (!botToken) botToken = process.env.BOT_TOKEN || '';\n-    if (!botToken) { console.error('Error: BOT_TOKEN not set'); process.exit(1); }\n+    if (!botToken) {\n+      console.error('Error: BOT_TOKEN not configured. Set it in your agent .env file or as an environment variable to enable Telegram.');\n+      process.exit(1);\n+    }\n \n     const api = new TelegramAPI(botToken);\n     let markup: object | undefined;\n@@ -1250,7 +1253,10 @@ busCommand\n       }\n     }\n     if (!botToken) botToken = process.env.BOT_TOKEN || '';\n-    if (!botToken) { console.error('Error: BOT_TOKEN not set'); process.exit(1); }\n+    if (!botToken) {\n+      console.error('Error: BOT_TOKEN not configured. Set it in your agent .env file or as an environment variable to enable Telegram.');\n+      process.exit(1);\n+    }\n \n     const api = new TelegramAPI(botToken);\n     try {\n"
+    },
+    {
+      "hash": "86ebce655cd7e315b9249876007ccbd594a25aa2",
+      "short_hash": "86ebce65",
+      "author": "Test",
+      "date": "2026-04-17 17:44:59 -0400",
+      "subject": "init",
+      "body": "",
+      "stat": "86ebce6 init\n .gitkeep | 0\n 1 file changed, 0 insertions(+), 0 deletions(-)",
+      "diff": "diff --git a/.gitkeep b/.gitkeep\nnew file mode 100644\nindex 0000000..e69de29\n"
+    },
+    {
+      "hash": "c7db670a51db2289cdcbef9895c90732aa06f9c5",
+      "short_hash": "c7db670a",
+      "author": "Test",
+      "date": "2026-04-17 17:45:08 -0400",
+      "subject": "feat(bus): auto-emit activity events from send-message, ack-inbox, update-heartbeat, send-telegram",
+      "body": "Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>",
+      "stat": "c7db670 feat(bus): auto-emit activity events from send-message, ack-inbox, update-heartbeat, send-telegram\n src/cli/bus.ts | 21 +++++++++++++++++++++\n 1 file changed, 21 insertions(+)",
+      "diff": "diff --git a/src/cli/bus.ts b/src/cli/bus.ts\nindex 8349960..9a30e22 100644\n--- a/src/cli/bus.ts\n+++ b/src/cli/bus.ts\n@@ -111,6 +111,9 @@ busCommand\n     }\n \n     const msgId = sendMessage(paths, env.agentName, to, priority as Priority, text, effectiveReplyTo);\n+    try {\n+      logEvent(paths, env.agentName, env.org, 'message', 'agent_message_sent', 'info', JSON.stringify({ to, priority, msg_id: msgId, reply_to: effectiveReplyTo ?? null }));\n+    } catch { /* non-fatal */ }\n     console.log(msgId);\n   });\n \n@@ -130,6 +133,9 @@ busCommand\n     const env = resolveEnv();\n     const paths = resolvePaths(env.agentName, env.instanceId, env.org);\n     ackInbox(paths, id);\n+    try {\n+      logEvent(paths, env.agentName, env.org, 'message', 'inbox_ack', 'info', JSON.stringify({ msg_id: id }));\n+    } catch { /* non-fatal */ }\n     console.log(`ACK'd ${id}`);\n   });\n \n@@ -457,6 +463,14 @@ busCommand\n       currentTask: opts.task,\n       displayName,\n     });\n+    // Auto-emit a heartbeat event so the activity feed surfaces any live agent\n+    // even if the agent itself forgets to call log-event. This makes the\n+    // dashboard \"agents\" list derive from heartbeats, not just explicit events.\n+    try {\n+      logEvent(paths, env.agentName, env.org, 'heartbeat', 'heartbeat', 'info', JSON.stringify({ status, task: opts.task ?? '' }));\n+    } catch {\n+      // Non-fatal: heartbeat write already succeeded\n+    }\n     console.log(`Heartbeat updated: ${env.agentName}`);\n   });\n \n@@ -970,6 +984,13 @@ busCommand\n           parseFallbackReason: parseFallbackReason ?? undefined,\n         });\n         cacheLastSent(env.ctxRoot, env.agentName, chatId, message);\n+        // Auto-emit activity event so dashboard sees every Telegram send,\n+        // even from agents that never call log-event directly.\n+        try {\n+          const paths = resolvePaths(env.agentName, env.instanceId, env.org);\n+          const preview = message.length > 120 ? message.slice(0, 120) + '\u2026' : message;\n+          logEvent(paths, env.agentName, env.org, 'message', 'telegram_sent', 'info', JSON.stringify({ chat_id: chatId, message_id: sentMessageId, preview }));\n+        } catch { /* non-fatal */ }\n       }\n \n       console.log('Message sent');\n"
+    },
+    {
+      "hash": "860b3590217ee41b0409b76d4c8c55017e843fa5",
+      "short_hash": "860b3590",
+      "author": "Test",
+      "date": "2026-04-17 17:46:00 -0400",
+      "subject": "init",
+      "body": "",
+      "stat": "860b359 init\n .gitkeep | 0\n 1 file changed, 0 insertions(+), 0 deletions(-)",
+      "diff": "diff --git a/.gitkeep b/.gitkeep\nnew file mode 100644\nindex 0000000..e69de29\n"
+    },
+    {
+      "hash": "d77820b4dcb3071c80f55c9bf8f53fd2408c6799",
+      "short_hash": "d77820b4",
+      "author": "Test",
+      "date": "2026-04-17 17:46:48 -0400",
+      "subject": "fix(org): normalize org casing at KB-write and dashboard sync",
+      "body": "Clean re-application of the fix from #62 \u2014 targeted changes only, building\non #131 (already merged, added normalizeOrgName to src/utils/org.ts using\nreaddirSync so macOS/Windows case-insensitive filesystems no longer\nshort-circuit the lookup).\n\n- src/bus/knowledge-base.ts: wire normalizeOrgName into buildKBEnv,\n  queryKnowledgeBase, ingestKnowledgeBase, and ensureKBDirs so every\n  downstream path, env var, and ChromaDB collection name uses the\n  canonical filesystem casing. Add frameworkRoot parameter to ensureKBDirs.\n- src/cli/bus.ts: pass env.frameworkRoot to ensureKBDirs at the kb-ingest\n  call site.\n- dashboard/src/lib/config.ts: getOrgs dedupes case variants by lowercase\n  key; framework root wins over state dir so we never return a ghost\n  lowercase name when the canonical dir exists in framework.\n\nWithout these wires, one lowercase `cortextos bus kb-* --org acmecorp`\ninvocation bootstraps a phantom ~/.cortextos/default/orgs/acmecorp/\nstate dir with its own MMRAG config.json, and dashboard sync floods the\nlog with lookup failures against the non-existent lowercase org.\n\nCo-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>",
+      "stat": "d77820b fix(org): normalize org casing at KB-write and dashboard sync\n dashboard/src/lib/config.ts | 34 +++++++++++++++++++++-------------\n src/bus/knowledge-base.ts   | 35 ++++++++++++++++++++++++++++-------\n src/cli/bus.ts              |  2 +-\n 3 files changed, 50 insertions(+), 21 deletions(-)",
+      "diff": "diff --git a/dashboard/src/lib/config.ts b/dashboard/src/lib/config.ts\nindex 13306f7..dc12445 100644\n--- a/dashboard/src/lib/config.ts\n+++ b/dashboard/src/lib/config.ts\n@@ -120,26 +120,34 @@ export function getAgentDir(name: string, org?: string): string {\n // -- Discovery functions --\n \n export function getOrgs(): string[] {\n-  const orgs = new Set<string>();\n-\n-  // Check state dir (CTX_ROOT/orgs/)\n+  // Read framework root FIRST \u2014 it is the source of truth for org naming.\n+  // When the same org exists in both dirs with drifted casing (e.g. a ghost\n+  // `acmecorp/` in state + canonical `AcmeCorp/` in framework),\n+  // we keep the framework casing and discard the state-dir variant. Without\n+  // this, dashboard sync hits both names and floods the log with lookup\n+  // failures against the non-existent lowercase dir.\n+  const frameworkOrgsDir = path.join(CTX_FRAMEWORK_ROOT, 'orgs');\n   const stateOrgsDir = path.join(CTX_ROOT, 'orgs');\n-  if (fs.existsSync(stateOrgsDir)) {\n-    for (const d of fs.readdirSync(stateOrgsDir, { withFileTypes: true })) {\n-      if (d.isDirectory()) orgs.add(d.name);\n+\n+  // Map lowercase key -> canonical casing. Framework entries win over state\n+  // entries. Within a single dir, we trust fs.readdirSync uniqueness.\n+  const byLower = new Map<string, string>();\n+\n+  if (fs.existsSync(frameworkOrgsDir)) {\n+    for (const d of fs.readdirSync(frameworkOrgsDir, { withFileTypes: true })) {\n+      if (d.isDirectory()) byLower.set(d.name.toLowerCase(), d.name);\n     }\n   }\n \n-  // Also check project/framework root (CTX_FRAMEWORK_ROOT/orgs/)\n-  // This is where CLI creates org config files (context.json, knowledge.md)\n-  const frameworkOrgsDir = path.join(CTX_FRAMEWORK_ROOT, 'orgs');\n-  if (frameworkOrgsDir !== stateOrgsDir && fs.existsSync(frameworkOrgsDir)) {\n-    for (const d of fs.readdirSync(frameworkOrgsDir, { withFileTypes: true })) {\n-      if (d.isDirectory()) orgs.add(d.name);\n+  if (frameworkOrgsDir !== stateOrgsDir && fs.existsSync(stateOrgsDir)) {\n+    for (const d of fs.readdirSync(stateOrgsDir, { withFileTypes: true })) {\n+      if (d.isDirectory() && !byLower.has(d.name.toLowerCase())) {\n+        byLower.set(d.name.toLowerCase(), d.name);\n+      }\n     }\n   }\n \n-  return Array.from(orgs);\n+  return Array.from(byLower.values());\n }\n \n export function getAgentsForOrg(org: string): string[] {\ndiff --git a/src/bus/knowledge-base.ts b/src/bus/knowledge-base.ts\nindex eaa6df6..0759b17 100644\n--- a/src/bus/knowledge-base.ts\n+++ b/src/bus/knowledge-base.ts\n@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync } from 'fs';\n import { join } from 'path';\n import { homedir } from 'os';\n import type { BusPaths } from '../types/index.js';\n+import { normalizeOrgName } from '../utils/org.js';\n \n /**\n  * Knowledge base integration \u2014 calls mmrag.py directly (cross-platform,\n@@ -73,12 +74,18 @@ function buildKBEnv(\n   instanceId: string,\n   agent?: string,\n ): Record<string, string> {\n-  const kbRoot = join(homedir(), '.cortextos', instanceId, 'orgs', org, 'knowledge-base');\n-  const secrets = loadSecretsEnv(frameworkRoot, org);\n+  // Normalize org to its canonical filesystem casing BEFORE touching any\n+  // paths. Without this, a lowercase --org arg produces a ghost state dir\n+  // (~/.cortextos/<instance>/orgs/<lowercase>/knowledge-base/) with its own\n+  // MMRAG config.json, splitting KB state across two directories and\n+  // polluting dashboard sync with hits against a non-existent org.\n+  const canonicalOrg = normalizeOrgName(frameworkRoot, org);\n+  const kbRoot = join(homedir(), '.cortextos', instanceId, 'orgs', canonicalOrg, 'knowledge-base');\n+  const secrets = loadSecretsEnv(frameworkRoot, canonicalOrg);\n   return {\n     ...process.env as Record<string, string>,\n     ...secrets,\n-    CTX_ORG: org,\n+    CTX_ORG: canonicalOrg,\n     CTX_AGENT_NAME: agent || '',\n     CTX_INSTANCE_ID: instanceId,\n     CTX_FRAMEWORK_ROOT: frameworkRoot,\n@@ -121,7 +128,13 @@ export function queryKnowledgeBase(\n     instanceId: string;\n   },\n ): KBQueryResponse {\n-  const { org, agent, scope = 'all', topK = 5, threshold = 0.5, frameworkRoot, instanceId } = options;\n+  const { agent, scope = 'all', topK = 5, threshold = 0.5, frameworkRoot, instanceId } = options;\n+  // Normalize once at the top so every downstream path join, env var, and\n+  // ChromaDB collection name uses the canonical filesystem casing. Without\n+  // this, `shared-acmecorp` and `shared-AcmeCorp` become two\n+  // distinct ChromaDB collections and a case-drifted query silently hits\n+  // the wrong one.\n+  const org = normalizeOrgName(frameworkRoot, options.org);\n \n   const env = buildKBEnv(frameworkRoot, org, instanceId, agent);\n \n@@ -239,7 +252,9 @@ export function ingestKnowledgeBase(\n     instanceId: string;\n   },\n ): void {\n-  const { org, agent, scope = 'shared', force, frameworkRoot, instanceId } = options;\n+  const { agent, scope = 'shared', force, frameworkRoot, instanceId } = options;\n+  // Normalize once (see queryKnowledgeBase for rationale).\n+  const org = normalizeOrgName(frameworkRoot, options.org);\n \n   const env = buildKBEnv(frameworkRoot, org, instanceId, agent);\n \n@@ -298,9 +313,15 @@ export function ingestKnowledgeBase(\n \n /**\n  * Ensure the knowledge base directories exist for an org.\n+ *\n+ * `frameworkRoot` is required so the org name can be normalized to its\n+ * canonical filesystem casing \u2014 without that, a caller passing a drifted\n+ * name (e.g. \"acmecorp\") would create a ghost state dir identical\n+ * to the one this module was written to prevent.\n  */\n-export function ensureKBDirs(instanceId: string, org: string): void {\n-  const kbRoot = join(homedir(), '.cortextos', instanceId, 'orgs', org, 'knowledge-base');\n+export function ensureKBDirs(instanceId: string, frameworkRoot: string, org: string): void {\n+  const canonicalOrg = normalizeOrgName(frameworkRoot, org);\n+  const kbRoot = join(homedir(), '.cortextos', instanceId, 'orgs', canonicalOrg, 'knowledge-base');\n   const chromaDir = join(kbRoot, 'chromadb');\n   if (!existsSync(chromaDir)) {\n     mkdirSync(chromaDir, { recursive: true });\ndiff --git a/src/cli/bus.ts b/src/cli/bus.ts\nindex 8349960..27a7555 100644\n--- a/src/cli/bus.ts\n+++ b/src/cli/bus.ts\n@@ -1092,7 +1092,7 @@ busCommand\n       process.exit(1);\n     }\n \n-    ensureKBDirs(env.instanceId, org);\n+    ensureKBDirs(env.instanceId, env.frameworkRoot, org);\n \n     ingestKnowledgeBase(paths, {\n       org,\n"
+    },
+    {
+      "hash": "55cf04ad6502072b605ff75495b0c5a0e4ed39fb",
+      "short_hash": "55cf04ad",
+      "author": "James Goldbach",
+      "date": "2026-04-17 18:00:44 -0400",
+      "subject": "Merge pull request #162 from grandamenium/fix/graceful-missing-bot-token-clean",
+      "body": "fix(cli): graceful exit when BOT_TOKEN or SLACK_BOT_TOKEN not configured",
+      "stat": "55cf04a Merge pull request #162 from grandamenium/fix/graceful-missing-bot-token-clean\n\n .gitkeep       |  0\n src/cli/bus.ts | 12 +++++++++---\n 2 files changed, 9 insertions(+), 3 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "fbe58feed39685afe985c46f7a596b9ef63da96c",
+      "short_hash": "fbe58fee",
+      "author": "James Goldbach",
+      "date": "2026-04-17 18:00:46 -0400",
+      "subject": "Merge pull request #163 from grandamenium/feat/bus-auto-emit-activity-events-clean",
+      "body": "feat(bus): auto-emit activity events from common bus commands",
+      "stat": "fbe58fe Merge pull request #163 from grandamenium/feat/bus-auto-emit-activity-events-clean\n\n src/cli/bus.ts | 21 +++++++++++++++++++++\n 1 file changed, 21 insertions(+)",
+      "diff": ""
+    }
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "batch_num": 42,
+  "start_index": 411,
+  "end_index": 420,
+  "commits": [
+    {
+      "hash": "1b42dba902423c6bc7a1cadc1fb521fb93a5b4a9",
+      "short_hash": "1b42dba9",
+      "author": "viper151",
+      "date": "2026-01-26 11:56:05 +0100",
+      "subject": "Set base path for Vite configuration",
+      "body": "",
+      "stat": "1b42dba Set base path for Vite configuration\n vite.config.js | 3 ++-\n 1 file changed, 2 insertions(+), 1 deletion(-)",
+      "diff": "diff --git a/vite.config.js b/vite.config.js\nindex 5fad3ad..1fcac95 100755\n--- a/vite.config.js\n+++ b/vite.config.js\n@@ -7,6 +7,7 @@ export default defineConfig(({ command, mode }) => {\n   \n   \n   return {\n+    base: './',                                          \n     plugins: [react()],\n     server: {\n       port: parseInt(env.VITE_PORT) || 5173,\n@@ -45,4 +46,4 @@ export default defineConfig(({ command, mode }) => {\n       }\n     }\n   }\n-})\n\\ No newline at end of file\n+})\n"
+    },
+    {
+      "hash": "5512e2e15b9cc04e56d02ce47ac126827e140def",
+      "short_hash": "5512e2e1",
+      "author": "viper151",
+      "date": "2026-01-26 11:58:22 +0100",
+      "subject": "Merge pull request #343 from siteboon/viper151-patch-1-1",
+      "body": "Set base path for Vite configuration",
+      "stat": "5512e2e Merge pull request #343 from siteboon/viper151-patch-1-1\n\n vite.config.js | 3 ++-\n 1 file changed, 2 insertions(+), 1 deletion(-)",
+      "diff": ""
+    },
+    {
+      "hash": "3debc3a249f5784232209e16ad29f713e02f289c",
+      "short_hash": "3debc3a2",
+      "author": "viper151",
+      "date": "2026-01-26 13:34:38 +0100",
+      "subject": "Reorder return statements for claude commands",
+      "body": "",
+      "stat": "3debc3a Reorder return statements for claude commands\n src/components/LoginModal.jsx | 4 ++--\n 1 file changed, 2 insertions(+), 2 deletions(-)",
+      "diff": "diff --git a/src/components/LoginModal.jsx b/src/components/LoginModal.jsx\nindex c431b8a..279917d 100644\n--- a/src/components/LoginModal.jsx\n+++ b/src/components/LoginModal.jsx\n@@ -31,13 +31,13 @@ function LoginModal({\n \n     switch (provider) {\n       case 'claude':\n-        return isAuthenticated ? 'claude /login --dangerously-skip-permissions' : 'claude setup-token --dangerously-skip-permissions';\n+        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : 'claude /login --dangerously-skip-permissions';\n       case 'cursor':\n         return 'cursor-agent login';\n       case 'codex':\n         return isPlatform ? 'codex login --device-auth' : 'codex login';\n       default:\n-        return isAuthenticated ? 'claude /login --dangerously-skip-permissions' : 'claude setup-token --dangerously-skip-permissions';\n+        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : 'claude /login --dangerously-skip-permissions';\n     }\n   };\n \n"
+    },
+    {
+      "hash": "4957220a056266dc030efc3ddc2763b981f0165c",
+      "short_hash": "4957220a",
+      "author": "viper151",
+      "date": "2026-01-26 13:39:24 +0100",
+      "subject": "Remove base path configuration from Vite config",
+      "body": "",
+      "stat": "4957220 Remove base path configuration from Vite config\n vite.config.js | 1 -\n 1 file changed, 1 deletion(-)",
+      "diff": "diff --git a/vite.config.js b/vite.config.js\nindex 1fcac95..ee2d943 100755\n--- a/vite.config.js\n+++ b/vite.config.js\n@@ -7,7 +7,6 @@ export default defineConfig(({ command, mode }) => {\n   \n   \n   return {\n-    base: './',                                          \n     plugins: [react()],\n     server: {\n       port: parseInt(env.VITE_PORT) || 5173,\n"
+    },
+    {
+      "hash": "4d2b592ec6fe5765fb519cf8990d24697d3e0dd9",
+      "short_hash": "4d2b592e",
+      "author": "viper151",
+      "date": "2026-01-26 15:38:00 +0100",
+      "subject": "Update Router to use dynamic basename",
+      "body": "",
+      "stat": "4d2b592 Update Router to use dynamic basename\n src/App.jsx | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)",
+      "diff": "diff --git a/src/App.jsx b/src/App.jsx\nindex 371d490..b65f65b 100644\n--- a/src/App.jsx\n+++ b/src/App.jsx\n@@ -990,7 +990,7 @@ function App() {\n             <TasksSettingsProvider>\n               <TaskMasterProvider>\n                 <ProtectedRoute>\n-                  <Router>\n+                  <Router basename={window.__ROUTER_BASENAME__ || ''}>                                                                                                      \n                     <Routes>\n                       <Route path=\"/\" element={<AppContent />} />\n                       <Route path=\"/session/:sessionId\" element={<AppContent />} />\n"
+    },
+    {
+      "hash": "14fb81586cf9a2603a680c7bc2063df19d6f10ad",
+      "short_hash": "14fb8158",
+      "author": "Haileyesus",
+      "date": "2026-01-27 22:58:56 +0300",
+      "subject": "Merge pull request #320 from EricBlanquer/fix/new-project-folder-selection",
+      "body": "feat: enhance project creation wizard - folder browser fixes and git clone improvements",
+      "stat": "14fb815 Merge pull request #320 from EricBlanquer/fix/new-project-folder-selection\n\n server/index.js                          |  51 ++++++-\n server/middleware/auth.js                |   7 +-\n server/projects.js                       |   2 +-\n server/routes/projects.js                | 236 +++++++++++++++++++++++++----\n src/components/ProjectCreationWizard.jsx | 249 ++++++++++++++++++++++++-------\n src/i18n/locales/en/common.json          |  18 ++-\n src/i18n/locales/zh-CN/common.json       |  18 ++-\n src/utils/api.js                         |   6 +\n 8 files changed, 484 insertions(+), 103 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "2d06cae0cab4370e31254a1cf040e7938bbdd530",
+      "short_hash": "2d06cae0",
+      "author": "simosmik",
+      "date": "2026-01-28 10:06:50 +0000",
+      "subject": "Release 1.15.0",
+      "body": "",
+      "stat": "2d06cae Release 1.15.0\n package-lock.json | 4 ++--\n package.json      | 2 +-\n 2 files changed, 3 insertions(+), 3 deletions(-)",
+      "diff": "diff --git a/package-lock.json b/package-lock.json\nindex 3c67d5b..2f287a5 100644\n--- a/package-lock.json\n+++ b/package-lock.json\n@@ -1,12 +1,12 @@\n {\n   \"name\": \"@siteboon/claude-code-ui\",\n-  \"version\": \"1.14.0\",\n+  \"version\": \"1.15.0\",\n   \"lockfileVersion\": 3,\n   \"requires\": true,\n   \"packages\": {\n     \"\": {\n       \"name\": \"@siteboon/claude-code-ui\",\n-      \"version\": \"1.14.0\",\n+      \"version\": \"1.15.0\",\n       \"license\": \"MIT\",\n       \"dependencies\": {\n         \"@anthropic-ai/claude-agent-sdk\": \"^0.1.29\",\ndiff --git a/package.json b/package.json\nindex 3a57edf..fdc47ae 100644\n--- a/package.json\n+++ b/package.json\n@@ -1,6 +1,6 @@\n {\n   \"name\": \"@siteboon/claude-code-ui\",\n-  \"version\": \"1.14.0\",\n+  \"version\": \"1.15.0\",\n   \"description\": \"A web-based UI for Claude Code CLI\",\n   \"type\": \"module\",\n   \"main\": \"server/index.js\",\n"
+    },
+    {
+      "hash": "bbb51dbf99055de79a39f52dcfe394a4efbdf8d4",
+      "short_hash": "bbb51dbf",
+      "author": "Haileyesus",
+      "date": "2026-01-28 22:12:20 +0300",
+      "subject": "fix: enforce WORKSPACES_ROOT in folder browser and folder creation",
+      "body": "",
+      "stat": "bbb51db fix: enforce WORKSPACES_ROOT in folder browser and folder creation\n server/index.js                          | 63 ++++++++++++++++++++------------\n server/routes/projects.js                |  4 +-\n src/components/ProjectCreationWizard.jsx |  2 +-\n 3 files changed, 43 insertions(+), 26 deletions(-)",
+      "diff": "diff --git a/server/index.js b/server/index.js\nindex 719e1c3..1c42d30 100755\n--- a/server/index.js\n+++ b/server/index.js\n@@ -70,7 +70,7 @@ import mcpUtilsRoutes from './routes/mcp-utils.js';\n import commandsRoutes from './routes/commands.js';\n import settingsRoutes from './routes/settings.js';\n import agentRoutes from './routes/agent.js';\n-import projectsRoutes, { FORBIDDEN_PATHS } from './routes/projects.js';\n+import projectsRoutes, { WORKSPACES_ROOT, validateWorkspacePath } from './routes/projects.js';\n import cliAuthRoutes from './routes/cli-auth.js';\n import userRoutes from './routes/user.js';\n import codexRoutes from './routes/codex.js';\n@@ -484,22 +484,42 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {\n     }\n });\n \n+const expandWorkspacePath = (inputPath) => {\n+    if (!inputPath) return inputPath;\n+    if (inputPath === '~') {\n+        return WORKSPACES_ROOT;\n+    }\n+    if (inputPath.startsWith('~/') || inputPath.startsWith('~\\\\')) {\n+        return path.join(WORKSPACES_ROOT, inputPath.slice(2));\n+    }\n+    return inputPath;\n+};\n+\n // Browse filesystem endpoint for project suggestions - uses existing getFileTree\n app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {\n     try {\n         const { path: dirPath } = req.query;\n         \n+        console.log('[API] Browse filesystem request for path:', dirPath);\n+        console.log('[API] WORKSPACES_ROOT is:', WORKSPACES_ROOT);\n         // Default to home directory if no path provided\n-        const homeDir = os.homedir();\n-        let targetPath = dirPath ? dirPath.replace('~', homeDir) : homeDir;\n+        const defaultRoot = WORKSPACES_ROOT;\n+        let targetPath = dirPath ? expandWorkspacePath(dirPath) : defaultRoot;\n         \n         // Resolve and normalize the path\n         targetPath = path.resolve(targetPath);\n+\n+        // Security check - ensure path is within allowed workspace root\n+        const validation = await validateWorkspacePath(targetPath);\n+        if (!validation.valid) {\n+            return res.status(403).json({ error: validation.error });\n+        }\n+        const resolvedPath = validation.resolvedPath || targetPath;\n         \n         // Security check - ensure path is accessible\n         try {\n-            await fs.promises.access(targetPath);\n-            const stats = await fs.promises.stat(targetPath);\n+            await fs.promises.access(resolvedPath);\n+            const stats = await fs.promises.stat(resolvedPath);\n             \n             if (!stats.isDirectory()) {\n                 return res.status(400).json({ error: 'Path is not a directory' });\n@@ -509,7 +529,7 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {\n         }\n         \n         // Use existing getFileTree function with shallow depth (only direct children)\n-        const fileTree = await getFileTree(targetPath, 1, 0, false); // maxDepth=1, showHidden=false\n+        const fileTree = await getFileTree(resolvedPath, 1, 0, false); // maxDepth=1, showHidden=false\n         \n         // Filter only directories and format for suggestions\n         const directories = fileTree\n@@ -529,7 +549,13 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {\n             \n         // Add common directories if browsing home directory\n         const suggestions = [];\n-        if (targetPath === homeDir) {\n+        let resolvedWorkspaceRoot = defaultRoot;\n+        try {\n+            resolvedWorkspaceRoot = await fsPromises.realpath(defaultRoot);\n+        } catch (error) {\n+            // Use default root as-is if realpath fails\n+        }\n+        if (resolvedPath === resolvedWorkspaceRoot) {\n             const commonDirs = ['Desktop', 'Documents', 'Projects', 'Development', 'Dev', 'Code', 'workspace'];\n             const existingCommon = directories.filter(dir => commonDirs.includes(dir.name));\n             const otherDirs = directories.filter(dir => !commonDirs.includes(dir.name));\n@@ -540,7 +566,7 @@ app.get('/api/browse-filesystem', authenticateToken, async (req, res) => {\n         }\n         \n         res.json({\n-            path: targetPath,\n+            path: resolvedPath,\n             suggestions: suggestions\n         });\n         \n@@ -556,22 +582,13 @@ app.post('/api/create-folder', authenticateToken, async (req, res) => {\n         if (!folderPath) {\n             return res.status(400).json({ error: 'Path is required' });\n         }\n-        const homeDir = os.homedir();\n-        const targetPath = path.resolve(folderPath.replace('~', homeDir));\n-        const normalizedPath = path.normalize(targetPath);\n-        const comparePath = normalizedPath.toLowerCase();\n-        const forbiddenLower = FORBIDDEN_PATHS.map(p => p.toLowerCase());\n-        if (forbiddenLower.includes(comparePath) || comparePath === '/') {\n-            return res.status(403).json({ error: 'Cannot create folders in system directories' });\n-        }\n-        for (const forbidden of forbiddenLower) {\n-            if (comparePath.startsWith(forbidden + path.sep)) {\n-                if (forbidden === '/var' && (comparePath.startsWith('/var/tmp') || comparePath.startsWith('/var/folders'))) {\n-                    continue;\n-                }\n-                return res.status(403).json({ error: `Cannot create folders in system directory: ${forbidden}` });\n-            }\n+        const expandedPath = expandWorkspacePath(folderPath);\n+        const resolvedInput = path.resolve(expandedPath);\n+        const validation = await validateWorkspacePath(resolvedInput);\n+        if (!validation.valid) {\n+            return res.status(403).json({ error: validation.error });\n         }\n+        const targetPath = validation.resolvedPath || resolvedInput;\n         const parentDir = path.dirname(targetPath);\n         try {\n             await fs.promises.access(parentDir);\ndiff --git a/server/routes/projects.js b/server/routes/projects.js\nindex 7db0537..2f41610 100644\n--- a/server/routes/projects.js\n+++ b/server/routes/projects.js\n@@ -13,7 +13,7 @@ function sanitizeGitError(message, token) {\n }\n \n // Configure allowed workspace root (defaults to user's home directory)\n-const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();\n+export const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();\n \n // System-critical paths that should never be used as workspace directories\n export const FORBIDDEN_PATHS = [\n@@ -48,7 +48,7 @@ export const FORBIDDEN_PATHS = [\n  * @param {string} requestedPath - The path to validate\n  * @returns {Promise<{valid: boolean, resolvedPath?: string, error?: string}>}\n  */\n-async function validateWorkspacePath(requestedPath) {\n+export async function validateWorkspacePath(requestedPath) {\n   try {\n     // Resolve to absolute path\n     let absolutePath = path.resolve(requestedPath);\ndiff --git a/src/components/ProjectCreationWizard.jsx b/src/components/ProjectCreationWizard.jsx\nindex dd6ab72..5126d44 100644\n--- a/src/components/ProjectCreationWizard.jsx\n+++ b/src/components/ProjectCreationWizard.jsx\n@@ -183,7 +183,7 @@ const ProjectCreationWizard = ({ onClose, onProjectCreated }) => {\n       const data = await response.json();\n \n       if (!response.ok) {\n-        throw new Error(data.error || t('projectWizard.errors.failedToCreate'));\n+        throw new Error(data.details || data.error || t('projectWizard.errors.failedToCreate'));\n       }\n \n       if (onProjectCreated) {\n"
+    },
+    {
+      "hash": "53224e47b6e0e47688426d5b7d711d5e3e03283e",
+      "short_hash": "53224e47",
+      "author": "simosmik",
+      "date": "2026-01-28 23:08:11 +0000",
+      "subject": "fix: change claude login order and command",
+      "body": "",
+      "stat": "53224e4 fix: change claude login order and command\n src/components/LoginModal.jsx | 4 ++--\n src/components/Onboarding.jsx | 3 ++-\n 2 files changed, 4 insertions(+), 3 deletions(-)",
+      "diff": "diff --git a/src/components/LoginModal.jsx b/src/components/LoginModal.jsx\nindex 279917d..d2c2213 100644\n--- a/src/components/LoginModal.jsx\n+++ b/src/components/LoginModal.jsx\n@@ -31,13 +31,13 @@ function LoginModal({\n \n     switch (provider) {\n       case 'claude':\n-        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : 'claude /login --dangerously-skip-permissions';\n+        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : 'claude /exit --dangerously-skip-permissions --no-session-persistence';\n       case 'cursor':\n         return 'cursor-agent login';\n       case 'codex':\n         return isPlatform ? 'codex login --device-auth' : 'codex login';\n       default:\n-        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : 'claude /login --dangerously-skip-permissions';\n+        return isAuthenticated ? 'claude setup-token --dangerously-skip-permissions' : 'claude /exit --dangerously-skip-permissions --no-session-persistence';\n     }\n   };\n \ndiff --git a/src/components/Onboarding.jsx b/src/components/Onboarding.jsx\nindex 2247c73..29bf762 100644\n--- a/src/components/Onboarding.jsx\n+++ b/src/components/Onboarding.jsx\n@@ -15,7 +15,8 @@ const Onboarding = ({ onComplete }) => {\n   const [error, setError] = useState('');\n \n   const [activeLoginProvider, setActiveLoginProvider] = useState(null);\n-  const [selectedProject] = useState({ name: 'default', fullPath: '' });\n+  const isPlatform = import.meta.env.VITE_IS_PLATFORM === 'true';\n+  const [selectedProject] = useState({ name: 'default', fullPath: isPlatform ? '/workspace' : '' });\n \n   const [claudeAuthStatus, setClaudeAuthStatus] = useState({\n     authenticated: false,\n"
+    },
+    {
+      "hash": "41ef84c28317287aa4a5edb64dd2565be48cdc58",
+      "short_hash": "41ef84c2",
+      "author": "viper151",
+      "date": "2026-01-29 20:55:55 +0100",
+      "subject": "Merge pull request #353 from siteboon/fix/WORKSPACES_ROOT-issue-in-deployed-version",
+      "body": "",
+      "stat": "41ef84c Merge pull request #353 from siteboon/fix/WORKSPACES_ROOT-issue-in-deployed-version\n\n server/index.js                          | 63 ++++++++++++++++++++------------\n server/routes/projects.js                |  4 +-\n src/components/ProjectCreationWizard.jsx |  2 +-\n 3 files changed, 43 insertions(+), 26 deletions(-)",
+      "diff": ""
+    }
+  ]
+}

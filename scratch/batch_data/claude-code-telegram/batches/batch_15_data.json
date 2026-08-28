@@ -1,0 +1,107 @@
+{
+  "batch_num": 15,
+  "start_index": 141,
+  "end_index": 150,
+  "commits": [
+    {
+      "hash": "c76056fdb3147a33fc181000a767b9bcae427933",
+      "short_hash": "c76056fd",
+      "author": "Richard A",
+      "date": "2026-02-21 20:49:53 +0400",
+      "subject": "Merge pull request #86 from lapinvert/main",
+      "body": "",
+      "stat": "c76056f Merge pull request #86 from lapinvert/main\n\n .env.example           | 2 +-\n src/config/settings.py | 1 +\n 2 files changed, 2 insertions(+), 1 deletion(-)",
+      "diff": ""
+    },
+    {
+      "hash": "24ba56c259bc3f4da04ed1cee0e9f552d10abedd",
+      "short_hash": "24ba56c2",
+      "author": "Richard A",
+      "date": "2026-02-21 20:50:45 +0400",
+      "subject": "Merge pull request #84 from drugoi/codex/issue-73-thread-sync-throttle",
+      "body": "",
+      "stat": "24ba56c Merge pull request #84 from drugoi/codex/issue-73-thread-sync-throttle\n\n .env.example                                    |  4 +\n CLAUDE.md                                       |  2 +-\n README.md                                       |  4 +\n docs/configuration.md                           |  4 +\n poetry.lock                                     | 15 +++-\n pyproject.toml                                  |  2 +-\n src/bot/core.py                                 |  2 +\n src/config/settings.py                          |  8 ++\n src/main.py                                     |  3 +\n src/projects/thread_manager.py                  | 95 +++++++++++++++++-------\n src/utils/constants.py                          |  1 +\n tests/unit/test_bot/test_core_rate_limiter.py   | 80 ++++++++++++++++++++\n tests/unit/test_config.py                       | 30 ++++++++\n tests/unit/test_projects/test_thread_manager.py | 98 +++++++++++++++++++++----\n 14 files changed, 307 insertions(+), 41 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "0b036995869a248f89c63805007a7f4f699b4c01",
+      "short_hash": "0b036995",
+      "author": "Richard A",
+      "date": "2026-02-21 21:31:40 +0400",
+      "subject": "Merge pull request #68 from salmanmkc/upgrade-github-actions-node24-general",
+      "body": "",
+      "stat": "0b03699 Merge pull request #68 from salmanmkc/upgrade-github-actions-node24-general\n\n .github/workflows/claude.yml | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)",
+      "diff": ""
+    },
+    {
+      "hash": "325f71a56bd8250434808ca5404d041a43a63aa8",
+      "short_hash": "325f71a5",
+      "author": "Richard A",
+      "date": "2026-02-21 21:32:35 +0400",
+      "subject": "Merge pull request #67 from salmanmkc/upgrade-github-actions-node24",
+      "body": "",
+      "stat": "325f71a Merge pull request #67 from salmanmkc/upgrade-github-actions-node24\n\n .github/workflows/ci.yml     | 6 +++---\n .github/workflows/claude.yml | 2 +-\n 2 files changed, 4 insertions(+), 4 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "064fbe5ee6fc66c2e9a9388cbfea198228e57230",
+      "short_hash": "064fbe5e",
+      "author": "Lucian Ghinda",
+      "date": "2026-02-21 20:40:55 +0200",
+      "subject": "Add AskUserQuestion and PlanMode to .env.example",
+      "body": "Added `AskUserQuestion`, `EnterPlanMode`, `ExitPlanMode` to the\n`CLAUDE_ALLOWED_TOOLS` so anyone that starts with .env from .env.example\nwill have them working in the chat.",
+      "stat": "064fbe5 Add AskUserQuestion and PlanMode to .env.example\n .env.example | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)",
+      "diff": "diff --git a/.env.example b/.env.example\nindex 44924ad..1004d5f 100644\n--- a/.env.example\n+++ b/.env.example\n@@ -77,7 +77,7 @@ CLAUDE_TIMEOUT_SECONDS=300\n CLAUDE_MAX_COST_PER_USER=10.0\n \n # Allowed Claude tools (comma-separated list)\n-CLAUDE_ALLOWED_TOOLS=Read,Write,Edit,Bash,Glob,Grep,LS,Task,TaskOutput,MultiEdit,NotebookRead,NotebookEdit,WebFetch,TodoRead,TodoWrite,WebSearch,Skill\n+CLAUDE_ALLOWED_TOOLS=Read,Write,Edit,Bash,Glob,Grep,LS,Task,TaskOutput,MultiEdit,NotebookRead,NotebookEdit,WebFetch,TodoRead,TodoWrite,WebSearch,Skill,AskUserQuestion,EnterPlanMode, ExitPlanMode\n \n # === RATE LIMITING ===\n # Number of requests allowed per window\n"
+    },
+    {
+      "hash": "9aa0343eb5b175b2167ebfcd076401bf435a85c8",
+      "short_hash": "9aa0343e",
+      "author": "Richard A",
+      "date": "2026-02-21 23:06:50 +0400",
+      "subject": "Merge pull request #87 from lucianghinda/lg/update-default-claude-tools",
+      "body": "",
+      "stat": "9aa0343 Merge pull request #87 from lucianghinda/lg/update-default-claude-tools\n\n .env.example | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)",
+      "diff": ""
+    },
+    {
+      "hash": "708f0eaa0bbaf6517f97bfa79afdbe41761b0e76",
+      "short_hash": "708f0eaa",
+      "author": "Claude",
+      "date": "2026-02-22 04:22:07 +0000",
+      "subject": "Allow Claude Code internal paths (~/.claude/plans/, todos/) in tool validation",
+      "body": "Claude Code stores plan-mode drafts in ~/.claude/plans/ and todo files\nin ~/.claude/todos/, which are outside the project's approved_directory.\nThe ToolMonitor now recognises these paths and skips the directory\nboundary check for file operations (Read/Write/Edit) targeting them,\nwhile still blocking arbitrary paths outside the approved directory.\n\nhttps://claude.ai/code/session_01Ehpa8b1UGyaAqjGMxCdYCf",
+      "stat": "708f0ea Allow Claude Code internal paths (~/.claude/plans/, todos/) in tool validation\n src/claude/monitor.py                  |  46 +++++++++-\n tests/unit/test_claude/test_monitor.py | 161 ++++++++++++++++++++++++++++++++-\n 2 files changed, 204 insertions(+), 3 deletions(-)",
+      "diff": "diff --git a/src/claude/monitor.py b/src/claude/monitor.py\nindex 6fda421..8205284 100644\n--- a/src/claude/monitor.py\n+++ b/src/claude/monitor.py\n@@ -17,6 +17,11 @@ import structlog\n from ..config.settings import Settings\n from ..security.validators import SecurityValidator\n \n+# Subdirectories under ~/.claude/ that Claude Code uses internally.\n+# File operations targeting these paths are allowed even when they fall\n+# outside the project's approved directory.\n+_CLAUDE_INTERNAL_SUBDIRS: Set[str] = {\"plans\", \"todos\", \"settings.json\"}\n+\n logger = structlog.get_logger()\n \n # Commands that modify the filesystem and should have paths checked\n@@ -130,6 +135,36 @@ def check_bash_directory_boundary(\n     return True, None\n \n \n+def _is_claude_internal_path(file_path: str) -> bool:\n+    \"\"\"Check whether *file_path* points inside the ``~/.claude/`` directory.\n+\n+    Claude Code keeps internal state (plan-mode drafts, todo lists, etc.)\n+    under ``$HOME/.claude/``.  These paths are outside the project's\n+    ``approved_directory`` but are safe to read/write because they are\n+    controlled entirely by Claude Code itself.\n+\n+    Only the specific subdirectories listed in ``_CLAUDE_INTERNAL_SUBDIRS``\n+    are allowed; arbitrary files directly under ``~/.claude/`` are not.\n+    \"\"\"\n+    try:\n+        resolved = Path(file_path).resolve()\n+        home = Path.home().resolve()\n+        claude_dir = home / \".claude\"\n+\n+        # Path must be inside ~/.claude/\n+        try:\n+            rel = resolved.relative_to(claude_dir)\n+        except ValueError:\n+            return False\n+\n+        # Must be in one of the known subdirectories (or a known file)\n+        top_part = rel.parts[0] if rel.parts else \"\"\n+        return top_part in _CLAUDE_INTERNAL_SUBDIRS\n+\n+    except Exception:\n+        return False\n+\n+\n class ToolMonitor:\n     \"\"\"Monitor and validate Claude's tool usage.\"\"\"\n \n@@ -218,8 +253,15 @@ class ToolMonitor:\n             if not file_path:\n                 return False, \"File path required\"\n \n-            # Validate path security\n-            if self.security_validator:\n+            # Allow Claude Code internal paths (~/.claude/plans/, etc.)\n+            if _is_claude_internal_path(file_path):\n+                logger.debug(\n+                    \"Allowing Claude internal path\",\n+                    tool_name=tool_name,\n+                    file_path=file_path,\n+                )\n+            elif self.security_validator:\n+                # Validate path security for all other paths\n                 valid, resolved_path, error = self.security_validator.validate_path(\n                     file_path, working_directory\n                 )\ndiff --git a/tests/unit/test_claude/test_monitor.py b/tests/unit/test_claude/test_monitor.py\nindex dae2208..4a05e06 100644\n--- a/tests/unit/test_claude/test_monitor.py\n+++ b/tests/unit/test_claude/test_monitor.py\n@@ -1,11 +1,17 @@\n \"\"\"Test Claude tool monitor \u2014 especially bash directory boundary checking.\"\"\"\n \n from pathlib import Path\n+from unittest.mock import patch\n \n import pytest\n \n-from src.claude.monitor import ToolMonitor, check_bash_directory_boundary\n+from src.claude.monitor import (\n+    ToolMonitor,\n+    _is_claude_internal_path,\n+    check_bash_directory_boundary,\n+)\n from src.config.settings import Settings\n+from src.security.validators import SecurityValidator\n \n \n class TestCheckBashDirectoryBoundary:\n@@ -241,3 +247,156 @@ class TestToolMonitorBashBoundary:\n         )\n         assert not valid\n         assert \"dangerous command pattern\" in error.lower()\n+\n+\n+class TestIsClaudeInternalPath:\n+    \"\"\"Test the _is_claude_internal_path helper function.\"\"\"\n+\n+    def test_plan_file_is_internal(self, tmp_path: Path) -> None:\n+        \"\"\"~/.claude/plans/some-plan.md should be recognised as internal.\"\"\"\n+        with patch(\"src.claude.monitor.Path.home\", return_value=tmp_path):\n+            (tmp_path / \".claude\" / \"plans\").mkdir(parents=True)\n+            plan_file = tmp_path / \".claude\" / \"plans\" / \"my-plan.md\"\n+            plan_file.touch()\n+            assert _is_claude_internal_path(str(plan_file)) is True\n+\n+    def test_todo_file_is_internal(self, tmp_path: Path) -> None:\n+        \"\"\"~/.claude/todos/todo.md should be recognised as internal.\"\"\"\n+        with patch(\"src.claude.monitor.Path.home\", return_value=tmp_path):\n+            (tmp_path / \".claude\" / \"todos\").mkdir(parents=True)\n+            todo_file = tmp_path / \".claude\" / \"todos\" / \"todo.md\"\n+            todo_file.touch()\n+            assert _is_claude_internal_path(str(todo_file)) is True\n+\n+    def test_settings_json_is_internal(self, tmp_path: Path) -> None:\n+        \"\"\"~/.claude/settings.json should be recognised as internal.\"\"\"\n+        with patch(\"src.claude.monitor.Path.home\", return_value=tmp_path):\n+            (tmp_path / \".claude\").mkdir(parents=True)\n+            settings_file = tmp_path / \".claude\" / \"settings.json\"\n+            settings_file.touch()\n+            assert _is_claude_internal_path(str(settings_file)) is True\n+\n+    def test_arbitrary_file_under_claude_dir_rejected(self, tmp_path: Path) -> None:\n+        \"\"\"Files directly under ~/.claude/ (not in known subdirs) are rejected.\"\"\"\n+        with patch(\"src.claude.monitor.Path.home\", return_value=tmp_path):\n+            (tmp_path / \".claude\").mkdir(parents=True)\n+            secret = tmp_path / \".claude\" / \"credentials.json\"\n+            secret.touch()\n+            assert _is_claude_internal_path(str(secret)) is False\n+\n+    def test_path_outside_claude_dir_rejected(self, tmp_path: Path) -> None:\n+        \"\"\"Paths outside ~/.claude/ entirely are rejected.\"\"\"\n+        with patch(\"src.claude.monitor.Path.home\", return_value=tmp_path):\n+            assert _is_claude_internal_path(\"/etc/passwd\") is False\n+            assert _is_claude_internal_path(\"/tmp/evil.txt\") is False\n+\n+    def test_empty_path_rejected(self, tmp_path: Path) -> None:\n+        \"\"\"Empty paths are rejected.\"\"\"\n+        assert _is_claude_internal_path(\"\") is False\n+\n+    def test_unknown_subdir_rejected(self, tmp_path: Path) -> None:\n+        \"\"\"Unknown subdirectories under ~/.claude/ are rejected.\"\"\"\n+        with patch(\"src.claude.monitor.Path.home\", return_value=tmp_path):\n+            (tmp_path / \".claude\" / \"secrets\").mkdir(parents=True)\n+            bad_file = tmp_path / \".claude\" / \"secrets\" / \"key.pem\"\n+            bad_file.touch()\n+            assert _is_claude_internal_path(str(bad_file)) is False\n+\n+\n+class TestToolMonitorClaudeInternalPaths:\n+    \"\"\"Test that validate_tool_call allows Claude internal paths.\"\"\"\n+\n+    @pytest.fixture\n+    def config(self, tmp_path: Path) -> Settings:\n+        return Settings(\n+            telegram_bot_token=\"test:token\",\n+            telegram_bot_username=\"testbot\",\n+            approved_directory=tmp_path,\n+        )\n+\n+    @pytest.fixture\n+    def security_validator(self, config: Settings) -> SecurityValidator:\n+        return SecurityValidator(config.approved_directory)\n+\n+    @pytest.fixture\n+    def monitor(\n+        self, config: Settings, security_validator: SecurityValidator\n+    ) -> ToolMonitor:\n+        return ToolMonitor(config, security_validator=security_validator)\n+\n+    async def test_read_plan_file_allowed(\n+        self, monitor: ToolMonitor, tmp_path: Path\n+    ) -> None:\n+        \"\"\"Read tool targeting a plan file in ~/.claude/plans/ should pass.\"\"\"\n+        with patch(\"src.claude.monitor.Path.home\", return_value=tmp_path):\n+            (tmp_path / \".claude\" / \"plans\").mkdir(parents=True)\n+            plan_path = str(tmp_path / \".claude\" / \"plans\" / \"my-plan.md\")\n+            valid, error = await monitor.validate_tool_call(\n+                tool_name=\"Read\",\n+                tool_input={\"file_path\": plan_path},\n+                working_directory=tmp_path / \"project\",\n+                user_id=123,\n+            )\n+            assert valid\n+            assert error is None\n+\n+    async def test_write_plan_file_allowed(\n+        self, monitor: ToolMonitor, tmp_path: Path\n+    ) -> None:\n+        \"\"\"Write tool targeting a plan file in ~/.claude/plans/ should pass.\"\"\"\n+        with patch(\"src.claude.monitor.Path.home\", return_value=tmp_path):\n+            (tmp_path / \".claude\" / \"plans\").mkdir(parents=True)\n+            plan_path = str(tmp_path / \".claude\" / \"plans\" / \"new-plan.md\")\n+            valid, error = await monitor.validate_tool_call(\n+                tool_name=\"Write\",\n+                tool_input={\"file_path\": plan_path},\n+                working_directory=tmp_path / \"project\",\n+                user_id=123,\n+            )\n+            assert valid\n+            assert error is None\n+\n+    async def test_edit_plan_file_allowed(\n+        self, monitor: ToolMonitor, tmp_path: Path\n+    ) -> None:\n+        \"\"\"Edit tool targeting a plan file in ~/.claude/plans/ should pass.\"\"\"\n+        with patch(\"src.claude.monitor.Path.home\", return_value=tmp_path):\n+            (tmp_path / \".claude\" / \"plans\").mkdir(parents=True)\n+            plan_path = str(tmp_path / \".claude\" / \"plans\" / \"my-plan.md\")\n+            valid, error = await monitor.validate_tool_call(\n+                tool_name=\"Edit\",\n+                tool_input={\"file_path\": plan_path},\n+                working_directory=tmp_path / \"project\",\n+                user_id=123,\n+            )\n+            assert valid\n+            assert error is None\n+\n+    async def test_file_outside_both_approved_and_claude_still_blocked(\n+        self, monitor: ToolMonitor, tmp_path: Path\n+    ) -> None:\n+        \"\"\"Files outside both approved dir and ~/.claude/ are still blocked.\"\"\"\n+        with patch(\"src.claude.monitor.Path.home\", return_value=tmp_path):\n+            valid, error = await monitor.validate_tool_call(\n+                tool_name=\"Read\",\n+                tool_input={\"file_path\": \"/etc/passwd\"},\n+                working_directory=tmp_path,\n+                user_id=123,\n+            )\n+            assert not valid\n+            assert error is not None\n+\n+    async def test_no_security_violations_for_claude_internal(\n+        self, monitor: ToolMonitor, tmp_path: Path\n+    ) -> None:\n+        \"\"\"Accessing Claude internal paths should not record security violations.\"\"\"\n+        with patch(\"src.claude.monitor.Path.home\", return_value=tmp_path):\n+            (tmp_path / \".claude\" / \"plans\").mkdir(parents=True)\n+            plan_path = str(tmp_path / \".claude\" / \"plans\" / \"my-plan.md\")\n+            await monitor.validate_tool_call(\n+                tool_name=\"Read\",\n+                tool_input={\"file_path\": plan_path},\n+                working_directory=tmp_path / \"project\",\n+                user_id=123,\n+            )\n+            assert len(monitor.security_violations) == 0\n"
+    },
+    {
+      "hash": "c49e58722940654bb05fd7f37c949cc06b2681ab",
+      "short_hash": "c49e5872",
+      "author": "Richard A",
+      "date": "2026-02-22 08:30:16 +0400",
+      "subject": "Merge pull request #89 from RichardAtCT/claude/fix-plan-mode-access-WjgCM",
+      "body": "",
+      "stat": "c49e587 Merge pull request #89 from RichardAtCT/claude/fix-plan-mode-access-WjgCM\n\n src/claude/monitor.py                  |  46 +++++++++-\n tests/unit/test_claude/test_monitor.py | 161 ++++++++++++++++++++++++++++++++-\n 2 files changed, 204 insertions(+), 3 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "5b5b5fdfefb3c378c50dd179516ca439f7db6eaa",
+      "short_hash": "5b5b5fdf",
+      "author": "Claude",
+      "date": "2026-02-22 06:37:09 +0000",
+      "subject": "Add docs/README.md as table of contents for all documentation",
+      "body": "Provides a single entry point linking every doc in the project with\none-line descriptions, grouped by category (guides, project, repo-level).\n\nhttps://claude.ai/code/session_01DTaATEe4wTtaPMDHVgjfKr",
+      "stat": "5b5b5fd Add docs/README.md as table of contents for all documentation\n docs/README.md | 28 ++++++++++++++++++++++++++++\n 1 file changed, 28 insertions(+)",
+      "diff": "diff --git a/docs/README.md b/docs/README.md\nnew file mode 100644\nindex 0000000..2c473f8\n--- /dev/null\n+++ b/docs/README.md\n@@ -0,0 +1,28 @@\n+# Documentation\n+\n+Quick links to every doc in this project. Start with the [README](../README.md) for an overview and quick start.\n+\n+## Guides\n+\n+| Document | Description |\n+|----------|-------------|\n+| [Setup & Installation](setup.md) | Prerequisites, authentication options, install methods, and first-run troubleshooting |\n+| [Configuration](configuration.md) | Full environment variable reference, feature flags, and Pydantic Settings internals |\n+| [Available Tools](tools.md) | The 16 tools Claude can use, allowlist/disallowlist config, and ToolMonitor behaviour |\n+| [Development](development.md) | Local dev setup, running tests, linting, project structure, and contribution workflow |\n+| [Systemd Setup](../SYSTEMD_SETUP.md) | Running the bot as a persistent systemd user service |\n+\n+## Project\n+\n+| Document | Description |\n+|----------|-------------|\n+| [Project Overview](project-overview.md) | Architecture, core objectives, request flow diagrams, and design decisions |\n+| [SDK Duplication Review](SDK_DUPLICATION_REVIEW.md) | Audit of `src/claude/` against the Claude Agent SDK \u2014 what to simplify or remove |\n+\n+## Repository-Level\n+\n+| Document | Description |\n+|----------|-------------|\n+| [Contributing](../CONTRIBUTING.md) | How to contribute: branching, code standards, PR process |\n+| [Security Policy](../SECURITY.md) | Supported versions, vulnerability reporting, and security architecture |\n+| [Changelog](../CHANGELOG.md) | Release history following Keep a Changelog format |\n"
+    },
+    {
+      "hash": "edd15d5077d1f7e867467efbdfe8c26201bab1c8",
+      "short_hash": "edd15d50",
+      "author": "Claude",
+      "date": "2026-02-22 06:41:58 +0000",
+      "subject": "Add link to docs index from README",
+      "body": "https://claude.ai/code/session_01DTaATEe4wTtaPMDHVgjfKr",
+      "stat": "edd15d5 Add link to docs index from README\n README.md | 2 ++\n 1 file changed, 2 insertions(+)",
+      "diff": "diff --git a/README.md b/README.md\nindex 131ea8a..559e19e 100644\n--- a/README.md\n+++ b/README.md\n@@ -336,6 +336,8 @@ make format        # Auto-format code\n make run-debug     # Run with debug logging\n ```\n \n+> **Full documentation:** See the [docs index](docs/README.md) for all guides and references.\n+\n ### Version Management\n \n The version is defined once in `pyproject.toml` and read at runtime via `importlib.metadata`. To cut a release:\n"
+    }
+  ]
+}

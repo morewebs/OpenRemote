@@ -1,0 +1,107 @@
+{
+  "batch_num": 10,
+  "start_index": 91,
+  "end_index": 100,
+  "commits": [
+    {
+      "hash": "2d912eeb64e560b030b4bbfb25521127df06b738",
+      "short_hash": "2d912eeb",
+      "author": "WolCarlos",
+      "date": "2025-07-31 22:19:55 +0200",
+      "subject": "Update claude-cli.js",
+      "body": "add \"``\"",
+      "stat": "2d912ee Update claude-cli.js\n server/claude-cli.js | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)",
+      "diff": "diff --git a/server/claude-cli.js b/server/claude-cli.js\nindex 33f5d3c..f833550 100755\n--- a/server/claude-cli.js\n+++ b/server/claude-cli.js\n@@ -23,7 +23,7 @@ async function spawnClaude(command, options = {}, ws) {\n     \n     // Add print flag with command if we have a command\n     if (command && command.trim()) {\n-      args.push('--print', \"${command.replace(/\"/g, '\\\\\"')}\");\n+      args.push('--print', `\"${command.replace(/\"/g, '\\\\\"')}\"`);\n     }\n     \n     // Use cwd (actual project directory) instead of projectPath (Claude's metadata directory)\n"
+    },
+    {
+      "hash": "0a9c2484d61c00a2afe274e8499f007f35b4e592",
+      "short_hash": "0a9c2484",
+      "author": "viper151",
+      "date": "2025-08-01 22:29:15 +0200",
+      "subject": "Merge pull request #133 from WolCarlos/main",
+      "body": "Fix command escaping in claude-cli.js",
+      "stat": "0a9c248 Merge pull request #133 from WolCarlos/main\n\n server/claude-cli.js | 4 ++--\n 1 file changed, 2 insertions(+), 2 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "41be9a4f63c53bf4fd08aa6e1d3d5f0c94b39d8d",
+      "short_hash": "41be9a4f",
+      "author": "viper151",
+      "date": "2025-08-01 22:31:03 +0200",
+      "subject": "Merge branch 'main' into fix/sidebar-folder-name-display",
+      "body": "",
+      "stat": "41be9a4 Merge branch 'main' into fix/sidebar-folder-name-display\n\n server/claude-cli.js | 4 ++--\n 1 file changed, 2 insertions(+), 2 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "f6408c51067801c90c4c17eec235062f3cc5d5d1",
+      "short_hash": "f6408c51",
+      "author": "viper151",
+      "date": "2025-08-01 22:31:16 +0200",
+      "subject": "Merge pull request #97 from mkdir3/fix/sidebar-folder-name-display",
+      "body": "fix(sidebar): display project name instead of full path",
+      "stat": "f6408c5 Merge pull request #97 from mkdir3/fix/sidebar-folder-name-display\n\n server/projects.js | 9 ++-------\n 1 file changed, 2 insertions(+), 7 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "51f935f6d83e38d85795a26e552c57ee37571d1f",
+      "short_hash": "51f935f6",
+      "author": "GiGiDKR",
+      "date": "2025-08-02 02:31:54 +0200",
+      "subject": "Merge branch 'main' into feature/windows-support",
+      "body": "",
+      "stat": "51f935f Merge branch 'main' into feature/windows-support\n\n server/claude-cli.js | 3 ++-\n server/projects.js   | 9 ++-------\n 2 files changed, 4 insertions(+), 8 deletions(-)",
+      "diff": "diff --cc server/claude-cli.js\nindex 6c5bc8f,f833550..c8a5ebb\n--- a/server/claude-cli.js\n+++ b/server/claude-cli.js\n@@@ -27,10 -23,7 +27,11 @@@ async function spawnClaude(command, opt\n      \n      // Add print flag with command if we have a command\n      if (command && command.trim()) {\n -      args.push('--print', `\"${command.replace(/\"/g, '\\\\\"')}\"`);\n++\n +      // Separate arguments for better cross-platform compatibility\n +      // This prevents issues with spaces and quotes on Windows\n +      args.push('--print');\n +      args.push(command);\n      }\n      \n      // Use cwd (actual project directory) instead of projectPath (Claude's metadata directory)\n"
+    },
+    {
+      "hash": "8b40f9f17768dada3f468beb38ca75985a2883bb",
+      "short_hash": "8b40f9f1",
+      "author": "viper151",
+      "date": "2025-08-06 18:17:54 +0200",
+      "subject": "Merge branch 'main' into fix/websocket-proxy-config",
+      "body": "",
+      "stat": "8b40f9f Merge branch 'main' into fix/websocket-proxy-config\n\n server/claude-cli.js | 4 ++--\n server/projects.js   | 9 ++-------\n 2 files changed, 4 insertions(+), 9 deletions(-)",
+      "diff": ""
+    },
+    {
+      "hash": "23c50f8feffe2ee056ec824fc624df3d2f6064f7",
+      "short_hash": "23c50f8f",
+      "author": "viper151",
+      "date": "2025-08-06 18:20:26 +0200",
+      "subject": "Merge pull request #119 from ismaslov/fix/websocket-proxy-config",
+      "body": "Update vite.config.js for websocket proxy configuration",
+      "stat": "23c50f8 Merge pull request #119 from ismaslov/fix/websocket-proxy-config\n\n vite.config.js | 4 ++++\n 1 file changed, 4 insertions(+)",
+      "diff": ""
+    },
+    {
+      "hash": "5ba62a2b7b935937e5b42838e3cf0abacb00fd2f",
+      "short_hash": "5ba62a2b",
+      "author": "viper151",
+      "date": "2025-08-06 18:20:36 +0200",
+      "subject": "Merge branch 'main' into feature/windows-support",
+      "body": "",
+      "stat": "5ba62a2 Merge branch 'main' into feature/windows-support\n\n vite.config.js | 4 ++++\n 1 file changed, 4 insertions(+)",
+      "diff": "diff --cc vite.config.js\nindex 557dabd,68b6a43..3d166b8\n--- a/vite.config.js\n+++ b/vite.config.js\n@@@ -9,12 -9,16 +9,16 @@@ export default defineConfig(({ command\n    return {\n      plugins: [react()],\n      server: {\n -      port: parseInt(env.VITE_PORT) || 3001,\n +      port: parseInt(env.VITE_PORT) || 5173,\n        proxy: {\n -        '/api': `http://localhost:${env.PORT || 3002}`,\n +        '/api': `http://localhost:${env.PORT || 3001}`,\n          '/ws': {\n -          target: `ws://localhost:${env.PORT || 3002}`,\n +          target: `ws://localhost:${env.PORT || 3001}`,\n            ws: true\n+         },\n+         '/shell': {\n+           target: `ws://localhost:${env.PORT || 3002}`,\n+           ws: true\n          }\n        }\n      },\n"
+    },
+    {
+      "hash": "8774aa428968e3a655692190e5f71017a14eff31",
+      "short_hash": "8774aa42",
+      "author": "viper151",
+      "date": "2025-08-06 19:30:05 +0300",
+      "subject": "Update index.js",
+      "body": "",
+      "stat": "8774aa4 Update index.js\n server/index.js | 5 +++++\n 1 file changed, 5 insertions(+)",
+      "diff": "diff --git a/server/index.js b/server/index.js\nindex 2d91f22..b6103a1 100755\n--- a/server/index.js\n+++ b/server/index.js\n@@ -898,7 +898,12 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r\n \n // Serve React app for all other routes\n app.get('*', (req, res) => {\n+  if (process.env.NODE_ENV === 'production') {\n     res.sendFile(path.join(__dirname, '../dist/index.html'));\n+  } else {\n+    // In development, redirect to Vite dev server\n+    res.redirect(`http://localhost:${process.env.VITE_PORT || 3001}`);\n+  }\n });\n \n // Helper function to convert permissions to rwx format\n"
+    },
+    {
+      "hash": "a01d6c91e065990334a2941f81a60d70b85f7a80",
+      "short_hash": "a01d6c91",
+      "author": "viper151",
+      "date": "2025-08-06 18:30:45 +0200",
+      "subject": "Merge pull request #117 from GiGiDKR/feature/windows-support",
+      "body": "feat(platform): Improve cross-platform compatibility with Windows support",
+      "stat": "a01d6c9 Merge pull request #117 from GiGiDKR/feature/windows-support\n\n .env.example         |    4 +-\n package-lock.json    | 1458 ++++++++++++++++++++++++++++++---------------\n package.json         |    5 +-\n server/claude-cli.js |   16 +-\n server/index.js      | 1611 +++++++++++++++++++++++++-------------------------\n vite.config.js       |    6 +-\n 6 files changed, 1817 insertions(+), 1283 deletions(-)",
+      "diff": ""
+    }
+  ]
+}
