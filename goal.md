@@ -2,43 +2,46 @@
 
 **OpenRemote** is a high-performance, agent-agnostic remote companion and control platform for AI coding assistants (**Claude Code, Antigravity, OpenCode, OpenAI Codex, and Pi**).
 
-It enables developers to launch, monitor, interact with, approve, and guide long-running coding agent sessions from any device (**Web PWA, Telegram Bot, Mobile Companion**) with zero desk lock-in, zero cloud ingress vulnerability, and 100% execution fidelity.
+It enables developers to launch, monitor, interact with, approve, and guide long-running coding agent sessions from any device (**Flutter Web / Mobile / Desktop, Embedded Go Telegram Bot, and Raw Terminal**) with zero desk lock-in, zero cloud ingress vulnerability, and 100% execution fidelity.
 
 ---
 
 ## Key Pillars
 
 1. **Universal Multi-Agent Engine**:
-   - Out-of-the-box support for **Claude Code, Antigravity, OpenCode, OpenAI Codex, and Pi** with dedicated runtime drivers.
+   - Out-of-the-box support for **Claude Code, Antigravity, OpenCode, OpenAI Codex, and Pi** with dedicated runtime drivers in Go.
    - Preserves long-running tasks, background test watchers, and subagent trees across client disconnects.
 
 2. **Hybrid Stream Pipeline**:
-   - Full 100% ANSI/VT100 terminal streaming via `@xterm/xterm` (Canvas Addon) over a high-speed 2-byte binary WebSocket protocol.
-   - Non-blocking heuristic AST/regex parser extracting structured human-in-the-loop cards (Tool Permissions, Multiple-Choice Questions, File Diffs, Turn Alerts).
+   - Chat-first structured UI streaming tool approvals, disambiguation questions, and file diffs.
+   - Full 100% ANSI/VT100 terminal streaming via `xterm.dart` over a high-speed 2-byte binary WebSocket protocol (`coder/websocket`).
+   - Non-blocking heuristic stream parser extracting structured human-in-the-loop cards in real time.
 
 3. **Multi-Surface Client Ecosystem**:
-   - **Web PWA** (Desktop & Mobile Browser): Multi-pane terminal IDE, split git diff viewer, CSS-cached tab switching, and SGR touch scrolling.
-   - **Telegram Bot**: `sendMessageDraft` / 2.0s streaming debouncing, inline approval keyboards, forum topic project isolation, and auto-document uploads.
-   - **Mobile Companion** (Android / iOS): Native background SSE service immune to Doze freezes, soft-keyboard modifier accessory bar, and touch Enter inversion.
+   - **Flutter Companion** (Web, Android, iOS, Windows, macOS, Linux): Unified cross-platform app powered by `flutter_riverpod`, `go_router`, `flutter_markdown_plus`, and `xterm.dart`.
+   - **Embedded Go Telegram Bot**: Zero-dependency pure-Go Telegram bridge with 2.0s debounced streaming, interactive inline approval keyboards, forum topic project isolation, and modified file auto-uploading.
+   - **Secondary Terminal Escape Hatch**: Direct raw terminal tab with touch-friendly mobile modifier bar (`Esc`, `Tab`, `Ctrl+C`, `Ctrl+D`, `/approve`, `/stop`) and touch Enter inversion.
 
 4. **Rock-Solid Reliability**:
-   - **ConPTY Worker Process Isolation**: Traps Windows ConPTY C++ exceptions in a child worker process to prevent host daemon crashes.
-   - **Sliding Ring Buffers**: Caps terminal history memory at 4–8MB to prevent V8/ART heap OOMs.
-   - **Monotonic Event Sequence Replay (`seq`)**: Guarantees zero lost messages during WiFi <-> Cellular handoffs.
+   - **Go-PTY Process Isolation**: Native Windows ConPTY, Linux openpty, and macOS terminal supervision via `aymanbagabas/go-pty` with child worker crash isolation.
+   - **Sliding Ring Buffers**: Caps terminal history memory at 4MB to prevent memory exhaustion and hydrate reconnections instantly.
+   - **Monotonic Event Sequence Replay (`seq`)**: Pure-Go SQLite WAL event bus (`modernc.org/sqlite`) guaranteeing zero lost messages during WiFi $\leftrightarrow$ Cellular handoffs.
    - **Ephemeral Git Worktrees**: Automatically provisions `task/<hash>` worktrees for parallel agent tasks to prevent `.git/index.lock` collisions.
 
 5. **Zero-Port-Forwarding Security**:
-   - Ingress via **Cloudflare Tunnels**, **Tailscale Encrypted Mesh**, or **TweetNaCl E2EE Relay**.
-   - Cryptographic 256-bit bearer tokens stored with `0o600` permissions.
-   - Strict canonical path verification (`path.resolve`) preventing directory traversal.
+   - Ingress via **Cloudflare Tunnels** (`cloudflared`) or **Tailscale Encrypted Mesh**.
+   - Cryptographic 256-bit bearer tokens stored with `0600` permissions.
+   - Strict canonical path verification preventing directory traversal (`ERR_PATH_TRAVERSAL`).
 
 ---
 
 ## Detailed Specifications Directory (`docs/spec/`)
 
-* **[`docs/spec/01_PROJECT_STRUCTURE_AND_MONOREPO.md`](docs/spec/01_PROJECT_STRUCTURE_AND_MONOREPO.md)** — Monorepo layout, package graph, and build setup.
-* **[`docs/spec/02_CORE_DAEMON_SPEC.md`](docs/spec/02_CORE_DAEMON_SPEC.md)** — Daemon engine, worker pools, event bus, and workspace management.
-* **[`docs/spec/03_AGENT_DRIVERS_SPEC.md`](docs/spec/03_AGENT_DRIVERS_SPEC.md)** — Specialized driver specifications for all 5 target agents.
-* **[`docs/spec/04_PROTOCOL_AND_API_SPEC.md`](docs/spec/04_PROTOCOL_AND_API_SPEC.md)** — Zod schemas, binary WebSocket framing, REST routes, and SSE events.
-* **[`docs/spec/05_CLIENT_APPS_SPEC.md`](docs/spec/05_CLIENT_APPS_SPEC.md)** — Web PWA, Telegram Bot, and Mobile Companion client specifications.
-* **[`docs/spec/06_IMPLEMENTATION_ROADMAP.md`](docs/spec/06_IMPLEMENTATION_ROADMAP.md)** — Step-by-step phased execution roadmap.
+* **[`docs/spec/01_PROJECT_STRUCTURE_AND_MONOREPO.md`](docs/spec/01_PROJECT_STRUCTURE_AND_MONOREPO.md)** — Go daemon root, Flutter companion, and CI/CD matrix.
+* **[`docs/spec/02_CORE_DAEMON_SPEC.md`](docs/spec/02_CORE_DAEMON_SPEC.md)** — Single Go daemon binary, SQLite WAL event bus, Go-PTY, and VT screen emulator.
+* **[`docs/spec/03_AGENT_DRIVERS_SPEC.md`](docs/spec/03_AGENT_DRIVERS_SPEC.md)** — Specialized Go driver interfaces for all 5 target AI coding assistants.
+* **[`docs/spec/04_PROTOCOL_AND_API_SPEC.md`](docs/spec/04_PROTOCOL_AND_API_SPEC.md)** — 2-byte binary WebSocket framing, JSON-RPC 2.0, REST routes, and SSE events.
+* **[`docs/spec/05_CLIENT_APPS_SPEC.md`](docs/spec/05_CLIENT_APPS_SPEC.md)** — Flutter Companion client and embedded Go Telegram Bot specifications.
+* **[`docs/spec/06_IMPLEMENTATION_ROADMAP.md`](docs/spec/06_IMPLEMENTATION_ROADMAP.md)** — 9-phase step-by-step implementation roadmap.
+* **[`docs/spec/07_DESIGN_SYSTEM.md`](docs/spec/07_DESIGN_SYSTEM.md)** — Zinc/Slate palette, Royal Purple accent (`#7C3AED`), Inter & JetBrains Mono typography, and card components.
+

@@ -1,61 +1,110 @@
-# 02. Core Daemon Specification (`@openremote/core`)
+# 02. Core Daemon Specification
 
-This document specifies the internal architecture, event bus, PTY supervisor, workspace isolation engine, and security subsystems of the **OpenRemote Core Daemon**.
-
----
-
-## 1. Daemon Lifecycle & Master Server
-
-* **Default Binding**: `127.0.0.1:4097`
-* **Transport Layers**:
-  - `GET /ws`: Multiplexed Binary & JSON RPC WebSocket endpoint
-  - `GET /events`: Server-Sent Events (SSE) stream for lightweight / mobile clients
-  - `POST /api/v1/sessions`: Create or attach to an agent session
-  - `POST /api/v1/approval/:id`: Submit tool permission response
-  - `POST /api/v1/question/:id`: Submit disambiguation answer
-  - `GET /health`: Supervisor heartbeat probe (`{ "status": "ok", "uptime": 1420, "sessions": 2 }`)
+This document specifies the architecture, SQLite WAL event bus, PTY engine, virtual screen commit, workspace manager, and security subsystems of the **OpenRemote Go Daemon**.
 
 ---
 
-## 2. Isolated PTY Worker Supervisor
+## 1. Daemon Architecture & Master Server
+
+The OpenRemote Daemon is compiled as a **single, self-contained Go executable** (`openremote` / `openremote.exe`) with zero external runtime dependencies (Node.js, Python, or CGO are not required).
+
+```mermaid
+graph TD
+    subgraph Daemon ["OpenRemote Go Daemon (127.0.0.1:4097)"]
+        HTTPMux["HTTP Router (net/http + auth.Middleware)"]
+        WSMux["WebSocket Multiplexer (coder/websocket)"]
+        SSEMux["Server-Sent Events (GET /events)"]
+        StaticFS["Embedded Web Companion (embed.FS)"]
+        
+        EventBus["SQLite WAL Event Bus (modernc.org/sqlite)"]
+        PTYMgr["PTY Manager (aymanbagabas/go-pty)"]
+        VTEmu["VT Screen Emulator (charmbracelet/x/vt)"]
+        RingBuf["Sliding Ring Buffer (4MB cap)"]
+        
+        Parser["Non-blocking Heuristic Stream Parser"]
+        Worktrees["Workspace & Git Worktree Manager"]
+        Supervisor["Supervisor & Watchdog Circuit Breaker"]
+        
+        HTTPMux --> StaticFS
+        HTTPMux --> WSMux
+        HTTPMux --> SSEMux
+        
+        WSMux --> PTYMgr
+        PTYMgr --> RingBuf
+        PTYMgr --> VTEmu
+        PTYMgr --> Parser
+        
+        Parser --> EventBus
+        EventBus --> WSMux
+        EventBus --> SSEMux
+    end
+
+    Client["Flutter Companion / Browser / Telegram"] <==> HTTPMux
+```
+
+### Transport & Route Endpoints:
+- `GET /` — Serves embedded Flutter Web Companion SPA (`embed.FS`).
+- `GET /ws` — High-speed 2-byte binary WebSocket multiplexer (`coder/websocket`).
+- `GET /events` — Server-Sent Events (SSE) stream for lightweight / mobile clients with `?sessionId=` and `?lastSeq=` catchup.
+- `GET /health` — Unauthenticated health probe (`{ "status": "ok", "uptime": 1420, "sessions": 2 }`).
+- `POST /api/v1/sessions` — Create, launch, or attach to an agent session.
+- `GET /api/v1/sessions` — List active and persisted sessions.
+- `GET /api/v1/sessions/:id` — Query session status and fetch event catchup.
+- `DELETE /api/v1/sessions/:id` — Terminate session, kill PTY, and prune worktree.
+- `POST /api/v1/approval/:id` — Submit tool execution permission (`{ "approved": true/false }`).
+- `POST /api/v1/question/:id` — Submit multiple-choice disambiguation answer.
+- `GET /api/v1/files` — List workspace files within canonical sandbox boundaries.
+- `GET /api/v1/diff/:sessionId` — Fetch accumulated unified git diff for active worktree.
+- `GET /api/v1/agents` — Query supported and detected AI agent drivers.
+- `GET /api/v1/tunnels` — Query Cloudflare / Tailscale tunnel status.
+- `GET /api/v1/telegram/status` — Query Telegram bot status and paired chat IDs.
+
+---
+
+## 2. Cross-Platform PTY & Virtual Screen Engine
+
+OpenRemote provides native pseudo-terminal management across Windows (ConPTY), Linux (openpty), and macOS using `github.com/aymanbagabas/go-pty`.
 
 ```mermaid
 sequenceDiagram
     participant Daemon as Master Daemon
-    participant IPC as Node IPC Channel
-    participant Worker as pty-worker Child Process
-    participant ConPTY as Windows ConPTY
-    participant Agent as Claude / Antigravity Process
+    participant PTY as go-pty Instance
+    participant VT as charmbracelet/x/vt Emulator
+    participant Ring as SlidingRingBuffer (4MB)
+    participant Parser as Heuristic Stream Parser
+    participant Client as Flutter Companion
 
-    Daemon->>Worker: fork('worker-process.ts')
-    Worker->>ConPTY: pty.spawn('claude', [], { cols: 120, rows: 30 })
-    ConPTY->>Agent: CreateProcessW(...)
+    Daemon->>PTY: Spawn(command, args, cwd, cols, rows, env)
+    PTY-->>Daemon: stdout / stderr byte stream (single master reader)
     
-    Agent-->>ConPTY: stdout / stderr
-    ConPTY-->>Worker: onData(chunk)
-    Worker-->>IPC: process.send({ type: 'pty_output', chunk })
-    IPC-->>Daemon: on('message', msg)
-    Daemon-->>Daemon: Feed RingBuffer & Parser
-    Daemon-->>Client: Broadcast Binary WS Frame
+    par Stream Distribution
+        Daemon->>Ring: Push(chunk)
+        Daemon->>VT: Write(chunk) [update screen matrix]
+        Daemon->>Parser: Scan(chunk) [detect approvals/questions/diffs]
+        Daemon->>Client: Broadcast Binary WS Frame (Opcode 0x01)
+    end
 
-    Note over Worker,ConPTY: Transient Windows ConPTY Crash
-    Worker-->>Daemon: Worker exits with code != 0
-    Daemon->>Daemon: Log failure, restart worker, reattach session
+    opt Approval Detected
+        Parser->>Daemon: Hit(approval.requested)
+        Daemon->>Daemon: SQLite AppendEvent(seq)
+        Daemon->>Client: Broadcast JSON-RPC 2.0 (Opcode 0x05)
+    end
 ```
 
-### IPC Message Protocol:
-1. `pty:spawn`: `{ sessionId: string, command: string, args: string[], cwd: string, cols: number, rows: number, env?: Record<string, string> }`
-2. `pty:write`: `{ sessionId: string, data: string | Buffer }`
-3. `pty:resize`: `{ sessionId: string, cols: number, rows: number }`
-4. `pty:kill`: `{ sessionId: string, signal?: string }`
-5. `pty:output`: `{ sessionId: string, chunk: Buffer }`
-6. `pty:exit`: `{ sessionId: string, exitCode: number, signal?: number }`
+### PTY Subsystem Specifications:
+1. **Dimension Clamping**: Enforces bounds (`cols`: 20–300, `rows`: 5–100) via `ClampDimensions()` to prevent buffer allocation panics.
+2. **Sliding Ring Buffer**: Caps terminal history memory at 4MB per session. On client reconnection, `RingBuffer.ReadAll()` immediately hydrates the terminal scrollback without disk I/O.
+3. **VT Screen Emulation (`charmbracelet/x/vt`)**:
+   - Maintains an in-memory virtual terminal grid representing the current screen matrix, cursor position, text styling, and alternate screen buffers (`smcup`/`rmcup`).
+   - Allows clients connecting mid-session to instantly render the full visual screen commit state rather than raw historical ANSI logs.
+4. **ConPTY Worker Isolation Mode**:
+   - For environments requiring fault isolation, the daemon can spawn PTY instances via `openremote pty-worker` subprocesses over stdin/stdout JSON-lines IPC, insulating the core daemon from native driver crashes.
 
 ---
 
-## 3. SQLite WAL Event Bus Schema
+## 3. Pure-Go SQLite WAL Monotonic Event Bus
 
-All state transitions, tool invocations, approvals, and diff events are persisted in `~/.openremote/data/events.db` using SQLite with WAL (`Write-Ahead Logging`) mode.
+All state transitions, tool approvals, user prompts, diff events, and agent outputs are stored in `~/.openremote/data/events.db` using `modernc.org/sqlite` (pure-Go, zero CGO).
 
 ```sql
 PRAGMA journal_mode = WAL;
@@ -70,7 +119,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     cwd TEXT NOT NULL,
     worktree_path TEXT,
     branch_name TEXT,
-    created_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,     -- Unix milliseconds
     updated_at INTEGER NOT NULL,
     status TEXT NOT NULL             -- 'running', 'idle', 'waiting_approval', 'stopped'
 );
@@ -79,8 +128,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS events (
     seq INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,
-    event_type TEXT NOT NULL,        -- 'stream_chunk', 'approval_requested', 'diff_generated', 'question_asked', 'turn_completed'
-    payload TEXT NOT NULL,           -- JSON serialized event body
+    event_type TEXT NOT NULL,        -- 'chat.message', 'stream.chunk', 'approval.requested', 'question.asked', 'diff.generated', 'turn.completed'
+    payload TEXT NOT NULL,           -- JSON serialized event payload
     created_at INTEGER NOT NULL,
     FOREIGN KEY(session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
 );
@@ -89,17 +138,33 @@ CREATE INDEX IF NOT EXISTS idx_events_session_seq ON events(session_id, seq);
 ```
 
 ### Reconnection Catchup Engine:
-When a client reconnects and sends `lastSeq = 1420`:
-```typescript
-export function getEventsSince(sessionId: string, lastSeq: number): AgentEvent[] {
-  const stmt = db.prepare('SELECT seq, event_type, payload, created_at FROM events WHERE session_id = ? AND seq > ? ORDER BY seq ASC');
-  const rows = stmt.all(sessionId, lastSeq);
-  return rows.map(r => ({
-    seq: r.seq,
-    type: r.event_type,
-    ...JSON.parse(r.payload),
-    timestamp: r.created_at
-  }));
+When any client disconnects (WiFi $\leftrightarrow$ 5G roaming, app backgrounding, or device reboot) and reconnects with `lastSeq = 1420`:
+
+```go
+func (b *Bus) GetEventsSince(sessionID string, lastSeq int64) ([]protocol.AgentEvent, error) {
+    rows, err := b.db.Query(
+        `SELECT seq, session_id, event_type, payload, created_at 
+         FROM events 
+         WHERE session_id = ? AND seq > ? 
+         ORDER BY seq ASC`,
+        sessionID, lastSeq,
+    )
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+
+    var out []protocol.AgentEvent
+    for rows.Next() {
+        var ev protocol.AgentEvent
+        var rawPayload string
+        if err := rows.Scan(&ev.Seq, &ev.SessionID, &ev.Type, &rawPayload, &ev.Timestamp); err != nil {
+            return nil, err
+        }
+        ev.Raw = json.RawMessage(rawPayload)
+        out = append(out, ev)
+    }
+    return out, nil
 }
 ```
 
@@ -107,46 +172,50 @@ export function getEventsSince(sessionId: string, lastSeq: number): AgentEvent[]
 
 ## 4. Opaque Workspace & Git Worktree Manager
 
+OpenRemote isolates concurrent agent tasks and protects the host working copy through **Opaque Workspaces** and **Ephemeral Git Worktrees**.
+
 ```mermaid
 graph TD
-    UserReq[New Task Prompt] --> Decider{Requires Isolated Worktree?}
+    UserReq[New Session Request] --> Decider{useWorktree == true?}
     Decider -->|Yes| CreateWT[GitWorktreeService]
     Decider -->|No| AttachCWD[Use Host CWD]
 
-    CreateWT --> ForkBranch[git worktree add .openremote/worktrees/task-xyz -b task/feature]
-    ForkBranch --> GenID[Assign Opaque ID: wks_a81f]
-    GenID --> SpawnAgent[Spawn Agent in Worktree Directory]
-    AttachCWD --> GenID2[Assign Opaque ID: wks_main]
+    CreateWT --> ForkBranch["git worktree add .openremote/worktrees/task-<hash> -b task/<name>"]
+    ForkBranch --> GenID[Assign Opaque Workspace ID: wks_a81f]
+    GenID --> SpawnAgent[Spawn Agent Driver in Worktree Path]
+    
+    AttachCWD --> GenID2[Assign Opaque Workspace ID: wks_main]
     GenID2 --> SpawnAgent
 ```
 
-* **Clean Separation**:
-  - Directory state (git branches, unstaged files) is shared only within the worktree.
-  - Session state (prompts, undo history, tool approvals) is strictly isolated under `wks_<hex>`.
-* **Merge & Cleanup**:
-  - Upon task completion, the client UI provides a `[Merge to Main]` button that executes `git checkout main && git merge --no-ff task/feature`, followed by `git worktree remove --force`.
+* **Filesystem Sandboxing**:
+  - All file inspection endpoints (`/api/v1/files`) validate canonical paths via `filepath.Clean` and `filepath.Rel` to ensure requests cannot escape the designated workspace boundary (`ERR_PATH_TRAVERSAL`).
+* **Conflict-Free Parallel Execution**:
+  - Independent agents working on separate features run in dedicated worktree directories, eliminating `.git/index.lock` collisions.
+* **Pruning & Merging**:
+  - When a task is completed, OpenRemote can merge `task/<name>` back into the base branch and execute `git worktree remove --force`.
 
 ---
 
-## 5. Non-Blocking Heuristic State Machine
+## 5. Non-Blocking Heuristic Stream Parser
 
-The parser continuously scans incoming chunks without pausing the terminal stream:
+The stream parser inspects incoming terminal output in real time without blocking the PTY pipeline, extracting structured events for the Chat Plane:
 
-| State Trigger | Regex / AST Signature | Emitted Event | Client UI Action |
-| :--- | :--- | :--- | :--- |
-| **Tool Approval** | `/(?:Do you want to run\|Allow)\s*[`"']([^`"']+)`?'?\s*\((?:y\/n\|yes\/no)\)/i` | `approval.requested` | Renders `[Allow]` / `[Deny]` action buttons |
-| **Disambiguation Question** | `/\?\s*Select an option:\s*\n((?:\s*\d+\)[^\n]+\n?)+)/i` | `question.asked` | Renders selection radio list / sheet |
-| **Unified Diff** | `/^---\s+a\/.*?\n\+\+\+\s+b\//m` | `diff.generated` | Opens side-by-side / inline syntax diff card |
-| **OAuth Device Flow** | `https:\/\/claude\.ai\/login\?[^\s]+` | `auth_url.detected` | Displays clickable browser login banner |
-| **Agent Turn Finished** | `/(?:Done!\|Completed task\|Ready for next prompt)/i` | `turn.completed` | Plays audio chime & fires push notification |
+| Pattern / Signature | Detected Event | Client Action |
+| :--- | :--- | :--- |
+| `/(?:Do you want to run\|Allow)\s*[`"']([^`"']+)`?'?\s*\((?:y\/n\|yes\/no)\)/i` | `approval.requested` | Renders interactive `[Allow]` / `[Deny]` card |
+| `/\?\s*Select an option:\s*\n((?:\s*\d+\)[^\n]+\n?)+)/i` | `question.asked` | Renders multiple-choice selection list |
+| `/^---\s+a\/.*?\n\+\+\+\s+b\//m` | `diff.generated` | Opens split / inline syntax-highlighted diff viewer |
+| `https:\/\/claude\.ai\/login\?[^\s]+` | `auth_url.detected` | Displays browser login button / QR code |
+| `/(?:Done!\|Completed task\|Ready for next prompt)/i` | `turn.completed` | Triggers notification & audio chime |
 
 ---
 
-## 6. Watchdog & Crash-Loop Circuit Breaker
+## 6. Supervisor & Crash-Loop Circuit Breaker
 
-* **Heartbeat**: Watchdog polls `http://127.0.0.1:4097/health` every 10 seconds.
-* **Failure Window**: If 3 consecutive health checks fail, the watchdog:
-  1. Sends a `SIGTERM` followed by `SIGKILL` to unresponsive PID.
-  2. Inspects SQLite WAL database integrity (`PRAGMA integrity_check`).
-  3. Restarts the daemon with session recovery.
-* **Circuit Breaker**: If the daemon crashes $\ge 3$ times within 15 minutes, auto-restart is halted and an emergency alert is pushed to Telegram / Webhook to prevent CPU/battery runaway.
+The supervisor subsystem (`internal/core/supervisor`) ensures maximum daemon uptime:
+
+1. **Watchdog Health Probe**: Periodically verifies internal subsystem responsiveness every 10 seconds.
+2. **Automatic Session Recovery**: If an agent process exits unexpectedly, the session state is marked as `stopped` and the last terminal state is preserved in SQLite for review.
+3. **Circuit Breaker**: If the daemon encounters $\ge 3$ consecutive fatal errors within a 15-minute window, the supervisor halts automatic restarts, preserves logs, and emits an alert to connected clients to prevent runaway CPU loops.
+

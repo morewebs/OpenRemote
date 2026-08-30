@@ -6,12 +6,13 @@ This directory contains comprehensive architectural specifications, blueprints, 
 
 ## 📐 Specifications Directory (`docs/spec/`)
 
-* **[`docs/spec/01_PROJECT_STRUCTURE_AND_MONOREPO.md`](spec/01_PROJECT_STRUCTURE_AND_MONOREPO.md)** — Monorepo topology, package graph, and build pipeline.
-* **[`docs/spec/02_CORE_DAEMON_SPEC.md`](spec/02_CORE_DAEMON_SPEC.md)** — Master daemon, worker pools, event bus, and workspace isolation.
-* **[`docs/spec/03_AGENT_DRIVERS_SPEC.md`](spec/03_AGENT_DRIVERS_SPEC.md)** — Specialized driver specifications for Claude, Antigravity, OpenCode, Codex, and Pi.
-* **[`docs/spec/04_PROTOCOL_AND_API_SPEC.md`](spec/04_PROTOCOL_AND_API_SPEC.md)** — Zod schemas, binary WebSocket framing, REST routes, and SSE events.
-* **[`docs/spec/05_CLIENT_APPS_SPEC.md`](spec/05_CLIENT_APPS_SPEC.md)** — Web PWA, Telegram Bot, and Mobile Companion client specifications.
-* **[`docs/spec/06_IMPLEMENTATION_ROADMAP.md`](spec/06_IMPLEMENTATION_ROADMAP.md)** — Step-by-step phased execution roadmap.
+* **[`docs/spec/01_PROJECT_STRUCTURE_AND_MONOREPO.md`](spec/01_PROJECT_STRUCTURE_AND_MONOREPO.md)** — Go daemon root, Flutter companion (`clients/companion`), and CI/CD workflows.
+* **[`docs/spec/02_CORE_DAEMON_SPEC.md`](spec/02_CORE_DAEMON_SPEC.md)** — Single Go daemon binary, SQLite WAL event bus, Go-PTY, and VT screen emulator.
+* **[`docs/spec/03_AGENT_DRIVERS_SPEC.md`](spec/03_AGENT_DRIVERS_SPEC.md)** — Specialized Go driver interfaces for Claude Code, Antigravity, OpenCode, Codex, and Pi.
+* **[`docs/spec/04_PROTOCOL_AND_API_SPEC.md`](spec/04_PROTOCOL_AND_API_SPEC.md)** — 2-byte binary WebSocket framing, JSON-RPC 2.0, REST routes, and SSE events.
+* **[`docs/spec/05_CLIENT_APPS_SPEC.md`](spec/05_CLIENT_APPS_SPEC.md)** — Flutter Companion client and embedded Go Telegram Bot specifications.
+* **[`docs/spec/06_IMPLEMENTATION_ROADMAP.md`](spec/06_IMPLEMENTATION_ROADMAP.md)** — 9-phase step-by-step implementation roadmap.
+* **[`docs/spec/07_DESIGN_SYSTEM.md`](spec/07_DESIGN_SYSTEM.md)** — Zinc/Slate neutral palette, Royal Purple accent (`#7C3AED`), typography, and card components.
 
 ---
 
