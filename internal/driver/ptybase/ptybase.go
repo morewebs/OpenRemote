@@ -109,26 +109,27 @@ func Start(ctx context.Context, cfg types.SessionConfig, mgr *pty.Manager, sink 
 		Env:       cfg.Env,
 	}
 
-	inst, err := mgr.Spawn(ctx, spawnCfg)
+	hooks := pty.Hooks{
+		OnData: func(chunk []byte) {
+			if sink != nil {
+				sink.Bytes(chunk)
+			}
+			scr.Write(chunk)
+		},
+		OnExit: func(code int, signal string) {
+			if asm != nil {
+				asm.Flush()
+			}
+			scr.FlushCurrentScreenLines()
+			if sink != nil {
+				sink.Exit(code, signal)
+			}
+		},
+	}
+
+	inst, err := mgr.Spawn(ctx, spawnCfg, hooks)
 	if err != nil {
 		return nil, fmt.Errorf("pty spawn failed: %w", err)
-	}
-
-	inst.OnData = func(chunk []byte) {
-		if sink != nil {
-			sink.Bytes(chunk)
-		}
-		scr.Write(chunk)
-	}
-
-	inst.OnExit = func(code int, signal string) {
-		if asm != nil {
-			asm.Flush()
-		}
-		scr.FlushCurrentScreenLines()
-		if sink != nil {
-			sink.Exit(code, signal)
-		}
 	}
 
 	bs.instance = inst

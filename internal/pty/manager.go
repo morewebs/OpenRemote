@@ -14,9 +14,11 @@ type Manager struct {
 
 func NewManager() *Manager { return &Manager{instances: make(map[string]*Instance)} }
 
-func (m *Manager) Spawn(ctx context.Context, cfg SpawnConfig) (*Instance, error) {
+// Spawn creates an instance with its hooks already wired, so output produced by
+// a short-lived process cannot be lost before the caller installs them.
+func (m *Manager) Spawn(ctx context.Context, cfg SpawnConfig, hooks Hooks) (*Instance, error) {
 	inst := NewInstance(cfg, 4*1024*1024)
-	if err := inst.Spawn(ctx); err != nil {
+	if err := inst.Spawn(ctx, hooks); err != nil {
 		return nil, err
 	}
 	m.mu.Lock()

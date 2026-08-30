@@ -56,12 +56,13 @@ func TestPTYSpawnAndEcho(t *testing.T) {
 		Args:      []string{"/c", "echo openremote-test-echo"},
 	}
 
-	inst, err := mgr.Spawn(context.Background(), cfg)
+	_, err := mgr.Spawn(context.Background(), cfg, pty.Hooks{
+		OnData: func(chunk []byte) {
+			dataCh <- chunk
+		},
+	})
 	if err != nil {
 		t.Skipf("skipping spawn on non-windows / missing cmd: %v", err)
-	}
-	inst.OnData = func(chunk []byte) {
-		dataCh <- chunk
 	}
 
 	select {

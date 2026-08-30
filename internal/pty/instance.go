@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"time"
 
 	ptylib "github.com/aymanbagabas/go-pty"
 )
@@ -36,16 +37,31 @@ type SpawnConfig struct {
 	Env       map[string]string
 }
 
+// Hooks receive PTY output and process exit. Both must be installed before
+// Spawn: the reader and reaper goroutines start inside Spawn, and a short-lived
+// process can produce all its output and exit before Spawn's caller regains
+// control.
+type Hooks struct {
+	OnData func(chunk []byte)
+	OnExit func(code int, signal string)
+}
+
+// drainGrace bounds how long the exit notification waits for the reader to
+// finish draining. Unix pty masters report EOF once the child exits, but ConPTY
+// can hold the handle open, so exit must not block on the reader forever.
+const drainGrace = 2 * time.Second
+
 type Instance struct {
 	SessionID  string
 	Config     SpawnConfig
 	RingBuffer *SlidingRingBuffer
 
-	mu        sync.Mutex
-	tty       ptylib.Pty
-	cmd       *ptylib.Cmd
-	destroyed bool
-	exitOnce  sync.Once
+	mu          sync.Mutex
+	tty         ptylib.Pty
+	cmd         *ptylib.Cmd
+	destroyed   bool
+	exitOnce    sync.Once
+	consumeDone chan struct{}
 
 	OnData func(chunk []byte)
 	OnExit func(code int, signal string)
@@ -53,13 +69,23 @@ type Instance struct {
 
 func NewInstance(cfg SpawnConfig, maxRingBytes int) *Instance {
 	return &Instance{
-		SessionID:  cfg.SessionID,
-		Config:     cfg,
-		RingBuffer: NewSlidingRingBuffer(maxRingBytes),
+		SessionID:   cfg.SessionID,
+		Config:      cfg,
+		RingBuffer:  NewSlidingRingBuffer(maxRingBytes),
+		consumeDone: make(chan struct{}),
 	}
 }
 
-func (p *Instance) Spawn(ctx context.Context) error {
+func (p *Instance) Spawn(ctx context.Context, hooks Hooks) error {
+	p.mu.Lock()
+	if p.OnData != nil || p.OnExit != nil {
+		p.mu.Unlock()
+		return errHooksAlreadySet
+	}
+	p.OnData = hooks.OnData
+	p.OnExit = hooks.OnExit
+	p.mu.Unlock()
+
 	cols, rows := ClampDimensions(p.Config.Cols, p.Config.Rows)
 
 	tty, err := ptylib.New()
@@ -115,6 +141,7 @@ func (p *Instance) Spawn(ctx context.Context) error {
 				code = state.ExitCode()
 			}
 		}
+		p.drainOutput()
 		p.fireExit(code, "")
 	}()
 
@@ -122,6 +149,7 @@ func (p *Instance) Spawn(ctx context.Context) error {
 }
 
 func (p *Instance) consume(r io.Reader) {
+	defer close(p.consumeDone)
 	buf := make([]byte, 8192)
 	for {
 		n, err := r.Read(buf)
@@ -129,8 +157,11 @@ func (p *Instance) consume(r io.Reader) {
 			chunk := make([]byte, n)
 			copy(chunk, buf[:n])
 			p.RingBuffer.Push(chunk)
-			if p.OnData != nil {
-				p.OnData(chunk)
+			p.mu.Lock()
+			onData := p.OnData
+			p.mu.Unlock()
+			if onData != nil {
+				onData(chunk)
 			}
 		}
 		if err != nil {
@@ -139,14 +170,29 @@ func (p *Instance) consume(r io.Reader) {
 	}
 }
 
+// drainOutput waits for the consume goroutine to hand off all pending output,
+// bounded by drainGrace so a pty handle that stays readable after the child is
+// gone (possible under ConPTY) cannot block exit notification indefinitely.
+func (p *Instance) drainOutput() {
+	select {
+	case <-p.consumeDone:
+	case <-time.After(drainGrace):
+	}
+}
+
 // fireExit delivers OnExit exactly once across the Wait goroutine and Kill.
 func (p *Instance) fireExit(code int, signal string) {
 	p.exitOnce.Do(func() {
-		if p.OnExit != nil {
-			p.OnExit(code, signal)
+		p.mu.Lock()
+		onExit := p.OnExit
+		p.mu.Unlock()
+		if onExit != nil {
+			onExit(code, signal)
 		}
 	})
 }
+
+var errHooksAlreadySet = errNotFound("pty hooks already installed")
 
 func (p *Instance) Write(data []byte) error {
 	p.mu.Lock()
@@ -190,6 +236,9 @@ func (p *Instance) Kill() {
 	}
 	if cmd != nil && cmd.Process != nil {
 		_ = cmd.Process.Kill()
+	}
+	if cmd != nil {
+		p.drainOutput()
 	}
 	p.fireExit(0, "SIGKILL")
 }

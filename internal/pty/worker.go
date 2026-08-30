@@ -81,16 +81,18 @@ func (w *Worker) Run(ctx context.Context) error {
 				SessionID: msg.SessionID, Command: msg.Command,
 				Args: msg.Args, CWD: msg.CWD, Cols: msg.Cols, Rows: msg.Rows, Env: msg.Env,
 			}
+			hooks := Hooks{
+				OnData: func(chunk []byte) {
+					_ = enc.Encode(IPCMessage{Type: MsgOutput, SessionID: msg.SessionID, Data: base64.StdEncoding.EncodeToString(chunk)})
+				},
+				OnExit: func(code int, signal string) {
+					c := code
+					_ = enc.Encode(IPCMessage{Type: MsgExit, SessionID: msg.SessionID, Code: &c, Signal: signal})
+					delete(w.instances, msg.SessionID)
+				},
+			}
 			inst := NewInstance(cfg, 4*1024*1024)
-			inst.OnData = func(chunk []byte) {
-				_ = enc.Encode(IPCMessage{Type: MsgOutput, SessionID: msg.SessionID, Data: base64.StdEncoding.EncodeToString(chunk)})
-			}
-			inst.OnExit = func(code int, signal string) {
-				c := code
-				_ = enc.Encode(IPCMessage{Type: MsgExit, SessionID: msg.SessionID, Code: &c, Signal: signal})
-				delete(w.instances, msg.SessionID)
-			}
-			if err := inst.Spawn(ctx); err != nil {
+			if err := inst.Spawn(ctx, hooks); err != nil {
 				_ = enc.Encode(IPCMessage{Type: MsgError, SessionID: msg.SessionID, Error: err.Error()})
 				continue
 			}
