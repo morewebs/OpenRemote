@@ -20,7 +20,7 @@ func TestSQLiteWALEventBus(t *testing.T) {
 	}
 
 	sessionID := "ses_test123"
-	err = bus.UpsertSession(sessionID, "wks_abc", "claude-code", "/repo", "/repo/worktree", "task/feat", "running")
+	err = bus.UpsertSession(sessionID, "wks_abc", "claude-code", "/repo", "/repo", "/repo/worktree", "task/feat", "running")
 	if err != nil {
 		t.Fatalf("UpsertSession failed: %v", err)
 	}

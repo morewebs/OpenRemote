@@ -1,14 +1,33 @@
 package server
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
-	"path/filepath"
 
 	"github.com/morewebs/OpenRemote/internal/protocol"
 )
 
-func listFilesImpl(dir string) ([]protocol.FileEntry, error) {
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func strPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func jsonEscape(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
+}
+
+func listFiles(dir string) ([]protocol.FileEntry, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -25,11 +44,10 @@ func listFilesImpl(dir string) ([]protocol.FileEntry, error) {
 		}
 		out = append(out, protocol.FileEntry{Name: e.Name(), IsDir: e.IsDir(), Size: size})
 	}
-	_ = filepath.Separator
 	return out, nil
 }
 
-func gitDiffImpl(cwd string) string {
+func gitDiff(cwd string) string {
 	cmd := exec.Command("git", "diff", "--no-color")
 	cmd.Dir = cwd
 	out, err := cmd.CombinedOutput()

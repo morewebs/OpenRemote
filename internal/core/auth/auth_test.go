@@ -38,7 +38,7 @@ func TestTokenGenerationAndPersistence(t *testing.T) {
 
 func TestAuthMiddleware(t *testing.T) {
 	token := "secret-test-token-123"
-	handler := auth.Middleware(token, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := auth.Middleware(token, nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	}))

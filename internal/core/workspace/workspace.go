@@ -66,17 +66,37 @@ func RemoveWorktree(cwd, worktreePath string) error {
 	return nil
 }
 
-func IsSafePath(cwd, target string) bool {
-	absCwd, err1 := filepath.Abs(cwd)
+// IsSafePath verifies that target is contained within base directory without escaping.
+func IsSafePath(base, target string) bool {
+	absBase, err1 := filepath.Abs(base)
 	absTarget, err2 := filepath.Abs(target)
 	if err1 != nil || err2 != nil {
 		return false
 	}
-	rel, err := filepath.Rel(absCwd, absTarget)
+
+	// Resolve symlinks if path exists
+	if resolvedBase, err := filepath.EvalSymlinks(absBase); err == nil {
+		absBase = resolvedBase
+	}
+	if resolvedTarget, err := filepath.EvalSymlinks(absTarget); err == nil {
+		absTarget = resolvedTarget
+	}
+
+	rel, err := filepath.Rel(absBase, absTarget)
 	if err != nil {
 		return false
 	}
 	return !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".."
+}
+
+// IsSafePathAny checks if target is safely within any allowed root directory.
+func IsSafePathAny(roots []string, target string) bool {
+	for _, root := range roots {
+		if root != "" && IsSafePath(root, target) {
+			return true
+		}
+	}
+	return false
 }
 
 func sanitizeBranch(s string) string {

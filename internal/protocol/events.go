@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// AgentID — union from spec 04 + goal.md
+// AgentID — union of supported agent drivers
 type AgentID string
 
 const (
@@ -15,11 +15,12 @@ const (
 	AgentOpenCode    AgentID = "opencode"
 	AgentCodex       AgentID = "codex"
 	AgentPi          AgentID = "pi"
+	AgentShell       AgentID = "shell" // fallback / testing shell
 )
 
 func (a AgentID) Valid() bool {
 	switch a {
-	case AgentClaude, AgentAntigravity, AgentOpenCode, AgentCodex, AgentPi:
+	case AgentClaude, AgentAntigravity, AgentOpenCode, AgentCodex, AgentPi, AgentShell:
 		return true
 	}
 	return false
@@ -35,11 +36,17 @@ type BaseEvent struct {
 type EventType string
 
 const (
-	EventStreamChunk      EventType = "stream.chunk"
+	EventStreamChunk       EventType = "stream.chunk"
+	EventChatMessage       EventType = "chat.message"
 	EventApprovalRequested EventType = "approval.requested"
-	EventQuestionAsked    EventType = "question.asked"
-	EventDiffGenerated    EventType = "diff.generated"
-	EventTurnCompleted    EventType = "turn.completed"
+	EventApprovalResolved  EventType = "approval.resolved"
+	EventQuestionAsked     EventType = "question.asked"
+	EventQuestionAnswered  EventType = "question.answered"
+	EventDiffGenerated     EventType = "diff.generated"
+	EventTurnCompleted     EventType = "turn.completed"
+	EventAuthURL           EventType = "auth.url"
+	EventSessionStatus     EventType = "session.status"
+	EventArtifactUpdated   EventType = "artifact.updated"
 )
 
 type StreamChunkEvent struct {
@@ -48,14 +55,44 @@ type StreamChunkEvent struct {
 	Chunk string    `json:"chunk"` // base64-or-plain; JSON channel uses string
 }
 
+type ChatRole string
+
+const (
+	RoleUser      ChatRole = "user"
+	RoleAssistant ChatRole = "assistant"
+	RoleTool      ChatRole = "tool"
+	RoleSystem    ChatRole = "system"
+)
+
+type ChatMessageEvent struct {
+	BaseEvent
+	Type      EventType      `json:"type"` // "chat.message"
+	MessageID string         `json:"messageId"`
+	Role      ChatRole       `json:"role"`
+	Kind      string         `json:"kind"` // "text", "tool_use", "tool_result", "thought"
+	Text      string         `json:"text"`
+	ToolName  string         `json:"toolName,omitempty"`
+	Meta      map[string]any `json:"meta,omitempty"`
+	Streaming bool           `json:"streaming"`
+	Rev       int            `json:"rev"`
+}
+
 type ApprovalRequestedEvent struct {
 	BaseEvent
-	Type               EventType `json:"type"`
-	ApprovalID         string    `json:"approvalId"`
-	ToolName           string    `json:"toolName"`
-	Command            string    `json:"command"`
-	Description        *string   `json:"description,omitempty"`
-	AutoDenyTimeoutMs  int       `json:"autoDenyTimeoutMs"`
+	Type              EventType `json:"type"`
+	ApprovalID        string    `json:"approvalId"`
+	ToolName          string    `json:"toolName"`
+	Command           string    `json:"command"`
+	Description       *string   `json:"description,omitempty"`
+	AutoDenyTimeoutMs int       `json:"autoDenyTimeoutMs"`
+}
+
+type ApprovalResolvedEvent struct {
+	BaseEvent
+	Type       EventType `json:"type"`
+	ApprovalID string    `json:"approvalId"`
+	Approved   bool      `json:"approved"`
+	ResolvedBy string    `json:"resolvedBy,omitempty"` // "user", "timeout", "auto"
 }
 
 type QuestionAskedEvent struct {
@@ -67,21 +104,49 @@ type QuestionAskedEvent struct {
 	IsMultiSelect bool      `json:"isMultiSelect"`
 }
 
+type QuestionAnsweredEvent struct {
+	BaseEvent
+	Type       EventType `json:"type"`
+	QuestionID string    `json:"questionId"`
+	Answers    []any     `json:"answers"`
+}
+
 type DiffGeneratedEvent struct {
 	BaseEvent
 	Type      EventType `json:"type"`
-	FilePath  string `json:"filePath"`
-	DiffPatch string `json:"diffPatch"`
-	Additions int    `json:"additions"`
-	Deletions int    `json:"deletions"`
+	FilePath  string    `json:"filePath"`
+	DiffPatch string    `json:"diffPatch"`
+	Additions int       `json:"additions"`
+	Deletions int       `json:"deletions"`
 }
 
 type TurnCompletedEvent struct {
 	BaseEvent
 	Type       EventType `json:"type"`
-	Summary    *string  `json:"summary,omitempty"`
-	CostUSD    *float64 `json:"costUsd,omitempty"`
-	DurationMs int64    `json:"durationMs"`
+	Summary    *string   `json:"summary,omitempty"`
+	CostUSD    *float64  `json:"costUsd,omitempty"`
+	DurationMs int64     `json:"durationMs"`
+}
+
+type AuthURLEvent struct {
+	BaseEvent
+	Type EventType `json:"type"`
+	URL  string    `json:"url"`
+}
+
+type SessionStatusEvent struct {
+	BaseEvent
+	Type   EventType     `json:"type"`
+	Status SessionStatus `json:"status"`
+	Reason string        `json:"reason,omitempty"`
+}
+
+type ArtifactUpdatedEvent struct {
+	BaseEvent
+	Type    EventType `json:"type"`
+	Path    string    `json:"path"`
+	Kind    string    `json:"kind"` // "plan", "diff", "file"
+	Content string    `json:"content"`
 }
 
 // AgentEvent is the discriminated union — use UnmarshalEvent to decode.
@@ -112,7 +177,9 @@ func (e *AgentEvent) UnmarshalJSON(data []byte) error {
 }
 
 func UnmarshalEvent(data []byte) (any, error) {
-	var probe struct{ Type EventType `json:"type"` }
+	var probe struct {
+		Type EventType `json:"type"`
+	}
 	if err := json.Unmarshal(data, &probe); err != nil {
 		return nil, err
 	}
@@ -121,12 +188,24 @@ func UnmarshalEvent(data []byte) (any, error) {
 		var e StreamChunkEvent
 		err := json.Unmarshal(data, &e)
 		return e, err
+	case EventChatMessage:
+		var e ChatMessageEvent
+		err := json.Unmarshal(data, &e)
+		return e, err
 	case EventApprovalRequested:
 		var e ApprovalRequestedEvent
 		err := json.Unmarshal(data, &e)
 		return e, err
+	case EventApprovalResolved:
+		var e ApprovalResolvedEvent
+		err := json.Unmarshal(data, &e)
+		return e, err
 	case EventQuestionAsked:
 		var e QuestionAskedEvent
+		err := json.Unmarshal(data, &e)
+		return e, err
+	case EventQuestionAnswered:
+		var e QuestionAnsweredEvent
 		err := json.Unmarshal(data, &e)
 		return e, err
 	case EventDiffGenerated:
@@ -137,6 +216,18 @@ func UnmarshalEvent(data []byte) (any, error) {
 		var e TurnCompletedEvent
 		err := json.Unmarshal(data, &e)
 		return e, err
+	case EventAuthURL:
+		var e AuthURLEvent
+		err := json.Unmarshal(data, &e)
+		return e, err
+	case EventSessionStatus:
+		var e SessionStatusEvent
+		err := json.Unmarshal(data, &e)
+		return e, err
+	case EventArtifactUpdated:
+		var e ArtifactUpdatedEvent
+		err := json.Unmarshal(data, &e)
+		return e, err
 	default:
 		return nil, fmt.Errorf("unknown event type %q", probe.Type)
 	}
@@ -144,23 +235,24 @@ func UnmarshalEvent(data []byte) (any, error) {
 
 func NowMillis() int64 { return time.Now().UnixMilli() }
 
-// Session models from spec 04 REST API
+// Session models from REST API
 type SessionStatus string
 
 const (
-	StatusRunning        SessionStatus = "running"
-	StatusIdle           SessionStatus = "idle"
+	StatusRunning         SessionStatus = "running"
+	StatusIdle            SessionStatus = "idle"
 	StatusWaitingApproval SessionStatus = "waiting_approval"
-	StatusStopped        SessionStatus = "stopped"
+	StatusStopped         SessionStatus = "stopped"
 )
 
 type CreateSessionRequest struct {
-	AgentID     AgentID `json:"agentId"`
-	CWD         string  `json:"cwd"`
-	UseWorktree bool    `json:"useWorktree"`
-	TaskName    *string `json:"taskName,omitempty"`
-	Cols        int     `json:"cols"`
-	Rows        int     `json:"rows"`
+	AgentID       AgentID `json:"agentId"`
+	CWD           string  `json:"cwd"`
+	UseWorktree   bool    `json:"useWorktree"`
+	TaskName      *string `json:"taskName,omitempty"`
+	RemoteControl bool    `json:"remoteControl,omitempty"`
+	Cols          int     `json:"cols"`
+	Rows          int     `json:"rows"`
 }
 
 func (r *CreateSessionRequest) Validate() error {
@@ -198,4 +290,19 @@ type ApprovalReply struct {
 
 type QuestionReply struct {
 	Answers []any `json:"answers"`
+}
+
+type AgentInfo struct {
+	ID           AgentID          `json:"id"`
+	DisplayName  string           `json:"displayName"`
+	Available    bool             `json:"available"`
+	Reason       string           `json:"reason,omitempty"`
+	Capabilities DriverCapability `json:"capabilities"`
+}
+
+type DriverCapability struct {
+	SupportsTerminal   bool `json:"supportsTerminal"`
+	SupportsChatNative bool `json:"supportsChatNative"`
+	SupportsApproval   bool `json:"supportsApproval"`
+	SupportsDiff       bool `json:"supportsDiff"`
 }
