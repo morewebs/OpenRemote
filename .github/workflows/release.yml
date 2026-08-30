@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag or version to release (e.g. v0.1.0)'
+        required: true
+        default: 'v0.1.0'
 
 permissions:
   contents: write
@@ -75,7 +81,15 @@ jobs:
           CGO_ENABLED: 0
         run: |
           OUTPUT_NAME="openremote-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
-          VERSION="${GITHUB_REF_NAME#v}"
+          TAG_INPUT="${{ github.event.inputs.tag_name }}"
+          if [ -n "$TAG_INPUT" ]; then
+            VERSION="${TAG_INPUT#v}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          if [ "$VERSION" = "main" ] || [ -z "$VERSION" ]; then
+            VERSION="0.1.0"
+          fi
           go build -ldflags="-s -w -X main.Version=$VERSION" -o "dist/$OUTPUT_NAME" ./cmd/openremote
 
       - name: Upload Binary Artifact
@@ -126,6 +140,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
           files: release-assets/**/*
           draft: false
           prerelease: false
