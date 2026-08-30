@@ -1,0 +1,132 @@
+name: Release & Export Artifacts
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-flutter-web:
+    name: Build Flutter Web Client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.x'
+          channel: 'stable'
+          cache: true
+      - name: Build Web
+        working-directory: clients/companion
+        run: |
+          flutter pub get
+          flutter build web --release
+      - name: Archive Web Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-web-dist
+          path: clients/companion/build/web
+
+  build-go-binaries:
+    name: Build Go Daemon (${{ matrix.goos }}/${{ matrix.goarch }})
+    needs: build-flutter-web
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+            ext: .exe
+          - goos: windows
+            goarch: arm64
+            ext: .exe
+          - goos: linux
+            goarch: amd64
+            ext: ''
+          - goos: linux
+            goarch: arm64
+            ext: ''
+          - goos: darwin
+            goarch: amd64
+            ext: ''
+          - goos: darwin
+            goarch: arm64
+            ext: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+
+      - name: Download Web Build
+        uses: actions/download-artifact@v4
+        with:
+          name: flutter-web-dist
+          path: internal/core/server/dist
+
+      - name: Compile Binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          OUTPUT_NAME="openremote-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
+          VERSION="${GITHUB_REF_NAME#v}"
+          go build -ldflags="-s -w -X main.Version=$VERSION" -o "dist/$OUTPUT_NAME" ./cmd/openremote
+
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+
+  build-android:
+    name: Build Android APK & Bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.x'
+          channel: 'stable'
+          cache: true
+      - name: Build APK & Bundle
+        working-directory: clients/companion
+        run: |
+          flutter pub get
+          flutter build apk --release
+          flutter build appbundle --release
+      - name: Upload Android Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: |
+            clients/companion/build/app/outputs/flutter-apk/app-release.apk
+            clients/companion/build/app/outputs/bundle/release/app-release.aab
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-go-binaries, build-android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/**/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true

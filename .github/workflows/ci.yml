@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go-matrix:
+    name: Go Matrix Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest ]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+
+      - name: Go Vet
+        run: go vet ./...
+
+      - name: Go Tests
+        run: go test -v ./...
+
+  flutter-ci:
+    name: Flutter Analyze & Test & Web Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Flutter Dependencies
+        working-directory: clients/companion
+        run: flutter pub get
+
+      - name: Flutter Analyze
+        working-directory: clients/companion
+        run: flutter analyze
+
+      - name: Flutter Tests
+        working-directory: clients/companion
+        run: flutter test
+
+      - name: Build Flutter Web
+        working-directory: clients/companion
+        run: flutter build web --release
