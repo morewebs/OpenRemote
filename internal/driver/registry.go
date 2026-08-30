@@ -1,57 +1,69 @@
 package driver
 
 import (
-	"context"
-	"fmt"
-
+	"github.com/morewebs/OpenRemote/internal/driver/antigravity"
+	"github.com/morewebs/OpenRemote/internal/driver/claude"
+	"github.com/morewebs/OpenRemote/internal/driver/codex"
+	"github.com/morewebs/OpenRemote/internal/driver/opencode"
+	"github.com/morewebs/OpenRemote/internal/driver/pi"
+	"github.com/morewebs/OpenRemote/internal/driver/shell"
+	"github.com/morewebs/OpenRemote/internal/driver/types"
 	"github.com/morewebs/OpenRemote/internal/protocol"
 	"github.com/morewebs/OpenRemote/internal/pty"
 )
 
-// Registry holds all 5 agent drivers — spec 03.
+// Registry holds all registered agent drivers.
 type Registry struct {
-	drivers map[protocol.AgentID]Driver
+	drivers map[protocol.AgentID]types.Driver
+	order   []protocol.AgentID
 }
 
 func NewRegistry(ptyManager *pty.Manager) *Registry {
-	r := &Registry{drivers: make(map[protocol.AgentID]Driver)}
-	// Stub drivers — real logic in subpackages (claude, antigravity, , codex, pi)
-	for _, d := range []Driver{
-		NewStubDriver(protocol.AgentClaude, "Claude Code", Capabilities{SupportsApprovals: true, SupportsDisambiguation: true, SupportsDiffStreams: true, SupportsWorktrees: true}),
-		NewStubDriver(protocol.AgentAntigravity, "Antigravity", Capabilities{SupportsApprovals: true, SupportsDiffStreams: true, SupportsWorktrees: true}),
-		NewStubDriver(protocol.AgentOpenCode, "OpenCode", Capabilities{SupportsApprovals: true, SupportsDisambiguation: true, SupportsDiffStreams: true, SupportsWorktrees: true}),
-		NewStubDriver(protocol.AgentCodex, "Codex", Capabilities{SupportsDiffStreams: true, SupportsWorktrees: true}),
-		NewStubDriver(protocol.AgentPi, "Pi", Capabilities{SupportsACP: true, SupportsApprovals: true}),
-	} {
-		r.drivers[d.AgentID()] = d
+	r := &Registry{
+		drivers: make(map[protocol.AgentID]types.Driver),
+		order: []protocol.AgentID{
+			protocol.AgentClaude,
+			protocol.AgentAntigravity,
+			protocol.AgentOpenCode,
+			protocol.AgentCodex,
+			protocol.AgentPi,
+			protocol.AgentShell,
+		},
 	}
+
+	r.drivers[protocol.AgentClaude] = claude.NewDriver(ptyManager)
+	r.drivers[protocol.AgentAntigravity] = antigravity.NewDriver(ptyManager)
+	r.drivers[protocol.AgentOpenCode] = opencode.NewDriver(ptyManager)
+	r.drivers[protocol.AgentCodex] = codex.NewDriver(ptyManager)
+	r.drivers[protocol.AgentPi] = pi.NewDriver(ptyManager)
+	r.drivers[protocol.AgentShell] = shell.NewDriver(ptyManager)
+
 	return r
 }
 
-func (r *Registry) Get(id protocol.AgentID) (Driver, bool) { d, ok := r.drivers[id]; return d, ok }
-
-// StubDriver — placeholder until per-agent logic is implemented.
-type StubDriver struct {
-	agentID     protocol.AgentID
-	displayName string
-	caps        Capabilities
+func (r *Registry) Get(id protocol.AgentID) (types.Driver, bool) {
+	d, ok := r.drivers[id]
+	return d, ok
 }
 
-func NewStubDriver(id protocol.AgentID, name string, caps Capabilities) *StubDriver {
-	return &StubDriver{agentID: id, displayName: name, caps: caps}
+func (r *Registry) List() []protocol.AgentInfo {
+	var list []protocol.AgentInfo
+	for _, id := range r.order {
+		d, ok := r.drivers[id]
+		if !ok {
+			continue
+		}
+		info := protocol.AgentInfo{
+			ID:           d.AgentID(),
+			DisplayName:  d.DisplayName(),
+			Capabilities: d.Capabilities(),
+			Available:    true,
+		}
+		if err := d.Probe(); err != nil {
+			info.Available = false
+			info.Reason = err.Error()
+		}
+		list = append(list, info)
+	}
+	return list
 }
-func (s *StubDriver) AgentID() protocol.AgentID { return s.agentID }
-func (s *StubDriver) DisplayName() string       { return s.displayName }
-func (s *StubDriver) Capabilities() Capabilities { return s.caps }
-func (s *StubDriver) StartSession(_ context.Context, cfg SessionConfig) (Handle, error) {
-	return Handle{}, fmt.Errorf("driver %s: not implemented", s.agentID)
-}
-func (s *StubDriver) StopSession(_ string) error                          { return nil }
-func (s *StubDriver) SendPrompt(_, _ string) error                        { return fmt.Errorf("not implemented") }
-func (s *StubDriver) SendRawInput(_ string, _ []byte) error               { return fmt.Errorf("not implemented") }
-func (s *StubDriver) SendApproval(_, _ string, _ bool) error              { return fmt.Errorf("not implemented") }
-func (s *StubDriver) SendAnswer(_, _ string, _ any) error                 { return fmt.Errorf("not implemented") }
-func (s *StubDriver) ResizeViewport(_ string, _, _ int) error             { return nil }
-func (s *StubDriver) StreamCh(_ string) <-chan []byte                     { ch := make(chan []byte); close(ch); return ch }
-func (s *StubDriver) EventCh(_ string) <-chan Event                       { ch := make(chan Event); close(ch); return ch }
-func (s *StubDriver) ExitCh(_ string) <-chan int                           { ch := make(chan int); close(ch); return ch }
