@@ -96,6 +96,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         if (!sameSession) return;
         ref.read(authUrlCardsProvider.notifier).addCard(AuthUrlCard.fromJson(map));
         break;
+      case 'diff.generated':
+        if (!sameSession) return;
+        ref.read(diffCardsProvider.notifier).addCard(DiffCard.fromJson(map));
+        _scrollToBottom();
+        break;
+      case 'turn.completed':
+        if (!sameSession) return;
+        ref.read(turnSummariesProvider.notifier).addSummary(TurnSummary.fromJson(map));
+        _scrollToBottom();
+        break;
+      case 'artifact.updated':
+        if (!sameSession) return;
+        ref.read(artifactCardsProvider.notifier).addOrUpdateArtifact(ArtifactCard.fromJson(map));
+        _scrollToBottom();
+        break;
       case 'session.status':
         ref.read(sessionsProvider.notifier).refresh();
         break;
@@ -147,6 +162,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final approvals = ref.watch(pendingApprovalsProvider);
     final questions = ref.watch(pendingQuestionsProvider);
     final authCards = ref.watch(authUrlCardsProvider);
+    final diffCards = ref.watch(diffCardsProvider);
+    final turnSummaries = ref.watch(turnSummariesProvider);
+    final artifactCards = ref.watch(artifactCardsProvider);
     final isConnected = ref.watch(wsConnectedProvider);
 
     return Scaffold(
@@ -211,6 +229,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ...questions.where((q) => !q.resolved).map(
             (q) => _buildQuestionCard(q),
           ),
+
+          // Artifact Updated Cards
+          ...artifactCards.map((art) => _buildArtifactCard(art)),
+
+          // Turn Completed Summaries
+          ...turnSummaries.map((sum) => _buildTurnSummaryCard(sum)),
+
+          // Live Generated Diff Cards
+          ...diffCards.map((diff) => _buildDiffCard(diff)),
 
           // Message Transcript
           Expanded(
@@ -440,6 +467,179 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               style: GoogleFonts.jetBrainsMono(fontSize: 11.5, color: AppTheme.purpleLight),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDiffCard(DiffCard card) {
+    return Container(
+      margin: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceDark,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.purpleAccent.withAlpha(120), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.difference_outlined, color: AppTheme.purpleLight, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  card.filePath,
+                  style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.w700, fontSize: 13, color: AppTheme.textMain),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (card.additions > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: AppTheme.successGreen.withAlpha(40), borderRadius: BorderRadius.circular(4)),
+                  child: Text('+${card.additions}', style: GoogleFonts.jetBrainsMono(fontSize: 11, color: AppTheme.successGreen, fontWeight: FontWeight.bold)),
+                ),
+              if (card.deletions > 0) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: AppTheme.dangerRed.withAlpha(40), borderRadius: BorderRadius.circular(4)),
+                  child: Text('-${card.deletions}', style: GoogleFonts.jetBrainsMono(fontSize: 11, color: AppTheme.dangerRed, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ],
+          ),
+          if (card.diffPatch.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.bgDark,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.borderDark),
+              ),
+              child: _ColoredDiffText(diff: card.diffPatch),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTurnSummaryCard(TurnSummary summary) {
+    return Container(
+      margin: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceDark,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.successGreen.withAlpha(120), width: 1.5),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppTheme.successGreen.withAlpha(30),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.check_circle_outline, color: AppTheme.successGreen, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Turn Completed',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: AppTheme.textMain),
+                ),
+                if (summary.summary != null && summary.summary!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      summary.summary!,
+                      style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (summary.durationMs > 0)
+                Text(
+                  '${(summary.durationMs / 1000).toStringAsFixed(1)}s',
+                  style: GoogleFonts.jetBrainsMono(fontSize: 11.5, color: AppTheme.textMuted),
+                ),
+              if (summary.costUsd != null)
+                Text(
+                  '\$${summary.costUsd!.toStringAsFixed(4)}',
+                  style: GoogleFonts.jetBrainsMono(fontSize: 11.5, color: AppTheme.purpleLight, fontWeight: FontWeight.w600),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildArtifactCard(ArtifactCard art) {
+    return Container(
+      margin: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceDark,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.purpleAccent.withAlpha(100), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.description_outlined, color: AppTheme.purpleAccent, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  art.path,
+                  style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.w700, fontSize: 13, color: AppTheme.textMain),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: AppTheme.cardDark, borderRadius: BorderRadius.circular(4)),
+                child: Text(art.kind, style: GoogleFonts.jetBrainsMono(fontSize: 11, color: AppTheme.textMuted)),
+              ),
+            ],
+          ),
+          if (art.content.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(maxHeight: 180),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.bgDark,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.borderDark),
+              ),
+              child: SingleChildScrollView(
+                child: MarkdownBody(
+                  data: art.content,
+                  styleSheet: MarkdownStyleSheet(
+                    p: const TextStyle(color: AppTheme.textMain, fontSize: 12),
+                    code: GoogleFonts.jetBrainsMono(fontSize: 11, color: AppTheme.textMain),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

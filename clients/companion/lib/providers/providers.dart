@@ -241,3 +241,58 @@ class AuthUrlNotifier extends StateNotifier<List<AuthUrlCard>> {
 final authUrlCardsProvider = StateNotifierProvider<AuthUrlNotifier, List<AuthUrlCard>>((ref) {
   return AuthUrlNotifier();
 });
+
+class DiffCardNotifier extends StateNotifier<List<DiffCard>> {
+  DiffCardNotifier() : super([]);
+
+  void addCard(DiffCard card) {
+    state = [...state, card];
+  }
+
+  void clear() {
+    state = [];
+  }
+}
+
+final diffCardsProvider = StateNotifierProvider<DiffCardNotifier, List<DiffCard>>((ref) {
+  return DiffCardNotifier();
+});
+
+class TurnSummaryNotifier extends StateNotifier<List<TurnSummary>> {
+  TurnSummaryNotifier() : super([]);
+
+  void addSummary(TurnSummary summary) {
+    state = [...state, summary];
+  }
+
+  void clear() {
+    state = [];
+  }
+}
+
+final turnSummariesProvider = StateNotifierProvider<TurnSummaryNotifier, List<TurnSummary>>((ref) {
+  return TurnSummaryNotifier();
+});
+
+class ArtifactCardNotifier extends StateNotifier<List<ArtifactCard>> {
+  ArtifactCardNotifier() : super([]);
+
+  void addOrUpdateArtifact(ArtifactCard card) {
+    final idx = state.indexWhere((a) => a.path == card.path);
+    if (idx >= 0) {
+      final updated = List<ArtifactCard>.from(state);
+      updated[idx] = card;
+      state = updated;
+    } else {
+      state = [...state, card];
+    }
+  }
+
+  void clear() {
+    state = [];
+  }
+}
+
+final artifactCardsProvider = StateNotifierProvider<ArtifactCardNotifier, List<ArtifactCard>>((ref) {
+  return ArtifactCardNotifier();
+});

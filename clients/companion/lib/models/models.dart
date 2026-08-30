@@ -74,7 +74,7 @@ class ChatMessage {
       meta: json['meta'] as Map<String, dynamic>?,
       streaming: json['streaming'] as bool? ?? false,
       rev: (json['rev'] as num?)?.toInt() ?? 1,
-      timestamp: (json['timestamp'] as num?)?.toInt() ?? DateTime.now().millisecondsMillisecondsSinceEpoch,
+      timestamp: (json['timestamp'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch,
       seq: (json['seq'] as num?)?.toInt(),
     );
   }
@@ -183,7 +183,8 @@ class AuthUrlCard {
   }
 }
 
-class AgentInfo {  final String id;
+class AgentInfo {
+  final String id;
   final String displayName;
   final bool available;
   final String? reason;
@@ -218,6 +219,80 @@ class AgentInfo {  final String id;
   }
 }
 
-extension DateTimeEpoch on DateTime {
-  int get millisecondsMillisecondsSinceEpoch => millisecondsSinceEpoch;
+/// A unified git diff emitted by the daemon's stream parser (`diff.generated`).
+class DiffCard {
+  final String sessionId;
+  final String filePath;
+  final String diffPatch;
+  final int additions;
+  final int deletions;
+  final int timestamp;
+
+  DiffCard({
+    required this.sessionId,
+    required this.filePath,
+    required this.diffPatch,
+    required this.additions,
+    required this.deletions,
+    required this.timestamp,
+  });
+
+  factory DiffCard.fromJson(Map<String, dynamic> json) {
+    return DiffCard(
+      sessionId: json['sessionId'] as String? ?? '',
+      filePath: json['filePath'] as String? ?? '',
+      diffPatch: json['diffPatch'] as String? ?? '',
+      additions: (json['additions'] as num?)?.toInt() ?? 0,
+      deletions: (json['deletions'] as num?)?.toInt() ?? 0,
+      timestamp: (json['timestamp'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+/// End-of-turn summary (`turn.completed`).
+class TurnSummary {
+  final String sessionId;
+  final String? summary;
+  final double? costUsd;
+  final int durationMs;
+
+  TurnSummary({
+    required this.sessionId,
+    this.summary,
+    this.costUsd,
+    required this.durationMs,
+  });
+
+  factory TurnSummary.fromJson(Map<String, dynamic> json) {
+    return TurnSummary(
+      sessionId: json['sessionId'] as String? ?? '',
+      summary: json['summary'] as String?,
+      costUsd: (json['costUsd'] as num?)?.toDouble(),
+      durationMs: (json['durationMs'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+/// A plan/diff/file artifact written by the agent (`artifact.updated`).
+class ArtifactCard {
+  final String sessionId;
+  final String path;
+  final String kind;
+  final String content;
+
+  ArtifactCard({
+    required this.sessionId,
+    required this.path,
+    required this.kind,
+    required this.content,
+  });
+
+  factory ArtifactCard.fromJson(Map<String, dynamic> json) {
+    return ArtifactCard(
+      sessionId: json['sessionId'] as String? ?? '',
+      path: json['path'] as String? ?? '',
+      kind: json['kind'] as String? ?? 'file',
+      content: json['content'] as String? ?? '',
+    );
+  }
 }
