@@ -86,7 +86,11 @@ WebSocket/SSE recovery. Tests do not send external messages.
 Browser checks exercised token setup, real shell creation and prompting, file
 previews, Git diffs and terminal replay at desktop and 390-pixel phone widths.
 That pass found and fixed delayed short-response chat extraction and cold-load
-connection settings. Windows desktop and a development-signed Android APK also
+connection settings. A final browser pass also fixed dart2js heartbeat timestamp
+encoding, restored the saved transcript after a cold load, and observed no new
+browser warnings or errors across several heartbeat intervals. The final Go
+test suite and vet pass; Flutter analysis and all four client tests pass.
+Windows desktop and a development-signed Android APK also
 compile locally. Android's first packaging attempt exhausted disk space; a
 sequential rebuild with a bounded Gradle heap succeeded.
 
@@ -101,3 +105,28 @@ Local daemon builds passed for Windows amd64, Linux amd64/arm64 and macOS amd64.
 The macOS arm64 compile exhausted disk space in the SQLite dependency; Windows
 arm64 was not reached. Both remain required cross-build jobs in CI. A local
 build success is not a claim of runtime testing on those other operating systems.
+
+## Local delivery
+
+The final local build produces these files under `bin/` (generated and ignored
+by Git):
+
+| File | Use |
+|---|---|
+| `openremote.exe` | Windows x64 daemon with the full Flutter web companion embedded |
+| `openremote-companion-windows-x64-preview.zip` | Extract the entire archive and run `companion.exe`; keep its DLLs and `data/` alongside it |
+| `openremote-companion-android-preview.apk` | Universal development-signed Android preview; distribution signing is still required |
+| `SHA256SUMS.txt` | SHA-256 hashes for these three artifacts |
+
+From the repository root in PowerShell, run:
+
+```powershell
+.\bin\openremote.exe serve --root .
+```
+
+Open `http://127.0.0.1:4097`. In a second terminal, run
+`.\bin\openremote.exe token` and enter that token in the companion's Settings.
+For the native clients, also enter the daemon URL. A daemon listening on loopback
+is reachable only on its own host; configure authenticated remote access before
+connecting from another device. The installed agent CLI must be authenticated
+before creating its session. Stop the daemon with Ctrl+C.
