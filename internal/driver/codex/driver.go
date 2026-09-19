@@ -4,11 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 
-	"github.com/morewebs/OpenRemote/internal/core/chat"
 	"github.com/morewebs/OpenRemote/internal/driver/ptybase"
 	"github.com/morewebs/OpenRemote/internal/driver/types"
 	"github.com/morewebs/OpenRemote/internal/protocol"
@@ -33,7 +31,7 @@ func (d *Driver) DisplayName() string {
 
 func (d *Driver) Capabilities() protocol.DriverCapability {
 	return protocol.DriverCapability{
-		SupportsTerminal:   true,
+		SupportsTerminal:   false,
 		SupportsChatNative: true,
 		SupportsApproval:   true,
 		SupportsDiff:       true,
@@ -41,28 +39,24 @@ func (d *Driver) Capabilities() protocol.DriverCapability {
 }
 
 func (d *Driver) findBinary() (string, error) {
-	candidates := []string{"codex"}
+	names := []string{"codex"}
+	var extras []string
 	if runtime.GOOS == "windows" {
-		candidates = append(candidates, "codex.cmd", "codex.exe")
+		names = append(names, "codex.cmd", "codex.exe")
 		if appdata := os.Getenv("APPDATA"); appdata != "" {
-			candidates = append(candidates, filepath.Join(appdata, "npm", "codex.cmd"))
+			extras = append(extras, filepath.Join(appdata, "npm", "codex.cmd"))
 		}
 	} else {
 		if home, err := os.UserHomeDir(); err == nil {
-			candidates = append(candidates, filepath.Join(home, ".npm-global", "bin", "codex"))
-			candidates = append(candidates, "/usr/local/bin/codex")
+			extras = append(extras, filepath.Join(home, ".npm-global", "bin", "codex"))
+			extras = append(extras, "/usr/local/bin/codex")
 		}
 	}
-
-	for _, cand := range candidates {
-		if path, err := exec.LookPath(cand); err == nil {
-			return path, nil
-		}
-		if fi, err := os.Stat(cand); err == nil && !fi.IsDir() {
-			return cand, nil
-		}
+	p, err := ptybase.FindBinary(names, extras)
+	if err != nil {
+		return "", fmt.Errorf("codex binary not found in PATH or standard install locations")
 	}
-	return "", fmt.Errorf("codex binary not found in PATH or standard install locations")
+	return p, nil
 }
 
 func (d *Driver) Probe() error {
@@ -76,20 +70,5 @@ func (d *Driver) Start(ctx context.Context, cfg types.SessionConfig, sink types.
 		return nil, err
 	}
 
-	opts := ptybase.Opts{
-		Command: bin,
-		Args:    nil,
-		Lexer:   chat.NewGenericLexer(),
-		PromptFormatter: func(p string) []byte {
-			return []byte(p + "\r\n")
-		},
-		ApproveKey: func(approved bool) []byte {
-			if approved {
-				return []byte("y\r\n")
-			}
-			return []byte("n\r\n")
-		},
-	}
-
-	return ptybase.Start(ctx, cfg, d.ptyManager, sink, opts)
+	return startAppServer(ctx, bin, cfg, sink)
 }

@@ -94,5 +94,14 @@ func (d *Driver) Start(ctx context.Context, cfg types.SessionConfig, sink types.
 		},
 	}
 
-	return ptybase.Start(ctx, cfg, d.ptyManager, sink, opts)
+	watcher, err := startWatcher(ctx, cfg, sink)
+	if err != nil {
+		return nil, err
+	}
+	session, err := ptybase.Start(ctx, cfg, d.ptyManager, &watchedSink{Sink: sink, watcher: watcher}, opts)
+	if err != nil {
+		watcher.Close()
+		return nil, err
+	}
+	return &watchedSession{Session: session, watcher: watcher}, nil
 }

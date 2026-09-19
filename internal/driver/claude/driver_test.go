@@ -25,13 +25,13 @@ func TestBuildArgs(t *testing.T) {
 	base := types.SessionConfig{SessionID: "sess1"}
 
 	args := buildArgs(base)
-	if len(args) != 1 || args[0] != "--no-auto-updater" {
-		t.Fatalf("default args = %v, want [--no-auto-updater]", args)
+	if len(args) != 0 {
+		t.Fatalf("default args = %v, want no flags", args)
 	}
 
 	rc := types.SessionConfig{SessionID: "sess1", RemoteControl: true, TaskName: "Fix flaky test"}
 	args = buildArgs(rc)
-	want := []string{"--no-auto-updater", "--remote-control", "Fix flaky test"}
+	want := []string{"--remote-control", "Fix flaky test"}
 	if len(args) != len(want) {
 		t.Fatalf("remote-control args = %v, want %v", args, want)
 	}
@@ -43,7 +43,7 @@ func TestBuildArgs(t *testing.T) {
 
 	rcNoTitle := types.SessionConfig{SessionID: "sess1", RemoteControl: true}
 	args = buildArgs(rcNoTitle)
-	if len(args) != 3 || args[2] != "sess1" {
+	if len(args) != 2 || args[1] != "sess1" {
 		t.Fatalf("remote-control without title should fall back to sessionID: %v", args)
 	}
 }

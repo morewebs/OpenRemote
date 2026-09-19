@@ -14,12 +14,12 @@ func TestPiDriver_Metadata(t *testing.T) {
 	if drv.AgentID() != protocol.AgentPi {
 		t.Fatalf("expected agent id %s, got %s", protocol.AgentPi, drv.AgentID())
 	}
-	if drv.DisplayName() != "Pi (ACP)" {
+	if drv.DisplayName() != "Pi (RPC)" {
 		t.Fatalf("expected display name Pi (ACP), got %s", drv.DisplayName())
 	}
 
 	caps := drv.Capabilities()
-	if !caps.SupportsTerminal || !caps.SupportsChatNative || !caps.SupportsApproval {
+	if caps.SupportsTerminal || !caps.SupportsChatNative || !caps.SupportsApproval {
 		t.Fatalf("expected capability flags to match ACP driver spec, got %+v", caps)
 	}
 	if caps.SupportsDiff {

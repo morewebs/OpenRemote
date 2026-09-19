@@ -114,13 +114,13 @@ func Start(ctx context.Context, cfg types.SessionConfig, mgr *pty.Manager, sink 
 			if sink != nil {
 				sink.Bytes(chunk)
 			}
-			scr.Write(chunk)
+			_, _ = scr.Write(chunk)
 		},
 		OnExit: func(code int, signal string) {
+			scr.FlushCurrentScreenLines()
 			if asm != nil {
 				asm.Flush()
 			}
-			scr.FlushCurrentScreenLines()
 			if sink != nil {
 				sink.Exit(code, signal)
 			}

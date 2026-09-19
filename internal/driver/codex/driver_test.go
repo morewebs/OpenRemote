@@ -19,7 +19,7 @@ func TestCodexDriver_Metadata(t *testing.T) {
 	}
 
 	caps := drv.Capabilities()
-	if !caps.SupportsTerminal || !caps.SupportsChatNative || !caps.SupportsApproval || !caps.SupportsDiff {
-		t.Fatalf("expected all capability flags to be true, got %+v", caps)
+	if caps.SupportsTerminal || !caps.SupportsChatNative || !caps.SupportsApproval || !caps.SupportsDiff {
+		t.Fatalf("expected structured app-server capabilities, got %+v", caps)
 	}
 }

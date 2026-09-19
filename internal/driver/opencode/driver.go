@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/morewebs/OpenRemote/internal/core/chat"
-	"github.com/morewebs/OpenRemote/internal/driver/ptybase"
 	"github.com/morewebs/OpenRemote/internal/driver/types"
 	"github.com/morewebs/OpenRemote/internal/protocol"
 	"github.com/morewebs/OpenRemote/internal/pty"
@@ -33,7 +31,7 @@ func (d *Driver) DisplayName() string {
 
 func (d *Driver) Capabilities() protocol.DriverCapability {
 	return protocol.DriverCapability{
-		SupportsTerminal:   true,
+		SupportsTerminal:   false,
 		SupportsChatNative: true,
 		SupportsApproval:   true,
 		SupportsDiff:       true,
@@ -77,20 +75,5 @@ func (d *Driver) Start(ctx context.Context, cfg types.SessionConfig, sink types.
 		return nil, err
 	}
 
-	opts := ptybase.Opts{
-		Command: bin,
-		Args:    nil,
-		Lexer:   chat.NewGenericLexer(),
-		PromptFormatter: func(p string) []byte {
-			return []byte(p + "\r\n")
-		},
-		ApproveKey: func(approved bool) []byte {
-			if approved {
-				return []byte("y\r\n")
-			}
-			return []byte("n\r\n")
-		},
-	}
-
-	return ptybase.Start(ctx, cfg, d.ptyManager, sink, opts)
+	return startHTTPServer(ctx, bin, cfg, sink)
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 
@@ -41,38 +40,34 @@ func (d *Driver) Capabilities() protocol.DriverCapability {
 }
 
 func (d *Driver) findBinary() (string, error) {
-	candidates := []string{"claude"}
+	names := []string{"claude"}
+	var extras []string
 	if runtime.GOOS == "windows" {
-		candidates = append(candidates, "claude.cmd", "claude.exe")
+		names = append(names, "claude.cmd", "claude.exe")
 		if appdata := os.Getenv("APPDATA"); appdata != "" {
-			candidates = append(candidates, filepath.Join(appdata, "npm", "claude.cmd"))
+			extras = append(extras, filepath.Join(appdata, "npm", "claude.cmd"))
 		}
 		if localappdata := os.Getenv("LOCALAPPDATA"); localappdata != "" {
-			candidates = append(candidates, filepath.Join(localappdata, "Programs", "Claude", "claude.exe"))
+			extras = append(extras, filepath.Join(localappdata, "Programs", "Claude", "claude.exe"))
 		}
 	} else {
 		if home, err := os.UserHomeDir(); err == nil {
-			candidates = append(candidates, filepath.Join(home, ".npm-global", "bin", "claude"))
-			candidates = append(candidates, "/usr/local/bin/claude")
+			extras = append(extras, filepath.Join(home, ".npm-global", "bin", "claude"))
+			extras = append(extras, "/usr/local/bin/claude")
 		}
 	}
-
-	for _, cand := range candidates {
-		if path, err := exec.LookPath(cand); err == nil {
-			return path, nil
-		}
-		if fi, err := os.Stat(cand); err == nil && !fi.IsDir() {
-			return cand, nil
-		}
+	p, err := ptybase.FindBinary(names, extras)
+	if err != nil {
+		return "", fmt.Errorf("claude binary not found in PATH or standard install locations")
 	}
-	return "", fmt.Errorf("claude binary not found in PATH or standard install locations")
+	return p, nil
 }
 
 // buildArgs assembles the CLI launch arguments. Terminal mode passes
-// --no-auto-updater to prevent background CLI updates mid-turn; remote-control
+// Remote-control
 // mode additionally attaches the session to a titled Claude.ai session.
 func buildArgs(cfg types.SessionConfig) []string {
-	args := []string{"--no-auto-updater"}
+	var args []string
 	if cfg.RemoteControl {
 		title := cfg.TaskName
 		if title == "" {
@@ -109,8 +104,14 @@ func (d *Driver) Start(ctx context.Context, cfg types.SessionConfig, sink types.
 			}
 			return []byte("3\r")
 		},
-		LineHook: DetectLoginURL,
+		LineHook: LineHook,
 	}
+	env := make(map[string]string, len(cfg.Env)+1)
+	for key, value := range cfg.Env {
+		env[key] = value
+	}
+	env["DISABLE_AUTOUPDATER"] = "1"
+	cfg.Env = env
 
 	return ptybase.Start(ctx, cfg, d.ptyManager, sink, opts)
 }

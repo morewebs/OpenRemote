@@ -3,14 +3,16 @@ package claude
 import (
 	"regexp"
 
+	"github.com/morewebs/OpenRemote/internal/driver/ptybase"
 	"github.com/morewebs/OpenRemote/internal/protocol"
 )
 
 // BracketedPaste wraps a prompt in bracketed paste mode sequences so the CLI
 // treats a multi-line prompt as a single atomic paste instead of executing
-// line-by-line through the terminal line buffer.
+// line-by-line through the terminal line buffer. It delegates to the shared
+// ptybase implementation so all PTY drivers emit identical paste framing.
 func BracketedPaste(prompt string) []byte {
-	return []byte("\x1b[200~" + prompt + "\x1b[201~\r\n")
+	return ptybase.BracketedPaste(prompt)
 }
 
 // reLoginURL matches OAuth device-flow login links printed by the CLI
@@ -21,7 +23,7 @@ var reLoginURL = regexp.MustCompile(`https://claude\.ai/(?:oauth/authorize|login
 // CLI renders an OAuth device-flow login link, letting remote clients show a
 // clickable "Log in" action instead of raw terminal output.
 func DetectLoginURL(sessionID, line string) []any {
-	u := trimRightPunct(reLoginURL.FindString(line))
+	u := ptybase.TrimRightPunct(reLoginURL.FindString(line))
 	if u == "" {
 		return nil
 	}
@@ -35,16 +37,15 @@ func DetectLoginURL(sessionID, line string) []any {
 	}}
 }
 
-// trimRightPunct strips trailing punctuation that terminal renderers may
-// attach to the end of a URL line.
-func trimRightPunct(s string) string {
-	for len(s) > 0 {
-		switch s[len(s)-1] {
-		case '.', ',', ';', ':', ')', ']', '>', '\'', '"':
-			s = s[:len(s)-1]
-		default:
-			return s
-		}
-	}
-	return s
-}
+// LineHook is the composed hook Claude feeds into ptybase: today it is the
+// login-URL detector, but composition via ptybase.ChainLineHooks keeps the seam
+// ready for additional detectors (approval prompts, turn completion, ...)
+// without rewriting driver wiring.
+//
+// ApprovalRequestedEvent is deliberately NOT emitted from the driver hook:
+// approvals are detected and registered in the approvals registry by the
+// server-side parser path (see internal/core/parser). A driver-emitted approval
+// would broadcast an event that the registry never recorded, so Approve RPCs
+// would fail to resolve it. Keeping approval emission in one place avoids
+// duplicate / phantom approvals.
+var LineHook = ptybase.ChainLineHooks(DetectLoginURL)
