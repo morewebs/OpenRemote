@@ -51,8 +51,9 @@ const (
 
 type StreamChunkEvent struct {
 	BaseEvent
-	Type  EventType `json:"type"`
-	Chunk string    `json:"chunk"` // base64-or-plain; JSON channel uses string
+	Type     EventType `json:"type"`
+	Chunk    string    `json:"chunk"`
+	Encoding string    `json:"encoding,omitempty"` // base64 preserves terminal bytes across UTF-8 boundaries
 }
 
 type ChatRole string

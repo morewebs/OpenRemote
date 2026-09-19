@@ -114,3 +114,43 @@ func TestSessionValidation(t *testing.T) {
 		t.Error("expected error for invalid agent and empty cwd")
 	}
 }
+
+func TestFrameDecodeErrors(t *testing.T) {
+	// Empty or 1-byte frame
+	if _, err := protocol.Decode(nil); err == nil {
+		t.Error("expected error decoding nil frame")
+	}
+	if _, err := protocol.Decode([]byte{0x01}); err == nil {
+		t.Error("expected error decoding 1-byte frame")
+	}
+
+	// Truncated payloads
+	if _, _, err := protocol.DecodeResize([]byte{1, 2, 3}); err == nil {
+		t.Error("expected error decoding truncated resize payload")
+	}
+	if _, err := protocol.DecodeCatchup([]byte{1, 2}); err == nil {
+		t.Error("expected error decoding truncated catchup payload")
+	}
+	if _, err := protocol.DecodePing([]byte{1, 2, 3, 4, 5, 6, 7}); err == nil {
+		t.Error("expected error decoding truncated ping payload")
+	}
+
+	// Opcode String representations
+	if protocol.OpcodePTYOutput.String() != "PTY_OUTPUT(0x01)" {
+		t.Errorf("unexpected string: %s", protocol.OpcodePTYOutput)
+	}
+	unknown := protocol.Opcode(0xFF)
+	if unknown.String() != "UNKNOWN(0xff)" {
+		t.Errorf("unexpected unknown string: %s", unknown)
+	}
+
+	// EncodeString
+	strFrame := protocol.EncodeString(protocol.OpcodeKeystroke, 1, "test string")
+	dec, err := protocol.Decode(strFrame)
+	if err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+	if string(dec.Payload) != "test string" || dec.Slot != 1 {
+		t.Errorf("payload mismatch: %v", dec)
+	}
+}

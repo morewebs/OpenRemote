@@ -6,16 +6,19 @@ import (
 	"fmt"
 )
 
-// Opcode matches spec 04. Bit-for-bit so TS clients can drop-in.
+// Opcode matches spec 04 §1 (docs/spec/04_PROTOCOL_AND_API_SPEC.md) bit-for-bit
+// so TS/Flutter clients can drop-in. Verified against the spec opcodes table:
+// 0x01 PTY_OUTPUT, 0x02 KEYSTROKE, 0x03 RESIZE, 0x04 CATCHUP, 0x05 JSON_RPC,
+// 0x06 PING_PONG. Header is [opcode:1B, slot:1B] followed by the payload.
 type Opcode byte
 
 const (
-	OpcodePTYOutput     Opcode = 0x01 // Server -> Client: raw PTY bytes
-	OpcodeKeystroke     Opcode = 0x02 // Client -> Server: raw keystroke / prompt
+	OpcodePTYOutput      Opcode = 0x01 // Server -> Client: raw PTY bytes
+	OpcodeKeystroke      Opcode = 0x02 // Client -> Server: raw keystroke / prompt
 	OpcodeViewportResize Opcode = 0x03 // [cols:u16, rows:u16] big-endian
-	OpcodeCatchup       Opcode = 0x04 // [lastSeq:u32] big-endian
-	OpcodeJSONRPC       Opcode = 0x05 // UTF-8 JSON
-	OpcodePingPong      Opcode = 0x06 // [ts:u64] big-endian
+	OpcodeCatchup        Opcode = 0x04 // [lastSeq:u32] big-endian
+	OpcodeJSONRPC        Opcode = 0x05 // UTF-8 JSON (JSON-RPC 2.0 envelopes; see rpc.go)
+	OpcodePingPong       Opcode = 0x06 // [ts:u64] big-endian
 )
 
 const headerSize = 2
@@ -26,7 +29,8 @@ type Frame struct {
 	Payload []byte
 }
 
-// Encode writes [opcode, slot, ...payload] — zero-copy of payload copy only once.
+// Encode writes [opcode, slot, ...payload]. The payload is copied once into a
+// freshly allocated frame buffer (single allocation, no shared backing).
 func Encode(opcode Opcode, slot byte, payload []byte) []byte {
 	out := make([]byte, headerSize+len(payload))
 	out[0] = byte(opcode)
