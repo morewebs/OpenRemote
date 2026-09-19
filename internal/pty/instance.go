@@ -8,6 +8,7 @@ import (
 	"time"
 
 	ptylib "github.com/aymanbagabas/go-pty"
+	"github.com/morewebs/OpenRemote/internal/process"
 )
 
 // ClampDimensions enforces sane terminal size — mirrors TS clampDimensions(20-300 cols, 5-100 rows)
@@ -59,6 +60,7 @@ type Instance struct {
 	mu          sync.Mutex
 	tty         ptylib.Pty
 	cmd         *ptylib.Cmd
+	remote      *Supervisor
 	destroyed   bool
 	exitOnce    sync.Once
 	consumeDone chan struct{}
@@ -97,7 +99,12 @@ func (p *Instance) Spawn(ctx context.Context, hooks Hooks) error {
 		return err
 	}
 
-	cmd := tty.CommandContext(ctx, p.Config.Command, p.Config.Args...)
+	bin, args, err := process.Resolve(p.Config.Command, p.Config.Args)
+	if err != nil {
+		_ = tty.Close()
+		return err
+	}
+	cmd := tty.CommandContext(ctx, bin, args...)
 	if p.Config.CWD != "" {
 		cmd.Dir = p.Config.CWD
 	}
@@ -142,6 +149,11 @@ func (p *Instance) Spawn(ctx context.Context, hooks Hooks) error {
 			}
 		}
 		p.drainOutput()
+		p.mu.Lock()
+		p.destroyed = true
+		p.mu.Unlock()
+		_ = tty.Close()
+		<-p.consumeDone
 		p.fireExit(code, "")
 	}()
 
@@ -196,6 +208,14 @@ var errHooksAlreadySet = errNotFound("pty hooks already installed")
 
 func (p *Instance) Write(data []byte) error {
 	p.mu.Lock()
+	if p.remote != nil {
+		remote, destroyed := p.remote, p.destroyed
+		p.mu.Unlock()
+		if destroyed {
+			return ErrNotFound
+		}
+		return remote.write(data)
+	}
 	if p.destroyed || p.tty == nil {
 		p.mu.Unlock()
 		return nil
@@ -211,7 +231,12 @@ func (p *Instance) Resize(cols, rows int) {
 	p.mu.Lock()
 	tty := p.tty
 	destroyed := p.destroyed
+	remote := p.remote
 	p.mu.Unlock()
+	if remote != nil && !destroyed {
+		_ = remote.send(IPCMessage{Type: MsgResize, SessionID: p.SessionID, Cols: cols, Rows: rows})
+		return
+	}
 	if tty == nil || destroyed {
 		return
 	}
@@ -227,7 +252,12 @@ func (p *Instance) Kill() {
 	p.destroyed = true
 	tty := p.tty
 	cmd := p.cmd
+	remote := p.remote
 	p.mu.Unlock()
+	if remote != nil {
+		remote.stop()
+		return
+	}
 
 	// Close the pty master before killing the process so the reader
 	// goroutine unblocks on Windows (a closed ConPTY handle fails reads).

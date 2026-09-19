@@ -5,11 +5,11 @@ import "sync"
 // SlidingRingBuffer caps memory at maxBytes (default 4 MB) to prevent OOM
 // during long streaming sessions. Spec goal.md: "Sliding Ring Buffers: 4-8MB"
 type SlidingRingBuffer struct {
-	mu       sync.Mutex
-	buf      []byte
-	cap      int
+	mu        sync.Mutex
+	buf       []byte
+	cap       int
 	writeHead int
-	length   int
+	length    int
 }
 
 func NewSlidingRingBuffer(maxBytes int) *SlidingRingBuffer {
@@ -58,11 +58,9 @@ func (r *SlidingRingBuffer) ReadAll() []byte {
 	if r.length < r.cap {
 		copy(out, r.buf[:r.length])
 	} else {
-		tail := r.cap - r.writeHead // actually bytes from writeHead to end
 		// when full, oldest is at writeHead
 		n := copy(out, r.buf[r.writeHead:])
 		copy(out[n:], r.buf[:r.writeHead])
-		_ = tail
 	}
 	return out
 }
