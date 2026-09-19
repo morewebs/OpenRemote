@@ -10,22 +10,22 @@ import (
 
 // Watchdog polls /health and restarts on crash-loop — spec 02 §6.
 type Watchdog struct {
-	HealthURL       string
-	Interval        time.Duration
-	FailureThreshold int
+	HealthURL            string
+	Interval             time.Duration
+	FailureThreshold     int
 	CircuitBreakerWindow time.Duration
-	MaxRestarts     int
-	onRestart       func()
+	MaxRestarts          int
+	onRestart            func()
 }
 
 func NewWatchdog(addr string, onRestart func()) *Watchdog {
 	return &Watchdog{
-		HealthURL:       fmt.Sprintf("http://%s/health", addr),
-		Interval:        10 * time.Second,
-		FailureThreshold: 3,
+		HealthURL:            fmt.Sprintf("http://%s/health", addr),
+		Interval:             10 * time.Second,
+		FailureThreshold:     3,
 		CircuitBreakerWindow: 15 * time.Minute,
-		MaxRestarts:     3,
-		onRestart:       onRestart,
+		MaxRestarts:          3,
+		onRestart:            onRestart,
 	}
 }
 
@@ -39,7 +39,7 @@ func (w *Watchdog) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := w.probe(); err != nil {
+			if err := w.probeContext(ctx); err != nil {
 				failures++
 				log.Printf("[watchdog] health probe failed (%d/%d): %v", failures, w.FailureThreshold, err)
 				if failures >= w.FailureThreshold {
@@ -70,9 +70,16 @@ func (w *Watchdog) Run(ctx context.Context) {
 }
 
 func (w *Watchdog) probe() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	return w.probeContext(context.Background())
+}
+
+func (w *Watchdog) probeContext(parent context.Context) error {
+	ctx, cancel := context.WithTimeout(parent, 3*time.Second)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, w.HealthURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, w.HealthURL, nil)
+	if err != nil {
+		return err
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err

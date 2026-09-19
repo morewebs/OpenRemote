@@ -1,26 +1,24 @@
 package server
 
 import (
-	"embed"
 	"io/fs"
 	"net/http"
 	"strings"
 )
 
-// Embedded static assets (if built)
-//
-//go:embed all:dist/*
-var embeddedAssets embed.FS
-
 // StaticHandler serves the companion web application or fallback interface.
 func StaticHandler() http.Handler {
-	sub, err := fs.Sub(embeddedAssets, "dist")
+	sub, err := fs.Sub(embeddedAssets, embeddedDirectory)
 	if err != nil {
 		return http.HandlerFunc(serveFallback)
 	}
 
 	fileServer := http.FileServer(http.FS(sub))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Prevent a browser from keeping an older bootstrap script after an upgrade.
+		if r.URL.Path == "/" || r.URL.Path == "/index.html" || r.URL.Path == "/flutter_bootstrap.js" || r.URL.Path == "/flutter_service_worker.js" {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
 		// If requesting API or WS paths, let next handler deal with it
 		if strings.HasPrefix(r.URL.Path, "/api/") ||
 			strings.HasPrefix(r.URL.Path, "/ws") ||

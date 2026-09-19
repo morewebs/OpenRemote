@@ -2,11 +2,16 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,15 +33,21 @@ import (
 )
 
 type Config struct {
-	Addr           string   // 127.0.0.1:4097 default
-	DataDir        string   // ~/.openremote/data
-	Token          string   // empty = no auth (dev)
-	AllowedRoots   []string // allowed root directories for workspace sandbox
-	TelegramToken  string
-	TelegramChatID int64
+	Addr                 string   // 127.0.0.1:4097 default
+	DataDir              string   // ~/.openremote/data
+	Token                string   // empty = no auth (dev)
+	AllowedRoots         []string // allowed root directories for workspace sandbox
+	TelegramToken        string
+	TelegramChatID       int64
+	TelegramAllowedUsers []int64
+	TelegramTopics       bool
+	AllowedOrigin        string // exact http(s) origin trusted for WebSocket handshake (CSWSH defense); defaults to http://<Addr>
+	WorkerBinary         string // daemon executable used for isolated PTY workers; empty in tests
 }
 
 type Server struct {
+	ctx        context.Context
+	cancel     context.CancelFunc
 	cfg        Config
 	bus        *events.Bus
 	ptyManager *pty.Manager
@@ -70,7 +81,21 @@ type SessionState struct {
 	Hub          *Hub                   `json:"-"`
 }
 
+// snapshotSession copies mutable fields while the server lock is held.
+// Drivers and hubs have their own synchronization and may be used afterwards.
+func (s *Server) snapshotSession(id string) (*SessionState, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	state, ok := s.sessions[id]
+	if !ok {
+		return nil, false
+	}
+	copy := *state
+	return &copy, true
+}
+
 type Hub struct {
+	eventMu sync.Mutex // persistence and publication share the same order
 	mu      sync.RWMutex
 	clients map[*wsClient]struct{}
 }
@@ -95,6 +120,15 @@ func (h *Hub) Remove(c *wsClient) {
 	h.mu.Unlock()
 	c.Close()
 }
+
+func (h *Hub) Close() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for c := range h.clients {
+		c.Close()
+		delete(h.clients, c)
+	}
+}
 func (h *Hub) Broadcast(frame []byte) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -102,24 +136,37 @@ func (h *Hub) Broadcast(frame []byte) {
 		select {
 		case c.send <- frame:
 		default:
+			// Force a reconnect and durable catchup instead of silently losing data.
+			c.Close()
 		}
 	}
 }
+
+// reANSI strips common ANSI escape sequences so the parser sees clean text.
+var reANSI = regexp.MustCompile("\x1b(?:\\[[0-9;?]*[A-Za-z]|\\].*?\x07|\\(B)")
+
+func stripANSI(s string) string { return reANSI.ReplaceAllString(s, "") }
 
 func New(cfg Config, bus *events.Bus) *Server {
 	if cfg.Addr == "" {
 		cfg.Addr = "127.0.0.1:4097"
 	}
 	if len(cfg.AllowedRoots) == 0 {
-		if home, err := os.UserHomeDir(); err == nil {
-			cfg.AllowedRoots = []string{home}
+		if cwd, err := os.Getwd(); err == nil {
+			cfg.AllowedRoots = []string{cwd}
 		}
 	}
 
 	ptyMgr := pty.NewManager()
+	if cfg.WorkerBinary != "" {
+		ptyMgr = pty.NewIsolatedManager(cfg.WorkerBinary, "pty-worker")
+	}
 	drvRegistry := driver.NewRegistry(ptyMgr)
 
+	ctx, cancel := context.WithCancel(context.Background())
 	s := &Server{
+		ctx:              ctx,
+		cancel:           cancel,
 		cfg:              cfg,
 		bus:              bus,
 		ptyManager:       ptyMgr,
@@ -138,7 +185,11 @@ func New(cfg Config, bus *events.Bus) *Server {
 	})
 
 	s.telegram = telegram.New(telegram.Config{
-		Token: cfg.TelegramToken,
+		Token:          cfg.TelegramToken,
+		AllowedUserIDs: cfg.TelegramAllowedUsers,
+		DefaultChatID:  cfg.TelegramChatID,
+		ForumTopics:    cfg.TelegramTopics,
+		Handlers:       s.telegramHandlers(),
 	}, bus, s.approvals)
 
 	s.setupRPC()
@@ -205,6 +256,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/approval/", s.handleApproval)
 	mux.HandleFunc("/api/v1/question/", s.handleQuestion)
 	mux.HandleFunc("/api/v1/files", s.handleFiles)
+	mux.HandleFunc("/api/v1/file", s.handleFile)
 	mux.HandleFunc("/api/v1/diff/", s.handleDiff)
 	mux.HandleFunc("/api/v1/tunnels", s.handleTunnels)
 	mux.HandleFunc("/api/v1/telegram/status", s.handleTelegramStatus)
@@ -214,19 +266,26 @@ func (s *Server) Handler() http.Handler {
 
 	var h http.Handler = mux
 	h = auth.Middleware(s.cfg.Token, s.rateLimiter, h)
-	h = corsMiddleware(h)
+	h = corsMiddleware(h, s.cfg.AllowedOrigin)
 	return h
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
+func corsMiddleware(next http.Handler, configuredOrigin string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin != "" {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("X-Frame-Options", "DENY")
+		if origin != "" && isAllowedOrigin(origin, r.Host, configuredOrigin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Requested-With")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Vary", "Origin")
+			w.Header().Add("Vary", "Origin")
+		} else if origin != "" {
+			w.Header().Add("Vary", "Origin")
+			http.Error(w, "origin not allowed", http.StatusForbidden)
+			return
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(204)
@@ -236,9 +295,24 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func isAllowedOrigin(origin, host, configured string) bool {
+	u, err := url.Parse(origin)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.Host == "" || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+		return false
+	}
+	if u.Host == host || origin == configured {
+		return true
+	}
+	local := func(name string) bool { return name == "localhost" || name == "127.0.0.1" || name == "::1" }
+	requestURL, _ := url.Parse("http://" + host)
+	return requestURL != nil && local(requestURL.Hostname()) && local(u.Hostname())
+}
+
 func (s *Server) ListenAndServe() error {
 	if s.cfg.TelegramToken != "" {
-		_ = s.telegram.Start(context.Background())
+		if err := s.telegram.Start(s.ctx); err != nil {
+			log.Printf("[telegram] %v", err)
+		}
 	}
 	s.http = &http.Server{
 		Addr:              s.cfg.Addr,
@@ -250,6 +324,23 @@ func (s *Server) ListenAndServe() error {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.telegram.Close()
+	s.mu.RLock()
+	var sessions []driver.Session
+	for _, st := range s.sessions {
+		if st.DriverSess != nil {
+			sessions = append(sessions, st.DriverSess)
+		}
+		st.Hub.Close()
+	}
+	s.mu.RUnlock()
+	for _, session := range sessions {
+		_ = session.Close()
+	}
+	s.ptyManager.Close()
+	s.cancel()
+	s.rateLimiter.Stop()
+	s.approvals.Close()
 	if s.tunnels != nil {
 		_ = s.tunnels.Stop()
 	}
@@ -259,9 +350,22 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return nil
 }
 
+// methodNotAllowed replies 405 with the verbs the route does support, so a
+// spec route never silently answers a request it does not implement.
+func methodNotAllowed(w http.ResponseWriter, allowed ...string) {
+	w.Header().Set("Allow", strings.Join(allowed, ", "))
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusMethodNotAllowed)
+	fmt.Fprintf(w, `{"code":"ERR_METHOD_NOT_ALLOWED","message":"method not allowed; expected %s"}`, strings.Join(allowed, " or "))
+}
+
 // --- Health ---
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		methodNotAllowed(w, http.MethodGet, http.MethodHead)
+		return
+	}
 	s.mu.RLock()
 	n := len(s.sessions)
 	s.mu.RUnlock()
@@ -276,6 +380,10 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // --- Agents ---
 
 func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
 	list := s.drivers.List()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(list)
@@ -308,6 +416,10 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(list)
 
 	case http.MethodPost:
+		if s.ctx.Err() != nil {
+			http.Error(w, "server shutting down", http.StatusServiceUnavailable)
+			return
+		}
 		var req protocol.CreateSessionRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, err.Error(), 400)
@@ -315,6 +427,16 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := req.Validate(); err != nil {
 			http.Error(w, err.Error(), 400)
+			return
+		}
+		absoluteCWD, err := filepath.Abs(req.CWD)
+		if err != nil {
+			http.Error(w, "invalid working directory", http.StatusBadRequest)
+			return
+		}
+		req.CWD = absoluteCWD
+		if info, err := os.Stat(req.CWD); err != nil || !info.IsDir() {
+			http.Error(w, "working directory does not exist", http.StatusBadRequest)
 			return
 		}
 
@@ -331,6 +453,10 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("unsupported agent %q", req.AgentID), 400)
 			return
 		}
+		if err := driverInst.Probe(); err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
 
 		sessionID := workspace.NewSessionID()
 		workspaceID := workspace.NewID()
@@ -345,7 +471,13 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 			targetCWD = worktreePath
 		}
 
-		_ = s.bus.UpsertSession(sessionID, workspaceID, string(req.AgentID), targetCWD, req.CWD, worktreePath, branch, string(protocol.StatusRunning))
+		if err := s.bus.UpsertSession(sessionID, workspaceID, string(req.AgentID), targetCWD, req.CWD, worktreePath, branch, string(protocol.StatusRunning)); err != nil {
+			if worktreePath != "" {
+				_ = workspace.RemoveWorktree(req.CWD, worktreePath)
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 
 		hub := NewHub()
 		streamParser := parser.NewStreamParser(sessionID)
@@ -376,7 +508,7 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 			parser:    streamParser,
 		}
 
-		drvSess, err := driverInst.Start(context.Background(), driver.SessionConfig{
+		drvSess, err := driverInst.Start(s.ctx, driver.SessionConfig{
 			SessionID:     sessionID,
 			AgentID:       req.AgentID,
 			CWD:           req.CWD,
@@ -390,10 +522,16 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("[core] failed to start driver %s: %v", req.AgentID, err)
 			_ = s.bus.UpdateSessionStatus(sessionID, string(protocol.StatusStopped))
+			s.mu.Lock()
 			st.Status = protocol.StatusStopped
-		} else {
-			st.DriverSess = drvSess
+			s.mu.Unlock()
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
 		}
+		s.mu.Lock()
+		st.DriverSess = drvSess
+		status := st.Status
+		s.mu.Unlock()
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(201)
@@ -401,7 +539,7 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 			SessionID:    sessionID,
 			WorkspaceID:  workspaceID,
 			WorktreePath: strPtr(worktreePath),
-			Status:       st.Status,
+			Status:       status,
 		})
 
 	default:
@@ -418,6 +556,49 @@ func (s *Server) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if len(parts) == 2 && (parts[1] == "input" || parts[1] == "resize") {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w, http.MethodPost)
+			return
+		}
+		s.mu.RLock()
+		state := s.sessions[id]
+		var session driver.Session
+		if state != nil {
+			session = state.DriverSess
+		}
+		s.mu.RUnlock()
+		if session == nil {
+			http.Error(w, "session not found", http.StatusNotFound)
+			return
+		}
+		var input struct {
+			Data string `json:"data"`
+			Cols int    `json:"cols"`
+			Rows int    `json:"rows"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024*1024)).Decode(&input); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		var err error
+		if parts[1] == "input" {
+			var data []byte
+			data, err = base64.StdEncoding.DecodeString(input.Data)
+			if err == nil {
+				err = session.RawInput(data)
+			}
+		} else {
+			err = session.Resize(input.Cols, input.Rows)
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+		return
+	}
 
 	// Handle /api/v1/sessions/:id/prompt
 	if len(parts) == 2 && parts[1] == "prompt" && r.Method == http.MethodPost {
@@ -428,14 +609,20 @@ func (s *Server) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), 400)
 			return
 		}
-		s.mu.RLock()
-		st, ok := s.sessions[id]
-		s.mu.RUnlock()
+		st, ok := s.snapshotSession(id)
 		if !ok || st.DriverSess == nil {
 			http.Error(w, `{"code":"ERR_SESSION_NOT_FOUND"}`, 404)
 			return
 		}
+		if strings.TrimSpace(req.Prompt) == "" {
+			http.Error(w, "prompt is empty", http.StatusBadRequest)
+			return
+		}
+		message := protocol.ChatMessageEvent{BaseEvent: protocol.BaseEvent{SessionID: id, Timestamp: protocol.NowMillis()}, Type: protocol.EventChatMessage, MessageID: "user_" + workspace.NewID(), Role: protocol.RoleUser, Kind: "text", Text: req.Prompt, Rev: 1}
+		s.broadcastEvent(id, string(message.Type), message)
 		if err := st.DriverSess.Prompt(req.Prompt); err != nil {
+			message.Kind, message.Rev, message.Text = "error", 2, req.Prompt+"\n\nNot delivered: "+err.Error()
+			s.broadcastEvent(id, string(message.Type), message)
 			http.Error(w, err.Error(), 500)
 			return
 		}
@@ -446,10 +633,7 @@ func (s *Server) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodDelete:
-		s.mu.Lock()
-		st, ok := s.sessions[id]
-		delete(s.sessions, id)
-		s.mu.Unlock()
+		st, ok := s.snapshotSession(id)
 
 		if ok {
 			if st.DriverSess != nil {
@@ -457,16 +641,33 @@ func (s *Server) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 			}
 			s.ptyManager.Kill(id)
 			if st.WorktreePath != "" && st.OriginCWD != "" {
-				_ = workspace.RemoveWorktree(st.OriginCWD, st.WorktreePath)
+				if err := workspace.RemoveWorktree(st.OriginCWD, st.WorktreePath); err != nil {
+					http.Error(w, "Session stopped; worktree retained: "+err.Error(), http.StatusConflict)
+					return
+				}
 			}
 		}
-		_ = s.bus.DeleteSession(id)
+		if err := s.bus.DeleteSession(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		s.mu.Lock()
+		delete(s.sessions, id)
+		s.mu.Unlock()
+		if ok {
+			st.Hub.Close()
+		}
+		s.pendingMu.Lock()
+		for questionID, owner := range s.pendingQuestions {
+			if owner == id {
+				delete(s.pendingQuestions, questionID)
+			}
+		}
+		s.pendingMu.Unlock()
 		w.WriteHeader(204)
 
 	case http.MethodGet:
-		s.mu.RLock()
-		st, ok := s.sessions[id]
-		s.mu.RUnlock()
+		st, ok := s.snapshotSession(id)
 		if !ok {
 			http.Error(w, `{"code":"ERR_SESSION_NOT_FOUND"}`, 404)
 			return
@@ -492,6 +693,14 @@ func (s *Server) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 // broadcastEvent persists an event to the bus and pushes it to all live
 // WebSocket clients attached to the session's hub.
 func (s *Server) broadcastEvent(sessionID, evType string, evt any) {
+	s.mu.RLock()
+	state := s.sessions[sessionID]
+	s.mu.RUnlock()
+	if state == nil {
+		return
+	}
+	state.Hub.eventMu.Lock()
+	defer state.Hub.eventMu.Unlock()
 	seq, _ := s.bus.AppendEvent(sessionID, evType, evt)
 	jb, _ := json.Marshal(evt)
 	var withSeq map[string]any
@@ -499,15 +708,17 @@ func (s *Server) broadcastEvent(sessionID, evType string, evt any) {
 		withSeq["seq"] = seq
 		jb, _ = json.Marshal(withSeq)
 	}
-	s.mu.RLock()
-	st, ok := s.sessions[sessionID]
-	s.mu.RUnlock()
+	st, ok := s.snapshotSession(sessionID)
 	if ok && st.Hub != nil {
 		st.Hub.Broadcast(protocol.Encode(protocol.OpcodeJSONRPC, 0, jb))
 	}
 }
 
 func (s *Server) handleApproval(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
 	appID := strings.TrimPrefix(r.URL.Path, "/api/v1/approval/")
 	if appID == "" {
 		http.Error(w, "approval ID required", 400)
@@ -520,18 +731,22 @@ func (s *Server) handleApproval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	app, err := s.approvals.Resolve(appID, req.Approved, "user")
+	app, err := s.approvals.ResolveWith(appID, req.Approved, "user", func(app *approval.PendingApproval) error {
+		s.mu.RLock()
+		st, ok := s.sessions[app.SessionID]
+		var session driver.Session
+		if ok {
+			session = st.DriverSess
+		}
+		s.mu.RUnlock()
+		if session == nil {
+			return fmt.Errorf("session not running")
+		}
+		return session.Approve(appID, req.Approved)
+	})
 	if err != nil {
 		http.Error(w, err.Error(), 404)
 		return
-	}
-
-	s.mu.RLock()
-	st, ok := s.sessions[app.SessionID]
-	s.mu.RUnlock()
-
-	if ok && st.DriverSess != nil {
-		_ = st.DriverSess.Approve(appID, req.Approved)
 	}
 
 	evt := protocol.ApprovalResolvedEvent{
@@ -551,9 +766,7 @@ func (s *Server) handleApproval(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleApprovalExpired(app *approval.PendingApproval) {
-	s.mu.RLock()
-	st, ok := s.sessions[app.SessionID]
-	s.mu.RUnlock()
+	st, ok := s.snapshotSession(app.SessionID)
 
 	if ok && st.DriverSess != nil {
 		_ = st.DriverSess.Approve(app.ID, false)
@@ -573,6 +786,10 @@ func (s *Server) handleApprovalExpired(app *approval.PendingApproval) {
 }
 
 func (s *Server) handleQuestion(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
 	qID := strings.TrimPrefix(r.URL.Path, "/api/v1/question/")
 	if qID == "" {
 		http.Error(w, "question ID required", 400)
@@ -587,24 +804,48 @@ func (s *Server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 
 	// Forward the answer to the owning driver session so it reaches the
 	// agent's stdin (multiple-choice selection, free text, ...).
-	s.pendingMu.RLock()
+	s.pendingMu.Lock()
 	sessionID, known := s.pendingQuestions[qID]
-	s.pendingMu.RUnlock()
+	delete(s.pendingQuestions, qID)
+	s.pendingMu.Unlock()
+	if !known {
+		http.Error(w, "question not found", http.StatusNotFound)
+		return
+	}
 
+	delivered := false
+	defer func() {
+		if !delivered {
+			s.pendingMu.Lock()
+			s.pendingQuestions[qID] = sessionID
+			s.pendingMu.Unlock()
+		}
+	}()
 	if known {
 		s.mu.RLock()
 		st, ok := s.sessions[sessionID]
+		var session driver.Session
+		if ok {
+			session = st.DriverSess
+		}
 		s.mu.RUnlock()
-		if ok && st.DriverSess != nil {
+		if session != nil {
 			// Forward a scalar for single-answer questions so drivers can
 			// write the raw selection into the agent's stdin.
 			var payload any = req.Answers
 			if len(req.Answers) == 1 {
 				payload = req.Answers[0]
 			}
-			_ = st.DriverSess.Answer(qID, payload)
+			if err := session.Answer(qID, payload); err != nil {
+				http.Error(w, err.Error(), http.StatusBadGateway)
+				return
+			}
+		} else {
+			http.Error(w, "session not running", http.StatusConflict)
+			return
 		}
 	}
+	delivered = true
 
 	evt := protocol.QuestionAnsweredEvent{
 		BaseEvent: protocol.BaseEvent{
@@ -626,6 +867,10 @@ func (s *Server) handleQuestion(w http.ResponseWriter, r *http.Request) {
 // --- Files & Diff ---
 
 func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
 	dir := r.URL.Query().Get("dir")
 	if dir == "" {
 		http.Error(w, "dir parameter required", 400)
@@ -639,7 +884,7 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entries, err := listFiles(dir)
+	entries, err := listWorkspaceFiles(s.cfg.AllowedRoots, dir)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -649,16 +894,22 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
 	sessionID := strings.TrimPrefix(r.URL.Path, "/api/v1/diff/")
-	s.mu.RLock()
-	st, ok := s.sessions[sessionID]
-	s.mu.RUnlock()
+	st, ok := s.snapshotSession(sessionID)
 	if !ok {
 		http.Error(w, `{"code":"ERR_SESSION_NOT_FOUND"}`, 404)
 		return
 	}
 
-	diff := gitDiff(st.CWD)
+	diff, err := workspaceDiff(r.Context(), st.CWD)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	w.Header().Set("Content-Type", "text/plain")
 	_, _ = w.Write([]byte(diff))
 }
@@ -681,22 +932,31 @@ func (s *Server) handleTunnels(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if req.Action == "stop" {
-			_ = s.tunnels.Stop()
+			if err := s.tunnels.Stop(); err != nil {
+				http.Error(w, err.Error(), http.StatusBadGateway)
+				return
+			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 			return
 		}
-		u, err := s.tunnels.Start(r.Context(), req.Name, s.cfg.Addr)
+		u, err := s.tunnels.Start(s.ctx, req.Name, s.cfg.Addr)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "url": u})
+	default:
+		methodNotAllowed(w, http.MethodGet, http.MethodPost)
 	}
 }
 
 func (s *Server) handleTelegramStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
 	st := s.telegram.Status()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(st)
@@ -705,18 +965,30 @@ func (s *Server) handleTelegramStatus(w http.ResponseWriter, r *http.Request) {
 // --- WebSocket ---
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	originPatterns := []string{}
+	if origin := r.Header.Get("Origin"); origin != "" {
+		if !isAllowedOrigin(origin, r.Host, s.cfg.AllowedOrigin) {
+			http.Error(w, "origin not allowed", http.StatusForbidden)
+			return
+		}
+		parsed, _ := url.Parse(origin)
+		originPatterns = append(originPatterns, parsed.Host)
+	}
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		OriginPatterns: []string{"*"},
+		OriginPatterns: originPatterns,
 	})
 	if err != nil {
 		return
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
+	conn.SetReadLimit(1024 * 1024)
 
 	sessionID := r.URL.Query().Get("sessionId")
-	s.mu.RLock()
-	st, ok := s.sessions[sessionID]
-	s.mu.RUnlock()
+	st, ok := s.snapshotSession(sessionID)
 
 	var hub *Hub
 	if ok {
@@ -733,12 +1005,32 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	defer hub.Remove(client)
 
 	ctx := r.Context()
+	eventsOnly := r.URL.Query().Get("eventsOnly") == "1"
+	var lastDelivered int64
+	if eventsOnly {
+		lastDelivered, _ = strconv.ParseInt(r.URL.Query().Get("lastSeq"), 10, 64)
+		if lastDelivered < 0 {
+			lastDelivered = 0
+		}
+		if evs, err := s.bus.GetEventsSince(sessionID, lastDelivered); err == nil {
+			for _, ev := range evs {
+				payload, _ := json.Marshal(ev)
+				if err := conn.Write(ctx, websocket.MessageBinary, protocol.Encode(protocol.OpcodeJSONRPC, 0, payload)); err != nil {
+					return
+				}
+				if seq, ok := ev["seq"].(int64); ok {
+					lastDelivered = seq
+				}
+			}
+		}
+	}
 
 	// Writer goroutine
 	go func() {
 		for {
 			select {
 			case <-client.done:
+				conn.CloseNow()
 				return
 			case <-ctx.Done():
 				return
@@ -746,7 +1038,31 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 				if !open {
 					return
 				}
+				decoded, err := protocol.Decode(frame)
+				if err != nil {
+					continue
+				}
+				if eventsOnly && decoded.Opcode == protocol.OpcodePTYOutput {
+					continue
+				}
+				if decoded.Opcode == protocol.OpcodeJSONRPC {
+					var event struct {
+						Type string `json:"type"`
+						Seq  int64  `json:"seq"`
+					}
+					_ = json.Unmarshal(decoded.Payload, &event)
+					if !eventsOnly && event.Type == string(protocol.EventStreamChunk) {
+						continue
+					}
+					if eventsOnly && event.Seq > 0 {
+						if event.Seq <= lastDelivered {
+							continue
+						}
+						lastDelivered = event.Seq
+					}
+				}
 				if err := conn.Write(ctx, websocket.MessageBinary, frame); err != nil {
+					conn.CloseNow()
 					return
 				}
 			}
@@ -754,7 +1070,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	// Replay PTY ring buffer if session has active terminal
-	if ok {
+	if ok && !eventsOnly {
 		if term, isTerm := st.DriverSess.(driver.Terminal); isTerm {
 			if snap := term.Snapshot(); len(snap) > 0 {
 				_ = conn.Write(ctx, websocket.MessageBinary, protocol.Encode(protocol.OpcodePTYOutput, 0, snap))
@@ -772,7 +1088,9 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		if typ == websocket.MessageText {
 			// Handle JSON-RPC over text frame
 			respBytes, _ := s.rpcMux.Dispatch(ctx, sessionID, data)
-			_ = conn.Write(ctx, websocket.MessageText, respBytes)
+			if respBytes != nil {
+				_ = conn.Write(ctx, websocket.MessageText, respBytes)
+			}
 			continue
 		}
 
@@ -783,9 +1101,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 
 		switch frame.Opcode {
 		case protocol.OpcodeKeystroke:
-			s.mu.RLock()
-			st, ok := s.sessions[sessionID]
-			s.mu.RUnlock()
+			st, ok := s.snapshotSession(sessionID)
 			if ok && st.DriverSess != nil {
 				if term, isTerm := st.DriverSess.(driver.Terminal); isTerm {
 					_ = term.RawInput(frame.Payload)
@@ -794,9 +1110,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 
 		case protocol.OpcodeViewportResize:
 			if cols, rows, err := protocol.DecodeResize(frame.Payload); err == nil {
-				s.mu.RLock()
-				st, ok := s.sessions[sessionID]
-				s.mu.RUnlock()
+				st, ok := s.snapshotSession(sessionID)
 				if ok && st.DriverSess != nil {
 					if term, isTerm := st.DriverSess.(driver.Terminal); isTerm {
 						_ = term.Resize(int(cols), int(rows))
@@ -818,140 +1132,16 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 
 		case protocol.OpcodeJSONRPC:
 			respBytes, _ := s.rpcMux.Dispatch(ctx, sessionID, frame.Payload)
-			_ = conn.Write(ctx, websocket.MessageBinary, protocol.Encode(protocol.OpcodeJSONRPC, frame.Slot, respBytes))
+			if respBytes != nil {
+				_ = conn.Write(ctx, websocket.MessageBinary, protocol.Encode(protocol.OpcodeJSONRPC, frame.Slot, respBytes))
+			}
 		}
 	}
 }
 
 // --- SSE ---
 
-func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
-	sessionID := r.URL.Query().Get("sessionId")
-	if sessionID == "" {
-		http.Error(w, "sessionId required", 400)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "streaming unsupported", 500)
-		return
-	}
-
-	lastSeqStr := r.URL.Query().Get("lastSeq")
-	var lastSeq int64
-	if lastSeqStr != "" {
-		_, _ = fmt.Sscan(lastSeqStr, &lastSeq)
-	}
-
-	if evs, err := s.bus.GetEventsSince(sessionID, lastSeq); err == nil {
-		for _, ev := range evs {
-			jb, _ := json.Marshal(ev)
-			fmt.Fprintf(w, "data: %s\n\n", jb)
-		}
-		flusher.Flush()
-	}
-
-	s.mu.RLock()
-	st, ok := s.sessions[sessionID]
-	s.mu.RUnlock()
-	if !ok {
-		return
-	}
-
-	client := &wsClient{send: make(chan []byte, 64), done: make(chan struct{})}
-	st.Hub.Add(client)
-	defer st.Hub.Remove(client)
-
-	ticker := time.NewTicker(20 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-r.Context().Done():
-			return
-		case frame := <-client.send:
-			f, err := protocol.Decode(frame)
-			if err != nil {
-				continue
-			}
-			if f.Opcode == protocol.OpcodePTYOutput {
-				fmt.Fprintf(w, "event: chunk\ndata: %s\n\n", jsonEscape(string(f.Payload)))
-			} else {
-				fmt.Fprintf(w, "data: %s\n\n", string(f.Payload))
-			}
-			flusher.Flush()
-		case <-ticker.C:
-			fmt.Fprintf(w, ": keepalive\n\n")
-			flusher.Flush()
-		}
-	}
-}
-
 // --- RPC Handlers ---
-
-func (s *Server) setupRPC() {
-	s.rpcMux.Register("session.list", func(ctx context.Context, sessionID string, params json.RawMessage) (any, *rpc.RPCError) {
-		s.mu.RLock()
-		defer s.mu.RUnlock()
-		var list []map[string]any
-		for _, st := range s.sessions {
-			list = append(list, map[string]any{
-				"sessionId": st.SessionID,
-				"agentId":   st.AgentID,
-				"status":    st.Status,
-			})
-		}
-		return list, nil
-	})
-
-	s.rpcMux.Register("prompt.send", func(ctx context.Context, sessionID string, params json.RawMessage) (any, *rpc.RPCError) {
-		var req struct {
-			Prompt string `json:"prompt"`
-		}
-		if err := json.Unmarshal(params, &req); err != nil {
-			return nil, &rpc.RPCError{Code: rpc.ErrInvalidParams, Message: err.Error()}
-		}
-		s.mu.RLock()
-		st, ok := s.sessions[sessionID]
-		s.mu.RUnlock()
-		if !ok || st.DriverSess == nil {
-			return nil, &rpc.RPCError{Code: rpc.ErrInternalError, Message: "session not found"}
-		}
-		if err := st.DriverSess.Prompt(req.Prompt); err != nil {
-			return nil, &rpc.RPCError{Code: rpc.ErrInternalError, Message: err.Error()}
-		}
-		return map[string]any{"ok": true}, nil
-	})
-
-	s.rpcMux.Register("approval.resolve", func(ctx context.Context, sessionID string, params json.RawMessage) (any, *rpc.RPCError) {
-		var req struct {
-			ApprovalID string `json:"approvalId"`
-			Approved   bool   `json:"approved"`
-		}
-		if err := json.Unmarshal(params, &req); err != nil {
-			return nil, &rpc.RPCError{Code: rpc.ErrInvalidParams, Message: err.Error()}
-		}
-		app, err := s.approvals.Resolve(req.ApprovalID, req.Approved, "rpc")
-		if err != nil {
-			return nil, &rpc.RPCError{Code: rpc.ErrInternalError, Message: err.Error()}
-		}
-		s.mu.RLock()
-		st, ok := s.sessions[app.SessionID]
-		s.mu.RUnlock()
-		if ok && st.DriverSess != nil {
-			_ = st.DriverSess.Approve(req.ApprovalID, req.Approved)
-		}
-		return map[string]any{"ok": true}, nil
-	})
-
-	s.rpcMux.Register("agents.list", func(ctx context.Context, sessionID string, params json.RawMessage) (any, *rpc.RPCError) {
-		return s.drivers.List(), nil
-	})
-}
 
 // --- serverSink implements driver.Sink ---
 
@@ -960,39 +1150,45 @@ type serverSink struct {
 	sessionID string
 	hub       *Hub
 	parser    *parser.StreamParser
+	mu        sync.Mutex
+	lineBuf   string // incomplete line carried across Bytes calls
 }
 
 func (s *serverSink) Bytes(data []byte) {
+	s.Event(protocol.StreamChunkEvent{BaseEvent: protocol.BaseEvent{SessionID: s.sessionID, Timestamp: protocol.NowMillis()}, Type: protocol.EventStreamChunk, Chunk: base64.StdEncoding.EncodeToString(data), Encoding: "base64"})
 	frame := protocol.Encode(protocol.OpcodePTYOutput, 0, data)
 	s.hub.Broadcast(frame)
 
-	// Feed to parser
-	events := s.parser.FeedLine(string(data))
-	for _, ev := range events {
-		if appEvt, ok := ev.(protocol.ApprovalRequestedEvent); ok {
-			s.server.approvals.Put(&approval.PendingApproval{
-				ID:                appEvt.ApprovalID,
-				SessionID:         s.sessionID,
-				ToolName:          appEvt.ToolName,
-				Command:           appEvt.Command,
-				AutoDenyTimeoutMs: appEvt.AutoDenyTimeoutMs,
-			})
-			if s.server.cfg.TelegramChatID != 0 {
-				if app, ok2 := s.server.approvals.Get(appEvt.ApprovalID); ok2 {
-					s.server.telegram.NotifyApproval(context.Background(), s.server.cfg.TelegramChatID, app)
-				}
-			}
+	// Feed the parser only on complete, ANSI-stripped lines.
+	// Raw PTY chunks are arbitrary byte boundaries — never feed them directly.
+	s.mu.Lock()
+	s.lineBuf += stripANSI(string(data))
+	if len(s.lineBuf) > 64*1024 {
+		s.lineBuf = s.lineBuf[len(s.lineBuf)-64*1024:]
+	}
+	var completeLines []string
+	for {
+		idx := strings.Index(s.lineBuf, "\n")
+		if idx < 0 {
+			break
 		}
-		if qEvt, ok := ev.(protocol.QuestionAskedEvent); ok {
-			s.server.pendingMu.Lock()
-			s.server.pendingQuestions[qEvt.QuestionID] = s.sessionID
-			s.server.pendingMu.Unlock()
+		if line := strings.TrimRight(s.lineBuf[:idx], "\r"); line != "" {
+			completeLines = append(completeLines, line)
 		}
-		s.Event(ev)
+		s.lineBuf = s.lineBuf[idx+1:]
+	}
+	s.mu.Unlock()
+
+	for _, line := range completeLines {
+		for _, ev := range s.parser.FeedLine(line) {
+			s.Event(ev)
+		}
 	}
 }
-
 func (s *serverSink) Message(msg chat.Message) {
+	if msg.Role == protocol.RoleUser {
+		return
+	} // prompts are recorded once by the shared REST/RPC handler
 	evt := protocol.ChatMessageEvent{
 		BaseEvent: protocol.BaseEvent{
 			SessionID: s.sessionID,
@@ -1009,21 +1205,37 @@ func (s *serverSink) Message(msg chat.Message) {
 		Rev:       msg.Rev,
 	}
 
-	seq, _ := s.server.bus.AppendEvent(s.sessionID, string(evt.Type), evt)
-	evt.Seq = seq
+	s.Event(evt)
 
-	jb, _ := json.Marshal(evt)
-	s.hub.Broadcast(protocol.Encode(protocol.OpcodeJSONRPC, 0, jb))
-
-	if !msg.Streaming && s.server.cfg.TelegramChatID != 0 {
-		s.server.telegram.NotifyChatMessage(context.Background(), s.server.cfg.TelegramChatID, msg)
-	}
+	s.server.telegram.NotifyChatMessage(s.server.ctx, s.server.cfg.TelegramChatID, msg)
 }
 
 func (s *serverSink) Event(evt any) {
+	s.hub.eventMu.Lock()
+	defer s.hub.eventMu.Unlock()
+	switch event := evt.(type) {
+	case protocol.ApprovalRequestedEvent:
+		s.server.approvals.Put(&approval.PendingApproval{ID: event.ApprovalID, SessionID: s.sessionID, ToolName: event.ToolName, Command: event.Command, AutoDenyTimeoutMs: event.AutoDenyTimeoutMs})
+		if app, ok := s.server.approvals.Get(event.ApprovalID); ok {
+			s.server.telegram.NotifyApproval(s.server.ctx, s.server.cfg.TelegramChatID, app)
+		}
+	case protocol.QuestionAskedEvent:
+		s.server.pendingMu.Lock()
+		s.server.pendingQuestions[event.QuestionID] = s.sessionID
+		s.server.pendingMu.Unlock()
+		s.server.telegram.NotifyQuestion(s.server.ctx, s.server.cfg.TelegramChatID, event)
+	case protocol.ArtifactUpdatedEvent:
+		s.server.telegram.NotifyArtifact(s.server.ctx, s.server.cfg.TelegramChatID, event)
+	case protocol.DiffGeneratedEvent:
+		s.server.telegram.NotifyArtifact(s.server.ctx, s.server.cfg.TelegramChatID, protocol.ArtifactUpdatedEvent{BaseEvent: event.BaseEvent, Type: protocol.EventArtifactUpdated, Path: event.FilePath + ".patch", Kind: "diff", Content: event.DiffPatch})
+	}
 	var evType string
 	if b, ok := evt.(protocol.AgentEvent); ok {
 		evType = string(b.Type)
+	} else if chunk, ok := evt.(protocol.StreamChunkEvent); ok {
+		evType = string(chunk.Type)
+	} else if message, ok := evt.(protocol.ChatMessageEvent); ok {
+		evType = string(message.Type)
 	} else if ab, ok := evt.(protocol.ApprovalRequestedEvent); ok {
 		evType = string(ab.Type)
 	} else if q, ok := evt.(protocol.QuestionAskedEvent); ok {
@@ -1034,11 +1246,19 @@ func (s *serverSink) Event(evt any) {
 		evType = string(t.Type)
 	} else if au, ok := evt.(protocol.AuthURLEvent); ok {
 		evType = string(au.Type)
+	} else if artifact, ok := evt.(protocol.ArtifactUpdatedEvent); ok {
+		evType = string(artifact.Type)
+	} else if status, ok := evt.(protocol.SessionStatusEvent); ok {
+		evType = string(status.Type)
 	} else {
 		evType = "custom.event"
 	}
 
-	seq, _ := s.server.bus.AppendEvent(s.sessionID, evType, evt)
+	seq, err := s.server.bus.AppendEvent(s.sessionID, evType, evt)
+	if err != nil {
+		log.Printf("[events] persist %s for %s: %v", evType, s.sessionID, err)
+		return
+	}
 	jb, _ := json.Marshal(evt)
 	var withSeq map[string]any
 	if err := json.Unmarshal(jb, &withSeq); err == nil {

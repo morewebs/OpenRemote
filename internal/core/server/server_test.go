@@ -29,12 +29,12 @@ type mockDriverSession struct {
 	answers []mockAnswer
 }
 
-func (m *mockDriverSession) Prompt(text string) error             { return nil }
-func (m *mockDriverSession) RawInput(data []byte) error           { return nil }
-func (m *mockDriverSession) Resize(cols, rows int) error          { return nil }
-func (m *mockDriverSession) Snapshot() []byte                     { return nil }
-func (m *mockDriverSession) Approve(id string, ok bool) error     { return nil }
-func (m *mockDriverSession) Close() error                         { return nil }
+func (m *mockDriverSession) Prompt(text string) error         { return nil }
+func (m *mockDriverSession) RawInput(data []byte) error       { return nil }
+func (m *mockDriverSession) Resize(cols, rows int) error      { return nil }
+func (m *mockDriverSession) Snapshot() []byte                 { return nil }
+func (m *mockDriverSession) Approve(id string, ok bool) error { return nil }
+func (m *mockDriverSession) Close() error                     { return nil }
 
 func (m *mockDriverSession) Answer(questionID string, answer any) error {
 	m.mu.Lock()
@@ -110,11 +110,11 @@ func TestServerHealthAndSessions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer bus.Close()
+	t.Cleanup(func() { _ = bus.Close() })
 
 	cwd, _ := os.Getwd()
 
-	srv := server.New(server.Config{
+	srv := newTestServer(t, server.Config{
 		Addr:         "127.0.0.1:0",
 		DataDir:      tempDir,
 		Token:        "test-token",
@@ -196,11 +196,11 @@ func TestServer_QuestionLifecycleAndAnswerRouting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer bus.Close()
+	t.Cleanup(func() { _ = bus.Close() })
 
 	cwd, _ := os.Getwd()
 
-	srv := server.New(server.Config{
+	srv := newTestServer(t, server.Config{
 		Addr:         "127.0.0.1:0",
 		DataDir:      tempDir,
 		Token:        "test-token",
@@ -308,11 +308,11 @@ func TestServer_EventCatchupHydration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer bus.Close()
+	t.Cleanup(func() { _ = bus.Close() })
 
 	cwd, _ := os.Getwd()
 
-	srv := server.New(server.Config{
+	srv := newTestServer(t, server.Config{
 		Addr:         "127.0.0.1:0",
 		DataDir:      tempDir,
 		Token:        "test-token",

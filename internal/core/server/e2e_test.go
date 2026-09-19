@@ -23,12 +23,12 @@ func TestEndToEndSessionLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("events.Open failed: %v", err)
 	}
-	defer bus.Close()
+	t.Cleanup(func() { _ = bus.Close() })
 
 	cwd, _ := os.Getwd()
 	token := "secret-test-token-1234567890"
 
-	srv := server.New(server.Config{
+	srv := newTestServer(t, server.Config{
 		Addr:         "127.0.0.1:0",
 		DataDir:      tempDir,
 		Token:        token,

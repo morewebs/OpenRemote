@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#09090b" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="OpenRemote — control local coding agents from your phone." />
+  <title>OpenRemote Console</title>
+  <link rel="stylesheet" href="/vendor/xterm.css" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+</head>
+<body class="dark">
+  <!-- Token gate -->
+  <div id="token-gate" class="gate hidden">
+    <form id="token-form" class="gate-card" autocomplete="off">
+      <div class="gate-logo" aria-hidden="true">
+        <span class="gate-mark"></span>
+        <div>
+          <h1>OpenRemote</h1>
+          <p class="muted small">Agent console</p>
+        </div>
+      </div>
+      <p class="muted">Paste the bearer token to connect.</p>
+      <input id="token-input" type="password" autocomplete="off" placeholder="Bearer token (64 hex chars)" spellcheck="false" aria-label="Bearer token" />
+      <div class="gate-actions">
+        <button id="token-save" type="submit" class="btn primary block">Connect</button>
+        <label class="remember"><input id="token-remember" type="checkbox" checked /> Remember in this browser</label>
+      </div>
+      <p id="token-error" class="error muted" role="alert"></p>
+      <p class="hint muted">Find it with: <code>openremote token</code></p>
+    </form>
+  </div>
+
+  <!-- Main console -->
+  <div id="console" class="console hidden">
+    <header class="topbar">
+      <div class="brand">OpenRemote <span id="health-badge" class="badge ok">Online</span></div>
+      <div class="topbar-actions">
+        <button id="btn-new-session" class="btn small">New Session</button>
+        <button id="btn-context" class="btn small ghost ctx-toggle" aria-expanded="false">Context</button>
+        <button id="btn-copy-token" class="btn small ghost">Copy Token</button>
+        <button id="btn-disconnect" class="btn small ghost">Disconnect</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <!-- Left: sessions -->
+      <aside class="sidebar">
+        <div class="sidebar-header">Sessions</div>
+        <ul id="session-list" class="session-list"></ul>
+      </aside>
+
+      <!-- Center: terminal + chat tabs -->
+      <section class="center">
+        <div class="tab-bar">
+          <button class="tab active" data-tab="terminal">Terminal</button>
+          <button class="tab" data-tab="chat">Chat</button>
+          <div class="spacer"></div>
+          <span id="conn-status" class="conn-pill" data-state="idle">Offline</span>
+          <span id="session-meta" class="muted small"></span>
+        </div>
+        <div id="panel-terminal" class="panel active">
+          <div id="xterm-host"></div>
+          <form id="prompt-form" class="prompt-bar">
+            <input id="prompt-input" type="text" autocomplete="off" placeholder="Send a prompt… (Enter)" />
+            <button type="submit" class="btn small">Send</button>
+          </form>
+        </div>
+        <div id="panel-chat" class="panel">
+          <div id="chat-log" class="chat-log"></div>
+        </div>
+      </section>
+
+      <!-- Right: context panel -->
+      <aside class="context" id="context-panel">
+        <div class="ctx-section">
+          <div class="ctx-header">Approvals <span id="approval-count" class="count" hidden>0</span></div>
+          <div id="approval-list" class="approval-list empty">No pending approvals</div>
+        </div>
+        <div class="ctx-section grow">
+          <div class="ctx-header">
+            Diff
+            <button id="btn-refresh-diff" class="btn tiny ghost">Refresh</button>
+          </div>
+          <pre id="diff-view" class="diff-view"></pre>
+        </div>
+        <div class="ctx-section">
+          <div class="ctx-header">Files</div>
+          <div id="file-tree" class="file-tree"></div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <!-- New session modal -->
+  <dialog id="new-session-dialog" class="modal">
+    <form id="new-session-form" class="modal-card" novalidate>
+      <h2>New Session</h2>
+      <label>Agent
+        <select id="ns-agent" required></select>
+      </label>
+      <label>Working directory
+        <input id="ns-cwd" type="text" required placeholder="/absolute/path/to/project" spellcheck="false" />
+      </label>
+      <label class="row"><input id="ns-worktree" type="checkbox" /> Use git worktree</label>
+      <label>Task name (optional)
+        <input id="ns-task" type="text" placeholder="e.g. fix-login-bug" />
+      </label>
+      <div class="modal-actions">
+        <button id="ns-cancel" type="button" class="btn ghost">Cancel</button>
+        <button id="ns-submit" type="submit" class="btn primary">Create</button>
+      </div>
+      <p id="ns-error" class="error muted" role="alert"></p>
+    </form>
+  </dialog>
+
+  <div id="toast-host" class="toast-host" aria-live="polite"></div>
+
+  <script defer src="/vendor/xterm.js"></script>
+  <script defer src="/vendor/xterm-addon-fit.js"></script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
