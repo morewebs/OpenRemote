@@ -34,8 +34,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       next,
     ) {
       if (!mounted ||
-          (previous?.baseUrl == next.baseUrl && previous?.token == next.token))
+          (previous?.baseUrl == next.baseUrl &&
+              previous?.token == next.token)) {
         return;
+      }
       ref.read(chatMessagesProvider(widget.sessionId).notifier).clear();
       ref.read(pendingApprovalsProvider(widget.sessionId).notifier).clear();
       ref.read(pendingQuestionsProvider(widget.sessionId).notifier).clear();

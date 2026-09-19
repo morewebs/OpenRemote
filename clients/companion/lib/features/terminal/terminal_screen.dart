@@ -59,8 +59,10 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
       next,
     ) {
       if (!mounted ||
-          (previous?.baseUrl == next.baseUrl && previous?.token == next.token))
+          (previous?.baseUrl == next.baseUrl &&
+              previous?.token == next.token)) {
         return;
+      }
       _ws?.disconnect();
       _terminalDecoder.close();
       _terminal.buffer.clear();

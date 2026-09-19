@@ -4,6 +4,17 @@ import 'dart:typed_data';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:http/http.dart' as http;
 
+/// dart2js does not implement ByteData.setUint64. Encode the wire timestamp
+/// using two 32-bit words so web and native clients share the same framing.
+Uint8List encodePingFrame(int timestamp) {
+  final frame = Uint8List(10);
+  frame[0] = 0x06;
+  final data = ByteData.sublistView(frame, 2);
+  data.setUint32(0, timestamp ~/ 0x100000000, Endian.big);
+  data.setUint32(4, timestamp % 0x100000000, Endian.big);
+  return frame;
+}
+
 class WebSocketService {
   WebSocketChannel? _channel;
   StreamSubscription? _sub;
@@ -291,12 +302,9 @@ class WebSocketService {
         t.cancel();
         return;
       }
-      final frame = Uint8List(10);
-      frame[0] = 0x06; // OpcodePingPong
-      frame[1] = 0;
-      final bd = ByteData.sublistView(frame, 2);
-      bd.setUint64(0, DateTime.now().millisecondsSinceEpoch, Endian.big);
-      _channel!.sink.add(frame);
+      _channel!.sink.add(
+        encodePingFrame(DateTime.now().millisecondsSinceEpoch),
+      );
     });
   }
 

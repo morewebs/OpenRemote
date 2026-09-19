@@ -96,3 +96,8 @@ GitHub release was made. Local race testing requires a C toolchain; CI runs it o
 Linux/macOS. Sub-5-ms latency and sub-25-MB idle memory are original targets, not
 verified guarantees. WSL on this host cannot start because its configured disk
 path is unavailable; no host configuration was changed.
+
+Local daemon builds passed for Windows amd64, Linux amd64/arm64 and macOS amd64.
+The macOS arm64 compile exhausted disk space in the SQLite dependency; Windows
+arm64 was not reached. Both remain required cross-build jobs in CI. A local
+build success is not a claim of runtime testing on those other operating systems.
