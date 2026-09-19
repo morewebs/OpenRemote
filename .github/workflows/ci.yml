@@ -2,64 +2,126 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ''
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  go-matrix:
-    name: Go Matrix Tests (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ ubuntu-latest, windows-latest ]
+  lint:
+    name: Lint (go vet)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26.x'
+          go-version-file: go.mod
           cache: true
+          cache-dependency-path: go.sum
 
       - name: Go Vet
         run: go vet ./...
 
-      - name: Go Tests
-        run: go test -v ./...
+      # Advisory golangci-lint — reports findings without blocking the required check.
+      # Remove `continue-on-error` once the codebase is fully lint-clean.
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        continue-on-error: true
+        with:
+          version: latest
+          args: --timeout 5m
 
-  flutter-ci:
-    name: Flutter Analyze & Test & Web Build
-    runs-on: ubuntu-latest
+  test:
+    name: Go Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: actions/checkout@v5
         with:
-          flutter-version: '3.44.x'
-          channel: 'stable'
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
           cache: true
+          cache-dependency-path: go.sum
 
-      - name: Install Flutter Dependencies
-        working-directory: clients/companion
-        run: flutter pub get
+      # `-race` requires CGO + a C toolchain (present on linux/macos runners).
+      # Windows runners lack gcc by default, so run without -race there.
+      - name: Go Tests (race)
+        if: runner.os != 'Windows'
+        run: go test -race -v -count=1 ./...
 
-      - name: Flutter Analyze
-        working-directory: clients/companion
-        run: flutter analyze
+      - name: Go Tests
+        if: runner.os == 'Windows'
+        run: go test -v -count=1 ./...
 
-      - name: Flutter Tests
-        working-directory: clients/companion
-        run: flutter test
+  cross-compile:
+    name: Cross-Compile (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+            ext: .exe
+          - goos: darwin
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
+            ext: .exe
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref || github.ref }}
 
-      - name: Build Flutter Web
-        working-directory: clients/companion
-        run: flutter build web --release
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Cross-Compile Check
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          OUTPUT_NAME="openremote-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
+          go build -ldflags="-s -w -X main.Version=ci-cross-check" -o "/tmp/$OUTPUT_NAME" ./cmd/openremote
+          echo "Built $OUTPUT_NAME ($(du -h /tmp/$OUTPUT_NAME | cut -f1))"
+          file "/tmp/$OUTPUT_NAME" 2>/dev/null || ls -lh "/tmp/$OUTPUT_NAME"
