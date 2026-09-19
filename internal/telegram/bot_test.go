@@ -10,10 +10,10 @@ import (
 )
 
 func TestBot_AllowedUsers(t *testing.T) {
-	// 1. When AllowedUserIDs is empty, all users are allowed
+	// An empty allowlist must never expose remote control to arbitrary users.
 	b1 := New(Config{Token: ""}, nil, nil)
-	if !b1.isUserAllowed(12345) {
-		t.Fatalf("expected all users allowed when list is empty")
+	if b1.isUserAllowed(12345) {
+		t.Fatalf("expected empty allowlist to deny control")
 	}
 
 	// 2. When AllowedUserIDs is configured, only listed IDs allowed
