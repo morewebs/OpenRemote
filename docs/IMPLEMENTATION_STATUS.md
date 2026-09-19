@@ -83,6 +83,13 @@ and supervisor failure fixtures, agent protocol fixtures, Telegram mocks, tunnel
 process fixtures, file containment, dirty worktrees, concurrent replies and
 WebSocket/SSE recovery. Tests do not send external messages.
 
+Browser checks exercised token setup, real shell creation and prompting, file
+previews, Git diffs and terminal replay at desktop and 390-pixel phone widths.
+That pass found and fixed delayed short-response chat extraction and cold-load
+connection settings. Windows desktop and a development-signed Android APK also
+compile locally. Android's first packaging attempt exhausted disk space; a
+sequential rebuild with a bounded Gradle heap succeeded.
+
 Live Telegram, cloudflared, Tailscale, Pi/OMP, mobile signing and real cellular
 handoffs need installations, devices or credentials. No production deployment or
 GitHub release was made. Local race testing requires a C toolchain; CI runs it on
