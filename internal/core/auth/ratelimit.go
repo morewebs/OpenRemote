@@ -10,10 +10,12 @@ import (
 
 // RateLimiter implements a per-IP sliding window / token bucket rate limiter.
 type RateLimiter struct {
-	mu      sync.Mutex
-	rate    float64 // tokens per second
-	burst   float64 // maximum tokens
-	clients map[string]*clientBucket
+	mu       sync.Mutex
+	rate     float64 // tokens per second
+	burst    float64 // maximum tokens
+	clients  map[string]*clientBucket
+	done     chan struct{} // closed to stop cleanupLoop goroutine
+	stopOnce sync.Once
 }
 
 type clientBucket struct {
@@ -26,9 +28,15 @@ func NewRateLimiter(rate float64, burst int) *RateLimiter {
 		rate:    rate,
 		burst:   float64(burst),
 		clients: make(map[string]*clientBucket),
+		done:    make(chan struct{}),
 	}
 	go rl.cleanupLoop()
 	return rl
+}
+
+// Stop terminates the background cleanup goroutine. Safe to call multiple times.
+func (rl *RateLimiter) Stop() {
+	rl.stopOnce.Do(func() { close(rl.done) })
 }
 
 func (rl *RateLimiter) Allow(ip string) bool {
@@ -65,15 +73,20 @@ func (rl *RateLimiter) cleanupLoop() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		rl.mu.Lock()
-		now := time.Now()
-		for ip, b := range rl.clients {
-			if now.Sub(b.lastRefill) > 10*time.Minute {
-				delete(rl.clients, ip)
+	for {
+		select {
+		case <-rl.done:
+			return
+		case <-ticker.C:
+			rl.mu.Lock()
+			now := time.Now()
+			for ip, b := range rl.clients {
+				if now.Sub(b.lastRefill) > 10*time.Minute {
+					delete(rl.clients, ip)
+				}
 			}
+			rl.mu.Unlock()
 		}
-		rl.mu.Unlock()
 	}
 }
 

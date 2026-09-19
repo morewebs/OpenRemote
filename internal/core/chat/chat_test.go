@@ -12,33 +12,43 @@ func TestClaudeLexer(t *testing.T) {
 	lexer := NewClaudeLexer()
 
 	// Test user prompt
-	role, kind, isNew, clean, skip := lexer.Classify("> What is 2 + 2?")
-	if role != protocol.RoleUser || !isNew || clean != "What is 2 + 2?" || skip {
-		t.Fatalf("Unexpected user prompt classification: role=%v, isNew=%v, clean=%q, skip=%v", role, isNew, clean, skip)
+	{
+		role, _, isNew, clean, skip := lexer.Classify("> What is 2 + 2?")
+		if role != protocol.RoleUser || !isNew || clean != "What is 2 + 2?" || skip {
+			t.Fatalf("Unexpected user prompt classification: role=%v, isNew=%v, clean=%q, skip=%v", role, isNew, clean, skip)
+		}
 	}
 
 	// Test assistant response
-	role, kind, isNew, clean, skip = lexer.Classify("⏺ 2 + 2 is 4.")
-	if role != protocol.RoleAssistant || !isNew || clean != "2 + 2 is 4." || skip {
-		t.Fatalf("Unexpected assistant classification: role=%v, isNew=%v, clean=%q, skip=%v", role, isNew, clean, skip)
+	{
+		role, _, isNew, clean, skip := lexer.Classify("⏺ 2 + 2 is 4.")
+		if role != protocol.RoleAssistant || !isNew || clean != "2 + 2 is 4." || skip {
+			t.Fatalf("Unexpected assistant classification: role=%v, isNew=%v, clean=%q, skip=%v", role, isNew, clean, skip)
+		}
 	}
 
 	// Test tool use
-	role, kind, isNew, clean, skip = lexer.Classify("⏺ Running bash...")
-	if role != protocol.RoleTool || kind != "tool_use" || !isNew || skip {
-		t.Fatalf("Unexpected tool classification: role=%v, kind=%v, isNew=%v, skip=%v", role, kind, isNew, skip)
+	{
+		role, kind, isNew, _, skip := lexer.Classify("⏺ Running bash...")
+		if role != protocol.RoleTool || kind != "tool_use" || !isNew || skip {
+			t.Fatalf("Unexpected tool classification: role=%v, kind=%v, isNew=%v, skip=%v", role, kind, isNew, skip)
+		}
 	}
 
 	// Test tool result
-	role, kind, isNew, clean, skip = lexer.Classify("⎿ Result: 4")
-	if role != protocol.RoleTool || kind != "tool_result" || clean != "Result: 4" || skip {
-		t.Fatalf("Unexpected tool result classification: role=%v, kind=%v, clean=%q, skip=%v", role, kind, clean, skip)
+	{
+		role, kind, _, clean, skip := lexer.Classify("⎿ Result: 4")
+		if role != protocol.RoleTool || kind != "tool_result" || clean != "Result: 4" || skip {
+			t.Fatalf("Unexpected tool result classification: role=%v, kind=%v, clean=%q, skip=%v", role, kind, clean, skip)
+		}
 	}
 
 	// Test spinner / noise
-	_, _, _, _, skip = lexer.Classify("⠋ Thinking...")
-	if !skip {
-		t.Fatalf("Expected spinner line to be skipped")
+	{
+		_, _, _, _, skip := lexer.Classify("⠋ Thinking...")
+		if !skip {
+			t.Fatalf("Expected spinner line to be skipped")
+		}
 	}
 }
 

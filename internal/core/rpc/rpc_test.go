@@ -62,3 +62,36 @@ func TestMux_Dispatch(t *testing.T) {
 		t.Fatalf("expected ErrParseError, got %+v", res4.Error)
 	}
 }
+
+func TestMuxNotificationsAndValidation(t *testing.T) {
+	m := NewMux()
+	calls := 0
+	m.Register("ping", func(context.Context, string, json.RawMessage) (any, *RPCError) { calls++; return nil, nil })
+	for _, input := range []string{`{"jsonrpc":"2.0","method":"ping"}`, `[{"jsonrpc":"2.0","method":"ping"}]`} {
+		response, err := m.Dispatch(context.Background(), "", []byte(input))
+		if err != nil || response != nil {
+			t.Fatalf("notification response = %s, %v", response, err)
+		}
+	}
+	if calls != 2 {
+		t.Fatalf("notifications executed %d times", calls)
+	}
+	for _, input := range []string{`null`, `[]`, `1`, `{"id":1,"method":"ping"}`, `{"jsonrpc":"2.0","id":{},"method":"ping"}`} {
+		response, _ := m.Dispatch(context.Background(), "", []byte(input))
+		var decoded Response
+		if err := json.Unmarshal(response, &decoded); err != nil || decoded.Error == nil || decoded.Error.Code != ErrInvalidRequest {
+			t.Fatalf("invalid request accepted: %s => %s", input, response)
+		}
+	}
+	response, _ := m.Dispatch(context.Background(), "", []byte(`{"jsonrpc":"2.0","id":9007199254740993,"method":"ping"}`))
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal(response, &fields)
+	if string(fields["id"]) != "9007199254740993" || string(fields["result"]) != "null" || fields["error"] != nil {
+		t.Fatalf("invalid success envelope: %s", response)
+	}
+	response, _ = m.Dispatch(context.Background(), "", []byte(`[{"jsonrpc":"2.0","method":"ping"},{"jsonrpc":"2.0","id":"x","method":"ping"}]`))
+	var batch []Response
+	if err := json.Unmarshal(response, &batch); err != nil || len(batch) != 1 || batch[0].ID != "x" {
+		t.Fatalf("invalid batch: %s", response)
+	}
+}

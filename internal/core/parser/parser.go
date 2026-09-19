@@ -105,14 +105,24 @@ func (p *StreamParser) FeedLine(line string) []any {
 	}
 
 	// 2. Question / Multiple choice detection
-	if strings.Contains(line, "Select an option:") || strings.Contains(line, "Choose an option:") {
+	if strings.Contains(contextBlock, "Select an option:") || strings.Contains(contextBlock, "Choose an option:") {
 		matches := reChoiceOption.FindAllStringSubmatch(contextBlock, -1)
 		if len(matches) >= 2 {
+			var promptLine string
+			for _, l := range p.recentLines {
+				if strings.Contains(l, "Select an option:") || strings.Contains(l, "Choose an option:") {
+					promptLine = l
+					break
+				}
+			}
+			if promptLine == "" {
+				promptLine = line
+			}
 			var options []string
 			for _, opt := range matches {
 				options = append(options, opt[2])
 			}
-			qID := approval.GenerateID(p.sessionID, line)
+			qID := approval.GenerateID(p.sessionID, promptLine)
 			if !p.seenQuestions[qID] {
 				p.seenQuestions[qID] = true
 				events = append(events, protocol.QuestionAskedEvent{
@@ -122,7 +132,7 @@ func (p *StreamParser) FeedLine(line string) []any {
 					},
 					Type:          protocol.EventQuestionAsked,
 					QuestionID:    qID,
-					QuestionText:  line,
+					QuestionText:  promptLine,
 					Options:       options,
 					IsMultiSelect: false,
 				})

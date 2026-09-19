@@ -1,6 +1,7 @@
 package screen
 
 import (
+	"bytes"
 	"strings"
 	"sync"
 	"time"
@@ -15,7 +16,8 @@ type Screen struct {
 	emu           *vt.SafeEmulator
 	cols          int
 	rows          int
-	committedLine int // number of scrollback lines already emitted
+	scrolled      int // logical offset of the active viewport
+	emitted       map[int]string
 	onCommit      func(line string)
 	altScreen     bool
 	lastWriteTime time.Time
@@ -30,9 +32,10 @@ func New(cols, rows int) *Screen {
 		rows = 30
 	}
 	return &Screen{
-		emu:  vt.NewSafeEmulator(cols, rows),
-		cols: cols,
-		rows: rows,
+		emu:     vt.NewSafeEmulator(cols, rows),
+		cols:    cols,
+		rows:    rows,
+		emitted: make(map[int]string),
 	}
 }
 
@@ -78,6 +81,11 @@ func (s *Screen) Write(p []byte) (int, error) {
 	// If in alternate screen mode, suppress scrollback line emissions
 	if !s.altScreen {
 		s.checkScrollbackCommits()
+		// A completed line need not leave the viewport to be useful in chat.
+		// Exclude the cursor row, which may still be a prompt or partial token.
+		if bytes.ContainsRune(p, '\n') {
+			s.commitVisible(s.emu.CursorPosition().Y - 1)
+		}
 	}
 
 	return n, err
@@ -86,17 +94,46 @@ func (s *Screen) Write(p []byte) (int, error) {
 // checkScrollbackCommits emits any newly committed scrollback lines.
 func (s *Screen) checkScrollbackCommits() {
 	sbLen := s.emu.ScrollbackLen()
-	if sbLen <= s.committedLine {
+	if sbLen == 0 {
 		return
 	}
 
-	for y := s.committedLine; y < sbLen; y++ {
-		line := s.readScrollbackLine(y)
-		if s.onCommit != nil {
-			s.onCommit(line)
-		}
+	for y := 0; y < sbLen; y++ {
+		s.commitLine(s.scrolled+y, s.readScrollbackLine(y))
+		delete(s.emitted, s.scrolled+y)
 	}
-	s.committedLine = sbLen
+	s.scrolled += sbLen
+	// Consume committed rows so the VT library's capped scrollback cannot
+	// stop our progress once it reaches its maximum length.
+	s.emu.ClearScrollback()
+}
+
+func (s *Screen) commitLine(index int, line string) {
+	if previous, ok := s.emitted[index]; ok && previous == line {
+		return
+	}
+	s.emitted[index] = line
+	if line != "" && s.onCommit != nil {
+		s.onCommit(line)
+	}
+}
+
+func (s *Screen) commitVisible(maxLine int) {
+	if maxLine >= s.rows {
+		maxLine = s.rows - 1
+	}
+	for y := 0; y <= maxLine; y++ {
+		var line strings.Builder
+		for x := 0; x < s.cols; x++ {
+			cell := s.emu.CellAt(x, y)
+			if cell != nil && cell.Content != "" {
+				line.WriteString(cell.Content)
+			} else {
+				line.WriteByte(' ')
+			}
+		}
+		s.commitLine(s.scrolled+y, strings.TrimRight(line.String(), " "))
+	}
 }
 
 // readScrollbackLine converts a scrollback row to a clean trimmed string.
@@ -165,26 +202,5 @@ func (s *Screen) FlushCurrentScreenLines() {
 	// Emit any scrollback lines first
 	s.checkScrollbackCommits()
 
-	// For any screen lines that contain text, emit them if we're flushing on exit
-	pos := s.emu.CursorPosition()
-	maxLine := pos.Y
-	if maxLine >= s.rows {
-		maxLine = s.rows - 1
-	}
-
-	for y := 0; y <= maxLine; y++ {
-		var sb strings.Builder
-		for x := 0; x < s.cols; x++ {
-			cell := s.emu.CellAt(x, y)
-			if cell != nil && cell.Content != "" {
-				sb.WriteString(cell.Content)
-			} else {
-				sb.WriteByte(' ')
-			}
-		}
-		line := strings.TrimRight(sb.String(), " ")
-		if line != "" && s.onCommit != nil {
-			s.onCommit(line)
-		}
-	}
+	s.commitVisible(s.emu.CursorPosition().Y)
 }

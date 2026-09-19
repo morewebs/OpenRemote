@@ -20,7 +20,7 @@ type Assembler struct {
 	currentMsg *Message
 	lines      []string
 
-	flushTimer *time.Timer
+	flushTimer   *time.Timer
 	idleDebounce time.Duration
 }
 
@@ -107,8 +107,9 @@ func (a *Assembler) sealCurrentLocked() {
 
 func (a *Assembler) emitLocked(msg Message) {
 	if a.onMessage != nil {
-		// Emit copy outside lock or via callback
-		go a.onMessage(msg)
+		// Keep revisions in order. A goroutine per revision can deliver a stale
+		// streaming update after the final message, including after session exit.
+		a.onMessage(msg)
 	}
 }
 
