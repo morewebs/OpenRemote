@@ -1,3 +1,5 @@
+> Historical design specification. Current implementation and changed assumptions are documented in [implementation status](../IMPLEMENTATION_STATUS.md).
+
 # 05. Client Applications Specification
 
 This document defines the architecture, user experience, and technical implementations for the **Flutter Companion** multi-platform client and the embedded **Go Telegram Bot**.

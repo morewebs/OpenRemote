@@ -1,3 +1,5 @@
+> Historical design specification. Current implementation and changed assumptions are documented in [implementation status](../IMPLEMENTATION_STATUS.md).
+
 # 02. Core Daemon Specification
 
 This document specifies the architecture, SQLite WAL event bus, PTY engine, virtual screen commit, workspace manager, and security subsystems of the **OpenRemote Go Daemon**.

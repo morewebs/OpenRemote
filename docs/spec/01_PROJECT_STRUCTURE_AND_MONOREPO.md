@@ -1,3 +1,5 @@
+> Historical design specification. Current implementation and changed assumptions are documented in [implementation status](../IMPLEMENTATION_STATUS.md).
+
 # 01. Project Structure & Monorepo Architecture
 
 This document defines the repository topology, package boundaries, directory structures, and build workflows for **OpenRemote** — built as a high-performance Go daemon backend paired with a cross-platform Flutter companion client.

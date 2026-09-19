@@ -1,3 +1,5 @@
+> Historical design specification. Current implementation and changed assumptions are documented in [implementation status](../IMPLEMENTATION_STATUS.md).
+
 # 03. Agent Drivers Specification
 
 This document details the interface contracts, command invocations, input injection strategies, and stream hooks for the 5 target AI coding assistants in the **OpenRemote Go Daemon**.
