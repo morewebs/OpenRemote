@@ -2,50 +2,93 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/models.dart';
 
+class ApiException implements Exception {
+  final int status;
+  final String message;
+  const ApiException(this.status, this.message);
+  @override
+  String toString() => message;
+}
+
 class ApiService {
-  String baseUrl;
-  String token;
+  final String baseUrl;
+  final String token;
+  ApiService({String baseUrl = 'http://127.0.0.1:4097', this.token = ''})
+    : baseUrl = baseUrl.replaceFirst(RegExp(r'/+$'), '');
 
-  ApiService({
-    this.baseUrl = 'http://127.0.0.1:4097',
-    this.token = '',
-  });
-
-  Map<String, String> get _headers {
-    final headers = {
-      'Content-Type': 'application/json',
-    };
-    if (token.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $token';
+  Future<http.Response> _request(
+    String method,
+    String path, {
+    Object? body,
+    Map<String, String>? query,
+    Duration timeout = const Duration(seconds: 45),
+  }) async {
+    final uri = Uri.parse('$baseUrl$path').replace(queryParameters: query);
+    final client = http.Client();
+    try {
+      final request = http.Request(method, uri)
+        ..headers['Content-Type'] = 'application/json';
+      if (token.isNotEmpty) request.headers['Authorization'] = 'Bearer $token';
+      if (body != null) request.body = jsonEncode(body);
+      final response = await client
+          .send(request)
+          .then(http.Response.fromStream)
+          .timeout(timeout);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        var message = response.body.trim();
+        try {
+          final error = jsonDecode(message);
+          if (error is Map) {
+            message =
+                '${error['message'] ?? error['error'] ?? error['code'] ?? message}';
+          }
+        } catch (_) {}
+        if (message.isEmpty) {
+          message = 'Request failed (${response.statusCode}).';
+        }
+        if (response.statusCode == 401) {
+          message = 'Connection needs a valid token. Update it in Settings.';
+        }
+        throw ApiException(
+          response.statusCode,
+          message.length > 500 ? '${message.substring(0, 500)}…' : message,
+        );
+      }
+      return response;
+    } finally {
+      client.close();
     }
-    return headers;
   }
 
   Future<bool> checkHealth() async {
     try {
-      final res = await http.get(Uri.parse('$baseUrl/health')).timeout(const Duration(seconds: 3));
-      return res.statusCode == 200;
+      await _request('GET', '/health', timeout: const Duration(seconds: 3));
+      return true;
     } catch (_) {
       return false;
     }
   }
 
   Future<List<AgentInfo>> getAgents() async {
-    final res = await http.get(Uri.parse('$baseUrl/api/v1/agents'), headers: _headers);
-    if (res.statusCode == 200) {
-      final List data = jsonDecode(res.body);
-      return data.map((e) => AgentInfo.fromJson(e)).toList();
-    }
-    throw Exception('Failed to load agents: ${res.statusCode}');
+    final response = await _request('GET', '/api/v1/agents');
+    return (jsonDecode(response.body) as List? ?? [])
+        .map((e) => AgentInfo.fromJson(e))
+        .toList();
   }
 
   Future<List<SessionItem>> getSessions() async {
-    final res = await http.get(Uri.parse('$baseUrl/api/v1/sessions'), headers: _headers);
-    if (res.statusCode == 200) {
-      final List data = jsonDecode(res.body);
-      return data.map((e) => SessionItem.fromJson(e)).toList();
-    }
-    throw Exception('Failed to load sessions: ${res.statusCode}');
+    final response = await _request('GET', '/api/v1/sessions');
+    return (jsonDecode(response.body) as List? ?? [])
+        .map((e) => SessionItem.fromJson(e))
+        .toList();
+  }
+
+  Future<SessionItem> getSession(String id) async {
+    final response = await _request(
+      'GET',
+      '/api/v1/sessions/${Uri.encodeComponent(id)}',
+    );
+    return SessionItem.fromJson(jsonDecode(response.body));
   }
 
   Future<SessionItem> createSession({
@@ -56,93 +99,88 @@ class ApiService {
     int cols = 120,
     int rows = 30,
   }) async {
-    final body = jsonEncode({
-      'agentId': agentId,
-      'cwd': cwd,
-      'useWorktree': useWorktree,
-      if (taskName != null && taskName.isNotEmpty) 'taskName': taskName,
-      'cols': cols,
-      'rows': rows,
-    });
-
-    final res = await http.post(
-      Uri.parse('$baseUrl/api/v1/sessions'),
-      headers: _headers,
-      body: body,
+    final response = await _request(
+      'POST',
+      '/api/v1/sessions',
+      body: {
+        'agentId': agentId,
+        'cwd': cwd,
+        'useWorktree': useWorktree,
+        if (taskName?.isNotEmpty == true) 'taskName': taskName,
+        'cols': cols,
+        'rows': rows,
+      },
     );
-
-    if (res.statusCode == 201) {
-      final data = jsonDecode(res.body);
-      return SessionItem(
-        sessionId: data['sessionId'],
-        workspaceId: data['workspaceId'] ?? '',
-        agentId: agentId,
-        cwd: cwd,
-        worktreePath: data['worktreePath'],
-        status: data['status'] ?? 'running',
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-      );
-    }
-    throw Exception('Create session failed (${res.statusCode}): ${res.body}');
+    final result = jsonDecode(response.body) as Map<String, dynamic>;
+    return getSession(result['sessionId'] as String);
   }
 
-  Future<void> deleteSession(String sessionId) async {
-    final res = await http.delete(Uri.parse('$baseUrl/api/v1/sessions/$sessionId'), headers: _headers);
-    if (res.statusCode != 204 && res.statusCode != 200) {
-      throw Exception('Delete session failed: ${res.statusCode}');
-    }
+  Future<void> deleteSession(String id) async {
+    await _request('DELETE', '/api/v1/sessions/${Uri.encodeComponent(id)}');
   }
 
-  Future<void> sendPrompt(String sessionId, String prompt) async {
-    final res = await http.post(
-      Uri.parse('$baseUrl/api/v1/sessions/$sessionId/prompt'),
-      headers: _headers,
-      body: jsonEncode({'prompt': prompt}),
+  Future<void> sendPrompt(String id, String prompt) async {
+    await _request(
+      'POST',
+      '/api/v1/sessions/${Uri.encodeComponent(id)}/prompt',
+      body: {'prompt': prompt},
     );
-    if (res.statusCode != 200) {
-      throw Exception('Send prompt failed: ${res.statusCode}');
-    }
   }
 
-  Future<void> sendApproval(String approvalId, bool approved) async {
-    final res = await http.post(
-      Uri.parse('$baseUrl/api/v1/approval/$approvalId'),
-      headers: _headers,
-      body: jsonEncode({'approved': approved}),
+  Future<void> sendApproval(String id, bool approved) async {
+    await _request(
+      'POST',
+      '/api/v1/approval/${Uri.encodeComponent(id)}',
+      body: {'approved': approved},
     );
-    if (res.statusCode != 200) {
-      throw Exception('Resolve approval failed: ${res.statusCode}');
-    }
   }
 
-  Future<String> getDiff(String sessionId) async {
-    final res = await http.get(Uri.parse('$baseUrl/api/v1/diff/$sessionId'), headers: _headers);
-    if (res.statusCode == 200) {
-      return res.body;
-    }
-    return '';
-  }
-
-  Future<void> sendAnswer(String questionId, List<dynamic> answers) async {
-    final res = await http.post(
-      Uri.parse('$baseUrl/api/v1/question/$questionId'),
-      headers: _headers,
-      body: jsonEncode({'answers': answers}),
+  Future<void> sendAnswer(String id, List<dynamic> answers) async {
+    await _request(
+      'POST',
+      '/api/v1/question/${Uri.encodeComponent(id)}',
+      body: {'answers': answers},
     );
-    if (res.statusCode != 200) {
-      throw Exception('Answer question failed: ${res.statusCode}');
-    }
   }
 
-  /// Fetches persisted session events after [since] (monotonic seq), used to
-  /// hydrate the chat transcript on first open and after reconnects.
-  Future<List<Map<String, dynamic>>> getEvents(String sessionId, {int since = 0}) async {
-    final res = await http
-        .get(Uri.parse('$baseUrl/api/v1/sessions/$sessionId?since=$since'), headers: _headers);
-    if (res.statusCode == 200) {
-      final List data = jsonDecode(res.body);
-      return data.whereType<Map<String, dynamic>>().toList();
-    }
-    return [];
+  Future<String> getDiff(String id) async {
+    return (await _request(
+      'GET',
+      '/api/v1/diff/${Uri.encodeComponent(id)}',
+    )).body;
+  }
+
+  Future<List<Map<String, dynamic>>> getEvents(
+    String id, {
+    int since = 0,
+  }) async {
+    final response = await _request(
+      'GET',
+      '/api/v1/sessions/${Uri.encodeComponent(id)}',
+      query: {'since': '$since'},
+    );
+    return (jsonDecode(response.body) as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getFiles(String directory) async {
+    final response = await _request(
+      'GET',
+      '/api/v1/files',
+      query: {'dir': directory},
+    );
+    return (jsonDecode(response.body) as List? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> getFile(String path) async {
+    final response = await _request(
+      'GET',
+      '/api/v1/file',
+      query: {'path': path},
+    );
+    return jsonDecode(response.body) as Map<String, dynamic>;
   }
 }

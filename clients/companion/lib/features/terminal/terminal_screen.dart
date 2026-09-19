@@ -8,6 +8,21 @@ import '../../providers/providers.dart';
 import '../../services/ws_service.dart';
 import '../../theme/theme.dart';
 
+class _TerminalTextSink extends StringConversionSinkBase {
+  final void Function(String) onText;
+  _TerminalTextSink(this.onText);
+  @override
+  void add(String str) => onText(str);
+  @override
+  void addSlice(String str, int start, int end, bool isLast) {
+    onText(str.substring(start, end));
+    if (isLast) close();
+  }
+
+  @override
+  void close() {}
+}
+
 class TerminalScreen extends ConsumerStatefulWidget {
   final String sessionId;
   const TerminalScreen({super.key, required this.sessionId});
@@ -18,12 +33,17 @@ class TerminalScreen extends ConsumerStatefulWidget {
 
 class _TerminalScreenState extends ConsumerState<TerminalScreen> {
   late final Terminal _terminal;
+  late ByteConversionSink _terminalDecoder;
   WebSocketService? _ws;
+  late final ProviderSubscription<ServerConfig> _configSubscription;
 
   @override
   void initState() {
     super.initState();
     _terminal = Terminal(maxLines: 5000);
+    _terminalDecoder = const Utf8Decoder(
+      allowMalformed: true,
+    ).startChunkedConversion(_TerminalTextSink(_terminal.write));
 
     _terminal.onOutput = (data) {
       final bytes = Uint8List.fromList(utf8.encode(data));
@@ -34,20 +54,30 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
       _ws?.sendResize(w, h);
     };
 
+    _configSubscription = ref.listenManual(serverConfigProvider, (previous, next) {
+      if (!mounted || (previous?.baseUrl == next.baseUrl && previous?.token == next.token)) return;
+      _ws?.disconnect();
+      _terminalDecoder.close();
+      _terminal.buffer.clear();
+      _terminalDecoder = const Utf8Decoder(allowMalformed: true).startChunkedConversion(_TerminalTextSink(_terminal.write));
+      _initWebSocket();
+    });
     Future.microtask(_initWebSocket);
   }
 
   void _initWebSocket() {
+    if (!mounted) return;
+    _ws?.disconnect();
     final config = ref.read(serverConfigProvider);
     final wsBase = config.baseUrl.replaceFirst('http', 'ws');
     final wsUrl = '$wsBase/ws';
 
     _ws = WebSocketService(
       onPtyOutput: (bytes) {
-        final text = utf8.decode(bytes, allowMalformed: true);
-        _terminal.write(text);
+        _terminalDecoder.add(bytes);
       },
       onConnectionChange: (connected) {
+        if (!mounted) return;
         ref.read(wsConnectedProvider.notifier).state = connected;
       },
     );
@@ -57,7 +87,9 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
 
   @override
   void dispose() {
+    _configSubscription.close();
     _ws?.disconnect();
+    _terminalDecoder.close();
     super.dispose();
   }
 
@@ -83,7 +115,10 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
               ),
             ),
             const SizedBox(width: 8),
-            const Text('Terminal Escape Hatch', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            const Text(
+              'Terminal Escape Hatch',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
           ],
         ),
         actions: [
@@ -106,7 +141,8 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
                 _terminal,
                 textStyle: TerminalStyle(
                   fontSize: 13,
-                  fontFamily: GoogleFonts.jetBrainsMono().fontFamily ?? 'monospace',
+                  fontFamily:
+                      GoogleFonts.jetBrainsMono().fontFamily ?? 'monospace',
                 ),
                 theme: const TerminalTheme(
                   cursor: AppTheme.purpleAccent,
@@ -183,7 +219,11 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
           ),
           child: Text(
             label,
-            style: GoogleFonts.jetBrainsMono(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textMain),
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textMain,
+            ),
           ),
         ),
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../providers/providers.dart';
+import '../../services/api_service.dart';
 import '../../theme/theme.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -37,10 +38,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _testingHealth = true;
       _healthOk = null;
     });
-    final api = ref.read(apiServiceProvider);
-    api.baseUrl = _urlController.text.trim();
-    api.token = _tokenController.text.trim();
+    final api = ApiService(
+      baseUrl: _urlController.text.trim(),
+      token: _tokenController.text.trim(),
+    );
     final ok = await api.checkHealth();
+    if (!mounted) return;
     setState(() {
       _testingHealth = false;
       _healthOk = ok;
@@ -48,16 +51,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   void _save() async {
-    await ref.read(serverConfigProvider.notifier).update(
-      baseUrl: _urlController.text.trim(),
-      token: _tokenController.text.trim(),
-    );
-    ref.read(sessionsProvider.notifier).refresh();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Settings saved successfully'), backgroundColor: AppTheme.purpleAccent),
-      );
-      Navigator.pop(context);
+    try {
+      await ref
+          .read(serverConfigProvider.notifier)
+          .update(
+            baseUrl: _urlController.text.trim(),
+            token: _tokenController.text.trim(),
+          );
+      if (!mounted) return;
+      ref.read(sessionsProvider.notifier).refresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Settings saved successfully'),
+            backgroundColor: AppTheme.purpleAccent,
+          ),
+        );
+        Navigator.pop(context);
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
     }
   }
 
@@ -65,16 +82,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.w700)),
+        title: const Text(
+          'Settings',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const Text('Daemon Connection', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+          const Text(
+            'Daemon Connection',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+          ),
           const SizedBox(height: 6),
-          const Text('Configure the address and authentication token for your OpenRemote daemon.', style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
+          const Text(
+            'Configure the address and authentication token for your OpenRemote daemon.',
+            style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
+          ),
           const SizedBox(height: 16),
-          const Text('Server URL', style: TextStyle(color: AppTheme.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
+          const Text(
+            'Server URL',
+            style: TextStyle(
+              color: AppTheme.textMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 6),
           TextField(
             controller: _urlController,
@@ -85,7 +118,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          const Text('Bearer Token', style: TextStyle(color: AppTheme.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
+          const Text(
+            'Bearer Token',
+            style: TextStyle(
+              color: AppTheme.textMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 6),
           TextField(
             controller: _tokenController,
@@ -101,7 +141,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             children: [
               OutlinedButton.icon(
                 icon: _testingHealth
-                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Icon(Icons.bolt, size: 16),
                 label: const Text('Test Connection'),
                 onPressed: _testingHealth ? null : _testConnection,
@@ -112,14 +156,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   children: [
                     Icon(
                       _healthOk! ? Icons.check_circle : Icons.error,
-                      color: _healthOk! ? AppTheme.successGreen : AppTheme.dangerRed,
+                      color: _healthOk!
+                          ? AppTheme.successGreen
+                          : AppTheme.dangerRed,
                       size: 18,
                     ),
                     const SizedBox(width: 6),
                     Text(
                       _healthOk! ? 'Connected' : 'Unreachable',
                       style: TextStyle(
-                        color: _healthOk! ? AppTheme.successGreen : AppTheme.dangerRed,
+                        color: _healthOk!
+                            ? AppTheme.successGreen
+                            : AppTheme.dangerRed,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -129,25 +177,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ],
           ),
           const SizedBox(height: 32),
-          const Text('Architecture & Protocol', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceDark,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppTheme.borderDark),
-            ),
-            child: Column(
-              children: [
-                _buildInfoRow('Daemon Engine', 'Go + SQLite WAL'),
-                const Divider(height: 16),
-                _buildInfoRow('Framing', '2-byte binary WebSocket'),
-                const Divider(height: 16),
-                _buildInfoRow('Terminal', 'xterm.dart 4.0.0 (ConPTY)'),
-                const Divider(height: 16),
-                _buildInfoRow('Color Palette', 'Zinc Neutrals + Purple'),
-              ],
+          const Text(
+            'Connecting from another device',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Use the HTTPS address supplied by your tunnel. A localhost address refers to the device running this app. Keep your token private: it grants access to your sessions and allowed workspaces.',
+            style: TextStyle(
+              color: AppTheme.textMuted,
+              fontSize: 13,
+              height: 1.5,
             ),
           ),
           const SizedBox(height: 32),
@@ -156,21 +196,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             height: 44,
             child: ElevatedButton(
               onPressed: _save,
-              child: const Text('Save Settings', style: TextStyle(fontSize: 15)),
+              child: const Text(
+                'Save Settings',
+                style: TextStyle(fontSize: 15),
+              ),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: const TextStyle(color: AppTheme.textMuted, fontSize: 13)),
-        Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppTheme.textMain, fontWeight: FontWeight.w600)),
-      ],
     );
   }
 }

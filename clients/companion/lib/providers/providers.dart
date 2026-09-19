@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
@@ -7,10 +8,7 @@ class ServerConfig {
   final String baseUrl;
   final String token;
 
-  const ServerConfig({
-    this.baseUrl = 'http://127.0.0.1:4097',
-    this.token = '',
-  });
+  const ServerConfig({this.baseUrl = 'http://127.0.0.1:4097', this.token = ''});
 
   ServerConfig copyWith({String? baseUrl, String? token}) {
     return ServerConfig(
@@ -20,19 +18,38 @@ class ServerConfig {
   }
 }
 
+String get defaultServerUrl =>
+    kIsWeb && (Uri.base.scheme == 'http' || Uri.base.scheme == 'https')
+    ? Uri.base.origin
+    : 'http://127.0.0.1:4097';
+
 class ServerConfigNotifier extends StateNotifier<ServerConfig> {
-  ServerConfigNotifier() : super(const ServerConfig()) {
+  ServerConfigNotifier() : super(ServerConfig(baseUrl: defaultServerUrl)) {
     _load();
   }
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    final url = prefs.getString('server_url') ?? 'http://127.0.0.1:4097';
+    final url = prefs.getString('server_url') ?? defaultServerUrl;
     final tok = prefs.getString('server_token') ?? '';
     state = ServerConfig(baseUrl: url, token: tok);
   }
 
   Future<void> update({String? baseUrl, String? token}) async {
+    if (baseUrl != null) {
+      final uri = Uri.tryParse(baseUrl.trim());
+      if (uri == null ||
+          !['http', 'https'].contains(uri.scheme) ||
+          uri.host.isEmpty ||
+          uri.userInfo.isNotEmpty ||
+          uri.hasQuery ||
+          uri.hasFragment) {
+        throw const FormatException(
+          'Enter an http:// or https:// daemon address.',
+        );
+      }
+      baseUrl = baseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
+    }
     final prefs = await SharedPreferences.getInstance();
     if (baseUrl != null) await prefs.setString('server_url', baseUrl);
     if (token != null) await prefs.setString('server_token', token);
@@ -40,9 +57,10 @@ class ServerConfigNotifier extends StateNotifier<ServerConfig> {
   }
 }
 
-final serverConfigProvider = StateNotifierProvider<ServerConfigNotifier, ServerConfig>((ref) {
-  return ServerConfigNotifier();
-});
+final serverConfigProvider =
+    StateNotifierProvider<ServerConfigNotifier, ServerConfig>((ref) {
+      return ServerConfigNotifier();
+    });
 
 final apiServiceProvider = Provider<ApiService>((ref) {
   final config = ref.watch(serverConfigProvider);
@@ -53,11 +71,7 @@ final wsConnectedProvider = StateProvider<bool>((ref) => false);
 
 final agentsProvider = FutureProvider<List<AgentInfo>>((ref) async {
   final api = ref.watch(apiServiceProvider);
-  try {
-    return await api.getAgents();
-  } catch (_) {
-    return [];
-  }
+  return api.getAgents();
 });
 
 class SessionsNotifier extends StateNotifier<AsyncValue<List<SessionItem>>> {
@@ -69,9 +83,9 @@ class SessionsNotifier extends StateNotifier<AsyncValue<List<SessionItem>>> {
   Future<void> refresh() async {
     try {
       final list = await _api.getSessions();
-      state = AsyncValue.data(list);
+      if (mounted) state = AsyncValue.data(list);
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (mounted) state = AsyncValue.error(e, st);
     }
   }
 
@@ -81,32 +95,29 @@ class SessionsNotifier extends StateNotifier<AsyncValue<List<SessionItem>>> {
     bool useWorktree = false,
     String? taskName,
   }) async {
-    try {
-      final s = await _api.createSession(
-        agentId: agentId,
-        cwd: cwd,
-        useWorktree: useWorktree,
-        taskName: taskName,
-      );
-      await refresh();
-      return s;
-    } catch (e) {
-      return null;
-    }
+    final s = await _api.createSession(
+      agentId: agentId,
+      cwd: cwd,
+      useWorktree: useWorktree,
+      taskName: taskName,
+    );
+    await refresh();
+    return s;
   }
 
   Future<void> deleteSession(String sessionId) async {
-    try {
-      await _api.deleteSession(sessionId);
-      await refresh();
-    } catch (_) {}
+    await _api.deleteSession(sessionId);
+    await refresh();
   }
 }
 
-final sessionsProvider = StateNotifierProvider<SessionsNotifier, AsyncValue<List<SessionItem>>>((ref) {
-  final api = ref.watch(apiServiceProvider);
-  return SessionsNotifier(api);
-});
+final sessionsProvider =
+    StateNotifierProvider<SessionsNotifier, AsyncValue<List<SessionItem>>>((
+      ref,
+    ) {
+      final api = ref.watch(apiServiceProvider);
+      return SessionsNotifier(api);
+    });
 
 final activeSessionIdProvider = StateProvider<String?>((ref) => null);
 
@@ -134,7 +145,7 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
     final idx = state.indexWhere((m) => m.id == msg.id);
     if (idx >= 0) {
       final current = state[idx];
-      if (msg.rev >= current.rev || !msg.streaming) {
+      if (msg.rev >= current.rev) {
         final updated = List<ChatMessage>.from(state);
         updated[idx] = msg;
         state = updated;
@@ -163,9 +174,13 @@ class ChatNotifier extends StateNotifier<List<ChatMessage>> {
   }
 }
 
-final chatMessagesProvider = StateNotifierProvider<ChatNotifier, List<ChatMessage>>((ref) {
-  return ChatNotifier();
-});
+/// Session-scoped chat transcript. Keyed by `sessionId` and disposed
+/// automatically when the owning screen stops listening, so opening a second
+/// session never leaks the first session's messages into the transcript.
+final chatMessagesProvider = StateNotifierProvider.autoDispose
+    .family<ChatNotifier, List<ChatMessage>, String>((ref, sessionId) {
+      return ChatNotifier();
+    });
 
 class ApprovalNotifier extends StateNotifier<List<PendingApproval>> {
   ApprovalNotifier() : super([]);
@@ -191,9 +206,12 @@ class ApprovalNotifier extends StateNotifier<List<PendingApproval>> {
   }
 }
 
-final pendingApprovalsProvider = StateNotifierProvider<ApprovalNotifier, List<PendingApproval>>((ref) {
-  return ApprovalNotifier();
-});
+/// Pending approvals for a single session. Scoped to avoid leaking
+/// approval state across sessions when the global singleton was used.
+final pendingApprovalsProvider = StateNotifierProvider.autoDispose
+    .family<ApprovalNotifier, List<PendingApproval>, String>((ref, sessionId) {
+      return ApprovalNotifier();
+    });
 
 class QuestionNotifier extends StateNotifier<List<PendingQuestion>> {
   QuestionNotifier() : super([]);
@@ -216,9 +234,11 @@ class QuestionNotifier extends StateNotifier<List<PendingQuestion>> {
   }
 }
 
-final pendingQuestionsProvider = StateNotifierProvider<QuestionNotifier, List<PendingQuestion>>((ref) {
-  return QuestionNotifier();
-});
+/// Questions/disambiguations scoped per session. See family note above.
+final pendingQuestionsProvider = StateNotifierProvider.autoDispose
+    .family<QuestionNotifier, List<PendingQuestion>, String>((ref, sessionId) {
+      return QuestionNotifier();
+    });
 
 class AuthUrlNotifier extends StateNotifier<List<AuthUrlCard>> {
   AuthUrlNotifier() : super([]);
@@ -238,9 +258,12 @@ class AuthUrlNotifier extends StateNotifier<List<AuthUrlCard>> {
   }
 }
 
-final authUrlCardsProvider = StateNotifierProvider<AuthUrlNotifier, List<AuthUrlCard>>((ref) {
-  return AuthUrlNotifier();
-});
+/// Auth/OAuth URL cards shown inline in chat, scoped per session so
+/// other sessions do not inherit the viewing session's login prompts.
+final authUrlCardsProvider = StateNotifierProvider.autoDispose
+    .family<AuthUrlNotifier, List<AuthUrlCard>, String>((ref, sessionId) {
+      return AuthUrlNotifier();
+    });
 
 class DiffCardNotifier extends StateNotifier<List<DiffCard>> {
   DiffCardNotifier() : super([]);
@@ -254,9 +277,11 @@ class DiffCardNotifier extends StateNotifier<List<DiffCard>> {
   }
 }
 
-final diffCardsProvider = StateNotifierProvider<DiffCardNotifier, List<DiffCard>>((ref) {
-  return DiffCardNotifier();
-});
+/// Unified git diffs emitted live (`diff.generated`), scoped per session.
+final diffCardsProvider = StateNotifierProvider.autoDispose
+    .family<DiffCardNotifier, List<DiffCard>, String>((ref, sessionId) {
+      return DiffCardNotifier();
+    });
 
 class TurnSummaryNotifier extends StateNotifier<List<TurnSummary>> {
   TurnSummaryNotifier() : super([]);
@@ -270,9 +295,11 @@ class TurnSummaryNotifier extends StateNotifier<List<TurnSummary>> {
   }
 }
 
-final turnSummariesProvider = StateNotifierProvider<TurnSummaryNotifier, List<TurnSummary>>((ref) {
-  return TurnSummaryNotifier();
-});
+/// End-of-turn summaries (`turn.completed`), per session.
+final turnSummariesProvider = StateNotifierProvider.autoDispose
+    .family<TurnSummaryNotifier, List<TurnSummary>, String>((ref, sessionId) {
+      return TurnSummaryNotifier();
+    });
 
 class ArtifactCardNotifier extends StateNotifier<List<ArtifactCard>> {
   ArtifactCardNotifier() : super([]);
@@ -293,6 +320,8 @@ class ArtifactCardNotifier extends StateNotifier<List<ArtifactCard>> {
   }
 }
 
-final artifactCardsProvider = StateNotifierProvider<ArtifactCardNotifier, List<ArtifactCard>>((ref) {
-  return ArtifactCardNotifier();
-});
+/// Artifact cards (plan/diff/file) scoped per session.
+final artifactCardsProvider = StateNotifierProvider.autoDispose
+    .family<ArtifactCardNotifier, List<ArtifactCard>, String>((ref, sessionId) {
+      return ArtifactCardNotifier();
+    });

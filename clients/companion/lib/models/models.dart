@@ -33,7 +33,8 @@ class SessionItem {
   }
 
   bool get isRunning => status == 'running';
-  String get shortId => sessionId.length > 8 ? sessionId.substring(0, 8) : sessionId;
+  String get shortId =>
+      sessionId.length > 8 ? sessionId.substring(0, 8) : sessionId;
 }
 
 class ChatMessage {
@@ -74,16 +75,14 @@ class ChatMessage {
       meta: json['meta'] as Map<String, dynamic>?,
       streaming: json['streaming'] as bool? ?? false,
       rev: (json['rev'] as num?)?.toInt() ?? 1,
-      timestamp: (json['timestamp'] as num?)?.toInt() ?? DateTime.now().millisecondsSinceEpoch,
+      timestamp:
+          (json['timestamp'] as num?)?.toInt() ??
+          DateTime.now().millisecondsSinceEpoch,
       seq: (json['seq'] as num?)?.toInt(),
     );
   }
 
-  ChatMessage copyWith({
-    String? text,
-    bool? streaming,
-    int? rev,
-  }) {
+  ChatMessage copyWith({String? text, bool? streaming, int? rev}) {
     return ChatMessage(
       id: id,
       sessionId: sessionId,
@@ -111,6 +110,7 @@ class PendingApproval {
   final String command;
   final String? description;
   final int autoDenyTimeoutMs;
+  final int createdAtMs;
   bool resolved;
   bool approved;
 
@@ -121,9 +121,10 @@ class PendingApproval {
     required this.command,
     this.description,
     this.autoDenyTimeoutMs = 120000,
+    int? createdAtMs,
     this.resolved = false,
     this.approved = false,
-  });
+  }) : createdAtMs = createdAtMs ?? DateTime.now().millisecondsSinceEpoch;
 
   factory PendingApproval.fromJson(Map<String, dynamic> json) {
     return PendingApproval(
@@ -133,6 +134,9 @@ class PendingApproval {
       command: json['command'] as String? ?? '',
       description: json['description'] as String?,
       autoDenyTimeoutMs: (json['autoDenyTimeoutMs'] as num?)?.toInt() ?? 120000,
+      createdAtMs:
+          (json['timestamp'] as num?)?.toInt() ??
+          DateTime.now().millisecondsSinceEpoch,
     );
   }
 }
@@ -158,7 +162,8 @@ class PendingQuestion {
     return PendingQuestion(
       id: json['questionId'] as String? ?? json['id'] as String? ?? '',
       sessionId: json['sessionId'] as String? ?? '',
-      questionText: json['questionText'] as String? ?? json['question'] as String? ?? '',
+      questionText:
+          json['questionText'] as String? ?? json['question'] as String? ?? '',
       options: (json['options'] as List<dynamic>? ?? [])
           .map((e) => e.toString())
           .toList(),
@@ -172,7 +177,11 @@ class AuthUrlCard {
   final String url;
   final int timestamp;
 
-  AuthUrlCard({required this.sessionId, required this.url, required this.timestamp});
+  AuthUrlCard({
+    required this.sessionId,
+    required this.url,
+    required this.timestamp,
+  });
 
   factory AuthUrlCard.fromJson(Map<String, dynamic> json) {
     return AuthUrlCard(
@@ -208,7 +217,8 @@ class AgentInfo {
     final caps = json['capabilities'] as Map<String, dynamic>? ?? {};
     return AgentInfo(
       id: json['id'] as String? ?? '',
-      displayName: json['displayName'] as String? ?? json['id'] as String? ?? '',
+      displayName:
+          json['displayName'] as String? ?? json['id'] as String? ?? '',
       available: json['available'] as bool? ?? false,
       reason: json['reason'] as String?,
       supportsTerminal: caps['supportsTerminal'] as bool? ?? true,

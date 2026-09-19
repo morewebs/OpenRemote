@@ -15,7 +15,10 @@ class SessionsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('OpenRemote', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+        title: const Text(
+          'OpenRemote',
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+        ),
         actions: [
           IconButton(
             tooltip: 'Refresh',
@@ -30,21 +33,38 @@ class SessionsScreen extends ConsumerWidget {
         ],
       ),
       body: sessionsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.purpleAccent)),
+        loading: () => const Center(
+          child: CircularProgressIndicator(color: AppTheme.purpleAccent),
+        ),
         error: (err, _) => Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.cloud_off, color: AppTheme.textMuted, size: 48),
+                const Icon(
+                  Icons.cloud_off,
+                  color: AppTheme.textMuted,
+                  size: 48,
+                ),
                 const SizedBox(height: 16),
-                const Text('Cannot connect to OpenRemote daemon', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                const Text(
+                  'Cannot connect to OpenRemote daemon',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                ),
                 const SizedBox(height: 8),
-                Text('$err', style: const TextStyle(color: AppTheme.textMuted, fontSize: 12), textAlign: TextAlign.center),
+                Text(
+                  '$err',
+                  style: const TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 12,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  onPressed: () => ref.read(sessionsProvider.notifier).refresh(),
+                  onPressed: () =>
+                      ref.read(sessionsProvider.notifier).refresh(),
                   child: const Text('Retry Connection'),
                 ),
               ],
@@ -65,12 +85,22 @@ class SessionsScreen extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: AppTheme.borderDark),
                     ),
-                    child: const Icon(Icons.chat_bubble_outline, color: AppTheme.purpleAccent, size: 28),
+                    child: const Icon(
+                      Icons.chat_bubble_outline,
+                      color: AppTheme.purpleAccent,
+                      size: 28,
+                    ),
                   ),
                   const SizedBox(height: 16),
-                  const Text('No Active Sessions', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
+                  const Text(
+                    'No Active Sessions',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+                  ),
                   const SizedBox(height: 6),
-                  const Text('Launch an AI coding assistant session to begin', style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
+                  const Text(
+                    'Launch an AI coding assistant session to begin',
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
+                  ),
                   const SizedBox(height: 20),
                   ElevatedButton.icon(
                     icon: const Icon(Icons.add, size: 18),
@@ -96,7 +126,10 @@ class SessionsScreen extends ConsumerWidget {
         backgroundColor: AppTheme.purpleAccent,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
-        label: const Text('New Session', style: TextStyle(fontWeight: FontWeight.w600)),
+        label: const Text(
+          'New Session',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
         onPressed: () => _showNewSessionModal(context, ref),
       ),
     );
@@ -126,7 +159,9 @@ class SessionsScreen extends ConsumerWidget {
                   ),
                   child: Icon(
                     _agentIcon(s.agentId),
-                    color: s.isRunning ? AppTheme.purpleLight : AppTheme.textMuted,
+                    color: s.isRunning
+                        ? AppTheme.purpleLight
+                        : AppTheme.textMuted,
                     size: 22,
                   ),
                 ),
@@ -139,13 +174,21 @@ class SessionsScreen extends ConsumerWidget {
                         children: [
                           Text(
                             s.agentId,
-                            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
                           ),
                           const SizedBox(width: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
-                              color: s.isRunning ? AppTheme.successGreen.withAlpha(38) : AppTheme.cardDark,
+                              color: s.isRunning
+                                  ? AppTheme.successGreen.withAlpha(38)
+                                  : AppTheme.cardDark,
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -153,7 +196,9 @@ class SessionsScreen extends ConsumerWidget {
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
-                                color: s.isRunning ? AppTheme.successGreen : AppTheme.textMuted,
+                                color: s.isRunning
+                                    ? AppTheme.successGreen
+                                    : AppTheme.textMuted,
                               ),
                             ),
                           ),
@@ -162,7 +207,10 @@ class SessionsScreen extends ConsumerWidget {
                       const SizedBox(height: 4),
                       Text(
                         s.cwd,
-                        style: GoogleFonts.jetBrainsMono(fontSize: 12, color: AppTheme.textMuted),
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 12,
+                          color: AppTheme.textMuted,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -170,9 +218,24 @@ class SessionsScreen extends ConsumerWidget {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 18, color: AppTheme.textMuted),
-                  onPressed: () {
-                    ref.read(sessionsProvider.notifier).deleteSession(s.sessionId);
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 18,
+                    color: AppTheme.textMuted,
+                  ),
+                  tooltip: 'Stop session',
+                  onPressed: () async {
+                    try {
+                      await ref
+                          .read(sessionsProvider.notifier)
+                          .deleteSession(s.sessionId);
+                    } catch (error) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text('$error')));
+                      }
+                    }
                   },
                 ),
               ],
@@ -205,8 +268,11 @@ class SessionsScreen extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: AppTheme.surfaceDark,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (context) => const _NewSessionSheet(),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) =>
+          const SingleChildScrollView(child: _NewSessionSheet()),
     );
   }
 }
@@ -219,7 +285,7 @@ class _NewSessionSheet extends ConsumerStatefulWidget {
 }
 
 class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
-  String _selectedAgent = 'claude-code';
+  String? _selectedAgent;
   final TextEditingController _cwdController = TextEditingController(text: '.');
   final TextEditingController _taskController = TextEditingController();
   bool _useWorktree = false;
@@ -233,18 +299,36 @@ class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
   }
 
   void _createSession() async {
+    if (_cwdController.text.trim().isEmpty ||
+        _selectedAgent == null ||
+        _isLoading) {
+      return;
+    }
+    final available =
+        ref.read(agentsProvider).valueOrNull ?? const <AgentInfo>[];
+    if (!available.any((a) => a.id == _selectedAgent && a.available)) return;
     setState(() => _isLoading = true);
-    final s = await ref.read(sessionsProvider.notifier).createSession(
-      agentId: _selectedAgent,
-      cwd: _cwdController.text.trim(),
-      useWorktree: _useWorktree,
-      taskName: _taskController.text.trim(),
-    );
-    setState(() => _isLoading = false);
-
-    if (s != null && mounted) {
-      Navigator.pop(context);
-      context.push('/session/${s.sessionId}');
+    try {
+      final s = await ref
+          .read(sessionsProvider.notifier)
+          .createSession(
+            agentId: _selectedAgent!,
+            cwd: _cwdController.text.trim(),
+            useWorktree: _useWorktree,
+            taskName: _taskController.text.trim(),
+          );
+      if (s != null && mounted) {
+        Navigator.pop(context);
+        context.push('/session/${s.sessionId}');
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -266,26 +350,35 @@ class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Launch Agent Session', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
-              IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+              const Text(
+                'Launch Agent Session',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
+              ),
             ],
           ),
           const SizedBox(height: 16),
-          const Text('Select Assistant', style: TextStyle(color: AppTheme.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
+          const Text(
+            'Select Assistant',
+            style: TextStyle(
+              color: AppTheme.textMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 8),
           agentsAsync.when(
-            loading: () => const LinearProgressIndicator(color: AppTheme.purpleAccent),
-            error: (err, stack) => const Text('Error loading agents', style: TextStyle(color: AppTheme.dangerRed)),
+            loading: () =>
+                const LinearProgressIndicator(color: AppTheme.purpleAccent),
+            error: (err, stack) => const Text(
+              'Error loading agents',
+              style: TextStyle(color: AppTheme.dangerRed),
+            ),
             data: (agents) {
-              final list = agents.isNotEmpty
-                  ? agents
-                  : [
-                      AgentInfo(id: 'claude-code', displayName: 'Claude Code', available: true, supportsTerminal: true, supportsChatNative: true, supportsApproval: true, supportsDiff: true),
-                      AgentInfo(id: 'antigravity', displayName: 'Antigravity', available: true, supportsTerminal: true, supportsChatNative: true, supportsApproval: true, supportsDiff: true),
-                      AgentInfo(id: 'opencode', displayName: 'OpenCode', available: true, supportsTerminal: true, supportsChatNative: true, supportsApproval: true, supportsDiff: true),
-                      AgentInfo(id: 'codex', displayName: 'Codex', available: true, supportsTerminal: true, supportsChatNative: true, supportsApproval: true, supportsDiff: true),
-                      AgentInfo(id: 'shell', displayName: 'Shell', available: true, supportsTerminal: true, supportsChatNative: false, supportsApproval: false, supportsDiff: false),
-                    ];
+              final list = agents;
               return SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
@@ -300,12 +393,16 @@ class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
                         backgroundColor: AppTheme.cardDark,
                         labelStyle: TextStyle(
                           color: selected ? Colors.white : AppTheme.textMain,
-                          fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
+                          fontWeight: selected
+                              ? FontWeight.w700
+                              : FontWeight.normal,
                           fontSize: 13,
                         ),
-                        onSelected: (val) {
-                          if (val) setState(() => _selectedAgent = a.id);
-                        },
+                        onSelected: !a.available
+                            ? null
+                            : (val) {
+                                if (val) setState(() => _selectedAgent = a.id);
+                              },
                       ),
                     );
                   }).toList(),
@@ -314,7 +411,14 @@ class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
             },
           ),
           const SizedBox(height: 16),
-          const Text('Working Directory', style: TextStyle(color: AppTheme.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
+          const Text(
+            'Working Directory',
+            style: TextStyle(
+              color: AppTheme.textMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 6),
           TextField(
             controller: _cwdController,
@@ -332,7 +436,10 @@ class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
                 activeColor: AppTheme.purpleAccent,
                 onChanged: (v) => setState(() => _useWorktree = v ?? false),
               ),
-              const Text('Isolate with Git Worktree', style: TextStyle(fontSize: 13.5)),
+              const Text(
+                'Isolate with Git Worktree',
+                style: TextStyle(fontSize: 13.5),
+              ),
             ],
           ),
           if (_useWorktree) ...[
@@ -349,9 +456,18 @@ class _NewSessionSheetState extends ConsumerState<_NewSessionSheet> {
             width: double.infinity,
             height: 44,
             child: ElevatedButton(
-              onPressed: _isLoading ? null : _createSession,
+              onPressed: _isLoading || _selectedAgent == null
+                  ? null
+                  : _createSession,
               child: _isLoading
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
                   : const Text('Start Session', style: TextStyle(fontSize: 15)),
             ),
           ),

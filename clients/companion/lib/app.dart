@@ -5,16 +5,14 @@ import 'features/chat/chat_screen.dart';
 import 'features/sessions/sessions_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/terminal/terminal_screen.dart';
+import 'features/workspace/workspace_screen.dart';
 import 'theme/theme.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/',
     routes: [
-      GoRoute(
-        path: '/',
-        builder: (context, state) => const SessionsScreen(),
-      ),
+      GoRoute(path: '/', builder: (context, state) => const SessionsScreen()),
       GoRoute(
         path: '/session/:id',
         builder: (context, state) {
@@ -28,6 +26,18 @@ final routerProvider = Provider<GoRouter>((ref) {
           final id = state.pathParameters['id'] ?? '';
           return TerminalScreen(sessionId: id);
         },
+      ),
+      GoRoute(
+        path: '/session/:id/files',
+        builder: (context, state) =>
+            WorkspaceScreen(sessionId: state.pathParameters['id'] ?? ''),
+      ),
+      GoRoute(
+        path: '/session/:id/changes',
+        builder: (context, state) => WorkspaceScreen(
+          sessionId: state.pathParameters['id'] ?? '',
+          showChanges: true,
+        ),
       ),
       GoRoute(
         path: '/settings',
