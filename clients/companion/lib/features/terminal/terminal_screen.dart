@@ -54,12 +54,19 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
       _ws?.sendResize(w, h);
     };
 
-    _configSubscription = ref.listenManual(serverConfigProvider, (previous, next) {
-      if (!mounted || (previous?.baseUrl == next.baseUrl && previous?.token == next.token)) return;
+    _configSubscription = ref.listenManual(serverConfigProvider, (
+      previous,
+      next,
+    ) {
+      if (!mounted ||
+          (previous?.baseUrl == next.baseUrl && previous?.token == next.token))
+        return;
       _ws?.disconnect();
       _terminalDecoder.close();
       _terminal.buffer.clear();
-      _terminalDecoder = const Utf8Decoder(allowMalformed: true).startChunkedConversion(_TerminalTextSink(_terminal.write));
+      _terminalDecoder = const Utf8Decoder(
+        allowMalformed: true,
+      ).startChunkedConversion(_TerminalTextSink(_terminal.write));
       _initWebSocket();
     });
     Future.microtask(_initWebSocket);

@@ -29,8 +29,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    _configSubscription = ref.listenManual(serverConfigProvider, (previous, next) {
-      if (!mounted || (previous?.baseUrl == next.baseUrl && previous?.token == next.token)) return;
+    _configSubscription = ref.listenManual(serverConfigProvider, (
+      previous,
+      next,
+    ) {
+      if (!mounted ||
+          (previous?.baseUrl == next.baseUrl && previous?.token == next.token))
+        return;
       ref.read(chatMessagesProvider(widget.sessionId).notifier).clear();
       ref.read(pendingApprovalsProvider(widget.sessionId).notifier).clear();
       ref.read(pendingQuestionsProvider(widget.sessionId).notifier).clear();
@@ -300,10 +305,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           if (!isConnected)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Row(children: [
-                const Expanded(child: Text('Disconnected. Reconnecting…', style: TextStyle(color: AppTheme.textMuted))),
-                TextButton(onPressed: () => context.push('/settings'), child: const Text('Settings')),
-              ]),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Disconnected. Reconnecting…',
+                      style: TextStyle(color: AppTheme.textMuted),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => context.push('/settings'),
+                    child: const Text('Settings'),
+                  ),
+                ],
+              ),
             ),
           Expanded(
             child: ListView(
