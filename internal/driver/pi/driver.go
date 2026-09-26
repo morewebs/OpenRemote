@@ -41,7 +41,7 @@ func (d *Driver) Probe() error {
 			return nil
 		}
 	}
-	return fmt.Errorf("pi / omp binary not found on PATH (ACP driver unverified on this host)")
+	return fmt.Errorf("pi / omp binary not found on PATH")
 }
 
 func (d *Driver) Start(ctx context.Context, cfg types.SessionConfig, sink types.Sink) (types.Session, error) {

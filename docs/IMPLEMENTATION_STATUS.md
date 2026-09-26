@@ -17,8 +17,8 @@ resume orphaned processes or repeat prompts.
 | Claude Code | PTY, screen parser and hooks | Fixture/PTY tests; no paid model turn |
 | Antigravity | PTY plus transcript/artifact watchers | Watcher fixtures; formats remain best-effort |
 | Codex | `codex app-server --listen stdio://` | Protocol fixtures and installed CLI handshake; no paid model turn |
-| OpenCode | Authenticated loopback HTTP/SSE server | Mock integration; no live model turn |
-| Pi / OMP | `--mode rpc` JSON lines | Protocol fixtures; CLIs absent on validation host |
+| OpenCode | Authenticated loopback HTTP/SSE server | Live: handshake, session create, `prompt_async` and a real model turn through the daemon |
+| Pi / OMP | `--mode rpc` JSON lines | Live: protocol verified against upstream source, `get_state` handshake and a real model turn with pi 0.87.1; daemon round-trip verified up to provider billing errors |
 
 Codex, OpenCode and Pi expose structured chat without a terminal tab. Claude and
 Antigravity parsing is heuristic and can change with CLI output. OAuth URL
@@ -94,8 +94,21 @@ Windows desktop and a development-signed Android APK also
 compile locally. Android's first packaging attempt exhausted disk space; a
 sequential rebuild with a bounded Gradle heap succeeded.
 
-Live Telegram, cloudflared, Tailscale, Pi/OMP, mobile signing and real cellular
-handoffs need installations, devices or credentials. No production deployment or
+A September 2026 live pass verified the native transports against installed
+CLIs and real providers. OpenCode 1.18.21 completed a full daemon round trip
+with a real model turn (`scripts/live_e2e.py`, PASS). Pi 0.87.1
+(`@earendil-works/pi-coding-agent`) was verified against its upstream RPC
+source: `get_state` handshake, prompt commands, streaming `text_delta`
+events, `message_end`, `agent_end` and the `extension_ui_request/response`
+pair. Through the daemon, every provider failure surfaced as a visible error
+card (fixed: the empty system-preamble card and invisible assistant error
+reasons); a fully successful Pi turn through the daemon remains blocked by
+provider credits on the reachable accounts, not by the driver.
+
+Live Telegram, cloudflared and Tailscale still need accounts or installations.
+Mobile signing and real cellular handoffs need devices or credentials; a
+successful paid Pi turn needs a credited provider account. No production
+deployment or
 GitHub release was made. Local race testing requires a C toolchain; CI runs it on
 Linux/macOS. Sub-5-ms latency and sub-25-MB idle memory are original targets, not
 verified guarantees. WSL on this host cannot start because its configured disk

@@ -45,3 +45,51 @@ func TestRPCResponsesAndMessageStream(t *testing.T) {
 		t.Fatalf("approval=%+v", approval)
 	}
 }
+
+// The pi preamble arrives as a system message whose text field is empty because
+// the content lives in structured sections. Emitting it produced a blank card.
+func TestSystemPreambleDoesNotEmitACard(t *testing.T) {
+	sink := &testSink{}
+	s := &rpcSession{cfg: types.SessionConfig{SessionID: "s"}, sink: sink, blocks: make(map[int]string), requests: make(map[string]string)}
+	feed := func(kind, body string) { s.handle(transport.Message{Method: kind, Params: json.RawMessage(body)}) }
+	feed("message_start", `{"message":{"role":"system"}}`)
+	feed("message_end", `{"message":{"role":"system","content":"","sections":{"preamble":"You are an expert coding assistant."}}}`)
+	if len(sink.messages) != 0 {
+		t.Fatalf("system preamble emitted %+v", sink.messages)
+	}
+	// The user prompt is recorded by the shared handler, so the driver echo is
+	// still forwarded (the server drops it later).
+	feed("message_start", `{"message":{"role":"user"}}`)
+	feed("message_end", `{"message":{"role":"user","content":[{"type":"text","text":"hi"}]}}`)
+	if len(sink.messages) != 1 || sink.messages[0].Role != protocol.RoleUser || sink.messages[0].Text != "hi" {
+		t.Fatalf("messages=%+v", sink.messages)
+	}
+}
+
+// A provider failure ends the assistant message with stopReason "error" and no
+// content, so the reason must become visible.
+func TestAssistantErrorReasonIsSurfaced(t *testing.T) {
+	sink := &testSink{}
+	s := &rpcSession{cfg: types.SessionConfig{SessionID: "s"}, sink: sink, blocks: make(map[int]string), requests: make(map[string]string)}
+	feed := func(kind, body string) { s.handle(transport.Message{Method: kind, Params: json.RawMessage(body)}) }
+	feed("message_start", `{"message":{"role":"assistant","content":[]}}`)
+	feed("message_end", `{"message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"403: Access denied"}}`)
+	if len(sink.messages) != 1 || sink.messages[0].Kind != "error" || sink.messages[0].Text != "403: Access denied" {
+		t.Fatalf("messages=%+v", sink.messages)
+	}
+
+	// Partial text survives and the reason is appended rather than replacing it.
+	sink2 := &testSink{}
+	s2 := &rpcSession{cfg: types.SessionConfig{SessionID: "s"}, sink: sink2, blocks: make(map[int]string), requests: make(map[string]string)}
+	feed2 := func(kind, body string) { s2.handle(transport.Message{Method: kind, Params: json.RawMessage(body)}) }
+	feed2("message_start", `{"message":{"role":"assistant","content":[]}}`)
+	feed2("message_update", `{"assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"partial"}}`)
+	feed2("message_end", `{"message":{"role":"assistant","content":[{"type":"text","text":"partial"}],"stopReason":"error","errorMessage":"socket closed"}}`)
+	if len(sink2.messages) == 0 {
+		t.Fatal("no messages")
+	}
+	last := sink2.messages[len(sink2.messages)-1]
+	if last.Kind != "error" || last.Text != "partial\n\nsocket closed" {
+		t.Fatalf("last=%+v", last)
+	}
+}

@@ -143,19 +143,30 @@ func (s *rpcSession) handle(msg transport.Message) {
 		s.sink.Message(s.message)
 	case "message_end":
 		var message struct {
-			Role       string
-			Content    json.RawMessage
-			ToolName   string
-			ToolCallID string
+			Role         string
+			Content      json.RawMessage
+			ToolName     string
+			ToolCallID   string
+			StopReason   string
+			ErrorMessage string
 		}
 		if err := json.Unmarshal(event.Message, &message); err != nil {
 			return
 		}
 		s.message.Text, s.message.Streaming = contentText(message.Content), false
 		s.message.Role = protocol.ChatRole(message.Role)
-		if message.Role == "toolResult" {
-			return
-		} // tool_execution_end already carries the result
+		switch message.Role {
+		case "system":
+			return // the preamble carries structured sections, so its text field is empty
+		case "toolResult":
+			return // tool_execution_end already carries the result
+		}
+		// A failed turn still ends its assistant message. Surface the reason
+		// instead of leaving an empty card.
+		if message.StopReason == "error" && message.ErrorMessage != "" {
+			s.message.Kind = "error"
+			s.message.Text = strings.TrimSpace(s.message.Text + "\n\n" + message.ErrorMessage)
+		}
 		s.message.Rev++
 		s.sink.Message(s.message)
 	case "tool_execution_end", "tool_execution_update":
