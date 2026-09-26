@@ -43,7 +43,7 @@ func TestEndToEndSessionLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("health probe failed: %v", err)
 	}
-	defer healthRes.Body.Close()
+	defer func() { _ = healthRes.Body.Close() }()
 	if healthRes.StatusCode != 200 {
 		t.Fatalf("expected 200 health, got %d", healthRes.StatusCode)
 	}
@@ -55,7 +55,7 @@ func TestEndToEndSessionLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("agents list request failed: %v", err)
 	}
-	defer agentsRes.Body.Close()
+	defer func() { _ = agentsRes.Body.Close() }()
 	if agentsRes.StatusCode != 200 {
 		t.Fatalf("expected 200 agents, got %d", agentsRes.StatusCode)
 	}
@@ -82,7 +82,7 @@ func TestEndToEndSessionLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create session failed: %v", err)
 	}
-	defer createRes.Body.Close()
+	defer func() { _ = createRes.Body.Close() }()
 
 	if createRes.StatusCode != 201 {
 		t.Fatalf("expected 201 Created, got %d", createRes.StatusCode)
@@ -104,7 +104,7 @@ func TestEndToEndSessionLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ws dial failed: %v", err)
 	}
-	defer wsConn.Close(websocket.StatusNormalClosure, "")
+	defer func() { _ = wsConn.Close(websocket.StatusNormalClosure, "") }()
 
 	// Send echo keystroke
 	keyFrame := protocol.Encode(protocol.OpcodeKeystroke, 0, []byte("echo hello_openremote\r\n"))
@@ -122,7 +122,7 @@ func TestEndToEndSessionLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prompt request failed: %v", err)
 	}
-	defer promptRes.Body.Close()
+	defer func() { _ = promptRes.Body.Close() }()
 	if promptRes.StatusCode != 200 {
 		t.Fatalf("expected 200 prompt, got %d", promptRes.StatusCode)
 	}
@@ -134,7 +134,7 @@ func TestEndToEndSessionLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("delete request failed: %v", err)
 	}
-	defer delRes.Body.Close()
+	defer func() { _ = delRes.Body.Close() }()
 	if delRes.StatusCode != 204 && delRes.StatusCode != 200 {
 		t.Fatalf("expected 204 or 200 on delete, got %d", delRes.StatusCode)
 	}

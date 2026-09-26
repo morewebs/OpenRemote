@@ -83,7 +83,7 @@ func Middleware(token string, limiter *RateLimiter, next http.Handler) http.Hand
 			if !limiter.Allow(ip) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusTooManyRequests)
-				fmt.Fprint(w, `{"code":"ERR_RATE_LIMITED","message":"too many requests, please slow down"}`)
+				_, _ = fmt.Fprint(w, `{"code":"ERR_RATE_LIMITED","message":"too many requests, please slow down"}`)
 				return
 			}
 		}
@@ -118,7 +118,7 @@ func Middleware(token string, limiter *RateLimiter, next http.Handler) http.Hand
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprint(w, `{"code":"ERR_AUTH_REQUIRED","message":"missing or invalid Bearer token"}`)
+		_, _ = fmt.Fprint(w, `{"code":"ERR_AUTH_REQUIRED","message":"missing or invalid Bearer token"}`)
 	})
 }
 

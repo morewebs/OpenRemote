@@ -38,7 +38,7 @@ func TestConcurrentRequestsNotificationsAndCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 	var wg sync.WaitGroup
 	for range 10 {
 		wg.Add(1)

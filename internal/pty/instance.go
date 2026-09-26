@@ -95,7 +95,7 @@ func (p *Instance) Spawn(ctx context.Context, hooks Hooks) error {
 		return err
 	}
 	if err := tty.Resize(cols, rows); err != nil {
-		tty.Close()
+		_ = tty.Close()
 		return err
 	}
 
@@ -126,7 +126,7 @@ func (p *Instance) Spawn(ctx context.Context, hooks Hooks) error {
 	cmd.Env = env
 
 	if err := cmd.Start(); err != nil {
-		tty.Close()
+		_ = tty.Close()
 		return err
 	}
 

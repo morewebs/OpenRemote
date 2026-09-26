@@ -111,8 +111,8 @@ func newFlagSet(name, description string) *flag.FlagSet {
 	fs := flag.NewFlagSet(name, flag.ExitOnError)
 	fs.Usage = func() {
 		out := fs.Output()
-		fmt.Fprintf(out, "%s — %s\n\n", name, description)
-		fmt.Fprintf(out, "Usage:\n  openremote %s [flags]\n\nFlags:\n", name)
+		_, _ = fmt.Fprintf(out, "%s — %s\n\n", name, description)
+		_, _ = fmt.Fprintf(out, "Usage:\n  openremote %s [flags]\n\nFlags:\n", name)
 		fs.PrintDefaults()
 	}
 	return fs
@@ -174,7 +174,7 @@ func runServeWorker(args []string) {
 	if err != nil {
 		log.Fatalf("[openremote] events.Open: %v", err)
 	}
-	defer bus.Close()
+	defer func() { _ = bus.Close() }()
 
 	token := *tokenFlag
 	if token == "" {
@@ -272,7 +272,7 @@ func runStatus(args []string) {
 		fmt.Printf("Daemon is NOT running at %s (%v)\n", *addr, err)
 		os.Exit(1)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		fmt.Printf("Daemon at %s responded with HTTP %d\n", *addr, resp.StatusCode)
@@ -327,7 +327,7 @@ func tunnelRequest(method, addr, token string, body map[string]string) {
 		fmt.Printf("Failed to contact daemon: %v\n", err)
 		os.Exit(1)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var out map[string]any
 	_ = json.NewDecoder(resp.Body).Decode(&out)
@@ -356,7 +356,7 @@ func listTunnels(addr, token string) {
 		fmt.Printf("Failed to contact daemon: %v\n", err)
 		os.Exit(1)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		fmt.Printf("Daemon at %s responded with HTTP %d\n", addr, resp.StatusCode)

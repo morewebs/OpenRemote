@@ -145,7 +145,7 @@ func (b *Bot) routeFor(ctx context.Context, sessionID string, chatID int64) rout
 		if err := b.call(ctx, "createForumTopic", map[string]any{"chat_id": chatID, "name": truncate(sessionID, 100)}, &topic); err == nil {
 			r.ThreadID = topic.ThreadID
 		} else {
-			b.fail(err)
+			_ = b.fail(err)
 		}
 	}
 	b.mu.Lock()
@@ -229,7 +229,7 @@ func (b *Bot) flushActions(ctx context.Context) {
 			err = b.call(ctx, "sendMessage", map[string]any{"chat_id": r.ChatID, "message_thread_id": r.ThreadID, "text": truncate(text, 4000), "reply_markup": map[string]any{"inline_keyboard": keyboard}}, nil)
 		}
 		if err != nil {
-			b.fail(err)
+			_ = b.fail(err)
 			action.Attempts++
 			if action.Attempts < 4 || b.throttled() {
 				b.mu.Lock()
@@ -293,7 +293,7 @@ func (b *Bot) flushMessages(ctx context.Context) {
 				}
 			}
 			if err != nil {
-				b.fail(err)
+				_ = b.fail(err)
 				success = false
 				break
 			}
@@ -340,7 +340,7 @@ func (b *Bot) upload(ctx context.Context, r route, artifact protocol.ArtifactUpd
 	if err != nil {
 		return fmt.Errorf("Telegram document upload failed")
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	var result struct {
 		OK bool `json:"ok"`
 	}

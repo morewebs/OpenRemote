@@ -51,7 +51,7 @@ func TestReplayPreservesSplitUTF8AndSSECursor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.CloseNow()
+	defer func() { _ = conn.CloseNow() }()
 	var replay []byte
 	var cursor int64
 	for i := 0; i < 2; i++ {
@@ -81,7 +81,7 @@ func TestReplayPreservesSplitUTF8AndSSECursor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	sink.Bytes([]byte("live\n"))
 	scan := bufio.NewScanner(response.Body)
 	for scan.Scan() {
@@ -134,7 +134,7 @@ func TestFilesContainmentAndBinaryPreview(t *testing.T) {
 			t.Fatal(err)
 		}
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode != tc.status {
 			t.Errorf("%s: status %d, body %s", tc.path, resp.StatusCode, body)
 		}
@@ -167,7 +167,7 @@ func TestQuestionClaimPreventsConcurrentDelivery(t *testing.T) {
 		if err != nil {
 			return 0
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		return resp.StatusCode
 	}
 	first := make(chan int, 1)

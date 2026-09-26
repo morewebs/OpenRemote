@@ -118,7 +118,7 @@ func (b *Bus) ListSessions() ([]map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []map[string]any
 	for rows.Next() {
 		var sID, wID, aID, cwd, status string
@@ -168,7 +168,7 @@ func (b *Bus) GetEventsSince(sessionID string, lastSeq int64) ([]map[string]any,
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []map[string]any
 	for rows.Next() {
 		var seq, created int64

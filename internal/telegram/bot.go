@@ -198,7 +198,7 @@ func (b *Bot) call(ctx context.Context, method string, payload any, result any) 
 	if err != nil {
 		return fmt.Errorf("Telegram %s request failed", method)
 	} // never include the token-bearing URL
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	var envelope struct {
 		OK          bool            `json:"ok"`
 		Result      json.RawMessage `json:"result"`
@@ -232,7 +232,7 @@ func (b *Bot) poll(ctx context.Context) {
 			if ctx.Err() != nil {
 				return
 			}
-			b.fail(err)
+			_ = b.fail(err)
 			select {
 			case <-ctx.Done():
 				return

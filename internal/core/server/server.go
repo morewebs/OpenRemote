@@ -356,7 +356,7 @@ func methodNotAllowed(w http.ResponseWriter, allowed ...string) {
 	w.Header().Set("Allow", strings.Join(allowed, ", "))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusMethodNotAllowed)
-	fmt.Fprintf(w, `{"code":"ERR_METHOD_NOT_ALLOWED","message":"method not allowed; expected %s"}`, strings.Join(allowed, " or "))
+	_, _ = fmt.Fprintf(w, `{"code":"ERR_METHOD_NOT_ALLOWED","message":"method not allowed; expected %s"}`, strings.Join(allowed, " or "))
 }
 
 // --- Health ---
@@ -444,7 +444,7 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 		if !workspace.IsSafePathAny(s.cfg.AllowedRoots, req.CWD) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
-			fmt.Fprint(w, `{"code":"ERR_PATH_TRAVERSAL","message":"requested directory outside allowed roots"}`)
+			_, _ = fmt.Fprint(w, `{"code":"ERR_PATH_TRAVERSAL","message":"requested directory outside allowed roots"}`)
 			return
 		}
 
@@ -880,7 +880,7 @@ func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {
 	if !workspace.IsSafePathAny(s.cfg.AllowedRoots, dir) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
-		fmt.Fprint(w, `{"code":"ERR_PATH_TRAVERSAL"}`)
+		_, _ = fmt.Fprint(w, `{"code":"ERR_PATH_TRAVERSAL"}`)
 		return
 	}
 
@@ -984,7 +984,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	defer conn.Close(websocket.StatusNormalClosure, "")
+	defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
 	conn.SetReadLimit(1024 * 1024)
 
 	sessionID := r.URL.Query().Get("sessionId")
@@ -1030,7 +1030,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		for {
 			select {
 			case <-client.done:
-				conn.CloseNow()
+				_ = conn.CloseNow()
 				return
 			case <-ctx.Done():
 				return
@@ -1062,7 +1062,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 				if err := conn.Write(ctx, websocket.MessageBinary, frame); err != nil {
-					conn.CloseNow()
+					_ = conn.CloseNow()
 					return
 				}
 			}

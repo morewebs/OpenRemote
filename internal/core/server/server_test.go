@@ -93,7 +93,7 @@ func fetchEventsSince(t *testing.T, base, token, sessionID string, since int64) 
 	if err != nil {
 		t.Fatalf("events request failed: %v", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != 200 {
 		t.Fatalf("expected 200 on events catchup, got %d", res.StatusCode)
 	}
@@ -129,7 +129,7 @@ func TestServerHealthAndSessions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("health probe failed: %v", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != 200 {
 		t.Errorf("health status code = %d", res.StatusCode)
 	}
@@ -158,7 +158,7 @@ func TestServerHealthAndSessions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create session request failed: %v", err)
 	}
-	defer createRes.Body.Close()
+	defer func() { _ = createRes.Body.Close() }()
 
 	if createRes.StatusCode != 201 {
 		t.Fatalf("expected 201 Created, got %d", createRes.StatusCode)
@@ -181,7 +181,7 @@ func TestServerHealthAndSessions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("websocket connection failed: %v", err)
 	}
-	defer wsConn.Close(websocket.StatusNormalClosure, "")
+	defer func() { _ = wsConn.Close(websocket.StatusNormalClosure, "") }()
 
 	// Send keystroke frame
 	keyFrame := protocol.Encode(protocol.OpcodeKeystroke, 0, []byte("echo test\n"))
@@ -222,7 +222,7 @@ func TestServer_QuestionLifecycleAndAnswerRouting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("websocket connection failed: %v", err)
 	}
-	defer wsConn.Close(websocket.StatusNormalClosure, "")
+	defer func() { _ = wsConn.Close(websocket.StatusNormalClosure, "") }()
 
 	// Drive the parser via the same sink a real driver uses. The block
 	// triggers question detection ("Select an option:" + 2 numbered options).
@@ -249,7 +249,7 @@ func TestServer_QuestionLifecycleAndAnswerRouting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("question answer request failed: %v", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != 200 {
 		t.Fatalf("expected 200 on question answer, got %d", res.StatusCode)
 	}

@@ -110,7 +110,7 @@ func TestStartPipeline(t *testing.T) {
 	if err != nil {
 		t.Skipf("skipping: pty spawn unsupported: %v", err)
 	}
-	defer sess.Close()
+	defer func() { _ = sess.Close() }()
 
 	select {
 	case <-sink.exited:

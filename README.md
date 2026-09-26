@@ -82,6 +82,16 @@ flutter test
 flutter build web --release --no-web-resources-cdn
 ```
 
+These gates use fixtures only. For one real model turn through the real daemon,
+install and authenticate an agent CLI, then run the live smoke test from the
+repository root (it spends real provider credits and exits 0 only when the
+expected token streams back over SSE):
+
+```sh
+python scripts/live_e2e.py                # OpenCode, expects OPENCODE_LIVE_OK
+python scripts/live_e2e.py pi PI_LIVE_OK  # any registered agent and token
+```
+
 Use `go test -race ./...` with a C toolchain. CI tests Go on Windows/Linux/macOS
 and packages six daemon targets. Android distribution signing is described in
 [implementation status](docs/IMPLEMENTATION_STATUS.md#reproducible-builds).

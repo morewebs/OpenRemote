@@ -45,7 +45,7 @@ func TestHTTPBridgeApprovalsQuestionsAndPrompt(t *testing.T) {
 	defer api.Close()
 	sink := &testSink{}
 	s := newHTTPSession(context.Background(), types.SessionConfig{SessionID: "local", CWD: "workspace"}, sink)
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	s.baseURL, s.password, s.sessionID = api.URL, "secret", "remote"
 	if err := s.Prompt("hello"); err != nil {
 		t.Fatal(err)
@@ -82,7 +82,7 @@ func TestHTTPBridgeApprovalsQuestionsAndPrompt(t *testing.T) {
 func TestSSEFragmentationAndSessionIsolation(t *testing.T) {
 	sink := &testSink{}
 	s := newHTTPSession(context.Background(), types.SessionConfig{SessionID: "local"}, sink)
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	s.sessionID = "remote"
 	events := ": keepalive\n\ndata: {\"type\":\"message.updated\",\n" +
 		"data: \"properties\":{\"info\":{\"id\":\"m\",\"sessionID\":\"remote\",\"role\":\"assistant\"}}}\n\n" +
@@ -100,7 +100,7 @@ func TestSSEFragmentationAndSessionIsolation(t *testing.T) {
 func TestContentDiffEventsProduceReviewablePatch(t *testing.T) {
 	sink := &testSink{}
 	s := newHTTPSession(context.Background(), types.SessionConfig{SessionID: "local"}, sink)
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	s.sessionID = "remote"
 	s.handleEvent([]byte(`{"type":"session.diff","properties":{"sessionID":"remote","diff":[{"file":"hello.txt","before":"old\n","after":"new\n","additions":1,"deletions":1}]}}`))
 	if len(sink.events) != 1 {

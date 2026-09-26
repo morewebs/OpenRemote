@@ -162,7 +162,7 @@ func startHTTPServer(ctx context.Context, bin string, cfg types.SessionConfig, s
 		return nil, err
 	}
 	go func() {
-		defer response.Body.Close()
+		defer func() { _ = response.Body.Close() }()
 		_ = consumeSSE(response.Body, s.handleEvent)
 		// A lost native event stream cannot safely leave an agent awaiting
 		// an approval the daemon never received. Contain that session.
@@ -202,7 +202,7 @@ func (s *httpSession) request(ctx context.Context, method, path string, body, re
 	if err != nil {
 		return err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode >= 300 {
 		data, _ := io.ReadAll(io.LimitReader(response.Body, 2048))
 		return fmt.Errorf("OpenCode %s: HTTP %d: %s", path, response.StatusCode, strings.TrimSpace(string(data)))

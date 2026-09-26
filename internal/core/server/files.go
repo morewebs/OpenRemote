@@ -51,7 +51,7 @@ func listWorkspaceFiles(roots []string, path string) ([]protocol.FileEntry, erro
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	entries, err := file.ReadDir(-1)
 	if err != nil {
 		return nil, err
@@ -91,7 +91,7 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() {
 		http.Error(w, "not a regular file", http.StatusBadRequest)

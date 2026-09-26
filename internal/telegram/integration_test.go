@@ -46,7 +46,7 @@ func TestApprovalAuthorizationAndAgentDelivery(t *testing.T) {
 			sent = append(sent, body)
 			mu.Unlock()
 		}
-		fmt.Fprint(w, `{"ok":true,"result":{"message_id":7}}`)
+		_, _ = fmt.Fprint(w, `{"ok":true,"result":{"message_id":7}}`)
 	}))
 	defer api.Close()
 	deliveries := 0
@@ -109,9 +109,9 @@ func TestDebouncedDraftsTopicsAndAttachments(t *testing.T) {
 			}
 		}
 		if method == "createForumTopic" {
-			fmt.Fprint(w, `{"ok":true,"result":{"message_thread_id":12}}`)
+			_, _ = fmt.Fprint(w, `{"ok":true,"result":{"message_thread_id":12}}`)
 		} else {
-			fmt.Fprint(w, `{"ok":true,"result":{"message_id":7}}`)
+			_, _ = fmt.Fprint(w, `{"ok":true,"result":{"message_id":7}}`)
 		}
 	}))
 	defer api.Close()

@@ -78,21 +78,10 @@ func TestPush_WrapAround(t *testing.T) {
 	// This wraps: avail = 8-6 = 2, chunk len 4 > avail
 	rb.Push([]byte("GHIJ")) // writes "GH" at [6..7], "IJ" at [0..1]
 
-	expected := []byte("IJcdefGH") // oldest to newest: c,d,e,f,G,H,I,J → but ring starts at writeHead
-	// After wrap: writeHead = 4-2 = 2, length = 8 (full)
-	// ReadAll when full reads from writeHead(2) to end, then 0 to writeHead
-	// buf[2:] = "cdefGH" wait... let me trace carefully.
-	// Initial: buf = [a b c d e f _ _], writeHead=6, length=6
-	// Push "GHIJ": avail=2, chunk=4 > avail
-	//   copy(buf[6:], "GH") → buf=[a b c d e f G H]
-	//   copy(buf[0:], "IJ") → buf=[I J c d e f G H]
-	//   writeHead = 4-2 = 2
-	//   length = min(6+4, 8) = 8
-	// ReadAll (full): tail = cap-writeHead = 6
-	//   n = copy(out, buf[2:]) = copy(out, "cdefGH") → n=6
-	//   copy(out[6:], buf[:2]) = copy(out[6:], "IJ")
-	//   out = "cdefGHIJ"
-	expected = []byte("cdefGHIJ")
+	// After the wrap, writeHead = 2 and the buffer is full. ReadAll drains
+	// from writeHead to the end ("cdefGH"), then the wrapped head bytes
+	// ("IJ"), so the buffer reads back in write order.
+	expected := []byte("cdefGHIJ")
 	got := rb.ReadAll()
 	if !bytes.Equal(got, expected) {
 		t.Errorf("expected %q, got %q", expected, got)

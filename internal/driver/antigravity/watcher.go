@@ -69,7 +69,7 @@ func startWatcher(ctx context.Context, cfg types.SessionConfig, sink types.Sink)
 	}
 	go func() {
 		defer close(w.done)
-		defer watcher.Close()
+		defer func() { _ = watcher.Close() }()
 		defer w.poll()
 		ticker := time.NewTicker(300 * time.Millisecond)
 		defer ticker.Stop()
@@ -99,7 +99,7 @@ func readArtifact(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	data, err := io.ReadAll(io.LimitReader(file, 4*1024*1024+1))
 	if len(data) > 4*1024*1024 {
 		return nil, fmt.Errorf("artifact exceeds 4 MB")

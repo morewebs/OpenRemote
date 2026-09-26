@@ -13,7 +13,7 @@ func TestSQLiteWALEventBus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open event bus: %v", err)
 	}
-	defer bus.Close()
+	defer func() { _ = bus.Close() }()
 
 	if err := bus.IntegrityCheck(); err != nil {
 		t.Fatalf("sqlite integrity check failed: %v", err)
