@@ -36,3 +36,4 @@ sessions.db
 internal/core/server/webdist/
 .go-test-results.txt
 .kotlin/
+/.zcode
