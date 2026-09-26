@@ -141,7 +141,7 @@ func workspaceDiff(ctx context.Context, cwd string) (string, error) {
 		return "", err
 	}
 	if waitErr != nil {
-		return "", fmt.Errorf("Git diff unavailable; the workspace must contain an initial commit")
+		return "", fmt.Errorf("git diff unavailable; the workspace must contain an initial commit")
 	}
 	return string(data), nil
 }

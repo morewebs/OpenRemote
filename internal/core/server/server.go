@@ -543,7 +543,7 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 		})
 
 	default:
-		http.Error(w, "method not allowed", 405)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -684,7 +684,7 @@ func (s *Server) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(st)
 
 	default:
-		http.Error(w, "method not allowed", 405)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 

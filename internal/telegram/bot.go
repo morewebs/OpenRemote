@@ -136,7 +136,7 @@ func (b *Bot) Start(ctx context.Context) error {
 		return nil
 	}
 	if len(b.cfg.AllowedUserIDs) == 0 {
-		return b.fail(fmt.Errorf("Telegram requires at least one allowed user ID"))
+		return b.fail(fmt.Errorf("telegram requires at least one allowed user ID"))
 	}
 	b.mu.Lock()
 	if b.running {
@@ -196,7 +196,7 @@ func (b *Bot) call(ctx context.Context, method string, payload any, result any) 
 	req.Header.Set("Content-Type", "application/json")
 	response, err := b.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("Telegram %s request failed", method)
+		return fmt.Errorf("telegram %s request failed", method)
 	} // never include the token-bearing URL
 	defer func() { _ = response.Body.Close() }()
 	var envelope struct {
@@ -208,7 +208,7 @@ func (b *Bot) call(ctx context.Context, method string, payload any, result any) 
 		} `json:"parameters"`
 	}
 	if err := json.NewDecoder(io.LimitReader(response.Body, 8*1024*1024)).Decode(&envelope); err != nil {
-		return fmt.Errorf("Telegram %s returned an invalid response", method)
+		return fmt.Errorf("telegram %s returned an invalid response", method)
 	}
 	if !envelope.OK {
 		if envelope.Parameters.RetryAfter > 0 {
@@ -216,7 +216,7 @@ func (b *Bot) call(ctx context.Context, method string, payload any, result any) 
 			b.blockedUntil = time.Now().Add(time.Duration(envelope.Parameters.RetryAfter) * time.Second)
 			b.mu.Unlock()
 		}
-		return fmt.Errorf("Telegram %s: %s", method, strings.ReplaceAll(envelope.Description, b.cfg.Token, "[redacted]"))
+		return fmt.Errorf("telegram %s: %s", method, strings.ReplaceAll(envelope.Description, b.cfg.Token, "[redacted]"))
 	}
 	if result != nil {
 		return json.Unmarshal(envelope.Result, result)

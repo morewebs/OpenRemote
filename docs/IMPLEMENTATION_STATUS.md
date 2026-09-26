@@ -81,9 +81,10 @@ owner's signing identities and an Apple build host.
 Local checks cover Go tests/vet, Flutter analysis/tests/web compilation, worker
 and supervisor failure fixtures, agent protocol fixtures, Telegram mocks, tunnel
 process fixtures, file containment, dirty worktrees, concurrent replies and
-WebSocket/SSE recovery. Tests do not send external messages. The advisory
-golangci-lint gate (errcheck, govet, ineffassign, staticcheck, unused) runs
-clean across the tree after a September 2026 cleanup pass.
+WebSocket/SSE recovery. Tests do not send external messages. The golangci-lint
+gate (v2 config, errcheck/govet/ineffassign/staticcheck/unused via the standard
+set) runs clean across the tree with golangci-lint 2.14.0 and is now a required
+CI check.
 
 Browser checks exercised token setup, real shell creation and prompting, file
 previews, Git diffs and terminal replay at desktop and 390-pixel phone widths.

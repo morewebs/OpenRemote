@@ -274,7 +274,7 @@ func (s *appSession) Answer(id string, answer any) error {
 	return nil
 }
 func (s *appSession) RawInput([]byte) error {
-	return fmt.Errorf("Codex app-server uses structured prompts; use a shell session for terminal input")
+	return fmt.Errorf("codex app-server uses structured prompts; use a shell session for terminal input")
 }
 func (s *appSession) Resize(int, int) error { return nil }
 func (s *appSession) Snapshot() []byte      { return nil }

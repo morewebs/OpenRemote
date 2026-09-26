@@ -20,7 +20,7 @@ func TestShortResponsesCommitBeforeScrollingAndOnlyOnce(t *testing.T) {
 	}
 	_, _ = s.Write([]byte(" response\r\n"))
 	for i := 0; i < 80; i++ {
-		_, _ = s.Write([]byte(fmt.Sprintf("line %d\r\n", i)))
+		_, _ = fmt.Fprintf(s, "line %d\r\n", i)
 	}
 	s.FlushCurrentScreenLines()
 	if len(lines) != 82 {

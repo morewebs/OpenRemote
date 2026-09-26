@@ -338,14 +338,14 @@ func (b *Bot) upload(ctx context.Context, r route, artifact protocol.ArtifactUpd
 	req.Header.Set("Content-Type", form.FormDataContentType())
 	response, err := b.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("Telegram document upload failed")
+		return fmt.Errorf("telegram document upload failed")
 	}
 	defer func() { _ = response.Body.Close() }()
 	var result struct {
 		OK bool `json:"ok"`
 	}
 	if json.NewDecoder(io.LimitReader(response.Body, 1024*1024)).Decode(&result) != nil || !result.OK {
-		return fmt.Errorf("Telegram document upload rejected")
+		return fmt.Errorf("telegram document upload rejected")
 	}
 	return nil
 }

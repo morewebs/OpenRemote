@@ -1,18 +1,19 @@
-run:
-  timeout: 5m
-  skip-dirs:
-    - ref
-    - scratch
-    - clients
-
+version: "2"
 linters:
-  enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
-
-issues:
-  exclude-use-default: false
+  default: standard
+  exclusions:
+    generated: lax
+    paths:
+      - ref
+      - scratch
+      - clients
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

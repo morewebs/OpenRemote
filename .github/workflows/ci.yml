@@ -40,11 +40,8 @@ jobs:
       - name: Go Vet
         run: go vet ./...
 
-      # Advisory golangci-lint — reports findings without blocking the required check.
-      # Remove `continue-on-error` once the codebase is fully lint-clean.
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
-        continue-on-error: true
         with:
           version: latest
           args: --timeout 5m

@@ -77,7 +77,7 @@ CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -o /dev/null ./cmd/openremote
 - Run `go vet ./...` before committing — CI enforces this as a required check.
 - Follow standard Go formatting (`gofmt`, `goimports`).
 - Keep exported symbols documented with godoc comments.
-- golangci-lint runs in CI as advisory; aim to keep it clean.
+- golangci-lint (v2 config) runs in CI as a required check; run it locally too if you have it installed.
 
 ### Flutter / Dart
 

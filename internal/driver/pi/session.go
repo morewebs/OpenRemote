@@ -73,7 +73,7 @@ func startRPC(ctx context.Context, bin string, cfg types.SessionConfig, sink typ
 	defer stop()
 	if err := client.CallCommand(probe, map[string]any{"type": "get_state"}, nil); err != nil {
 		_ = s.Close()
-		return nil, fmt.Errorf("Pi RPC capability probe failed: %w", err)
+		return nil, fmt.Errorf("pi RPC capability probe failed: %w", err)
 	}
 	return s, nil
 }
@@ -220,7 +220,7 @@ func (s *rpcSession) Approve(id string, approved bool) error {
 func (s *rpcSession) Answer(id string, answer any) error {
 	return s.reply(id, map[string]any{"value": fmt.Sprint(answer)})
 }
-func (s *rpcSession) RawInput([]byte) error { return fmt.Errorf("Pi RPC uses structured prompts") }
+func (s *rpcSession) RawInput([]byte) error { return fmt.Errorf("pi RPC uses structured prompts") }
 func (s *rpcSession) Resize(int, int) error { return nil }
 func (s *rpcSession) Snapshot() []byte      { return nil }
 func (s *rpcSession) Close() error          { err := s.client.Close(); s.cancel(); return err }
