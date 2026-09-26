@@ -18,7 +18,9 @@ Updated September 19, 2026. This reconciles the original roadmap with the code.
 
 Environment-dependent acceptance checks remain: live model turns, Telegram and
 tunnel accounts, Pi/OMP installation, physical network handoffs, Apple builds,
-and mobile signing. Latency/memory figures remain unmeasured targets.
+and mobile signing. Latency and memory are measured (September 2026 dev laptop):
+~0.21 ms per end-to-end SSE event delivery and a 9.0 MB idle working set
+(private committed bytes ~47 MB).
 
 Changes from the initial plan: Pi uses RPC rather than ACP; Codex app-server
 provides structured events without rollout-log polling; OpenCode selects a free

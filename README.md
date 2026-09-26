@@ -92,6 +92,12 @@ python scripts/live_e2e.py                # OpenCode, expects OPENCODE_LIVE_OK
 python scripts/live_e2e.py pi PI_LIVE_OK  # any registered agent and token
 ```
 
+Performance targets can be measured locally: `go test -bench . ./internal/core/events ./internal/core/server`
+reports event append and end-to-end SSE delivery latency, and `python scripts/measure_idle.py`
+samples the idle daemon's memory. Both are noise-sensitive on shared or loaded
+machines, so they are not CI gates; see
+[implementation status](docs/IMPLEMENTATION_STATUS.md) for recorded figures.
+
 Use `go test -race ./...` with a C toolchain. CI tests Go on Windows/Linux/macOS
 and packages six daemon targets. Android distribution signing is described in
 [implementation status](docs/IMPLEMENTATION_STATUS.md#reproducible-builds).

@@ -21,15 +21,15 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func newTestServer(t *testing.T, cfg server.Config, bus *events.Bus) *server.Server {
-	t.Helper()
+func newTestServer(tb testing.TB, cfg server.Config, bus *events.Bus) *server.Server {
+	tb.Helper()
 	bin, err := os.Executable()
 	if err != nil {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 	cfg.WorkerBinary = bin
 	srv := server.New(cfg, bus)
-	t.Cleanup(func() {
+	tb.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(ctx)

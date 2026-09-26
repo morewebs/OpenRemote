@@ -113,8 +113,15 @@ Mobile signing and real cellular handoffs need devices or credentials; a
 successful paid Pi turn needs a credited provider account. No production
 deployment or
 GitHub release was made. Local race testing requires a C toolchain; CI runs it on
-Linux/macOS. Sub-5-ms latency and sub-25-MB idle memory are original targets, not
-verified guarantees. WSL on this host cannot start because its configured disk
+Linux/macOS. Measured September 2026 on the development laptop (i5-12450H,
+Windows): end-to-end SSE event delivery (sink to durable append to subscriber
+receive, `BenchmarkSSEEventDelivery`) runs at ~0.21 ms per event, and a single
+durable event append (`BenchmarkEventBusAppend`) at ~0.10 ms — both far inside
+the original sub-5-ms target. Idle daemon memory with no sessions
+(`scripts/measure_idle.py`) is a 9.0 MB median working set (inside the
+sub-25-MB target) but ~47 MB private committed bytes, dominated by Go heap
+arenas; by that stricter measure the target is not met. WSL on this host
+cannot start because its configured disk
 path is unavailable; no host configuration was changed.
 
 Local daemon builds passed for Windows amd64, Linux amd64/arm64 and macOS amd64.
