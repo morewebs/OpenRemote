@@ -76,6 +76,23 @@ class ApiService {
         .toList();
   }
 
+  /// Daemon self-update status; null when the daemon predates the endpoint.
+  Future<DaemonUpdateStatus?> getUpdateStatus() async {
+    try {
+      final response = await _request('GET', '/api/v1/update');
+      return DaemonUpdateStatus.fromJson(jsonDecode(response.body));
+    } on ApiException catch (e) {
+      if (e.status == 404) return null;
+      rethrow;
+    }
+  }
+
+  /// Ask the daemon to apply its update (returns when accepted, not applied).
+  Future<void> applyUpdate() async {
+    await _request('POST', '/api/v1/update',
+        timeout: const Duration(seconds: 10));
+  }
+
   Future<List<SessionItem>> getSessions() async {
     final response = await _request('GET', '/api/v1/sessions');
     return (jsonDecode(response.body) as List? ?? [])

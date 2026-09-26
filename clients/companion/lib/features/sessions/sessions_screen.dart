@@ -12,6 +12,7 @@ class SessionsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sessionsAsync = ref.watch(sessionsProvider);
+    final updateBanner = _updateBanner(context, ref);
 
     return Scaffold(
       appBar: AppBar(
@@ -23,7 +24,10 @@ class SessionsScreen extends ConsumerWidget {
           IconButton(
             tooltip: 'Refresh',
             icon: const Icon(Icons.refresh),
-            onPressed: () => ref.read(sessionsProvider.notifier).refresh(),
+            onPressed: () {
+              ref.read(sessionsProvider.notifier).refresh();
+              ref.invalidate(updateStatusProvider);
+            },
           ),
           IconButton(
             tooltip: 'Settings',
@@ -32,7 +36,11 @@ class SessionsScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: sessionsAsync.when(
+      body: Column(
+        children: [
+          ?updateBanner,
+          Expanded(
+            child: sessionsAsync.when(
         loading: () => const Center(
           child: CircularProgressIndicator(color: AppTheme.purpleAccent),
         ),
@@ -121,6 +129,9 @@ class SessionsScreen extends ConsumerWidget {
             },
           );
         },
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppTheme.purpleAccent,
@@ -131,6 +142,44 @@ class SessionsScreen extends ConsumerWidget {
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
         onPressed: () => _showNewSessionModal(context, ref),
+      ),
+    );
+  }
+
+  /// Dismissible daemon-update banner; null when no release is pending, the
+  /// daemon is offline, or this version was already dismissed.
+  Widget? _updateBanner(BuildContext context, WidgetRef ref) {
+    final status = ref.watch(updateStatusProvider).valueOrNull;
+    if (status == null || !status.available) return null;
+    final latest = status.latest ?? '';
+    if (latest.isEmpty) return null;
+    if (ref.watch(dismissedUpdateProvider) == latest) return null;
+    return Material(
+      color: AppTheme.surfaceDark,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: Row(
+          children: [
+            const Icon(Icons.system_update, size: 18, color: AppTheme.purpleAccent),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Daemon update available: $latest',
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+            TextButton(
+              onPressed: () => context.push('/settings'),
+              child: const Text('Update'),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 16),
+              tooltip: 'Dismiss',
+              onPressed: () =>
+                  ref.read(dismissedUpdateProvider.notifier).dismiss(latest),
+            ),
+          ],
+        ),
       ),
     );
   }

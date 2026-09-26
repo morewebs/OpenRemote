@@ -74,6 +74,41 @@ final agentsProvider = FutureProvider<List<AgentInfo>>((ref) async {
   return api.getAgents();
 });
 
+/// Daemon self-update status; null when the daemon is offline or predates
+/// the update endpoint (older daemons answer 404).
+final updateStatusProvider = FutureProvider<DaemonUpdateStatus?>((ref) async {
+  final api = ref.watch(apiServiceProvider);
+  try {
+    return await api.getUpdateStatus();
+  } catch (_) {
+    return null;
+  }
+});
+
+/// Remembers the latest release version whose banner was dismissed, so the
+/// banner only reappears for a genuinely new release.
+class DismissedUpdateNotifier extends StateNotifier<String?> {
+  DismissedUpdateNotifier() : super(null) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = prefs.getString('dismissed_update_version');
+  }
+
+  Future<void> dismiss(String version) async {
+    state = version;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('dismissed_update_version', version);
+  }
+}
+
+final dismissedUpdateProvider =
+    StateNotifierProvider<DismissedUpdateNotifier, String?>((ref) {
+  return DismissedUpdateNotifier();
+});
+
 class SessionsNotifier extends StateNotifier<AsyncValue<List<SessionItem>>> {
   final ApiService _api;
   SessionsNotifier(this._api) : super(const AsyncValue.loading()) {

@@ -229,6 +229,39 @@ class AgentInfo {
   }
 }
 
+/// Daemon self-update status from GET /api/v1/update.
+class DaemonUpdateStatus {
+  final String current;
+  final String? latest;
+  final bool available;
+  final String? checkedAt;
+  final String autoCheck;
+  final bool applying;
+  final String? applyError;
+
+  DaemonUpdateStatus({
+    required this.current,
+    this.latest,
+    required this.available,
+    this.checkedAt,
+    required this.autoCheck,
+    required this.applying,
+    this.applyError,
+  });
+
+  factory DaemonUpdateStatus.fromJson(Map<String, dynamic> json) {
+    return DaemonUpdateStatus(
+      current: json['current'] as String? ?? '',
+      latest: json['latest'] as String?,
+      available: json['available'] as bool? ?? false,
+      checkedAt: json['checkedAt'] as String?,
+      autoCheck: json['autoCheck'] as String? ?? 'off',
+      applying: json['applying'] as bool? ?? false,
+      applyError: json['applyError'] as String?,
+    );
+  }
+}
+
 /// A unified git diff emitted by the daemon's stream parser (`diff.generated`).
 class DiffCard {
   final String sessionId;
