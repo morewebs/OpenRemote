@@ -24,6 +24,24 @@ working directory. Plain Go builds include the lightweight fallback console.
 The daemon defaults to loopback access and the current working directory.
 Bearer-token holders can control the exposed workspaces and agent sessions.
 
+## Keep the daemon updated
+
+The daemon checks its GitHub releases every 24 hours by default (`--update-interval`
+to change, `0` disables, `--update-url` points elsewhere). Applying is manual:
+
+```sh
+openremote update --check   # report the latest release without applying
+openremote update           # apply: download, SHA256-verify, swap, restart
+```
+
+With the daemon running, the update applies through its REST API and the
+daemon restarts itself (live sessions stop; transcripts survive). The
+companion shows a dismissible banner and a Settings section for the same
+flow. Downloads must match the release's `SHA256SUMS.txt` entry or they are
+refused; the previous binary is kept as `<binary>.old` and restored
+automatically if the new one keeps crashing. Unstamped `dev` builds never
+self-update.
+
 ## Build the full companion
 
 Requires Flutter 3.44 and its Dart SDK, plus Go:

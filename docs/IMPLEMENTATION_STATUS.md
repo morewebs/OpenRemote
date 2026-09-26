@@ -56,6 +56,26 @@ selected chat/topic, updates drafts every two seconds and sends Markdown/patch
 artifacts. Queues and callback tokens are bounded. Bot API messages are not
 end-to-end encrypted; use it for material appropriate for that service.
 
+## Built-in updates
+
+The daemon checks its GitHub releases every 24 hours by default
+(`--update-interval`, `0` disables; `--update-url` retargets the feed).
+`GET /health` and `status` report the version stamp; `GET/POST /api/v1/update`
+expose status and apply (also registered as `system.updateStatus` /
+`system.updateApply` RPC methods), and the companion shows a dismissible
+banner plus a Settings section. Applying downloads the platform's raw binary
+asset, refuses it unless the download matches the release's `SHA256SUMS.txt`
+entry, swaps it in (previous binary kept as `<binary>.old`), gracefully shuts
+down and exits with a deliberate-restart code; the supervisor relaunches the
+new binary without counting a failure, and rolls the `.old` binary back
+automatically if the new release keeps crashing. Unstamped `dev` builds never
+self-update. Verified offline end-to-end with a fake release feed
+(`scripts/update_e2e.py`): a 0.9.0 daemon updates itself to 0.10.0 and comes
+back under its supervisor, and a corrupted checksum is refused with the old
+binary untouched. Live GitHub verification happens on the first published
+release. The embedded web companion updates with the daemon; Android and
+desktop companion packages are not self-updated.
+
 ## Reproducible builds
 
 `go run ./tools/build` builds Flutter and embeds it using `flutterweb`. `-web-dir`
