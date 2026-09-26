@@ -21,6 +21,7 @@ import (
 	"github.com/morewebs/OpenRemote/internal/core/events"
 	"github.com/morewebs/OpenRemote/internal/core/server"
 	"github.com/morewebs/OpenRemote/internal/core/supervisor"
+	"github.com/morewebs/OpenRemote/internal/core/update"
 	"github.com/morewebs/OpenRemote/internal/pty"
 )
 
@@ -64,6 +65,8 @@ func main() {
 		runStatus(args)
 	case "tunnel":
 		runTunnel(args)
+	case "update":
+		runUpdate(args)
 	case "pty-worker":
 		runPTYWorker(args)
 	case "version", "--version", "-v":
@@ -91,6 +94,7 @@ func printUsage() {
 	fmt.Println("  token       View or rotate bearer token")
 	fmt.Println("  status      Check daemon health and active sessions")
 	fmt.Println("  tunnel      Manage Cloudflare / remote tunnels")
+	fmt.Println("  update      Check for and apply daemon updates (verified GitHub releases)")
 	fmt.Println("  pty-worker  Run the isolated PTY worker subprocess (spawned by serve)")
 	fmt.Println("  version     Show version")
 	fmt.Println("  help        Show this help")
@@ -151,6 +155,8 @@ func runServeWorker(args []string) {
 	telegramChat := fs.Int64("telegram-chat", 0, "default telegram chat id for notifications")
 	allowedOrigin := fs.String("origin", "", "additional exact browser origin allowed to access the daemon")
 	telegramTopics := fs.Bool("telegram-topics", false, "route Telegram sessions into forum topics")
+	updateURL := fs.String("update-url", "", "release feed URL for update checks (empty = project default)")
+	updateInterval := fs.Duration("update-interval", 24*time.Hour, "release check interval (0 disables; e.g. 1h, 30m)")
 	var telegramUsers stringSlice
 	fs.Var(&telegramUsers, "telegram-user", "allowed Telegram user ID (repeat for multiple users; required with a bot token)")
 
@@ -210,6 +216,12 @@ func runServeWorker(args []string) {
 		AllowedOrigin:        *allowedOrigin,
 		TelegramAllowedUsers: allowedTelegramUsers,
 		TelegramTopics:       *telegramTopics,
+		Version:              Version,
+		UpdateFeedURL:        *updateURL,
+		UpdateCheckInterval:  *updateInterval,
+		// A self-update ends with a graceful shutdown; exit with the
+		// supervisor's restart code so the parent relaunches the new binary.
+		RestartHook: func() { os.Exit(supervisor.RestartExitCode) },
 	}, bus)
 
 	go func() {
@@ -287,6 +299,9 @@ func runStatus(args []string) {
 	fmt.Printf("OpenRemote Daemon Status: %v\n", health["status"])
 	fmt.Printf("Uptime:   %v seconds\n", health["uptime"])
 	fmt.Printf("Sessions: %v active\n", health["sessions"])
+	if v, ok := health["version"].(string); ok && v != "" {
+		fmt.Printf("Version:  %s\n", v)
+	}
 }
 
 func runTunnel(args []string) {
@@ -375,6 +390,156 @@ func listTunnels(addr, token string) {
 	for _, t := range tunnels {
 		fmt.Printf("- %v | installed: %v | running: %v | url: %v\n", t["name"], t["installed"], t["running"], t["url"])
 	}
+}
+
+// runUpdate checks for and applies daemon updates. With a running daemon it
+// drives the REST API (the daemon downloads, verifies, swaps and restarts
+// itself via the supervisor handshake); standalone (daemon not running) it
+// swaps the binary in place for the next `openremote serve`.
+func runUpdate(args []string) {
+	fs := newFlagSet("update", "check for and apply daemon updates from verified GitHub releases")
+	addr := fs.String("addr", defaultAddr, "daemon address (host:port)")
+	dataDir := fs.String("data", defaultDataDir(), "data directory holding the token file")
+	check := fs.Bool("check", false, "only report the latest release; do not apply")
+	yes := fs.Bool("y", false, "apply without asking for confirmation")
+	feed := fs.String("url", "", "release feed URL (standalone mode only; empty = project default)")
+	_ = fs.Parse(args)
+
+	if daemonUp(*addr) {
+		updateViaDaemon(*addr, *dataDir, *check, *yes)
+		return
+	}
+	updateStandalone(*feed, *check, *yes)
+}
+
+// daemonUp reports whether a daemon answers /health at addr.
+func daemonUp(addr string) bool {
+	res, err := httpClient.Get(fmt.Sprintf("http://%s/health", addr))
+	if err != nil {
+		return false
+	}
+	_ = res.Body.Close()
+	return res.StatusCode == http.StatusOK
+}
+
+// updateViaDaemon prints the daemon's update status and, unless -check, asks
+// the daemon to apply it, then polls health until the restarted daemon answers.
+func updateViaDaemon(addr, dataDir string, check, yes bool) {
+	token, err := auth.LoadOrCreateToken(dataDir)
+	if err != nil {
+		log.Fatalf("load token failed: %v", err)
+	}
+	status := updateRequest("GET", addr, token, nil)
+	current, _ := status["current"].(string)
+	latest, _ := status["latest"].(string)
+	available, _ := status["available"].(bool)
+	fmt.Printf("Daemon at %s: current %s, latest %s\n", addr, current, latest)
+	switch {
+	case available:
+		fmt.Println("Update available.")
+	case status["checkedAt"] == "" || status["checkedAt"] == "0001-01-01T00:00:00Z":
+		fmt.Println("No release check has run yet (dev build or checks disabled).")
+	default:
+		fmt.Println("Already up to date.")
+	}
+	if check || !available {
+		return
+	}
+	if !yes {
+		fmt.Print("Applying restarts the daemon (live sessions stop; transcripts survive).\nContinue? [y/N] ")
+		var answer string
+		_, _ = fmt.Scanln(&answer)
+		if !strings.EqualFold(answer, "y") && !strings.EqualFold(answer, "yes") {
+			fmt.Println("Aborted.")
+			return
+		}
+	}
+	fmt.Println("Applying update...")
+	updateRequest("POST", addr, token, nil)
+
+	// The daemon shuts down and its supervisor relaunches the new binary; poll
+	// until health answers again with a new version.
+	deadline := time.Now().Add(90 * time.Second)
+	client := &http.Client{Timeout: 3 * time.Second}
+	for time.Now().Before(deadline) {
+		time.Sleep(2 * time.Second)
+		res, err := client.Get(fmt.Sprintf("http://%s/health", addr))
+		if err != nil {
+			continue
+		}
+		var health map[string]any
+		_ = json.NewDecoder(res.Body).Decode(&health)
+		_ = res.Body.Close()
+		if v, _ := health["version"].(string); v != "" && v != current {
+			fmt.Printf("Update applied: daemon now running %s.\n", v)
+			return
+		}
+	}
+	fmt.Println("Daemon did not report a new version in time; check `openremote status`.")
+}
+
+// updateStandalone swaps this binary in place without a running daemon.
+func updateStandalone(feed string, check, yes bool) {
+	bin, err := os.Executable()
+	if err != nil {
+		log.Fatalf("locate executable: %v", err)
+	}
+	mgr := update.New(Version, bin, feed)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	if err := mgr.Check(ctx); err != nil {
+		log.Fatalf("update check failed: %v", err)
+	}
+	st := mgr.Status()
+	fmt.Printf("Standalone: current %s, latest %s\n", st.Current, st.Latest)
+	if !st.Available {
+		fmt.Println("Already up to date.")
+		return
+	}
+	if check {
+		return
+	}
+	if !yes {
+		fmt.Print("Replace the binary at this path? [y/N] ")
+		var answer string
+		_, _ = fmt.Scanln(&answer)
+		if !strings.EqualFold(answer, "y") && !strings.EqualFold(answer, "yes") {
+			fmt.Println("Aborted.")
+			return
+		}
+	}
+	if err := mgr.Apply(ctx); err != nil {
+		log.Fatalf("apply update: %v", err)
+	}
+	fmt.Printf("Update applied: %s. Restart the daemon with `openremote serve`.\n", st.Latest)
+	fmt.Printf("Previous binary kept at %s.old for rollback.\n", bin)
+}
+
+// updateRequest performs a GET/POST against the daemon's update endpoint.
+func updateRequest(method, addr, token string, body map[string]string) map[string]any {
+	var reader io.Reader
+	if body != nil {
+		payload, _ := json.Marshal(body)
+		reader = strings.NewReader(string(payload))
+	}
+	req, err := http.NewRequest(method, fmt.Sprintf("http://%s/api/v1/update", addr), reader)
+	if err != nil {
+		log.Fatalf("build request failed: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	res, err := httpClient.Do(req)
+	if err != nil {
+		fmt.Printf("Failed to contact daemon: %v\n", err)
+		os.Exit(1)
+	}
+	defer func() { _ = res.Body.Close() }()
+	var out map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&out)
+	if res.StatusCode >= 400 {
+		fmt.Printf("Update request failed (HTTP %d): %v\n", res.StatusCode, out["applyError"])
+		os.Exit(1)
+	}
+	return out
 }
 
 func defaultDataDir() string {

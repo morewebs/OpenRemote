@@ -25,6 +25,7 @@ import (
 	"github.com/morewebs/OpenRemote/internal/core/parser"
 	"github.com/morewebs/OpenRemote/internal/core/rpc"
 	"github.com/morewebs/OpenRemote/internal/core/tunnel"
+	"github.com/morewebs/OpenRemote/internal/core/update"
 	"github.com/morewebs/OpenRemote/internal/core/workspace"
 	"github.com/morewebs/OpenRemote/internal/driver"
 	"github.com/morewebs/OpenRemote/internal/protocol"
@@ -41,8 +42,12 @@ type Config struct {
 	TelegramChatID       int64
 	TelegramAllowedUsers []int64
 	TelegramTopics       bool
-	AllowedOrigin        string // exact http(s) origin trusted for WebSocket handshake (CSWSH defense); defaults to http://<Addr>
-	WorkerBinary         string // daemon executable used for isolated PTY workers; empty in tests
+	AllowedOrigin        string        // exact http(s) origin trusted for WebSocket handshake (CSWSH defense); defaults to http://<Addr>
+	WorkerBinary         string        // daemon executable used for isolated PTY workers; empty in tests
+	Version              string        // daemon version stamp; shown in /health and used for update checks
+	UpdateFeedURL        string        // GitHub-style release feed; empty = project default
+	UpdateCheckInterval  time.Duration // periodic release check; 0 disables
+	RestartHook          func()        // called after a self-update apply+shutdown; production exits with the supervisor restart code
 }
 
 type Server struct {
@@ -60,6 +65,7 @@ type Server struct {
 	telegram         *telegram.Bot
 	rateLimiter      *auth.RateLimiter
 	rpcMux           *rpc.Mux
+	updates          *serverUpdater
 	http             *http.Server
 	mu               sync.RWMutex
 	startTime        time.Time
@@ -193,7 +199,12 @@ func New(cfg Config, bus *events.Bus) *Server {
 	}, bus, s.approvals)
 
 	s.setupRPC()
+	s.updates = &serverUpdater{
+		Manager:     update.New(cfg.Version, cfg.WorkerBinary, cfg.UpdateFeedURL),
+		restartHook: cfg.RestartHook,
+	}
 	s.Restore()
+	s.startUpdateChecker()
 
 	return s
 }
@@ -259,6 +270,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/v1/file", s.handleFile)
 	mux.HandleFunc("/api/v1/diff/", s.handleDiff)
 	mux.HandleFunc("/api/v1/tunnels", s.handleTunnels)
+	mux.HandleFunc("/api/v1/update", s.handleUpdate)
 	mux.HandleFunc("/api/v1/telegram/status", s.handleTelegramStatus)
 
 	// Fallback/SPA Static Handler for Flutter Companion web client
@@ -372,6 +384,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(protocol.HealthResponse{
 		Status:   "ok",
+		Version:  s.cfg.Version,
 		Uptime:   int64(time.Since(s.startTime).Seconds()),
 		Sessions: n,
 	})

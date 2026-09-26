@@ -70,6 +70,8 @@ func (s *Server) setupRPC() {
 	register([]string{"session.answer"}, http.MethodPost, "/api/v1/question/{id}", "questionId", s.handleQuestion)
 	register([]string{"system.status"}, http.MethodGet, "/health", "", s.handleHealth)
 	register([]string{"system.agents", "agents.list"}, http.MethodGet, "/api/v1/agents", "", s.handleAgents)
+	register([]string{"system.updateStatus"}, http.MethodGet, "/api/v1/update", "", s.handleUpdate)
+	register([]string{"system.updateApply"}, http.MethodPost, "/api/v1/update", "", s.handleUpdate)
 	register([]string{"system.tunnels"}, http.MethodGet, "/api/v1/tunnels", "", s.handleTunnels)
 	s.rpcMux.Register("session.resize", func(ctx context.Context, sessionID string, params json.RawMessage) (any, *rpc.RPCError) {
 		var req struct {

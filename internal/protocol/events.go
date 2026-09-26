@@ -281,6 +281,7 @@ type CreateSessionResponse struct {
 
 type HealthResponse struct {
 	Status   string `json:"status"`
+	Version  string `json:"version,omitempty"`
 	Uptime   int64  `json:"uptime"`
 	Sessions int    `json:"sessions"`
 }

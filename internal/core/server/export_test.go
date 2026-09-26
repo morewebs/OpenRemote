@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/morewebs/OpenRemote/internal/core/parser"
+	"github.com/morewebs/OpenRemote/internal/core/update"
 	"github.com/morewebs/OpenRemote/internal/driver"
 	"github.com/morewebs/OpenRemote/internal/protocol"
 )
@@ -38,4 +39,12 @@ func (s *Server) TestSink(sessionID string) driver.Sink {
 	st := s.sessions[sessionID]
 	s.mu.RUnlock()
 	return &serverSink{server: s, sessionID: sessionID, hub: st.Hub, parser: st.Parser}
+}
+
+// TestSetUpdater replaces the update manager so handler tests run against a
+// controllable feed without touching the worker binary path.
+func (s *Server) TestSetUpdater(m *update.Manager) {
+	s.updates.mu.Lock()
+	s.updates.Manager = m
+	s.updates.mu.Unlock()
 }
