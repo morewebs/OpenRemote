@@ -24,12 +24,12 @@ All notable changes to **OpenRemote** are documented in this file.
 - **Multi-Platform Support**: Single codebase targeting Web, Android, iOS, Windows, macOS, and Linux.
 
 #### 3. Agent Drivers
-- **Claude Code**: Bracketed paste framing (`\x1b[200~`), `--no-auto-updater`, OAuth detection.
+- **Claude Code**: Bracketed paste framing (`\x1b[200~`), `DISABLE_AUTOUPDATER=1` environment, OAuth detection.
 - **Antigravity**: Dual-channel interactive PTY + log watcher & artifact synchronization.
-- **OpenCode**: Interactive PTY / HTTP SSE bridge.
-- **OpenAI Codex**: JSON-RPC 2.0 session interface.
-- **Pi / Oh My Pi**: Probe-gated ACP v1 stdio adapter.
+- **OpenCode**: Native loopback HTTP/SSE adapter around `opencode serve` (session create, async prompts, permission/question replies).
+- **OpenAI Codex**: JSON-RPC 2.0 session interface (app-server stdio).
+- **Pi / Oh My Pi**: `--mode rpc` JSON-lines RPC driver with `get_state` handshake and extension UI bridging.
 - **Shell**: Fallback system shell for terminal debugging.
 
 #### 4. Automated CI/CD Workflows
-- **GitHub Actions Matrix**: Automated Go tests across Ubuntu & Windows, Flutter analyze & test, and multi-platform binary compilation and GitHub Releases.
+- **GitHub Actions Matrix**: Automated Go tests across Windows/Linux/macOS, Flutter analyze & test, and multi-platform binary compilation and GitHub Releases.

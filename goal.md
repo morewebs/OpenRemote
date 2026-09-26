@@ -2,7 +2,7 @@
 
 **OpenRemote** is a high-performance, agent-agnostic remote companion and control platform for AI coding assistants (**Claude Code, Antigravity, OpenCode, OpenAI Codex, and Pi**).
 
-It enables developers to launch, monitor, interact with, approve, and guide long-running coding agent sessions from any device (**Flutter Web / Mobile / Desktop, Embedded Go Telegram Bot, and Raw Terminal**) with zero desk lock-in, zero cloud ingress vulnerability, and 100% execution fidelity.
+It enables developers to launch, monitor, interact with, approve, and guide long-running coding agent sessions from any device (**Flutter Web / Mobile / Desktop, Embedded Go Telegram Bot, and Raw Terminal**) with zero desk lock-in, loopback-first networking, and high execution fidelity. Security and fidelity boundaries are described honestly in [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md); no system can promise zero ingress vulnerability or perfect fidelity across every CLI.
 
 ---
 
@@ -14,7 +14,7 @@ It enables developers to launch, monitor, interact with, approve, and guide long
 
 2. **Hybrid Stream Pipeline**:
    - Chat-first structured UI streaming tool approvals, disambiguation questions, and file diffs.
-   - Full 100% ANSI/VT100 terminal streaming via `xterm.dart` over a high-speed 2-byte binary WebSocket protocol (`coder/websocket`).
+   - Full ANSI/VT100 terminal streaming via `xterm.dart` over a high-speed 2-byte binary WebSocket protocol (`coder/websocket`).
    - Non-blocking heuristic stream parser extracting structured human-in-the-loop cards in real time.
 
 3. **Multi-Surface Client Ecosystem**:
@@ -25,7 +25,7 @@ It enables developers to launch, monitor, interact with, approve, and guide long
 4. **Rock-Solid Reliability**:
    - **Go-PTY Process Isolation**: Native Windows ConPTY, Linux openpty, and macOS terminal supervision via `aymanbagabas/go-pty` with child worker crash isolation.
    - **Sliding Ring Buffers**: Caps terminal history memory at 4MB to prevent memory exhaustion and hydrate reconnections instantly.
-   - **Monotonic Event Sequence Replay (`seq`)**: Pure-Go SQLite WAL event bus (`modernc.org/sqlite`) guaranteeing zero lost messages during WiFi $\leftrightarrow$ Cellular handoffs.
+   - **Monotonic Event Sequence Replay (`seq`)**: Pure-Go SQLite WAL event bus (`modernc.org/sqlite`) with durable replay across WiFi $\leftrightarrow$ Cellular handoffs (bounded by the event log's retention window).
    - **Ephemeral Git Worktrees**: Automatically provisions `task/<hash>` worktrees for parallel agent tasks to prevent `.git/index.lock` collisions.
 
 5. **Zero-Port-Forwarding Security**:
