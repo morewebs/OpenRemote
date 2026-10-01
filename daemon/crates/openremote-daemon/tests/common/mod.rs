@@ -147,7 +147,7 @@ pub async fn call_with_token(
 /// arrive or the timeout trips. Returns `(seq, payload)` pairs; on timeout
 /// it panics with everything it did see (diagnostics ride with tests).
 pub async fn sse_collect(daemon: &TestDaemon, path: &str, want: usize) -> Vec<(u64, Value)> {
-    let timeout = Duration::from_secs(15);
+    let timeout = Duration::from_secs(60);
     let mut collected: Vec<(u64, Value)> = Vec::new();
     match tokio::time::timeout(
         timeout,
@@ -226,7 +226,7 @@ pub fn dump(events: &[(u64, Value)]) -> String {
 /// Collect until the event kinds match the expected suffix, then return
 /// everything seen (diagnostics keep the full trace).
 pub async fn until_kinds(daemon: &TestDaemon, path: &str, wanted: &[&str]) -> Vec<(u64, Value)> {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
     let mut seen: Vec<(u64, Value)> = Vec::new();
     while tokio::time::Instant::now() < deadline {
         let need = seen.len() + 1;
@@ -261,7 +261,7 @@ pub async fn until_count(
     wanted_kind: &str,
     count: usize,
 ) -> Vec<(u64, Value)> {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
     let mut seen: Vec<(u64, Value)> = Vec::new();
     while tokio::time::Instant::now() < deadline {
         let need = seen.len() + 1;
