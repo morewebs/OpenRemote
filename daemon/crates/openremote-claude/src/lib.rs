@@ -12,5 +12,14 @@ pub mod driver;
 pub mod frames;
 pub mod resolve;
 
-pub use driver::{Driver, DriverError, DriverEvent, DriverOptions};
-pub use resolve::{Resolution, resolve_claude};
+pub use driver::Driver;
+pub use openremote_harness::{DriverError, DriverEvent, Resolution, SpawnOptions};
+
+use std::path::Path;
+
+/// Find the Claude Code CLI. `override` wins (tests point it at the
+/// fixture agent); otherwise the native binary on PATH, then the SDK's
+/// POSIX fallbacks, then the npm layouts.
+pub fn resolve_claude(override_path: Option<&Path>) -> Resolution {
+    resolve::resolve_impl(override_path.map(std::path::PathBuf::from))
+}

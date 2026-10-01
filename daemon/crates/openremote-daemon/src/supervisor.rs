@@ -1,6 +1,7 @@
-//! The supervisor: one live process per session, events into the store,
+//! The supervisor: one live driver per session, events into the store,
 //! broadcasts to every listener. All session steering funnels through here
-//! so receipts, decisions, and lifecycles stay single-tracked.
+//! so receipts, decisions, and lifecycles stay single-tracked. It knows
+//! nothing about any specific harness — the registry dispatches.
 //!
 //! Ordering contract: the store is the truth; the broadcast channel is a
 //! live nudge (SSE replays from the store on connect, so a dropped nudge
@@ -13,15 +14,17 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::{Arc, Mutex as StdMutex};
 
-use openremote_claude::{Driver, DriverEvent, DriverOptions, Resolution};
 use openremote_core::{
-    Decision, DecisionId, DecisionKind, DecisionOption, DecisionState, Event, EventPayload,
-    Harness, Receipt, Session, SessionId, SessionStatus, Store, TurnOutcome, now_ms,
+    Decision, DecisionId, DecisionState, Event, EventPayload, Harness, Receipt, Session, SessionId,
+    SessionStatus, Store, now_ms,
 };
+use openremote_harness::DriverEvent;
 use serde_json::Value;
 use thiserror::Error;
 use tokio::sync::{Mutex as AsyncMutex, broadcast, mpsc, oneshot};
 use uuid::Uuid;
+
+use crate::registry::{AnswerOutcome, HarnessRegistry, SessionDriver};
 
 #[derive(Debug, Error)]
 pub enum SupervisorError {
@@ -34,11 +37,11 @@ pub enum SupervisorError {
     #[error("store: {0}")]
     Store(#[from] openremote_core::store::StoreError),
     #[error("driver: {0}")]
-    Driver(#[from] openremote_claude::DriverError),
+    Driver(#[from] openremote_harness::DriverError),
 }
 
 struct SessionEntry {
-    driver: Arc<AsyncMutex<Driver>>,
+    driver: Arc<AsyncMutex<SessionDriver>>,
     /// Serializes event sequences for this session across tasks.
     order: Arc<AsyncMutex<()>>,
     stopping: Arc<AtomicBool>,
@@ -50,39 +53,29 @@ pub struct Supervisor {
     store: Arc<StdMutex<Store>>,
     sessions: AsyncMutex<HashMap<SessionId, SessionEntry>>,
     events: broadcast::Sender<String>,
-    harnesses: Vec<Harness>,
-    resolution: Resolution,
+    registry: HarnessRegistry,
 }
 
 impl Supervisor {
-    /// Build the supervisor over an opened store and a resolved harness.
-    /// The resolution is injected (not re-read from the environment) so
-    /// tests can point sessions at the fixture agent.
-    pub fn new(store: Arc<StdMutex<Store>>, resolution: Resolution) -> Arc<Self> {
-        let harness = Harness {
-            id: "claude".into(),
-            name: "Claude Code".into(),
-            path: match &resolution {
-                Resolution::Executable(p) => Some(p.display().to_string()),
-                Resolution::NodeScript { node, script } => {
-                    Some(format!("{} {}", node.display(), script.display()))
-                }
-                Resolution::Unavailable => None,
-            },
-            version: None,
-            available: resolution.is_available(),
-        };
+    /// Build the supervisor over an opened store and a probed registry.
+    /// The registry is injected so tests can point harnesses at fixture
+    /// agents; production passes `HarnessRegistry::probe(&HashMap::new())`.
+    pub fn new(store: Arc<StdMutex<Store>>, registry: HarnessRegistry) -> Arc<Self> {
         Arc::new(Self {
             store,
             sessions: AsyncMutex::new(HashMap::new()),
             events: broadcast::channel(1024).0,
-            harnesses: vec![harness],
-            resolution,
+            registry,
         })
     }
 
-    pub fn harnesses(&self) -> &[Harness] {
-        &self.harnesses
+    pub fn harnesses(&self) -> Vec<Harness> {
+        self.registry.harnesses()
+    }
+
+    /// Advertised models for a harness (empty = the slot stays reserved).
+    pub async fn models(&self, harness: &str) -> Vec<openremote_harness::ModelDescriptor> {
+        self.registry.models(harness).await
     }
 
     /// Subscribe to the live event stream (serialized event JSON).
@@ -147,7 +140,7 @@ impl Supervisor {
 
     // ---- session lifecycle ----
 
-    /// Create a session and spawn its harness process. The session exists
+    /// Create a session and spawn its harness driver. The session exists
     /// even when the spawn fails — the failure is the session's first fact.
     pub async fn create_session(
         self: &Arc<Self>,
@@ -156,15 +149,11 @@ impl Supervisor {
         model: Option<String>,
         permission_mode: Option<String>,
     ) -> Result<Session, SupervisorError> {
-        if !self
-            .harnesses
-            .iter()
-            .any(|h| h.id == harness && h.available)
-        {
+        let Some(backend) = self.registry.backend(harness) else {
             return Err(SupervisorError::Harness(format!(
                 "harness '{harness}' is not available"
             )));
-        }
+        };
         let session = Session {
             id: SessionId::new(),
             harness: harness.to_string(),
@@ -181,14 +170,14 @@ impl Supervisor {
         let id = session.id;
         self.emit_all(&id, vec![EventPayload::SessionCreated { session }])?;
 
-        let opts = DriverOptions {
+        let opts = openremote_harness::SpawnOptions {
             cwd: self.session(&id)?.workspace.clone(),
             model: self.session(&id)?.model.clone(),
             permission_mode: self.session(&id)?.permission_mode.clone(),
             resume: None,
             include_deltas: false,
         };
-        match Driver::spawn(&self.resolution, opts) {
+        match backend.spawn(opts) {
             Ok((driver, rx)) => {
                 let mut sessions = self.sessions.lock().await;
                 sessions.insert(
@@ -245,14 +234,15 @@ impl Supervisor {
         Ok(())
     }
 
-    /// Interrupt the running turn (the harness cancels; a result frame follows).
+    /// Interrupt the running turn (the harness cancels; its boundary event
+    /// follows).
     pub async fn interrupt(&self, id: &SessionId) -> Result<(), SupervisorError> {
         let entry = self.entry(id).await?;
         entry.driver.lock().await.interrupt().await?;
         Ok(())
     }
 
-    /// Stop the session: kill the process; the pump records the terminal
+    /// Stop the session: kill the driver; the pump records the terminal
     /// status and retires pending decisions. Returns the session as it
     /// settled (stopped, or failed if the process died first).
     pub async fn stop(&self, id: &SessionId) -> Result<Session, SupervisorError> {
@@ -272,7 +262,8 @@ impl Supervisor {
         }
     }
 
-    /// Resume a stopped/failed session on its harness thread (`--resume=<ref>`).
+    /// Resume a stopped/failed session on its harness's own conversation
+    /// (claude `--resume=<id>`, codex `thread/resume`, pi `--session`, …).
     pub async fn resume(self: &Arc<Self>, id: &SessionId) -> Result<Session, SupervisorError> {
         let session = self.session(id)?;
         if session.status.is_alive() {
@@ -285,18 +276,20 @@ impl Supervisor {
                 "the harness never reported a conversation to resume".to_string(),
             )
         })?;
-        let resolution = self.resolution.clone();
-        if !resolution.is_available() {
-            return Err(SupervisorError::Harness("claude CLI not found".into()));
-        }
-        let opts = DriverOptions {
+        let Some(backend) = self.registry.backend(&session.harness) else {
+            return Err(SupervisorError::Harness(format!(
+                "harness '{}' is not available",
+                session.harness
+            )));
+        };
+        let opts = openremote_harness::SpawnOptions {
             cwd: session.workspace.clone(),
             model: session.model.clone(),
             permission_mode: session.permission_mode.clone(),
             resume: Some(harness_ref),
             include_deltas: false,
         };
-        let (driver, rx) = Driver::spawn(&resolution, opts)?;
+        let (driver, rx) = backend.spawn(opts)?;
         {
             let mut sessions = self.sessions.lock().await;
             sessions.insert(
@@ -321,7 +314,8 @@ impl Supervisor {
     }
 
     /// Answer a pending decision: route it to the harness with its own
-    /// correlation id, record it, and let the turn continue.
+    /// correlation id and choice word, record it, and let the turn continue
+    /// (or settle, when the choice interrupts it).
     pub async fn answer_decision(
         &self,
         decision_id: &DecisionId,
@@ -339,38 +333,27 @@ impl Supervisor {
         let session_id = decision.session_id;
         let entry = self.entry(&session_id).await?;
 
-        let allowed = choice == "allow";
-        let original_input = decision
-            .harness_request
-            .get("input")
-            .cloned()
-            .unwrap_or(Value::Null);
-        entry
+        let outcome = entry
             .driver
             .lock()
             .await
-            .answer_approval(
-                &harness_ref,
-                allowed,
-                &original_input,
-                "Denied from OpenRemote",
-            )
+            .answer(&harness_ref, choice, &decision.harness_request)
             .await?;
         {
             let _order = entry.order.lock().await;
-            self.emit_all(
-                &session_id,
-                vec![
-                    EventPayload::DecisionResponded {
-                        decision_id: *decision_id,
-                        choice: choice.to_string(),
-                    },
-                    EventPayload::SessionStatusChanged {
-                        status: SessionStatus::Working,
-                        reason: None,
-                    },
-                ],
-            )?;
+            let mut payloads = vec![EventPayload::DecisionResponded {
+                decision_id: *decision_id,
+                choice: choice.to_string(),
+            }];
+            // Choices that continue the turn move the session back to
+            // working; interrupting choices let the boundary event settle it.
+            if outcome == AnswerOutcome::Continues {
+                payloads.push(EventPayload::SessionStatusChanged {
+                    status: SessionStatus::Working,
+                    reason: None,
+                });
+            }
+            self.emit_all(&session_id, payloads)?;
         }
         self.decision(decision_id)
     }
@@ -476,11 +459,20 @@ impl Supervisor {
                     }],
                 )?;
             }
-            DriverEvent::ApprovalRequested {
-                request_id,
-                request,
-            } => {
-                let decision = self.build_decision(id, &request_id, request);
+            DriverEvent::ApprovalRequested { approval } => {
+                // The driver built the spec with the harness's own words.
+                let decision = Decision {
+                    id: DecisionId::new(),
+                    session_id: *id,
+                    turn: self.current_turn(id),
+                    kind: approval.spec.kind,
+                    state: DecisionState::Pending,
+                    harness_request: approval.request,
+                    harness_ref: Some(approval.harness_ref),
+                    options: approval.spec.options,
+                    created_at: now_ms(),
+                    answer: None,
+                };
                 self.emit_all(
                     id,
                     vec![
@@ -494,20 +486,9 @@ impl Supervisor {
             }
             DriverEvent::TurnCompleted {
                 subtype,
-                terminal_reason,
-                is_error,
+                coarse,
+                is_error: _,
             } => {
-                let coarse = if subtype == "success" {
-                    TurnOutcome::Completed
-                } else if terminal_reason
-                    .as_deref()
-                    .is_some_and(|r| r.starts_with("aborted"))
-                {
-                    TurnOutcome::Interrupted
-                } else {
-                    let _ = is_error;
-                    TurnOutcome::Failed
-                };
                 let turn = self.current_turn(id);
                 self.emit_all(
                     id,
@@ -578,62 +559,5 @@ impl Supervisor {
                 .map(|s| s.next_turn.saturating_sub(1))
                 .unwrap_or(0)
         })
-    }
-
-    /// Build a Decision from a `can_use_tool` request: approvals and
-    /// questions are one concept; the options are the harness's own words.
-    fn build_decision(&self, id: &SessionId, request_id: &str, request: Value) -> Decision {
-        let tool_name = request
-            .get("tool_name")
-            .and_then(|t| t.as_str())
-            .unwrap_or("tool");
-        let (kind, options) = if tool_name == "AskUserQuestion" {
-            let mut options = Vec::new();
-            if let Some(questions) = request
-                .get("input")
-                .and_then(|i| i.get("questions"))
-                .and_then(|q| q.as_array())
-            {
-                if let Some(first) = questions.first() {
-                    if let Some(opts) = first.get("options").and_then(|o| o.as_array()) {
-                        for opt in opts {
-                            if let Some(label) = opt.get("label").and_then(|l| l.as_str()) {
-                                options.push(DecisionOption {
-                                    id: label.to_string(),
-                                    label: label.to_string(),
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            (DecisionKind::Question, options)
-        } else {
-            (
-                DecisionKind::Approval,
-                vec![
-                    DecisionOption {
-                        id: "allow".into(),
-                        label: "Allow".into(),
-                    },
-                    DecisionOption {
-                        id: "deny".into(),
-                        label: "Deny".into(),
-                    },
-                ],
-            )
-        };
-        Decision {
-            id: DecisionId::new(),
-            session_id: *id,
-            turn: self.current_turn(id),
-            kind,
-            state: DecisionState::Pending,
-            harness_request: request,
-            harness_ref: Some(request_id.to_string()),
-            options,
-            created_at: now_ms(),
-            answer: None,
-        }
     }
 }

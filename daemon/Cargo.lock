@@ -327,6 +327,7 @@ name = "openremote-claude"
 version = "0.1.0"
 dependencies = [
  "openremote-core",
+ "openremote-harness",
  "serde",
  "serde_json",
  "thiserror",
@@ -351,12 +352,24 @@ dependencies = [
  "futures-util",
  "openremote-claude",
  "openremote-core",
+ "openremote-harness",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "openremote-harness"
+version = "0.1.0"
+dependencies = [
+ "openremote-core",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]

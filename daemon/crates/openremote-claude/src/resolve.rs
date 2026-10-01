@@ -6,81 +6,9 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
-/// What `resolve_claude` found.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Resolution {
-    /// A spawnable executable (native binary, or a script on POSIX).
-    Executable(PathBuf),
-    /// `node <script>` — the npm install layout.
-    NodeScript {
-        node: PathBuf,
-        script: PathBuf,
-    },
-    Unavailable,
-}
+use openremote_harness::Resolution;
 
-impl Resolution {
-    pub fn is_available(&self) -> bool {
-        !matches!(self, Resolution::Unavailable)
-    }
-}
-
-fn home_dir() -> Option<PathBuf> {
-    env::var_os("USERPROFILE")
-        .or_else(|| env::var_os("HOME"))
-        .map(PathBuf::from)
-}
-
-fn which_exact(name: &str) -> Option<PathBuf> {
-    let path = env::var_os("PATH")?;
-    for dir in env::split_paths(&path) {
-        if !dir.is_absolute() {
-            continue;
-        }
-        let candidate = dir.join(name);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    None
-}
-
-fn which_claude() -> Option<PathBuf> {
-    if cfg!(windows) {
-        // Only a native exe: the extensionless `claude` file in the npm dir
-        // is a POSIX sh script and `claude.cmd` is unspawnable via
-        // CreateProcess — both are refused on purpose.
-        which_exact("claude.exe")
-    } else {
-        which_exact("claude")
-    }
-}
-
-fn node_script_resolution(script: PathBuf) -> Option<Resolution> {
-    if !script.is_file() {
-        return None;
-    }
-    let node = if cfg!(windows) { "node.exe" } else { "node" };
-    let node = which_exact(node)
-        .or_else(|| which_exact("node"))
-        .or_else(|| {
-            env::var_os("PROGRAMFILES").map(|pf| {
-                let pf = PathBuf::from(pf);
-                pf.join("nodejs")
-                    .join(if cfg!(windows) { "node.exe" } else { "node" })
-            })
-        })?;
-    Some(Resolution::NodeScript { node, script })
-}
-
-/// Find the Claude Code CLI. `OPENREMOTE_CLAUDE_PATH` wins (tests point it
-/// at the fixture agent); otherwise the native binary on PATH, then the
-/// SDK's POSIX fallbacks, then the npm global `cli.js` via node.
-pub fn resolve_claude() -> Resolution {
-    resolve_impl(std::env::var_os("OPENREMOTE_CLAUDE_PATH").map(PathBuf::from))
-}
-
-fn resolve_impl(override_path: Option<PathBuf>) -> Resolution {
+pub(crate) fn resolve_impl(override_path: Option<PathBuf>) -> Resolution {
     if let Some(path) = override_path {
         if path.is_file() {
             return Resolution::Executable(path);
@@ -130,6 +58,54 @@ fn resolve_impl(override_path: Option<PathBuf>) -> Resolution {
         }
     }
     Resolution::Unavailable
+}
+
+fn home_dir() -> Option<PathBuf> {
+    env::var_os("USERPROFILE")
+        .or_else(|| env::var_os("HOME"))
+        .map(PathBuf::from)
+}
+
+fn which_exact(name: &str) -> Option<PathBuf> {
+    let path = env::var_os("PATH")?;
+    for dir in env::split_paths(&path) {
+        if !dir.is_absolute() {
+            continue;
+        }
+        let candidate = dir.join(name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn which_claude() -> Option<PathBuf> {
+    if cfg!(windows) {
+        // Only a native exe: the extensionless `claude` file in the npm dir
+        // is a POSIX sh script and `claude.cmd` is unspawnable via
+        // CreateProcess — both are refused on purpose.
+        which_exact("claude.exe")
+    } else {
+        which_exact("claude")
+    }
+}
+
+fn node_script_resolution(script: PathBuf) -> Option<Resolution> {
+    if !script.is_file() {
+        return None;
+    }
+    let node = if cfg!(windows) { "node.exe" } else { "node" };
+    let node = which_exact(node)
+        .or_else(|| which_exact("node"))
+        .or_else(|| {
+            env::var_os("PROGRAMFILES").map(|pf| {
+                let pf = PathBuf::from(pf);
+                pf.join("nodejs")
+                    .join(if cfg!(windows) { "node.exe" } else { "node" })
+            })
+        })?;
+    Some(Resolution::NodeScript { node, script })
 }
 
 #[cfg(test)]

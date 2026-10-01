@@ -9,9 +9,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
-use openremote_claude::Resolution;
 use openremote_core::Store;
 use openremote_daemon::app::{self, App};
+use openremote_daemon::registry::HarnessRegistry;
 use openremote_daemon::supervisor::Supervisor;
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -54,13 +54,17 @@ struct TestDaemon {
     _data_dir: tempfile::TempDir,
 }
 
-async fn start_daemon(resolution: Resolution) -> TestDaemon {
+async fn start_daemon(overrides: &[(&str, PathBuf)]) -> TestDaemon {
+    let overrides: std::collections::HashMap<String, PathBuf> = overrides
+        .iter()
+        .map(|(k, v)| ((*k).to_string(), v.clone()))
+        .collect();
     let data_dir = tempfile::tempdir().expect("temp data dir");
     let token = uuid::Uuid::new_v4().to_string();
     let store = Arc::new(StdMutex::new(
         Store::open(data_dir.path().to_path_buf()).expect("store"),
     ));
-    let supervisor = Supervisor::new(store.clone(), resolution);
+    let supervisor = Supervisor::new(store.clone(), HarnessRegistry::probe(&overrides));
     let app = Arc::new(App {
         token: token.clone(),
         data_dir: data_dir.path().to_path_buf(),
@@ -281,7 +285,7 @@ async fn until_count(
 
 #[tokio::test]
 async fn healthz_is_open_and_everything_else_needs_the_token() {
-    let daemon = start_daemon(Resolution::Executable(fixture_agent())).await;
+    let daemon = start_daemon(&[("claude", fixture_agent())]).await;
     let health = call(&daemon, "GET", "/healthz", None).await;
     assert_eq!(health.status, 200, "raw: {}", health.raw);
     let anon = call_with_token(&daemon, "wrong-token", "GET", "/sessions", None).await;
@@ -292,8 +296,7 @@ async fn healthz_is_open_and_everything_else_needs_the_token() {
 
 #[tokio::test]
 async fn a_prompt_runs_a_real_turn_end_to_end() {
-    let resolution = Resolution::Executable(fixture_agent());
-    let daemon = start_daemon(resolution).await;
+    let daemon = start_daemon(&[("claude", fixture_agent())]).await;
     let ws = workspace(Some("plain"));
 
     let created = call(
@@ -369,7 +372,7 @@ async fn a_prompt_runs_a_real_turn_end_to_end() {
 
 #[tokio::test]
 async fn approvals_flow_through_decisions() {
-    let daemon = start_daemon(Resolution::Executable(fixture_agent())).await;
+    let daemon = start_daemon(&[("claude", fixture_agent())]).await;
     let ws = workspace(Some("approve"));
     let created = call(
         &daemon,
@@ -465,7 +468,7 @@ async fn approvals_flow_through_decisions() {
 
 #[tokio::test]
 async fn late_answers_get_an_explicit_error() {
-    let daemon = start_daemon(Resolution::Executable(fixture_agent())).await;
+    let daemon = start_daemon(&[("claude", fixture_agent())]).await;
     let ws = workspace(Some("approve"));
     let created = call(
         &daemon,
@@ -534,7 +537,7 @@ async fn late_answers_get_an_explicit_error() {
 
 #[tokio::test]
 async fn receipts_dedup_mutations() {
-    let daemon = start_daemon(Resolution::Executable(fixture_agent())).await;
+    let daemon = start_daemon(&[("claude", fixture_agent())]).await;
     let ws = workspace(Some("plain"));
     let created = call(
         &daemon,
@@ -599,7 +602,7 @@ async fn receipts_dedup_mutations() {
 
 #[tokio::test]
 async fn stop_retires_pending_decisions_and_the_late_answer_conflicts() {
-    let daemon = start_daemon(Resolution::Executable(fixture_agent())).await;
+    let daemon = start_daemon(&[("claude", fixture_agent())]).await;
     let ws = workspace(Some("approve"));
     let created = call(
         &daemon,
@@ -670,7 +673,7 @@ async fn stop_retires_pending_decisions_and_the_late_answer_conflicts() {
 
 #[tokio::test]
 async fn resume_runs_a_new_process_on_the_same_conversation() {
-    let daemon = start_daemon(Resolution::Executable(fixture_agent())).await;
+    let daemon = start_daemon(&[("claude", fixture_agent())]).await;
     let ws = workspace(Some("plain"));
     let created = call(
         &daemon,
@@ -786,7 +789,7 @@ async fn resume_runs_a_new_process_on_the_same_conversation() {
 
 #[tokio::test]
 async fn sse_resume_after_seq_gets_only_the_tail() {
-    let daemon = start_daemon(Resolution::Executable(fixture_agent())).await;
+    let daemon = start_daemon(&[("claude", fixture_agent())]).await;
     let ws = workspace(Some("plain"));
     let created = call(
         &daemon,
@@ -839,13 +842,16 @@ async fn sse_resume_after_seq_gets_only_the_tail() {
 
 #[tokio::test]
 async fn an_unavailable_harness_creates_a_failed_session_not_an_error() {
-    let daemon = start_daemon(Resolution::Unavailable).await;
+    // A harness the registry knows nothing about: the same path a probe
+    // that found nothing takes (backend lookup fails → explicit error, no
+    // phantom session). Machine-dependent probe results aren't asserted.
+    let daemon = start_daemon(&[]).await;
     let ws = workspace(None);
     let created = call(
         &daemon,
         "POST",
         "/sessions",
-        Some(json!({"request_id": "r-create", "harness": "claude", "workspace": ws.path()})),
+        Some(json!({"request_id": "r-create", "harness": "no-such-harness", "workspace": ws.path()})),
     )
     .await;
     assert_eq!(created.status, 400, "raw: {}", created.raw);

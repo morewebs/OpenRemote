@@ -1,90 +1,23 @@
 //! The session driver: one persistent harness process per session.
 //!
 //! Spawn contract ported from the SDK: argv order, `CLAUDE_CODE_ENTRYPOINT`
-//! set, inherited `CLAUDECODE` stripped (so the child doesn't think it lives
-//! inside a Claude Code parent), `PWD` pinned to the workspace, approvals
-//! enabled through `--permission-prompt-tool stdio`. Stdout lines accept
-//! both `\r\n` and `\n` — the ICRNL lesson.
+//! set, inherited `CLAUDECODE` stripped (so the child doesn't think it
+//! lives inside a Claude Code parent), `PWD` pinned to the workspace,
+//! approvals enabled through `--permission-prompt-tool stdio`. Stdout
+//! lines accept both `\r\n` and `\n` — the ICRNL lesson.
 
-use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 
+use openremote_core::{DecisionKind, DecisionOption, TurnOutcome};
+use openremote_harness::{DriverError, DriverEvent, Resolution, SpawnOptions};
 use serde_json::Value;
-use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, mpsc};
 
 use crate::frames::{self, Frame};
-use crate::resolve::Resolution;
-
-#[derive(Debug, Error)]
-pub enum DriverError {
-    #[error("spawn failed: {0}")]
-    Spawn(String),
-    #[error("harness process io: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("harness process is gone")]
-    Gone,
-}
-
-/// Spawn options for one session's harness process.
-#[derive(Clone, Debug, Default)]
-pub struct DriverOptions {
-    pub cwd: PathBuf,
-    pub model: Option<String>,
-    pub permission_mode: Option<String>,
-    /// `--resume=<id>` — always the equals form, never `--resume <id>`:
-    /// untrusted session ids must not be able to inject flags.
-    pub resume: Option<String>,
-    pub include_deltas: bool,
-}
-
-/// What the harness process told us, in domain terms. The supervisor
-/// translates these into sequenced events; nothing here knows about seqs.
-#[derive(Debug, Clone)]
-pub enum DriverEvent {
-    Initialized {
-        session_ref: String,
-        model: Option<String>,
-        permission_mode: Option<String>,
-    },
-    AssistantText {
-        text: String,
-    },
-    TextDelta {
-        text: String,
-    },
-    ToolStarted {
-        tool_use_id: String,
-        name: String,
-        input: Value,
-    },
-    ToolResult {
-        tool_use_id: String,
-        name: String,
-        text: String,
-        is_error: bool,
-    },
-    /// A `can_use_tool` control request — `request` is the harness's own
-    /// request object, verbatim; the console renders its options.
-    ApprovalRequested {
-        request_id: String,
-        request: Value,
-    },
-    /// The turn boundary. Never guess turn state from silence.
-    TurnCompleted {
-        subtype: String,
-        terminal_reason: Option<String>,
-        is_error: bool,
-    },
-    /// Harness stderr, line by line — diagnostics ride with everything.
-    Stderr {
-        line: String,
-    },
-    StdoutClosed,
-}
+use openremote_harness::events::{ApprovalRequest, DecisionSpec};
 
 pub struct Driver {
     stdin: tokio::process::ChildStdin,
@@ -97,9 +30,9 @@ impl Driver {
     /// driver (for steering) and the event stream (for observing).
     pub fn spawn(
         resolution: &Resolution,
-        opts: DriverOptions,
+        opts: SpawnOptions,
     ) -> Result<(Self, mpsc::Receiver<DriverEvent>), DriverError> {
-        let (program, mut argv): (PathBuf, Vec<std::ffi::OsString>) = match resolution {
+        let (program, mut argv): (std::path::PathBuf, Vec<std::ffi::OsString>) = match resolution {
             Resolution::Executable(path) => (path.clone(), Vec::new()),
             Resolution::NodeScript { node, script } => {
                 (node.clone(), vec![script.as_os_str().to_os_string()])
@@ -164,21 +97,23 @@ impl Driver {
             .await
     }
 
-    /// Answer a `can_use_tool` request. On allow, `updated_input` defaults
-    /// to the original input (CLIs before 2.1.207 reject an allow without
-    /// it); on deny the message goes back to the model.
-    pub async fn answer_approval(
+    /// Answer a `can_use_tool` request with the chosen option id. On allow,
+    /// `updated_input` defaults to the original input (CLIs before 2.1.207
+    /// reject an allow without it); on deny the message goes back to the
+    /// model.
+    pub async fn answer(
         &mut self,
-        request_id: &str,
-        allow: bool,
-        original_input: &Value,
-        deny_message: &str,
+        harness_ref: &str,
+        choice: &str,
+        request: &Value,
     ) -> Result<(), DriverError> {
+        let allow = choice == "allow";
+        let original_input = request.get("input").cloned().unwrap_or(Value::Null);
         self.write_line(frames::can_use_tool_response(
-            request_id,
+            harness_ref,
             allow,
-            original_input,
-            deny_message,
+            &original_input,
+            "Denied from OpenRemote",
         ))
         .await
     }
@@ -194,6 +129,87 @@ impl Driver {
         self.stdin.write_all(b"\n").await?;
         self.stdin.flush().await?;
         Ok(())
+    }
+}
+
+/// Coarse turn outcome from the claude result frame.
+fn coarse_outcome(subtype: &str, terminal_reason: Option<&str>) -> TurnOutcome {
+    if subtype == "success" {
+        TurnOutcome::Completed
+    } else if terminal_reason.is_some_and(|r| r.starts_with("aborted")) {
+        TurnOutcome::Interrupted
+    } else {
+        TurnOutcome::Failed
+    }
+}
+
+/// Build the decision spec from a `can_use_tool` request: approvals and
+/// questions are one concept; the options are the harness's own words.
+fn decision_spec(request: &Value) -> DecisionSpec {
+    let tool_name = request
+        .get("tool_name")
+        .and_then(|t| t.as_str())
+        .unwrap_or("tool");
+    if tool_name == "AskUserQuestion" {
+        // Structured questions ride the same callback: each question's own
+        // options become the choices (S6, agent-sdk/user-input).
+        let mut options = Vec::new();
+        if let Some(questions) = request
+            .get("input")
+            .and_then(|i| i.get("questions"))
+            .and_then(|q| q.as_array())
+        {
+            if let Some(first) = questions.first() {
+                if let Some(question) = first.get("question").and_then(|q| q.as_str()) {
+                    if let Some(opts) = first.get("options").and_then(|o| o.as_array()) {
+                        for opt in opts {
+                            if let Some(label) = opt.get("label").and_then(|l| l.as_str()) {
+                                options.push(DecisionOption {
+                                    id: label.to_string(),
+                                    label: label.to_string(),
+                                });
+                            }
+                        }
+                        return DecisionSpec {
+                            kind: DecisionKind::Question,
+                            options,
+                            tool_name: Some(tool_name.to_string()),
+                            summary: Some(question.to_string()),
+                            interrupts_turn: Vec::new(),
+                        };
+                    }
+                }
+            }
+        }
+        DecisionSpec {
+            kind: DecisionKind::Question,
+            options: Vec::new(),
+            tool_name: Some(tool_name.to_string()),
+            summary: None,
+            interrupts_turn: Vec::new(),
+        }
+    } else {
+        let summary = request
+            .get("input")
+            .and_then(|i| i.get("command"))
+            .and_then(|c| c.as_str())
+            .map(String::from);
+        DecisionSpec {
+            kind: DecisionKind::Approval,
+            options: vec![
+                DecisionOption {
+                    id: "allow".into(),
+                    label: "Allow".into(),
+                },
+                DecisionOption {
+                    id: "deny".into(),
+                    label: "Deny".into(),
+                },
+            ],
+            tool_name: Some(tool_name.to_string()),
+            summary,
+            interrupts_turn: Vec::new(),
+        }
     }
 }
 
@@ -214,7 +230,7 @@ async fn kill_and_reap(
 
 /// The argv after the executable — the SDK's documented order, plus
 /// `--permission-prompt-tool stdio` so approvals reach us.
-fn build_argv(opts: &DriverOptions) -> Vec<std::ffi::OsString> {
+fn build_argv(opts: &SpawnOptions) -> Vec<std::ffi::OsString> {
     let mut argv: Vec<std::ffi::OsString> = vec![
         "--output-format".into(),
         "stream-json".into(),
@@ -328,8 +344,8 @@ async fn read_stdout(
                 terminal_reason,
                 is_error,
             } => Some(DriverEvent::TurnCompleted {
-                subtype,
-                terminal_reason,
+                subtype: subtype.clone(),
+                coarse: coarse_outcome(&subtype, terminal_reason.as_deref()),
                 is_error,
             }),
             Frame::ControlRequest {
@@ -342,8 +358,11 @@ async fn read_stdout(
                     .unwrap_or("");
                 if subtype == "can_use_tool" {
                     Some(DriverEvent::ApprovalRequested {
-                        request_id,
-                        request,
+                        approval: ApprovalRequest {
+                            harness_ref: request_id,
+                            spec: decision_spec(&request),
+                            request,
+                        },
                     })
                 } else {
                     // Other CLI→host requests (hook callbacks, dialogs) can't
@@ -388,11 +407,12 @@ async fn read_stderr(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn argv_orders_flags_the_sdk_way_and_resume_is_equals_form() {
-        let opts = DriverOptions {
-            cwd: PathBuf::from("/w"),
+        let opts = SpawnOptions {
+            cwd: std::path::PathBuf::from("/w"),
             model: Some("sonnet".into()),
             permission_mode: Some("default".into()),
             resume: Some("abc; --dangerously-skip-permissions".into()),
@@ -413,5 +433,40 @@ mod tests {
         // equals form: the id cannot smuggle a second flag
         assert!(argv.iter().any(|s| *s == std::ffi::OsStr::new("--resume=abc; --dangerously-skip-permissions")));
         assert!(joined.contains("--include-partial-messages"));
+    }
+
+    #[test]
+    fn approval_specs_use_claudes_own_words() {
+        let spec = decision_spec(&json!({
+            "subtype": "can_use_tool",
+            "tool_name": "Bash",
+            "input": {"command": "cargo test", "description": "run tests"}
+        }));
+        assert_eq!(spec.kind, DecisionKind::Approval);
+        assert_eq!(
+            spec.options
+                .iter()
+                .map(|o| o.id.as_str())
+                .collect::<Vec<_>>(),
+            ["allow", "deny"]
+        );
+        assert_eq!(spec.summary.as_deref(), Some("cargo test"));
+
+        let spec = decision_spec(&json!({
+            "subtype": "can_use_tool",
+            "tool_name": "AskUserQuestion",
+            "input": {"questions": [{"question": "Which DB?", "options": [
+                {"label": "Postgres"}, {"label": "SQLite"}
+            ]}]}
+        }));
+        assert_eq!(spec.kind, DecisionKind::Question);
+        assert_eq!(
+            spec.options
+                .iter()
+                .map(|o| o.id.as_str())
+                .collect::<Vec<_>>(),
+            ["Postgres", "SQLite"]
+        );
+        assert_eq!(spec.summary.as_deref(), Some("Which DB?"));
     }
 }

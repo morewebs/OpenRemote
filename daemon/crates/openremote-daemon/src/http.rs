@@ -22,6 +22,7 @@ use crate::supervisor::SupervisorError;
 pub fn router(app: Arc<App>) -> Router {
     let authed = Router::new()
         .route("/capabilities", get(capabilities))
+        .route("/harnesses/{id}/models", get(harness_models))
         .route("/sessions", get(list_sessions).post(create_session))
         .route("/sessions/{id}", get(get_session))
         .route("/sessions/{id}/events", get(session_events))
@@ -62,6 +63,13 @@ async fn capabilities(State(app): State<Arc<App>>) -> Response {
         "harnesses": app.supervisor.harnesses(),
     }))
     .into_response()
+}
+
+/// The models a harness advertises, in its own words. An empty list is a
+/// real answer: the console's model slot stays reserved for that harness.
+async fn harness_models(State(app): State<Arc<App>>, AxumPath(id): AxumPath<String>) -> Response {
+    let models = app.supervisor.models(&id).await;
+    Json(models).into_response()
 }
 
 #[derive(Deserialize)]

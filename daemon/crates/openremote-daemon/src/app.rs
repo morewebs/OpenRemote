@@ -9,6 +9,7 @@ use openremote_core::{SessionId, Store};
 use tokio::sync::mpsc;
 
 use crate::http;
+use crate::registry::HarnessRegistry;
 use crate::supervisor::Supervisor;
 
 pub struct App {
@@ -27,7 +28,7 @@ impl App {
     pub fn new(options: AppOptions) -> Arc<Self> {
         let store = Store::open(options.data_dir.clone()).expect("store opens");
         let store = Arc::new(StdMutex::new(store));
-        let supervisor = Supervisor::new(store.clone(), openremote_claude::resolve_claude());
+        let supervisor = Supervisor::new(store.clone(), HarnessRegistry::probe(&env_overrides()));
         Arc::new(Self {
             token: options.token,
             data_dir: options.data_dir,
@@ -35,6 +36,25 @@ impl App {
             supervisor,
         })
     }
+}
+
+/// Debug/testing escape hatch: `OPENREMOTE_<HARNESS>_PATH` forces a
+/// harness's binary (e.g. a fixture agent) without touching PATH.
+fn env_overrides() -> std::collections::HashMap<String, PathBuf> {
+    let mut map = std::collections::HashMap::new();
+    for (key, value) in std::env::vars_os() {
+        let Some(key) = key.to_str() else { continue };
+        let Some(rest) = key.strip_prefix("OPENREMOTE_") else {
+            continue;
+        };
+        let Some(harness) = rest.strip_suffix("_PATH") else {
+            continue;
+        };
+        if !harness.is_empty() {
+            map.insert(harness.to_ascii_lowercase(), PathBuf::from(value));
+        }
+    }
+    map
 }
 
 /// Default data dir: `~/.openremote` (where the desktop shell reads the
