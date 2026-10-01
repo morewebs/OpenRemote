@@ -3,6 +3,10 @@
 const NAMES = {
   claude: 'Claude Code',
   codex: 'Codex',
+  grok: 'Grok Build',
+  pi: 'Pi Agent',
+  opencode: 'OpenCode',
+  agy: 'Antigravity',
 }
 
 export function harnessName(id) {
