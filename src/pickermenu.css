@@ -1,0 +1,135 @@
+.nc-menu {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  width: 264px;
+  max-height: 380px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  background: #171b21;
+  box-shadow:
+    0 4px 10px rgba(0, 0, 0, 0.32),
+    0 16px 44px rgba(0, 0, 0, 0.44);
+  animation: nc-menu-in 0.14s ease-out;
+}
+
+@keyframes nc-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.nc-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  margin-bottom: 4px;
+  padding: 0 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--text-3);
+}
+
+.nc-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 12.5px;
+}
+
+.nc-search input::placeholder {
+  color: var(--text-3);
+}
+
+.nc-items {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding-right: 2px;
+}
+
+.nc-items::-webkit-scrollbar {
+  width: 8px;
+}
+
+.nc-items::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.nc-group + .nc-group {
+  margin-top: 6px;
+}
+
+.nc-group-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px 3px;
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.nc-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: default;
+  text-align: left;
+}
+
+.nc-item.cursor {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-1);
+}
+
+.nc-item.selected {
+  color: var(--text-1);
+}
+
+.nc-item-path {
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-weight: 400;
+}
+
+.nc-check {
+  margin-left: auto;
+  color: var(--text-3);
+}
+
+.nc-item.cursor .nc-check {
+  color: var(--text-2);
+}
+
+.nc-empty {
+  padding: 14px 10px;
+  color: var(--text-3);
+  font-size: 12.5px;
+  text-align: center;
+}

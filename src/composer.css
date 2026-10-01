@@ -1,0 +1,88 @@
+/* shared composer-chip styles (new-chat screen + chat view) */
+
+.nc-pickers {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nc-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: default;
+}
+
+.nc-meta svg {
+  color: var(--text-3);
+}
+
+.nc-meta:hover {
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+
+.nc-via {
+  color: rgba(153, 163, 174, 0.55);
+  font-size: 11px;
+}
+
+.nc-device {
+  position: relative;
+  display: flex;
+}
+
+.nc-dev-dot {
+  width: 6px;
+  height: 6px;
+  margin-left: 4px;
+  border-radius: 50%;
+}
+
+.nc-dev-dot--online {
+  background: var(--green);
+}
+
+.nc-dev-dot--offline {
+  background: transparent;
+  border: 1.5px solid var(--dot-idle);
+}
+
+.nc-dev-dot--waiting {
+  background: var(--accent);
+}
+
+.nc-send-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nc-send {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-1);
+  cursor: default;
+}
+
+.nc-send:disabled {
+  background: transparent;
+  color: var(--text-3);
+}
+
+.nc-send:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.13);
+}

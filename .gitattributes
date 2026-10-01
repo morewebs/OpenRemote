@@ -1,0 +1,15 @@
+* text=auto
+*.rs text
+*.js text
+*.jsx text
+*.css text
+*.md text
+*.json text
+*.toml text
+*.yml text
+*.lock text
+# windows shell helpers stay CRLF-free where git decides, keep binaries binary
+*.png binary
+*.ico binary
+*.woff binary
+*.woff2 binary

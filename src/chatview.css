@@ -1,0 +1,373 @@
+.chatview {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg-app);
+}
+
+.cv-head {
+  flex: none;
+  align-self: stretch;
+  width: 100%;
+  padding: 22px 32px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.cv-head h1 {
+  margin: 0;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cv-facts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 6px 0 0;
+  color: var(--text-3);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.cv-where {
+  color: var(--text-2);
+}
+
+.cv-fact::before {
+  content: '·';
+  margin: 0 7px;
+  color: var(--text-3);
+}
+
+.cv-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.cv-dot--waiting {
+  background: var(--accent);
+}
+
+.cv-none {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.cv-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.cv-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.cv-scroll::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.cv-thread {
+  /* bottom padding tracks the floating composer's measured height
+     (--cv-clear, set by ChatView) plus breathing room — the last
+     message sits above the box at full scroll, never under it */
+  padding: 28px 32px calc(var(--cv-clear, 130px) + 20px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cv-user {
+  padding: 11px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-1);
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.cv-user + .cv-user {
+  margin-top: -6px;
+}
+
+.cv-rail {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 4px 0 4px 3px;
+  padding-left: 22px;
+}
+
+.cv-rail::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 8px;
+  bottom: 8px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.cv-node {
+  position: relative;
+  margin: 0;
+}
+
+.cv-node::before {
+  content: '';
+  position: absolute;
+  left: -22px;
+  top: 0.45em;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+  box-shadow: 0 0 0 3px var(--bg-app);
+}
+
+.cv-node--ok::before {
+  background: var(--green);
+}
+
+.cv-node--pending::before,
+.cv-node--run::before {
+  background: var(--accent);
+}
+
+.cv-node--run::before {
+  background: var(--green);
+  animation: cv-breathe 2.4s ease-in-out infinite;
+}
+
+.cv-agent {
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.cv-running {
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+@keyframes cv-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.cv-composer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  padding: 0 28px 22px;
+  background: none;
+  pointer-events: none;
+}
+
+/* bottom shadow: translucent see-through dark, strongest behind the
+   composer and falling off quickly above it — no blur, no solid floor,
+   transcript stays visible through the whole band, just dimmed */
+.cv-composer::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 158px;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(10, 12, 15, 0.85), rgba(10, 12, 15, 0) 100%);
+}
+
+.cv-box {
+  position: relative;
+  z-index: 1;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 12px 14px 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), var(--bg-app);
+  pointer-events: auto;
+}
+
+.cv-box:focus-within {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.cv-box textarea {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  max-height: 180px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  resize: none;
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.cv-box textarea::placeholder {
+  color: var(--text-3);
+}
+
+.cv-box textarea:disabled {
+  color: var(--text-3);
+}
+
+.cv-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.cv-meta {
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cv-note {
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.cv-tool-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.cv-tool-name {
+  color: var(--text-1);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.cv-tool-state {
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cv-node--pending .cv-tool-state,
+.cv-node--failed .cv-tool-state,
+.cv-node--denied .cv-tool-state {
+  color: var(--accent);
+}
+
+.cv-io {
+  margin-top: 8px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.cv-io-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px 12px;
+}
+
+.cv-io-row + .cv-io-row {
+  border-top: 1px solid var(--line);
+}
+
+.cv-io-label {
+  padding-top: 2px;
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cv-io code {
+  color: var(--text-2);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.cv-tool-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.cv-tool-actions button {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-1);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: default;
+}
+
+.cv-tool-actions button.primary {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.cv-tool-actions button:hover {
+  background: var(--bg-hover);
+}
+
+.cv-caret {
+  display: inline-block;
+  width: 7px;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: var(--text-2);
+  animation: cv-breathe 1s ease-in-out infinite;
+}
+
+html[data-reduce-motion] .cv-caret,
+html[data-reduce-motion] .cv-node--run::before {
+  animation: none;
+}
+
+
+

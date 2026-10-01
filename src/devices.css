@@ -1,0 +1,616 @@
+/* page composition: header pinned to the top-left corner, grid flows
+   below it — the page anchors to the top and just ends, no centering */
+.devices {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 44px 48px 32px;
+  overflow-y: auto;
+  background: var(--bg-app);
+}
+
+.dv-head {
+  width: 100%;
+}
+
+.dv-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+}
+
+.dv-meta {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.dv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 24px;
+  width: 100%;
+  margin-top: 36px;
+}
+
+.dv-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-height: 176px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  font: inherit;
+  cursor: default;
+  text-align: left;
+  transition: border-color 0.15s ease;
+}
+
+.dv-card:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.dv-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-2);
+}
+
+.dv-name {
+  display: block;
+  margin-top: 18px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.dv-detail {
+  display: block;
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.dv-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: auto;
+  padding-top: 20px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.dv-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.dv-dot--offline {
+  background: transparent;
+  border: 1.5px solid var(--dot-idle);
+}
+
+.dv-dot--waiting {
+  background: var(--accent);
+}
+
+.dv-card.dv-off .dv-icon,
+.dv-card.dv-off .dv-name,
+.dv-card.dv-off .dv-detail {
+  opacity: 0.55;
+}
+
+/* add-device: an empty slot in the grid — same cell size, dashed,
+   centered, contrasting with the left-aligned data cards */
+.dv-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 176px;
+  padding: 24px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  cursor: default;
+  text-align: center;
+}
+
+.dv-add:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dv-add-plus {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text-2);
+}
+
+.dv-add-label {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+/* ── add-device modal ── */
+
+.dv-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 6, 9, 0.55);
+  animation: dv-fade 0.12s ease-out;
+}
+
+.dv-modal {
+  width: 440px;
+  max-width: 100%;
+  max-height: min(82vh, 760px);
+  overflow-y: auto;
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: #171b21;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), 0 4px 16px rgba(0, 0, 0, 0.3);
+  animation: dv-pop 0.14s ease-out;
+}
+
+@keyframes dv-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes dv-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+.dv-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dv-modal-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.dv-modal-close {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: default;
+}
+
+.dv-modal-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.dv-modal-hint {
+  margin: 8px 0 14px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.dv-os {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.dv-os button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: default;
+}
+
+.dv-os button:hover {
+  color: var(--text-1);
+}
+
+.dv-os button.on {
+  background: var(--bg-active);
+  color: var(--text-1);
+}
+
+.dv-modal-cmd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 12px 12px 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.dv-modal-cmd code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: 'Geist Mono', ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-1);
+}
+
+.dv-modal-copy {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: default;
+}
+
+.dv-modal-copy:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.dv-modal-foot {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dv-modal-backdrop,
+  .dv-modal {
+    animation: none;
+  }
+
+  .dv-agent-dot {
+    animation: none;
+  }
+}
+
+/* ── device modal ── */
+
+.dv-devmodal {
+  width: 480px;
+}
+
+.dv-dev-id {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.dv-presence {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.dv-pdot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.dv-pdot--offline {
+  background: transparent;
+  border: 1.5px solid var(--dot-idle);
+}
+
+.dv-pdot--waiting {
+  background: var(--accent);
+}
+
+.dv-spec {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.dv-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 22px 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.dv-label-val {
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.dv-label-val--up {
+  color: var(--green);
+}
+
+/* uptime band: 48 half-hour slices, oldest left; up = solid green,
+   down = hollow ring (matches the offline dot treatment) */
+.dv-band {
+  display: flex;
+  gap: 2px;
+  height: 28px;
+}
+
+.dv-slice {
+  flex: 1;
+  border-radius: 2px;
+  background: rgba(76, 180, 135, 0.72);
+}
+
+.dv-slice:hover {
+  background: var(--green);
+}
+
+.dv-slice.down {
+  background: transparent;
+  border: 1.5px solid var(--dot-idle);
+}
+
+.dv-slice.down:hover {
+  border-color: var(--text-3);
+  background: transparent;
+}
+
+.dv-agents {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dv-agent {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: default;
+  text-align: left;
+}
+
+.dv-agent:hover {
+  background: var(--bg-hover);
+}
+
+.dv-agent:disabled {
+  cursor: default;
+}
+
+.dv-agent-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.dv-agent-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dv-agent-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-1);
+}
+
+.dv-agent-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: dv-pulse 2.4s ease-in-out infinite;
+}
+
+.dv-agent-dot.idle {
+  background: transparent;
+  border: 1.5px solid var(--dot-idle);
+  animation: none;
+}
+
+.dv-agent-sub {
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@keyframes dv-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* offline device: same popup, last-known state, dimmed */
+.dv-devmodal.off .dv-dev-id,
+.dv-devmodal.off .dv-agents {
+  opacity: 0.6;
+}
+
+.dv-devmodal.off .dv-agent:hover {
+  background: transparent;
+}
+
+.dv-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.dv-act {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: default;
+}
+
+.dv-act:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.dv-act:disabled {
+  opacity: 0.45;
+}
+
+.dv-act svg {
+  color: var(--text-3);
+}
+
+.dv-connect {
+  width: 100%;
+  justify-content: center;
+  margin-top: 14px;
+}
+
+.dv-host {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.dv-host input {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.dv-host input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.dv-host-hint {
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+.dv-waitnote,
+.dv-empty {
+  margin: 14px 0 0;
+  color: var(--text-3);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.dv-harnesses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dv-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.dv-installs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+}
+
+.dv-install {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0 4px 2px;
+  color: var(--text-1);
+  font-size: 13px;
+}

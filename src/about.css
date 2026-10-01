@@ -1,0 +1,170 @@
+/* about popup — same surface family as the device modals */
+.ab-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 6, 9, 0.55);
+  animation: ab-fade 0.12s ease-out;
+}
+
+.ab-modal {
+  width: 380px;
+  max-width: 100%;
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: #171b21;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), 0 4px 16px rgba(0, 0, 0, 0.3);
+  animation: ab-pop 0.14s ease-out;
+}
+
+@keyframes ab-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes ab-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+.ab-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ab-wordmark {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+}
+
+.ab-close {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: default;
+}
+
+.ab-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.ab-version {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.ab-sep {
+  margin: 16px 0;
+  border-top: 1px solid var(--line);
+}
+
+.ab-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: default;
+}
+
+.ab-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.ab-update {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.ab-available {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-1);
+}
+
+.ab-status {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.ab-bar {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.ab-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--green);
+  animation: ab-fill 1.6s ease forwards;
+}
+
+@keyframes ab-fill {
+  from {
+    width: 0;
+  }
+
+  to {
+    width: 100%;
+  }
+}
+
+.ab-done {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--green);
+}
+
+.ab-foot {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ab-backdrop,
+  .ab-modal {
+    animation: none;
+  }
+
+  .ab-bar span {
+    animation: none;
+    width: 100%;
+  }
+}

@@ -1,0 +1,448 @@
+:root {
+  --bg-app: #0a0c0f;
+  --bg-side: #0f1216;
+  --bg-hover: rgba(255, 255, 255, 0.045);
+  --bg-active: rgba(255, 255, 255, 0.07);
+  --line: rgba(255, 255, 255, 0.07);
+  --text-1: #e8ebef;
+  --text-2: #9aa3ae;
+  --text-3: #5f6873;
+  --accent: #dca24b;
+  --green: #4cb487;
+  --dot-idle: #4a525c;
+  --radius: 7px;
+  --font-sans: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html,
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-app);
+  color: var(--text-1);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+.app-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  background: var(--bg-app);
+}
+
+.sidebar {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  width: 264px;
+  flex: none;
+  background: var(--bg-side);
+  border-right: 1px solid var(--line);
+  transition:
+    margin-left 0.12s cubic-bezier(0.2, 0, 0, 1),
+    width 0.18s ease,
+    margin-right 0.18s ease,
+    visibility 0s;
+}
+
+/* collapse: the whole sidebar slides out as one unit — contents
+   travel with it instead of being clipped mid-element by a width
+   collapse (which sheared the labels), and the main area grows in
+   behind it. Contents become unfocusable once the motion ends
+   (delayed visibility). The :has override keeps a focused search
+   field from holding part of the sidebar on screen mid-collapse */
+.sidebar.collapsed,
+.sidebar.collapsed:has(.search:focus-within) {
+  width: 264px;
+  margin-left: -264px;
+  margin-right: 0;
+  visibility: hidden;
+  transition:
+    margin-left 0.12s cubic-bezier(0.2, 0, 0, 1),
+    width 0.18s ease,
+    margin-right 0.18s ease,
+    visibility 0s 0.12s;
+}
+
+/* widen only while the search field itself holds focus; any other
+   focus inside the sidebar must not trigger it. the matching negative
+   margin keeps the flex layout slot at 264px so the main area never
+   reflows — the extra 56px paints over it as an overlay */
+.sidebar:has(.search:focus-within) {
+  width: 320px;
+  margin-right: -56px;
+}
+
+.sb-actions {
+  padding: 16px 8px 14px;
+}
+
+.mode-switch {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 14px;
+  padding: 2px;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.mode-switch button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: default;
+}
+
+.mode-switch button:hover {
+  color: var(--text-1);
+}
+
+.mode-switch button.on {
+  background: var(--bg-active);
+  color: var(--text-1);
+}
+
+.side-tile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: default;
+}
+
+.side-tile + .side-tile {
+  margin-top: 2px;
+}
+
+.side-tile svg {
+  color: var(--text-2);
+}
+
+.side-tile:hover,
+.side-tile.on {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+button.side-tile:active {
+  transform: translateY(1px);
+}
+
+.search {
+  cursor: text;
+}
+
+.search:focus-within {
+  background: var(--bg-hover);
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.search input::placeholder {
+  color: var(--text-1);
+}
+
+/* dim the hint only in the active field, so typed text stands out;
+   the resting tile keeps full opacity like the other side-tiles */
+.search input:focus::placeholder {
+  color: var(--text-3);
+}
+
+.search-clear {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.search-clear:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-1);
+}
+
+.sb-list {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: 0 10px 12px;
+  margin-top: 8px;
+}
+
+.sb-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sb-list::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sb-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.section-title {
+  padding: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.project-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  margin-top: 6px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-1);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: default;
+  text-align: left;
+}
+
+.project-head:hover {
+  background: var(--bg-hover);
+}
+
+.project-caret {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  color: var(--text-3);
+  transition: transform 0.15s ease;
+}
+
+.project-caret.closed {
+  transform: rotate(-90deg);
+}
+
+.project-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.project-count {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+.group-label {
+  padding: 8px 0 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+.chat-row {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-row:hover {
+  background: var(--bg-hover);
+}
+
+.chat-row.active {
+  background: var(--bg-active);
+}
+
+.dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.dot--running {
+  background: var(--green);
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+.dot--waiting {
+  background: var(--accent);
+}
+
+.dot--idle {
+  visibility: hidden;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.chat-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--text-2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.chat-row.active .chat-title,
+.chat-row[data-status='running'] .chat-title,
+.chat-row[data-status='waiting'] .chat-title {
+  color: var(--text-1);
+}
+
+.sb-foot {
+  padding: 10px 14px 14px;
+  border-top: 1px solid var(--line);
+}
+
+.settings-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.settings-btn:hover,
+.settings-btn.on {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+html[data-reduce-motion] .ab-bar span,
+html[data-reduce-motion] .dv-agent-dot,
+html[data-reduce-motion] .dot--running {
+  animation: none;
+}
+
+html[data-reduce-motion] .sidebar,
+html[data-reduce-motion] .sidebar.collapsed {
+  transition: none;
+}
+
+html[data-reduce-motion] .ab-bar span {
+  width: 100%;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot--running {
+    animation: none;
+  }
+}
+
+.sidebar {
+  animation: sidebar-in 0.16s ease-out;
+}
+
+@keyframes sidebar-in {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

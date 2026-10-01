@@ -1,0 +1,15 @@
+# build output
+dist/
+# dependencies
+node_modules/
+# rust
+target/
+# tauri generated schemas
+src-tauri/gen/schemas/
+# local knowledge: wayfinder map, research, session plans
+.tasks/
+.zcode/
+# editor / OS noise
+.DS_Store
+Thumbs.db
+*.log

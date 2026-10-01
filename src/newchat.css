@@ -1,0 +1,175 @@
+.newchat {
+  position: relative;
+  z-index: 0; /* stacking context: traps ::before between the app
+     background and the content instead of letting it escape behind */
+  flex: 1;
+  display: grid;
+  grid-template-rows: 1fr auto 1fr;
+  justify-items: center;
+  padding: 0 40px;
+  background: var(--bg-app);
+}
+
+/* glow layer: negative z-index paints it above the app background
+   but below the greeting/composer, so it can animate on its own */
+.newchat::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: '';
+  background:
+    radial-gradient(620px 420px at 78% 8%, rgba(122, 92, 255, 0.21), transparent 70%),
+    radial-gradient(520px 400px at 8% 92%, rgba(88, 56, 220, 0.145), transparent 70%),
+    radial-gradient(900px 520px at 50% 125%, rgba(64, 34, 170, 0.12), transparent 75%);
+  animation: nc-glow-in 0.8s ease-out both, nc-glow-breathe 9s ease-in-out 0.8s infinite;
+}
+
+@keyframes nc-glow-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes nc-glow-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.85;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .newchat::before {
+    animation: none;
+  }
+}
+
+.nc-greeting {
+  grid-row: 1;
+  align-self: end;
+  margin: 0 0 28px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-2);
+}
+
+.nc-box {
+  grid-row: 2;
+  width: min(620px, 100%);
+  max-width: 620px;
+  padding: 14px 16px 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.nc-box:focus-within {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.nc-box textarea {
+  display: block;
+  width: 100%;
+  min-height: 64px;
+  max-height: 200px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  resize: none;
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.nc-box textarea::placeholder {
+  color: var(--text-3);
+}
+
+.nc-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.nc-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+
+.nc-under {
+  grid-row: 3;
+  align-self: start;
+  width: min(620px, 100%);
+}
+
+.nc-below {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  margin-left: 16px;
+}
+
+.nc-resume {
+  margin-top: 28px;
+  margin-left: 16px;
+}
+
+.nc-resume-label {
+  padding: 0 4px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.nc-resume button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+}
+
+.nc-resume button:hover {
+  background: var(--bg-hover);
+}
+
+.nc-resume-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nc-resume-meta {
+  margin-left: auto;
+  flex: none;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+
+.nc-overlay {
+  display: none;
+}
+

@@ -1,0 +1,331 @@
+.panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 44px 48px 32px;
+  overflow-y: auto;
+  /* reserve the scrollbar gutter on BOTH edges, so the centered pill
+     dock stays optically centered whether the pane scrolls or not */
+  scrollbar-gutter: stable both-edges;
+  background: var(--bg-app);
+}
+
+/* the pane's scrollbar matches the app's thin ones — the default
+   classic Windows bar is 15px wide and skews the centered dock */
+.panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.panel::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.pn-list {
+  width: min(640px, 100%);
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pn-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.pn-row--stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.pn-row-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.pn-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.pn-detail {
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.pn-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+.pn-btn {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: default;
+  flex: none;
+}
+
+.pn-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.pn-btn.on {
+  color: var(--green);
+  border-color: rgba(76, 180, 135, 0.35);
+}
+
+.pn-log {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pn-log li {
+  display: flex;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.pn-log span {
+  flex: none;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.pn-list--tight {
+  margin-top: 12px;
+}
+
+.pn-section {
+  margin: 28px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.pn-lead {
+  margin: 6px 0 0;
+  max-width: 62ch;
+  color: var(--text-3);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.pn-then {
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+
+.pn-task {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.pn-note {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.pn-state {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+.pn-state--running {
+  color: var(--green);
+}
+
+.pn-state--needs-key {
+  color: var(--accent);
+}
+
+.pn-btn:disabled {
+  opacity: 0.4;
+}
+
+.pn-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pn-pick button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.pn-pick button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.pn-pick button:disabled {
+  opacity: 0.45;
+}
+
+.pn-pick-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-1);
+}
+
+.pn-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.pn-head > div {
+  min-width: 0;
+}
+
+.pn-head .dv-act {
+  flex: none;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+.pn-list--wide {
+  width: min(880px, 100%);
+}
+
+.pn-search {
+  display: block;
+  width: min(880px, 100%);
+  margin-top: 12px;
+}
+
+.pn-search input {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+}
+
+.pn-search input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.pn-empty {
+  margin: 12px 0 0;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.pn-command {
+  display: block;
+  color: var(--text-2);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+}
+
+.pn-pick button.on {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.dv-modal--form {
+  width: 520px;
+}
+
+.dv-command {
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+.dv-check {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin-top: 14px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+
+.dv-check.on {
+  color: var(--text-1);
+}
+
+.af-then {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.dv-host textarea {
+  min-height: 72px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  resize: vertical;
+}
+
+.dv-host textarea:focus,
+.dv-host input[type='time']:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.dv-host input[type='time'] {
+  color-scheme: dark;
+}

@@ -1,0 +1,108 @@
+.titlebar {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  height: 36px;
+  flex: none;
+  background: var(--bg-side);
+  user-select: none;
+}
+
+.tb-left {
+  display: flex;
+  align-items: stretch;
+}
+
+.tb-toggle {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.tb-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-1);
+}
+
+.tb-toggle:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.tb-toggle:disabled {
+  color: var(--text-3);
+  opacity: 0.55;
+  cursor: default;
+  background: transparent;
+}
+
+.tb-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+}
+
+.tb-info {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font: inherit;
+  color: var(--text-3);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.tb-info:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-1);
+}
+
+.tb-controls {
+  display: flex;
+}
+
+.tb-btn {
+  width: 44px;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-2);
+  font-family: 'Segoe MDL2 Assets', 'Segoe Fluent Icons', sans-serif;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.tb-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-1);
+}
+
+.tb-btn:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.tb-close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
+.tb-close:active {
+  background: #a82b1e;
+  color: #fff;
+}
+
