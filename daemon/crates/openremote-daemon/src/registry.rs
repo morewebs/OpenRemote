@@ -27,6 +27,7 @@ pub enum Backend {
     Grok(openremote_grok::Resolution),
     Pi(openremote_pi::Resolution),
     Opencode(openremote_opencode::Resolution),
+    Agy(openremote_agy::Resolution),
 }
 
 /// A live session's driver, dispatch-only — every method reaches the
@@ -37,6 +38,7 @@ pub enum SessionDriver {
     Grok(openremote_grok::Driver),
     Pi(openremote_pi::Driver),
     Opencode(openremote_opencode::Driver),
+    Agy(openremote_agy::Driver),
 }
 
 impl SessionDriver {
@@ -47,6 +49,7 @@ impl SessionDriver {
             SessionDriver::Grok(driver) => driver.send_prompt(text).await,
             SessionDriver::Pi(driver) => driver.send_prompt(text).await,
             SessionDriver::Opencode(driver) => driver.send_prompt(text).await,
+            SessionDriver::Agy(driver) => driver.send_prompt(text).await,
         }
     }
 
@@ -57,6 +60,7 @@ impl SessionDriver {
             SessionDriver::Grok(driver) => driver.interrupt().await,
             SessionDriver::Pi(driver) => driver.interrupt().await,
             SessionDriver::Opencode(driver) => driver.interrupt().await,
+            SessionDriver::Agy(driver) => driver.interrupt().await,
         }
     }
 
@@ -93,6 +97,10 @@ impl SessionDriver {
                 driver.answer(harness_ref, choice, request).await?;
                 Ok(AnswerOutcome::Continues)
             }
+            SessionDriver::Agy(driver) => {
+                driver.answer(harness_ref, choice, request).await?;
+                Ok(AnswerOutcome::Continues)
+            }
         }
     }
 
@@ -103,6 +111,7 @@ impl SessionDriver {
             SessionDriver::Grok(driver) => driver.shutdown().await,
             SessionDriver::Pi(driver) => driver.shutdown().await,
             SessionDriver::Opencode(driver) => driver.shutdown().await,
+            SessionDriver::Agy(driver) => driver.shutdown().await,
         }
     }
 }
@@ -135,6 +144,10 @@ impl Backend {
                 let (driver, rx) = openremote_opencode::Driver::spawn(resolution, opts).await?;
                 Ok((SessionDriver::Opencode(driver), rx))
             }
+            Backend::Agy(resolution) => {
+                let (driver, rx) = openremote_agy::Driver::spawn(resolution, opts)?;
+                Ok((SessionDriver::Agy(driver), rx))
+            }
         }
     }
 
@@ -154,6 +167,8 @@ impl Backend {
             // the workspace) — a per-session model query lands with the
             // model slot ticket; the catalog stays reserved for now.
             Backend::Opencode(_) => None,
+            // Antigravity's `agy models` prints its own catalog (TSV).
+            Backend::Agy(resolution) => openremote_agy::driver::models(resolution).await.ok(),
         }
     }
 }
@@ -244,6 +259,17 @@ impl HarnessRegistry {
         };
         entries.push(RegistryEntry {
             harness: harness_from("opencode", "OpenCode", &opencode),
+            backend,
+        });
+
+        let agy = openremote_agy::resolve_agy(overrides.get("agy").map(|p| p.as_path()));
+        let backend = if agy.is_available() {
+            Some(Backend::Agy(agy.clone()))
+        } else {
+            None
+        };
+        entries.push(RegistryEntry {
+            harness: harness_from("agy", "Antigravity", &agy),
             backend,
         });
 

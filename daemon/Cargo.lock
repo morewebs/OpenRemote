@@ -323,6 +323,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
+name = "openremote-agy"
+version = "0.1.0"
+dependencies = [
+ "openremote-core",
+ "openremote-harness",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "openremote-claude"
 version = "0.1.0"
 dependencies = [
@@ -362,6 +373,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "futures-util",
+ "openremote-agy",
  "openremote-claude",
  "openremote-codex",
  "openremote-core",

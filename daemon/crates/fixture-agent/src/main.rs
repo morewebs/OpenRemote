@@ -22,6 +22,7 @@
 //! Lines are accepted with either `\r\n` or `\n` delimiters — the ICRNL
 //! lesson, paid for once in a PTY and never again.
 
+mod agy;
 mod codex;
 mod grok;
 mod opencode;
@@ -46,6 +47,12 @@ fn main() {
     }
     if argv.iter().any(|a| a == "serve") {
         opencode::main_opencode();
+        return;
+    }
+    if argv.first().is_some_and(|a| a == "models")
+        || argv.iter().any(|a| a == "--print" || a == "-p")
+    {
+        agy::main_agy(&argv);
         return;
     }
     let mut agent = FixtureAgent::from_env();
