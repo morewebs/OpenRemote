@@ -1,0 +1,17 @@
+[package]
+name = "openremote-pi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Pi Agent harness driver: the rpc mode (JSON-lines over stdio)"
+
+[dependencies]
+openremote-core = { path = "../openremote-core" }
+openremote-harness = { path = "../openremote-harness" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+
+[lints]
+workspace = true

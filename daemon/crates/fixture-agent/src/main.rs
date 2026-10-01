@@ -24,6 +24,7 @@
 
 mod codex;
 mod grok;
+mod pi;
 
 use std::io::{BufRead, Write};
 
@@ -36,6 +37,10 @@ fn main() {
     }
     if argv.iter().any(|a| a == "--single") {
         grok::main_grok(&argv);
+        return;
+    }
+    if argv.iter().any(|a| a == "--mode") {
+        pi::main_pi();
         return;
     }
     let mut agent = FixtureAgent::from_env();

@@ -25,6 +25,7 @@ pub enum Backend {
     Claude(openremote_claude::Resolution),
     Codex(openremote_codex::Resolution),
     Grok(openremote_grok::Resolution),
+    Pi(openremote_pi::Resolution),
 }
 
 /// A live session's driver, dispatch-only — every method reaches the
@@ -33,6 +34,7 @@ pub enum SessionDriver {
     Claude(openremote_claude::Driver),
     Codex(openremote_codex::Driver),
     Grok(openremote_grok::Driver),
+    Pi(openremote_pi::Driver),
 }
 
 impl SessionDriver {
@@ -41,6 +43,7 @@ impl SessionDriver {
             SessionDriver::Claude(driver) => driver.send_prompt(text).await,
             SessionDriver::Codex(driver) => driver.send_prompt(text).await,
             SessionDriver::Grok(driver) => driver.send_prompt(text).await,
+            SessionDriver::Pi(driver) => driver.send_prompt(text).await,
         }
     }
 
@@ -49,6 +52,7 @@ impl SessionDriver {
             SessionDriver::Claude(driver) => driver.interrupt().await,
             SessionDriver::Codex(driver) => driver.interrupt().await,
             SessionDriver::Grok(driver) => driver.interrupt().await,
+            SessionDriver::Pi(driver) => driver.interrupt().await,
         }
     }
 
@@ -77,6 +81,10 @@ impl SessionDriver {
                 driver.answer(harness_ref, choice, request).await?;
                 Ok(AnswerOutcome::Continues)
             }
+            SessionDriver::Pi(driver) => {
+                driver.answer(harness_ref, choice, request).await?;
+                Ok(AnswerOutcome::Continues)
+            }
         }
     }
 
@@ -85,6 +93,7 @@ impl SessionDriver {
             SessionDriver::Claude(driver) => driver.shutdown().await,
             SessionDriver::Codex(driver) => driver.shutdown().await,
             SessionDriver::Grok(driver) => driver.shutdown().await,
+            SessionDriver::Pi(driver) => driver.shutdown().await,
         }
     }
 }
@@ -109,6 +118,10 @@ impl Backend {
                 let (driver, rx) = openremote_grok::Driver::spawn(resolution, opts)?;
                 Ok((SessionDriver::Grok(driver), rx))
             }
+            Backend::Pi(resolution) => {
+                let (driver, rx) = openremote_pi::Driver::spawn(resolution, opts).await?;
+                Ok((SessionDriver::Pi(driver), rx))
+            }
         }
     }
 
@@ -120,6 +133,10 @@ impl Backend {
             Backend::Claude(_) => None,
             Backend::Codex(resolution) => openremote_codex::models(resolution).await.ok(),
             Backend::Grok(_) => None,
+            // Pi's model catalog needs a signed-in provider (`pi
+            // --list-models` answers "No models available" here) — the
+            // slot stays reserved until that probe is honest.
+            Backend::Pi(_) => None,
         }
     }
 }
@@ -187,6 +204,17 @@ impl HarnessRegistry {
         };
         entries.push(RegistryEntry {
             harness: harness_from("grok", "Grok Build", &grok),
+            backend,
+        });
+
+        let pi = openremote_pi::resolve_pi(overrides.get("pi").map(|p| p.as_path()));
+        let backend = if pi.is_available() {
+            Some(Backend::Pi(pi.clone()))
+        } else {
+            None
+        };
+        entries.push(RegistryEntry {
+            harness: harness_from("pi", "Pi Agent", &pi),
             backend,
         });
 
