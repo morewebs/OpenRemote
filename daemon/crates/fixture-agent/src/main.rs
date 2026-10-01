@@ -24,6 +24,7 @@
 
 mod codex;
 mod grok;
+mod opencode;
 mod pi;
 
 use std::io::{BufRead, Write};
@@ -41,6 +42,10 @@ fn main() {
     }
     if argv.iter().any(|a| a == "--mode") {
         pi::main_pi();
+        return;
+    }
+    if argv.iter().any(|a| a == "serve") {
+        opencode::main_opencode();
         return;
     }
     let mut agent = FixtureAgent::from_env();

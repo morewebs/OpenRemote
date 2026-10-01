@@ -7,6 +7,7 @@ members = [
     "crates/openremote-codex",
     "crates/openremote-grok",
     "crates/openremote-pi",
+    "crates/openremote-opencode",
     "crates/openremote-daemon",
     "crates/fixture-agent",
 ]

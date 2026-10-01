@@ -367,6 +367,7 @@ dependencies = [
  "openremote-core",
  "openremote-grok",
  "openremote-harness",
+ "openremote-opencode",
  "openremote-pi",
  "serde",
  "serde_json",
@@ -396,6 +397,18 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "openremote-opencode"
+version = "0.1.0"
+dependencies = [
+ "openremote-core",
+ "openremote-harness",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]

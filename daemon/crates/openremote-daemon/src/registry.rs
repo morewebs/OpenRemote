@@ -26,6 +26,7 @@ pub enum Backend {
     Codex(openremote_codex::Resolution),
     Grok(openremote_grok::Resolution),
     Pi(openremote_pi::Resolution),
+    Opencode(openremote_opencode::Resolution),
 }
 
 /// A live session's driver, dispatch-only — every method reaches the
@@ -35,6 +36,7 @@ pub enum SessionDriver {
     Codex(openremote_codex::Driver),
     Grok(openremote_grok::Driver),
     Pi(openremote_pi::Driver),
+    Opencode(openremote_opencode::Driver),
 }
 
 impl SessionDriver {
@@ -44,6 +46,7 @@ impl SessionDriver {
             SessionDriver::Codex(driver) => driver.send_prompt(text).await,
             SessionDriver::Grok(driver) => driver.send_prompt(text).await,
             SessionDriver::Pi(driver) => driver.send_prompt(text).await,
+            SessionDriver::Opencode(driver) => driver.send_prompt(text).await,
         }
     }
 
@@ -53,6 +56,7 @@ impl SessionDriver {
             SessionDriver::Codex(driver) => driver.interrupt().await,
             SessionDriver::Grok(driver) => driver.interrupt().await,
             SessionDriver::Pi(driver) => driver.interrupt().await,
+            SessionDriver::Opencode(driver) => driver.interrupt().await,
         }
     }
 
@@ -85,6 +89,10 @@ impl SessionDriver {
                 driver.answer(harness_ref, choice, request).await?;
                 Ok(AnswerOutcome::Continues)
             }
+            SessionDriver::Opencode(driver) => {
+                driver.answer(harness_ref, choice, request).await?;
+                Ok(AnswerOutcome::Continues)
+            }
         }
     }
 
@@ -94,6 +102,7 @@ impl SessionDriver {
             SessionDriver::Codex(driver) => driver.shutdown().await,
             SessionDriver::Grok(driver) => driver.shutdown().await,
             SessionDriver::Pi(driver) => driver.shutdown().await,
+            SessionDriver::Opencode(driver) => driver.shutdown().await,
         }
     }
 }
@@ -122,6 +131,10 @@ impl Backend {
                 let (driver, rx) = openremote_pi::Driver::spawn(resolution, opts).await?;
                 Ok((SessionDriver::Pi(driver), rx))
             }
+            Backend::Opencode(resolution) => {
+                let (driver, rx) = openremote_opencode::Driver::spawn(resolution, opts).await?;
+                Ok((SessionDriver::Opencode(driver), rx))
+            }
         }
     }
 
@@ -137,6 +150,10 @@ impl Backend {
             // --list-models` answers "No models available" here) — the
             // slot stays reserved until that probe is honest.
             Backend::Pi(_) => None,
+            // OpenCode's /api/model is per-project (it needs a serve in
+            // the workspace) — a per-session model query lands with the
+            // model slot ticket; the catalog stays reserved for now.
+            Backend::Opencode(_) => None,
         }
     }
 }
@@ -215,6 +232,18 @@ impl HarnessRegistry {
         };
         entries.push(RegistryEntry {
             harness: harness_from("pi", "Pi Agent", &pi),
+            backend,
+        });
+
+        let opencode =
+            openremote_opencode::resolve_opencode(overrides.get("opencode").map(|p| p.as_path()));
+        let backend = if opencode.is_available() {
+            Some(Backend::Opencode(opencode.clone()))
+        } else {
+            None
+        };
+        entries.push(RegistryEntry {
+            harness: harness_from("opencode", "OpenCode", &opencode),
             backend,
         });
 
