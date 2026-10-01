@@ -23,6 +23,7 @@
 //! lesson, paid for once in a PTY and never again.
 
 mod codex;
+mod grok;
 
 use std::io::{BufRead, Write};
 
@@ -31,6 +32,10 @@ fn main() {
     let argv: Vec<String> = std::env::args().skip(1).collect();
     if argv.iter().any(|a| a == "app-server") {
         codex::main_codex();
+        return;
+    }
+    if argv.iter().any(|a| a == "--single") {
+        grok::main_grok(&argv);
         return;
     }
     let mut agent = FixtureAgent::from_env();

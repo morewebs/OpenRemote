@@ -1,7 +1,9 @@
-//! Wire frames of the Claude Code stream-json protocol, as the SDK's
-//! types define them. Everything unknown stays as raw JSON — the driver
-//! forwards what it recognizes and drops what it doesn't, the way the
-//! SDK swallows `keep_alive` and hidden lifecycle frames.
+//! Wire frames of the Anthropic-Messages stream-json family — spoken by
+//! Claude Code (`--output-format stream-json`), Grok Build
+//! (`--output-format streaming-messages-json`, verified live 2026-10-01),
+//! and Antigravity (same flags). Everything unknown stays as raw JSON —
+//! the driver forwards what it recognizes and drops what it doesn't, the
+//! way the SDK swallows `keep_alive` and hidden lifecycle frames.
 
 use serde_json::Value;
 

@@ -258,7 +258,29 @@ impl Supervisor {
         entry.driver.lock().await.shutdown().await?;
         match tokio::time::timeout(std::time::Duration::from_secs(3), rx).await {
             Ok(Ok(session)) => Ok(session),
-            _ => self.session(id), // pump gone (already dead); status is terminal already
+            _ => {
+                // The pump never answered: either it already died (the
+                // status is terminal) or the driver has no live process at
+                // all (print-mode harnesses between prompts) — settle an
+                // still-alive session here, the single writer rule bent
+                // only because nothing else is writing.
+                if self
+                    .session(id)
+                    .map(|s| s.status.is_alive())
+                    .unwrap_or(false)
+                {
+                    self.emit_all(
+                        id,
+                        vec![EventPayload::SessionStatusChanged {
+                            status: SessionStatus::Stopped,
+                            reason: None,
+                        }],
+                    )?;
+                    self.with_store(|s| s.retire_pending(id))?;
+                    self.sessions.lock().await.remove(id);
+                }
+                self.session(id)
+            }
         }
     }
 

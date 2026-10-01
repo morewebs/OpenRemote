@@ -4,6 +4,7 @@
 //! consumes `DriverEvent`s, and routes answers back with the harness's own
 //! correlation id.
 
+pub mod anthropic_wire;
 pub mod events;
 
 pub use events::{ApprovalRequest, DecisionSpec, DriverEvent};

@@ -24,6 +24,7 @@ pub enum AnswerOutcome {
 pub enum Backend {
     Claude(openremote_claude::Resolution),
     Codex(openremote_codex::Resolution),
+    Grok(openremote_grok::Resolution),
 }
 
 /// A live session's driver, dispatch-only — every method reaches the
@@ -31,6 +32,7 @@ pub enum Backend {
 pub enum SessionDriver {
     Claude(openremote_claude::Driver),
     Codex(openremote_codex::Driver),
+    Grok(openremote_grok::Driver),
 }
 
 impl SessionDriver {
@@ -38,6 +40,7 @@ impl SessionDriver {
         match self {
             SessionDriver::Claude(driver) => driver.send_prompt(text).await,
             SessionDriver::Codex(driver) => driver.send_prompt(text).await,
+            SessionDriver::Grok(driver) => driver.send_prompt(text).await,
         }
     }
 
@@ -45,6 +48,7 @@ impl SessionDriver {
         match self {
             SessionDriver::Claude(driver) => driver.interrupt().await,
             SessionDriver::Codex(driver) => driver.interrupt().await,
+            SessionDriver::Grok(driver) => driver.interrupt().await,
         }
     }
 
@@ -69,6 +73,10 @@ impl SessionDriver {
                     AnswerOutcome::Continues
                 })
             }
+            SessionDriver::Grok(driver) => {
+                driver.answer(harness_ref, choice, request).await?;
+                Ok(AnswerOutcome::Continues)
+            }
         }
     }
 
@@ -76,6 +84,7 @@ impl SessionDriver {
         match self {
             SessionDriver::Claude(driver) => driver.shutdown().await,
             SessionDriver::Codex(driver) => driver.shutdown().await,
+            SessionDriver::Grok(driver) => driver.shutdown().await,
         }
     }
 }
@@ -96,6 +105,10 @@ impl Backend {
                 let (driver, rx) = openremote_codex::Driver::spawn(resolution, opts).await?;
                 Ok((SessionDriver::Codex(driver), rx))
             }
+            Backend::Grok(resolution) => {
+                let (driver, rx) = openremote_grok::Driver::spawn(resolution, opts)?;
+                Ok((SessionDriver::Grok(driver), rx))
+            }
         }
     }
 
@@ -106,6 +119,7 @@ impl Backend {
         match self {
             Backend::Claude(_) => None,
             Backend::Codex(resolution) => openremote_codex::models(resolution).await.ok(),
+            Backend::Grok(_) => None,
         }
     }
 }
@@ -162,6 +176,17 @@ impl HarnessRegistry {
         };
         entries.push(RegistryEntry {
             harness: harness_from("codex", "Codex", &codex),
+            backend,
+        });
+
+        let grok = openremote_grok::resolve_grok(overrides.get("grok").map(|p| p.as_path()));
+        let backend = if grok.is_available() {
+            Some(Backend::Grok(grok.clone()))
+        } else {
+            None
+        };
+        entries.push(RegistryEntry {
+            harness: harness_from("grok", "Grok Build", &grok),
             backend,
         });
 

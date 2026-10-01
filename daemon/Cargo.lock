@@ -365,6 +365,7 @@ dependencies = [
  "openremote-claude",
  "openremote-codex",
  "openremote-core",
+ "openremote-grok",
  "openremote-harness",
  "serde",
  "serde_json",
@@ -372,6 +373,17 @@ dependencies = [
  "thiserror",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "openremote-grok"
+version = "0.1.0"
+dependencies = [
+ "openremote-core",
+ "openremote-harness",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

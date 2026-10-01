@@ -19,6 +19,7 @@ openremote-core = { path = "../openremote-core" }
 openremote-harness = { path = "../openremote-harness" }
 openremote-claude = { path = "../openremote-claude" }
 openremote-codex = { path = "../openremote-codex" }
+openremote-grok = { path = "../openremote-grok" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

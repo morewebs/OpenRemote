@@ -9,8 +9,9 @@
 //! turn state from absence of output.
 
 pub mod driver;
-pub mod frames;
 pub mod resolve;
+
+pub use openremote_harness::anthropic_wire as frames;
 
 pub use driver::Driver;
 pub use openremote_harness::{DriverError, DriverEvent, Resolution, SpawnOptions};
