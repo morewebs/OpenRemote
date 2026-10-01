@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowUp, Stop, Play } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { railItems } from './state/reducer.js'
+import { harnessName } from './harness-names.js'
 import './chatview.css'
 import './composer.css'
 
@@ -93,7 +94,7 @@ export default function ChatView({ chat, onBack }) {
         <p className="cv-facts">
           {chat.status !== 'idle' && <span className={`cv-dot cv-dot--${chat.status}`} />}
           <span className="cv-where">{chat.workspace}</span>
-          <span className="cv-fact">Claude Code</span>
+          <span className="cv-fact">{harnessName(chat.harness)}</span>
           {chat.model && <span className="cv-fact">{chat.model}</span>}
           <span className="cv-fact">{STATUS_LABEL[chat.status] ?? chat.status}</span>
           {chat.running && (
@@ -199,7 +200,7 @@ export default function ChatView({ chat, onBack }) {
           />
           <div className="cv-foot">
             <div className="nc-pickers">
-              <span className="nc-meta nc-static">Claude Code</span>
+              <span className="nc-meta nc-static">{harnessName(chat.harness)}</span>
             </div>
             <div className="nc-send-group">
               <button className="nc-send" onClick={send} disabled={!canSend} title="Send">

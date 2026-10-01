@@ -111,6 +111,12 @@ export class DaemonApi {
     return this.call('GET', `/sessions/${id}/decisions`)
   }
 
+  // The models a harness advertises, in its own words (empty = the slot
+  // stays reserved for that harness).
+  models(harnessId) {
+    return this.call('GET', `/harnesses/${harnessId}/models`)
+  }
+
   answer(decisionId, choice) {
     return this.call('POST', `/decisions/${decisionId}/answer`, {
       request_id: newRequestId(),

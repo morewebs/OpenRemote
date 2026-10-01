@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import AboutModal from './AboutModal.jsx'
 import { useConsole } from './state/console.jsx'
+import { harnessName } from './harness-names.js'
 import './devices.css'
 import './panels.css'
 
 export default function Panels({ onReplay }) {
   const { connection, capabilities, sessions, disconnect } = useConsole()
+  const harnessList = capabilities?.harnesses ?? []
   const [about, setAbout] = useState(false)
   const [reduceMotion, setReduceMotion] = useState(() => {
     try {
@@ -15,7 +17,6 @@ export default function Panels({ onReplay }) {
     }
   })
   const [confirmDisconnect, setConfirmDisconnect] = useState(false)
-  const harness = capabilities?.harnesses?.find((h) => h.id === 'claude')
 
   const setReduce = (value) => {
     setReduceMotion(value)
@@ -66,18 +67,18 @@ export default function Panels({ onReplay }) {
         </div>
       </div>
 
-      <h2 className="pn-section">Harness</h2>
-      <p className="pn-lead">What the daemon drives on this machine.</p>
+      <h2 className="pn-section">Harnesses</h2>
+      <p className="pn-lead">What the daemon can drive on this machine. Install a harness's own CLI and it appears here.</p>
       <div className="pn-list pn-list--tight">
-        <div className="pn-row">
-          <div>
-            <div className="pn-name">Claude Code</div>
-            <div className="pn-detail">
-              {harness?.available ? harness.path : 'No CLI found. Install Claude Code and reopen the app.'}
+        {(harnessList ?? []).map((h) => (
+          <div className="pn-row" key={h.id}>
+            <div>
+              <div className="pn-name">{harnessName(h.id)}</div>
+              <div className="pn-detail">{h.available ? h.path : 'Not found on this machine.'}</div>
             </div>
+            <span className={`pn-btn${h.available ? ' on' : ''}`}>{h.available ? 'Ready' : 'Missing'}</span>
           </div>
-          <span className={`pn-btn${harness?.available ? ' on' : ''}`}>{harness?.available ? 'Ready' : 'Missing'}</span>
-        </div>
+        ))}
       </div>
 
       <h2 className="pn-section">This install</h2>

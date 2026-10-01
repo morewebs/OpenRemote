@@ -22,6 +22,7 @@ export function ConsoleProvider({ children }) {
   const [capabilities, setCapabilities] = useState(null)
   const [sessions, setSessions] = useState([])
   const [chats, setChats] = useState({})
+  const [modelsByHarness, setModelsByHarness] = useState({})
   const [openChatId, setOpenChatId] = useState(null)
   const stopEventsRef = useRef(null)
   const cursorRef = useRef(null)
@@ -194,13 +195,29 @@ export function ConsoleProvider({ children }) {
   )
 
   const createChat = useCallback(
-    async (text, workspace) => {
-      const session = await api.createSession({ harness: 'claude', workspace })
+    async (text, workspace, harness, model) => {
+      const session = await api.createSession({ harness, workspace, model })
       ensureChat(session)
       if (text.trim()) await api.prompt(session.id, text.trim())
       return session.id
     },
     [api, ensureChat],
+  )
+
+  // The model catalog for a harness, cached per connection. Empty means
+  // the harness advertises nothing — the picker stays hidden.
+  const modelsFor = useCallback(
+    async (harnessId) => {
+      if (!api.ready || modelsByHarness[harnessId]) return modelsByHarness[harnessId] ?? []
+      try {
+        const list = (await api.models(harnessId)) ?? []
+        setModelsByHarness((current) => ({ ...current, [harnessId]: list }))
+        return list
+      } catch {
+        return []
+      }
+    },
+    [api, modelsByHarness],
   )
 
   const sendPrompt = useCallback(
@@ -244,6 +261,7 @@ export function ConsoleProvider({ children }) {
       disconnect,
       ensureChat,
       createChat,
+      modelsFor,
       sendPrompt,
       answerDecision,
       stopChat,
@@ -261,6 +279,7 @@ export function ConsoleProvider({ children }) {
       disconnect,
       ensureChat,
       createChat,
+      modelsFor,
       sendPrompt,
       answerDecision,
       stopChat,

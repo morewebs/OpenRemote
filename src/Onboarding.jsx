@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { ArrowRight, Asterisk } from '@phosphor-icons/react'
+import { ArrowRight } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
+import { harnessName } from './harness-names.js'
 import './onboarding.css'
 
 const STEPS = ['welcome', 'connect', 'ready']
@@ -17,8 +18,7 @@ export default function Onboarding({ onDone }) {
     else onDone()
   }
 
-  const harness = capabilities?.harnesses?.find((h) => h.id === 'claude')
-  const harnessReady = Boolean(harness?.available)
+  const available = (capabilities?.harnesses ?? []).filter((h) => h.available)
 
   return (
     <div className="ob">
@@ -85,20 +85,17 @@ export default function Onboarding({ onDone }) {
           <>
             <h1 className="ob-title">New tasks run on this computer</h1>
             <p className="ob-sub">
-              {harnessReady
-                ? 'Claude Code is installed and ready. Describe the work and pick the folder it runs in.'
-                : 'No Claude Code CLI was found on this machine — install it, then start a task.'}
+              {available.length > 0
+                ? 'These harnesses are installed and ready. Describe the work and pick the folder it runs in.'
+                : 'No harness CLI was found on this machine — install Claude Code or Codex, then start a task.'}
             </p>
             <div className="ob-harnesses">
-              <div className={`ob-harness${harnessReady ? ' signed' : ''}`}>
-                <span className="ob-harness-mark">
-                  <Asterisk size={15} weight="light" />
-                </span>
-                <span className="ob-harness-name">Claude Code</span>
-                <span className="ob-harness-state">
-                  {harnessReady ? harness.version ?? 'Ready' : 'Not found'}
-                </span>
-              </div>
+              {available.map((h) => (
+                <div className="ob-harness signed" key={h.id}>
+                  <span className="ob-harness-name">{harnessName(h.id)}</span>
+                  <span className="ob-harness-state">Ready</span>
+                </div>
+              ))}
             </div>
             <button className="ob-cta ob-cta--primary" onClick={next}>
               Open OpenRemote
