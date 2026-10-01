@@ -107,15 +107,19 @@ fn resolve_impl(override_path: Option<PathBuf>) -> Resolution {
         }
         return Resolution::Unavailable;
     }
-    // Windows npm layout: %APPDATA%\npm\node_modules\@anthropic-ai\claude-code\cli.js
+    // Windows npm layouts, newest first: the 2.x package ships a native
+    // binary under bin/; the older layout ran cli.js through node.
     if let Some(appdata) = std::env::var_os("APPDATA") {
-        let script = Path::new(&appdata)
+        let package = Path::new(&appdata)
             .join("npm")
             .join("node_modules")
             .join("@anthropic-ai")
-            .join("claude-code")
-            .join("cli.js");
-        if let Some(res) = node_script_resolution(script) {
+            .join("claude-code");
+        let native = package.join("bin").join("claude.exe");
+        if native.is_file() {
+            return Resolution::Executable(native);
+        }
+        if let Some(res) = node_script_resolution(package.join("cli.js")) {
             return res;
         }
     }

@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test \"src/**/*.test.js\""
+    "test": "node --test \"src/**/*.test.js\"",
+    "daemon": "node scripts/sync-daemon.mjs"
   },
   "dependencies": {
     "@fontsource/geist-mono": "^5.3.0",

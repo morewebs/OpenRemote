@@ -1,29 +1,41 @@
 import { useMemo, useState } from 'react'
-import { CaretDown, Cloud, GearSix, House, Lightning, MagnifyingGlass, Plus, PuzzlePiece, WifiHigh, X } from '@phosphor-icons/react'
-import { PROJECTS } from './world.js'
+import { CaretDown, GearSix, MagnifyingGlass, Plus, X } from '@phosphor-icons/react'
+import { useConsole } from './state/console.jsx'
+import { workspaceName } from './state/reducer.js'
 import './sidebar.css'
 
-export default function Sidebar({ open, active, onSelect, mode, onModeChange, chats }) {
+export default function Sidebar({ open, active, onSelect, onReplayOnboarding }) {
+  const { connection, sessions, chats } = useConsole()
   const [query, setQuery] = useState('')
   const [collapsed, setCollapsed] = useState({})
 
+  const rows = useMemo(() => {
+    return (sessions ?? []).map((session) => ({
+      id: session.id,
+      title: chats[session.id]?.title ?? 'A new task',
+      status: chats[session.id]?.status ?? 'idle',
+      project: workspaceName(session.workspace),
+      updatedAt: session.updated_at ?? 0,
+    }))
+  }, [sessions, chats])
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return chats
-    return chats.filter((c) => c.title.toLowerCase().includes(q))
-  }, [query, chats])
+    const sorted = [...rows].sort((a, b) => b.updatedAt - a.updatedAt)
+    if (!q) return sorted
+    return sorted.filter((c) => c.title.toLowerCase().includes(q) || c.project.toLowerCase().includes(q))
+  }, [rows, query])
 
   const groups = []
   const byProject = new Map()
-  for (const chat of visible) {
-    const label = PROJECTS.find((p) => p.id === chat.project)?.name ?? chat.project
-    let group = byProject.get(label)
+  for (const row of visible) {
+    let group = byProject.get(row.project)
     if (!group) {
-      group = { label, items: [] }
-      byProject.set(label, group)
+      group = { label: row.project, items: [] }
+      byProject.set(row.project, group)
       groups.push(group)
     }
-    group.items.push(chat)
+    group.items.push(row)
   }
 
   const toggleProject = (project) => {
@@ -33,24 +45,6 @@ export default function Sidebar({ open, active, onSelect, mode, onModeChange, ch
   return (
     <aside className={`sidebar${open ? '' : ' collapsed'}`}>
       <div className="sb-actions">
-        <div className="mode-switch" role="group" aria-label="Connection mode">
-          <button
-            className={mode === 'local' ? 'on' : ''}
-            aria-pressed={mode === 'local'}
-            onClick={() => onModeChange('local')}
-          >
-            <House size={13} />
-            Local
-          </button>
-          <button
-            className={mode === 'cloud' ? 'on' : ''}
-            aria-pressed={mode === 'cloud'}
-            onClick={() => onModeChange('cloud')}
-          >
-            <Cloud size={13} />
-            Cloud
-          </button>
-        </div>
         <button className="side-tile" onClick={() => onSelect('new')}>
           <Plus size={17} weight="bold" />
           New chat
@@ -69,22 +63,13 @@ export default function Sidebar({ open, active, onSelect, mode, onModeChange, ch
             </button>
           )}
         </label>
-        <button className={`side-tile${active === 'plugins' ? ' on' : ''}`} onClick={() => onSelect('plugins')}>
-          <PuzzlePiece size={17} />
-          Plugins
-        </button>
-        <button className={`side-tile${active === 'automations' ? ' on' : ''}`} onClick={() => onSelect('automations')}>
-          <Lightning size={17} />
-          Automations
-        </button>
-        <button className={`side-tile${active === 'devices' ? ' on' : ''}`} onClick={() => onSelect('devices')}>
-          <WifiHigh size={17} />
-          Machines
-        </button>
       </div>
 
       <nav className="sb-list" aria-label="Chats">
         <div className="section-title">Chats</div>
+        {groups.length === 0 && (
+          <p className="sb-empty">No chats yet. Start one — it will appear here grouped by folder.</p>
+        )}
         {groups.map((group) => {
           const isCollapsed = !!collapsed[group.label]
           return (
@@ -94,24 +79,22 @@ export default function Sidebar({ open, active, onSelect, mode, onModeChange, ch
                 onClick={() => toggleProject(group.label)}
                 aria-expanded={!isCollapsed}
               >
-                <span
-                  className={`project-caret${isCollapsed ? ' closed' : ''}`}
-                >
+                <span className={`project-caret${isCollapsed ? ' closed' : ''}`}>
                   <CaretDown size={12} />
                 </span>
                 <span className="project-name">{group.label}</span>
                 <span className="project-count">{group.items.length}</span>
               </button>
               {!isCollapsed &&
-                group.items.map((chat) => (
+                group.items.map((row) => (
                   <button
-                    key={chat.id}
-                    className={`chat-row${chat.id === active ? ' active' : ''}`}
-                    data-status={chat.status}
-                    onClick={() => onSelect(chat.id)}
+                    key={row.id}
+                    className={`chat-row${row.id === active ? ' active' : ''}`}
+                    data-status={row.status}
+                    onClick={() => onSelect(row.id)}
                   >
-                    <span className={`dot dot--${chat.status}`} />
-                    <span className="chat-title">{chat.title}</span>
+                    <span className={`dot dot--${row.status}`} />
+                    <span className="chat-title">{row.title}</span>
                   </button>
                 ))}
             </section>
@@ -128,4 +111,3 @@ export default function Sidebar({ open, active, onSelect, mode, onModeChange, ch
     </aside>
   )
 }
-

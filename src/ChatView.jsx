@@ -1,46 +1,40 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp } from '@phosphor-icons/react'
-import PickerMenu from './PickerMenu.jsx'
-import { HarnessIcon } from './BrandIcon.jsx'
-import ContextRing from './ContextRing.jsx'
-import { MODELS, harnessName } from './catalog.js'
-import { PROJECTS, contextWindow } from './world.js'
+import { ArrowUp, Stop, Play } from '@phosphor-icons/react'
+import { useConsole } from './state/console.jsx'
+import { railItems } from './state/reducer.js'
 import './chatview.css'
 import './composer.css'
 
-const TOOL_LABEL = { pending: 'Needs a decision', ok: 'Done', denied: 'Denied', failed: 'Failed' }
-
-function machineName(chat, devices) {
-  if (!chat.machine) return 'this computer'
-  return devices.find((d) => d.id === chat.machine)?.name ?? chat.machine
+const STATUS_LABEL = {
+  starting: 'Starting',
+  running: 'Running',
+  waiting: 'Needs your decision',
+  idle: 'Idle',
+  stopped: 'Stopped',
+  failed: 'Failed',
 }
 
-export default function ChatView({ chat, devices, harnesses, onSend, onResolve, onHarness, onModel }) {
+const TOOL_LABEL = { ok: 'Done', failed: 'Failed' }
+
+export default function ChatView({ chat, onBack }) {
+  const { sendPrompt, answerDecision, stopChat, resumeChat } = useConsole()
   const [text, setText] = useState('')
-  const [picker, setPicker] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
   const scrollRef = useRef(null)
   const composerRef = useRef(null)
-  const pending = chat.messages.some((m) => m.role === 'tool' && m.state === 'pending')
-  const canSend = text.trim().length > 0 && !pending
-
-  const currentHarness = harnesses.find((h) => h.id === chat.harness)
-  const modelList = MODELS[chat.harness] ?? []
-  const currentModel =
-    modelList.find((m) => m.id === chat.model) ?? modelList[0] ?? { name: chat.modelLabel ?? chat.model }
-  const project = PROJECTS.find((p) => p.id === chat.project)
-  const where = machineName(chat, devices)
-  const harnessLabel = currentHarness?.name ?? harnessName(chat.harness)
-
-  const openPicker = (kind) => (e) => setPicker({ kind, x: e.clientX, y: e.clientY })
+  const rail = railItems(chat)
+  const pendingDecision = rail.find((item) => item.kind === 'decision' && item.pending)
+  const canSend = text.trim().length > 0 && !pendingDecision && chat.running && !busy
 
   useEffect(() => {
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [chat.messages, chat.status])
+  }, [rail.length, chat.status])
 
   // the composer floats over the transcript; its height varies as the
-  // textarea grows. Publish it as --cv-clear so the thread's bottom
-  // padding always keeps the last message above the box, never under it
+  // textarea grows. Publish it as --cv-clear so the thread's bottom padding
+  // always keeps the last message above the box, never under it.
   useEffect(() => {
     const composer = composerRef.current
     if (!composer) return
@@ -54,118 +48,137 @@ export default function ChatView({ chat, devices, harnesses, onSend, onResolve, 
     return () => ro.disconnect()
   }, [])
 
-  const send = () => {
+  const send = async () => {
     if (!canSend) return
-    onSend(chat.id, text.trim())
-    setText('')
-  }
-
-  const place = project?.path ?? project?.name ?? chat.project
-  const blocks = []
-  let rail = null
-  for (const message of chat.messages) {
-    if (message.role === 'user') {
-      rail = null
-      blocks.push({ kind: 'user', id: message.id, message })
-    } else {
-      if (!rail) {
-        rail = { kind: 'rail', id: message.id, items: [] }
-        blocks.push(rail)
-      }
-      rail.items.push(message)
+    setBusy(true)
+    setError(null)
+    try {
+      await sendPrompt(chat.id, text.trim())
+      setText('')
+    } catch (err) {
+      setError(err.message ?? String(err))
+    } finally {
+      setBusy(false)
     }
   }
-  if (chat.status === 'running') {
-    const last = blocks.at(-1)
-    if (last?.kind === 'rail') last.running = true
-    else blocks.push({ kind: 'rail', id: 'running', items: [], running: true })
+
+  const answer = async (decisionId, choice) => {
+    setBusy(true)
+    setError(null)
+    try {
+      await answerDecision(decisionId, choice)
+    } catch (err) {
+      setError(err.message ?? String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const control = async (action) => {
+    setBusy(true)
+    setError(null)
+    try {
+      await action()
+    } catch (err) {
+      setError(err.message ?? String(err))
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
     <div className="chatview">
       <header className="cv-head">
-        <h1>{chat.title}</h1>
+        <h1>{chat.title ?? 'A new task'}</h1>
         <p className="cv-facts">
           {chat.status !== 'idle' && <span className={`cv-dot cv-dot--${chat.status}`} />}
-          <span className="cv-where">{place}</span>
-          <span className="cv-fact">{harnessLabel}</span>
-          <span className="cv-fact">{currentModel.name}</span>
-          <span className="cv-fact">{where}</span>
-          {chat.status === 'waiting' && <span className="cv-fact">Needs your decision</span>}
-          {chat.approvals?.length > 0 && (
-            <span className="cv-fact">{chat.approvals.join(', ')} allowed for this chat</span>
+          <span className="cv-where">{chat.workspace}</span>
+          <span className="cv-fact">Claude Code</span>
+          {chat.model && <span className="cv-fact">{chat.model}</span>}
+          <span className="cv-fact">{STATUS_LABEL[chat.status] ?? chat.status}</span>
+          {chat.running && (
+            <button className="cv-fact-btn" onClick={() => control(() => stopChat(chat.id))} title="Stop the session">
+              <Stop size={11} weight="fill" />
+              Stop
+            </button>
+          )}
+          {(chat.status === 'stopped' || chat.status === 'failed') && (
+            <button className="cv-fact-btn" onClick={() => control(() => resumeChat(chat.id))} title="Resume the session">
+              <Play size={11} weight="fill" />
+              Resume
+            </button>
           )}
         </p>
+        {chat.lastError && chat.status === 'failed' && <p className="cv-facts cv-error">{chat.lastError}</p>}
       </header>
       <div className="cv-scroll" ref={scrollRef}>
         <div className="cv-thread">
-          {blocks.map((block) => {
-            if (block.kind === 'user') {
+          {rail.length === 0 && <p className="cv-node cv-note">The transcript will appear here.</p>}
+          {rail.map((item) => {
+            if (item.kind === 'message') {
+              if (item.role === 'user') return <div key={item.id} className="cv-user">{item.text}</div>
+              if (item.role === 'note') return <p key={item.id} className="cv-node cv-note">{item.text}</p>
+              return <p key={item.id} className="cv-node cv-agent">{item.text}</p>
+            }
+            if (item.kind === 'tool') {
               return (
-                <div key={block.id} className="cv-user">
-                  {block.message.text}
+                <div key={item.id} className={`cv-node cv-node--${item.state}`}>
+                  <div className="cv-tool-line">
+                    <span className="cv-tool-name">{item.name}</span>
+                    {item.state !== 'ok' && <span className="cv-tool-state">{TOOL_LABEL[item.state] ?? item.state}</span>}
+                  </div>
+                  {(item.input || item.result) && (
+                    <div className="cv-io">
+                      {item.input && (
+                        <div className="cv-io-row">
+                          <span className="cv-io-label">In</span>
+                          <code>{typeof item.input === 'string' ? item.input : JSON.stringify(item.input, null, 2)}</code>
+                        </div>
+                      )}
+                      {item.result && (
+                        <div className="cv-io-row">
+                          <span className="cv-io-label">Out</span>
+                          <code>{item.result}</code>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             }
+            // decision: approval or question, options in the harness's words
             return (
-              <div key={block.id} className="cv-rail">
-                {block.items.map((m) => {
-                  if (m.role === 'tool') {
-                    return (
-                      <div key={m.id} className={`cv-node cv-node--${m.state}`}>
-                        <div className="cv-tool-line">
-                          <span className="cv-tool-name">{m.name}</span>
-                          {m.state !== 'ok' && <span className="cv-tool-state">{TOOL_LABEL[m.state] ?? m.state}</span>}
-                        </div>
-                        {(m.arg || m.result) && (
-                          <div className="cv-io">
-                            {m.arg && (
-                              <div className="cv-io-row">
-                                <span className="cv-io-label">In</span>
-                                <code>{m.arg}</code>
-                              </div>
-                            )}
-                            {m.result && (
-                              <div className="cv-io-row">
-                                <span className="cv-io-label">Out</span>
-                                <code>{m.result}</code>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {m.state === 'pending' && (
-                          <div className="cv-tool-actions">
-                            <button type="button" className="primary" onClick={() => onResolve(chat.id, m.id, 'once')}>
-                              Allow once
-                            </button>
-                            <button type="button" onClick={() => onResolve(chat.id, m.id, 'session')}>
-                              Allow for this chat
-                            </button>
-                            <button type="button" onClick={() => onResolve(chat.id, m.id, 'deny')}>
-                              Deny
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  }
-                  if (m.role === 'note') {
-                    return (
-                      <p key={m.id} className="cv-node cv-note">
-                        {m.text}
-                      </p>
-                    )
-                  }
-                  return (
-                    <p key={m.id} className="cv-node cv-agent">
-                      {m.text}
-                    </p>
-                  )
-                })}
-                {block.running && <p className="cv-node cv-node--run cv-running">With {harnessLabel} · {where}</p>}
+              <div key={item.id} className={`cv-node cv-node--${item.pending ? 'pending' : 'done'}`}>
+                <div className="cv-tool-line">
+                  <span className="cv-tool-name">{item.toolName ?? 'Decision'}</span>
+                  <span className="cv-tool-state">{item.pending ? 'Needs a decision' : `Answered: ${item.answeredChoice}`}</span>
+                </div>
+                {item.input && (
+                  <div className="cv-io">
+                    <div className="cv-io-row">
+                      <span className="cv-io-label">In</span>
+                      <code>{typeof item.input === 'string' ? item.input : JSON.stringify(item.input, null, 2)}</code>
+                    </div>
+                  </div>
+                )}
+                {item.pending && (
+                  <div className="cv-tool-actions">
+                    {item.options.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className={option.id === 'allow' ? 'primary' : ''}
+                        onClick={() => answer(item.id, option.id)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           })}
+          {chat.running && !pendingDecision && <p className="cv-node cv-node--run cv-running">With Claude Code · this computer</p>}
         </div>
       </div>
 
@@ -180,72 +193,22 @@ export default function ChatView({ chat, devices, harnesses, onSend, onResolve, 
                 send()
               }
             }}
-            placeholder={pending ? 'Decide on the command above' : 'Steer the session'}
-            disabled={pending}
+            placeholder={pendingDecision ? 'Decide above to continue' : chat.running ? 'Steer the session' : 'Resume the session to continue'}
+            disabled={pendingDecision || !chat.running}
             spellCheck={false}
           />
           <div className="cv-foot">
             <div className="nc-pickers">
-              <button
-                className="nc-meta"
-                onClick={openPicker('model')}
-                aria-haspopup="listbox"
-                aria-expanded={picker?.kind === 'model'}
-                title="Model"
-              >
-                {currentModel.name}
-              </button>
-              <span className="nc-via">via</span>
-              <button
-                className="nc-meta"
-                onClick={openPicker('harness')}
-                aria-haspopup="listbox"
-                aria-expanded={picker?.kind === 'harness'}
-                title="Harness"
-              >
-                <HarnessIcon harness={currentHarness} size={13} />
-                {harnessLabel}
-              </button>
-              {picker?.kind === 'model' && (
-                <PickerMenu
-                  label="Model"
-                  searchPlaceholder="Search models"
-                  items={modelList}
-                  groups={null}
-                  selectedId={currentModel.id}
-                  onChoose={(id) => {
-                    onModel(chat.id, id)
-                    setPicker(null)
-                  }}
-                  onClose={() => setPicker(null)}
-                  anchor={{ left: picker.x, top: picker.y }}
-                />
-              )}
-              {picker?.kind === 'harness' && (
-                <PickerMenu
-                  label="Harness"
-                  searchPlaceholder="Search harnesses"
-                  items={harnesses}
-                  groups
-                  selectedId={chat.harness}
-                  onChoose={(id) => {
-                    onHarness(chat.id, id)
-                    setPicker(null)
-                  }}
-                  onClose={() => setPicker(null)}
-                  anchor={{ left: picker.x, top: picker.y }}
-                  renderIcon={(h) => <HarnessIcon harness={h} size={14} />}
-                />
-              )}
+              <span className="nc-meta nc-static">Claude Code</span>
             </div>
             <div className="nc-send-group">
-              <ContextRing used={chat.contextUsed ?? 0} window={contextWindow(chat.model)} />
               <button className="nc-send" onClick={send} disabled={!canSend} title="Send">
                 <ArrowUp size={15} weight="bold" />
               </button>
             </div>
           </div>
         </div>
+        {error && <p className="cv-error-line">{error}</p>}
       </div>
     </div>
   )

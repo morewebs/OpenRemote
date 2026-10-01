@@ -446,3 +446,58 @@ button:focus-visible {
     transform: none;
   }
 }
+
+/* real daemon statuses beyond the mock three */
+.dot--starting {
+  background: var(--accent);
+}
+
+.dot--stopped,
+.dot--failed {
+  visibility: visible;
+  background: var(--dot-idle);
+}
+
+.dot--failed {
+  background: #f87171;
+}
+
+.sb-empty {
+  margin: 10px 14px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ---- phone width: the sidebar overlays instead of pushing ---- */
+.sb-backdrop {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .sidebar {
+    position: fixed;
+    top: 36px;
+    bottom: 0;
+    left: 0;
+    z-index: 30;
+    width: 264px;
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55);
+    transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1), visibility 0.18s;
+  }
+
+  .sidebar.collapsed {
+    transform: translateX(-100%);
+    margin-left: 0;
+    margin-right: 0;
+    width: 264px;
+  }
+
+  .sb-backdrop {
+    display: block;
+    position: fixed;
+    inset: 36px 0 0 0;
+    z-index: 25;
+    background: rgba(0, 0, 0, 0.45);
+  }
+}

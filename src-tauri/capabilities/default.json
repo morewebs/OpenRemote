@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window: frameless caption controls",
+  "description": "Main window: frameless caption controls, daemon sidecar",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -9,6 +9,11 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",
     "core:window:allow-start-dragging",
-    "core:window:allow-is-maximized"
+    "core:window:allow-is-maximized",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [{ "name": "openremote-daemon", "sidecar": true }]
+    },
+    "shell:allow-stdin-write"
   ]
 }

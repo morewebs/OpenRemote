@@ -173,3 +173,40 @@
   display: none;
 }
 
+
+/* the inline "add a workspace by path" input (slice-1 local chat) */
+.nc-path-input {
+  flex: 1 1 160px;
+  min-width: 120px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-hover);
+  color: var(--text-1);
+  font-size: 12.5px;
+  font-family: var(--font-sans);
+  outline: none;
+}
+
+.nc-path-input:focus {
+  border-color: var(--accent);
+}
+
+.nc-path-input::placeholder {
+  color: var(--text-3);
+}
+
+.nc-error {
+  margin: 10px 0 0;
+  color: var(--red, #f87171);
+  font-size: 12.5px;
+}
+
+/* ---- phone width: the greeting centers its margins ---- */
+@media (max-width: 640px) {
+  .nc-greeting {
+    margin: 0 16px 22px;
+    font-size: 20px;
+  }
+}

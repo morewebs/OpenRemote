@@ -371,3 +371,63 @@ html[data-reduce-motion] .cv-node--run::before {
 
 
 
+
+/* header controls + inline errors (slice-1 real chat) */
+.cv-fact-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 7px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+}
+
+.cv-fact-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.cv-error,
+.cv-error-line {
+  color: #f87171;
+  font-size: 12.5px;
+}
+
+.cv-error-line {
+  margin: 8px 2px 0;
+}
+
+/* honest dots for the rest of the lifecycle */
+.cv-dot--starting {
+  background: var(--accent);
+}
+
+.cv-dot--stopped {
+  background: var(--dot-idle);
+}
+
+.cv-dot--failed {
+  background: #f87171;
+}
+
+/* ---- phone width: tighter gutters, the language holds ---- */
+@media (max-width: 640px) {
+  .cv-head {
+    padding: 14px 16px 12px;
+  }
+
+  .cv-thread {
+    padding: 18px 16px calc(var(--cv-clear, 130px) + 14px);
+  }
+
+  .cv-composer {
+    left: 8px;
+    right: 8px;
+  }
+}

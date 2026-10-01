@@ -421,13 +421,21 @@ impl Supervisor {
                 permission_mode,
             } => {
                 self.with_store(|s| s.note_session(id, Some(session_ref), model, permission_mode))?;
-                self.emit_all(
-                    id,
-                    vec![EventPayload::SessionStatusChanged {
-                        status: SessionStatus::Idle,
-                        reason: None,
-                    }],
-                )?;
+                // A slow-booting harness may deliver init after a prompt
+                // already moved the session to working — init only settles
+                // a session that is still starting.
+                if matches!(
+                    self.session(id).map(|s| s.status),
+                    Ok(SessionStatus::Starting)
+                ) {
+                    self.emit_all(
+                        id,
+                        vec![EventPayload::SessionStatusChanged {
+                            status: SessionStatus::Idle,
+                            reason: None,
+                        }],
+                    )?;
+                }
             }
             DriverEvent::AssistantText { text } => {
                 let turn = self.current_turn(id);

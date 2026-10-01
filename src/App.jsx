@@ -2,63 +2,23 @@ import { useEffect, useState } from 'react'
 import Sidebar from './Sidebar.jsx'
 import TitleBar from './TitleBar.jsx'
 import NewChat from './NewChat.jsx'
-import DevicesView from './DevicesView.jsx'
 import ChatView from './ChatView.jsx'
 import Onboarding from './Onboarding.jsx'
 import Panels from './Panels.jsx'
-import PluginsView from './PluginsView.jsx'
-import AutomationsView from './AutomationsView.jsx'
-import { APP, HARNESSES, MODELS, harnessName, modelName } from './catalog.js'
-import {
-  WORLD_KEY,
-  acknowledgePluginKey,
-  addAutomation,
-  addCustomPlugin,
-  addDevice,
-  addStarter,
-  installFromCatalog,
-  installOnDevice,
-  loadWorld,
-  markUpdated,
-  openChat,
-  resetWorld,
-  removeAutomation,
-  removePlugin,
-  resolveTool,
-  runAutomation,
-  seedWorld,
-  sendMessage,
-  setChatHarness,
-  setChatModel,
-  setDefaults,
-  setDeviceOnline,
-  setMode,
-  setPluginEnabled,
-  setReduceMotion,
-  updateAutomation,
-  signInHarness,
-  signOutHarness,
-  toggleAutomation,
-} from './world.js'
+import { ConsoleProvider, useConsole } from './state/console.jsx'
 
-const OB_KEY = 'openremote-ui-onboarded'
-const STORE_KEY = 'openremote-ui-state'
-const STATIC_VIEWS = ['new', 'devices', 'plugins', 'automations', 'settings']
+const OB_KEY = 'openremote-onboarded'
+const STORE_KEY = 'openremote-view-state'
+const STATIC_VIEWS = ['new', 'settings']
 
-function loadInitial() {
-  let world
-  try {
-    world = loadWorld(localStorage.getItem(WORLD_KEY))
-  } catch {
-    world = loadWorld(null)
-  }
+function loadViewState(sessions) {
   let saved = null
   try {
     saved = JSON.parse(sessionStorage.getItem(STORE_KEY) ?? 'null')
   } catch {
     saved = null
   }
-  const known = new Set([...STATIC_VIEWS, ...world.chats.map((c) => c.id)])
+  const known = new Set([...STATIC_VIEWS, ...sessions.map((s) => s.id)])
   const hashView = location.hash.replace(/^#/, '')
   const fromHash = known.has(hashView) ? hashView : null
   let history
@@ -67,30 +27,22 @@ function loadInitial() {
     history = saved.history.filter((v) => known.has(v))
     hIndex = Math.min(saved.hIndex ?? 0, history.length - 1)
   } else {
-    history = [fromHash ?? 'new']
+    history = ['new']
     hIndex = 0
   }
   if (fromHash && history[hIndex] !== fromHash) {
     history = [...history.slice(0, hIndex + 1), fromHash]
     hIndex = history.length - 1
   }
-  return { world, history, hIndex }
+  return { history, hIndex }
 }
 
-const restored = loadInitial()
-
-function visibleHarnesses(signedIn) {
-  return HARNESSES.map((h) => ({
-    ...h,
-    group: signedIn.includes(h.id) ? 'Signed in' : 'Available',
-  })).sort((a, b) => (a.group === b.group ? 0 : a.group === 'Signed in' ? -1 : 1))
-}
-
-export default function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [history, setHistory] = useState(restored.history)
-  const [hIndex, setHIndex] = useState(restored.hIndex)
-  const [world, setWorld] = useState(restored.world)
+function Shell() {
+  const { sessions, chats, connection, ensureChat } = useConsole()
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window === 'undefined' ? true : window.innerWidth >= 640,
+  )
+  const [{ history, hIndex }, setNav] = useState(() => loadViewState([]))
   const [onboarded, setOnboarded] = useState(() => {
     try {
       return localStorage.getItem(OB_KEY) === '1'
@@ -98,27 +50,16 @@ export default function App() {
       return true
     }
   })
+
   const view = history[hIndex]
-  const stale = world.schema !== 2 || !Array.isArray(world.plugins) || !Array.isArray(world.signedIn)
-  if (stale) setWorld(seedWorld())
-  const harnesses = visibleHarnesses(world.signedIn ?? [])
+  const chat = STATIC_VIEWS.includes(view) ? null : chats[view] ?? null
 
-  const finishOnboarding = () => {
-    try {
-      localStorage.setItem(OB_KEY, '1')
-    } catch {
-      /* storage unavailable */
-    }
-    setOnboarded(true)
-  }
-
+  // Reconcile navigation with the live session list (a chat in the history
+  // that no longer exists falls back to New chat).
   useEffect(() => {
-    try {
-      localStorage.setItem(WORLD_KEY, JSON.stringify(world))
-    } catch {
-      /* storage unavailable */
-    }
-  }, [world])
+    setNav(loadViewState(sessions))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions])
 
   useEffect(() => {
     try {
@@ -129,61 +70,40 @@ export default function App() {
   }, [history, hIndex])
 
   useEffect(() => {
-    document.documentElement.toggleAttribute('data-reduce-motion', world.reduceMotion)
-  }, [world.reduceMotion])
-
-  useEffect(() => {
     window.history.replaceState(null, '', `#${view}`)
   }, [view])
 
   const navigate = (id) => {
     if (id === view) return
-    setHistory([...history.slice(0, hIndex + 1), id])
-    setHIndex((i) => i + 1)
-  }
-
-  const goBack = () => setHIndex((i) => Math.max(0, i - 1))
-  const goForward = () => setHIndex((i) => Math.min(history.length - 1, i + 1))
-
-  const switchHarness = (chatId, harnessId) => {
-    const modelId = MODELS[harnessId]?.[0]?.id
-    setWorld((w) => setChatHarness(w, chatId, harnessId, modelId, modelName(harnessId, modelId)))
-  }
-
-  const switchModel = (chatId, modelId) => {
-    const chat = world.chats.find((c) => c.id === chatId)
-    setWorld((w) => setChatModel(w, chatId, modelId, modelName(chat?.harness, modelId)))
-  }
-
-  const createChat = (text, harness, model, deviceId, projectId) => {
-    const id = crypto.randomUUID()
-    setWorld((w) => openChat(w, {
-      id,
-      text,
-      harness,
-      harnessName: harnessName(harness),
-      model,
-      modelLabel: modelName(harness, model),
-      deviceId,
-      mode: w.mode,
-      project: projectId,
+    setNav((nav) => ({
+      history: [...nav.history.slice(0, nav.hIndex + 1), id],
+      hIndex: nav.hIndex + 1,
     }))
+  }
+
+  const goBack = () => setNav((nav) => ({ ...nav, hIndex: Math.max(0, nav.hIndex - 1) }))
+  const goForward = () =>
+    setNav((nav) => ({ ...nav, hIndex: Math.min(nav.history.length - 1, nav.hIndex + 1) }))
+
+  // Opening a chat from the sidebar: make sure its record exists even
+  // before the next session poll.
+  const openSession = (id) => {
+    const session = (sessions ?? []).find((s) => s.id === id)
+    if (session) ensureChat(session)
     navigate(id)
+    if (typeof window !== 'undefined' && window.innerWidth < 640) setSidebarOpen(false)
   }
 
-  const runRule = (id) => {
-    const ran = runAutomation(world, id)
-    setWorld(ran.world)
-    if (ran.chatId) navigate(ran.chatId)
+  const finishOnboarding = () => {
+    try {
+      localStorage.setItem(OB_KEY, '1')
+    } catch {
+      /* storage unavailable */
+    }
+    setOnboarded(true)
   }
 
-  const reset = () => {
-    setWorld(resetWorld())
-    setHistory(['new'])
-    setHIndex(0)
-  }
-
-  const replay = () => {
+  const replayOnboarding = () => {
     try {
       localStorage.removeItem(OB_KEY)
     } catch {
@@ -192,120 +112,45 @@ export default function App() {
     setOnboarded(false)
   }
 
-  const staticView = STATIC_VIEWS.includes(view)
-  const chat = stale ? null : world.chats.find((c) => c.id === view)
-  if (stale) return null
-
-  return (
-    <div className="app" data-reduce-motion={world.reduceMotion ? '' : undefined}>
-      {!onboarded && (
-        <Onboarding
-          onDone={finishOnboarding}
-          onSignIn={(id) => setWorld((w) => signInHarness(w, id))}
-          harnesses={harnesses}
+  const body = () => {
+    if (!onboarded) return <Onboarding onDone={finishOnboarding} />
+    return (
+      <>
+        <TitleBar
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen((v) => !v)}
+          onBack={goBack}
+          onForward={goForward}
+          canBack={hIndex > 0}
+          canForward={hIndex < history.length - 1}
         />
-      )}
-      {onboarded && (
-        <>
-          <TitleBar
-            sidebarOpen={sidebarOpen}
-            onToggleSidebar={() => setSidebarOpen((v) => !v)}
-            onBack={goBack}
-            onForward={goForward}
-            canBack={hIndex > 0}
-            canForward={hIndex < history.length - 1}
-            version={world.appVersion}
-            latest={APP.latest}
-            reduceMotion={world.reduceMotion}
-            onUpdated={() => setWorld((w) => markUpdated(w, APP.latest))}
-          />
-          <div className="app-body">
-            <Sidebar
-              open={sidebarOpen}
-              active={view === 'new' ? null : view}
-              onSelect={navigate}
-              mode={world.mode}
-              onModeChange={(mode) => setWorld((w) => setMode(w, mode))}
-              chats={world.chats}
-            />
-            <main className="main">
-              {view === 'new' && (
-                <NewChat
-                  mode={world.mode}
-                  devices={world.devices}
-                  harnesses={harnesses}
-                  defaults={world.defaults}
-                  chats={world.chats}
-                  onOpen={navigate}
-                  onCreate={createChat}
-                />
-              )}
-              {view === 'devices' && (
-                <DevicesView
-                  devices={world.devices}
-                  signedIn={world.signedIn}
-                  onOpenChat={navigate}
-                  onAdd={(input) => setWorld((w) => addDevice(w, input))}
-                  onTogglePower={(id, online) => setWorld((w) => setDeviceOnline(w, id, online))}
-                  onInstall={(deviceId, harnessId) => setWorld((w) => installOnDevice(w, deviceId, harnessId))}
-                />
-              )}
-              {view === 'plugins' && (
-                <PluginsView
-                  world={world}
-                  onInstall={(catalogId, deviceId) => setWorld((w) => installFromCatalog(w, catalogId, deviceId))}
-                  onAdd={(input) => setWorld((w) => addCustomPlugin(w, input))}
-                  onRemove={(id) => setWorld((w) => removePlugin(w, id))}
-                  onKey={(id) => setWorld((w) => acknowledgePluginKey(w, id))}
-                  onEnabled={(id, enabled) => setWorld((w) => setPluginEnabled(w, id, enabled))}
-                />
-              )}
-              {view === 'automations' && (
-                <AutomationsView
-                  world={world}
-                  harnesses={harnesses}
-                  onToggle={(id) => setWorld((w) => toggleAutomation(w, id))}
-                  onRun={runRule}
-                  onOpenChat={navigate}
-                  onAdd={(input) => setWorld((w) => addAutomation(w, input))}
-                  onUpdate={(id, input) => setWorld((w) => updateAutomation(w, id, input))}
-                  onRemove={(id) => setWorld((w) => removeAutomation(w, id))}
-                  onStarter={(id) => setWorld((w) => addStarter(w, id))}
-                />
-              )}
-              {view === 'settings' && (
-                <Panels
-                  world={world}
-                  harnesses={harnesses}
-                  onDefaults={(patch) => setWorld((w) => setDefaults(w, patch))}
-                  onSignIn={(id) => setWorld((w) => signInHarness(w, id))}
-                  onSignOut={(id) => setWorld((w) => signOutHarness(w, id))}
-                  onReduceMotion={(value) => setWorld((w) => setReduceMotion(w, value))}
-                  onReset={reset}
-                  onReplay={replay}
-                  onUpdated={() => setWorld((w) => markUpdated(w, APP.latest))}
-                />
-              )}
-              {!staticView && (
-                chat ? (
-                  <ChatView
-                    key={chat.id}
-                    chat={chat}
-                    devices={world.devices}
-                    harnesses={harnesses}
-                    onSend={(id, text) => setWorld((w) => sendMessage(w, id, text))}
-                    onResolve={(id, messageId, choice) => setWorld((w) => resolveTool(w, id, messageId, choice))}
-                    onHarness={switchHarness}
-                    onModel={switchModel}
-                  />
-                ) : (
-                  <div className="cv-none">That session is no longer in this workspace.</div>
-                )
-              )}
-            </main>
-          </div>
-        </>
-      )}
-    </div>
+        <div className="app-body">
+          {sidebarOpen && <div className="sb-backdrop" onClick={() => setSidebarOpen(false)} />}
+          <Sidebar open={sidebarOpen} active={view === 'new' ? null : view} onSelect={openSession} />
+          <main className="main">
+            {view === 'new' && <NewChat onOpen={openSession} />}
+            {view === 'settings' && <Panels onReplay={replayOnboarding} />}
+            {!STATIC_VIEWS.includes(view) &&
+              (chat ? (
+                <ChatView key={chat.id} chat={chat} />
+              ) : (
+                <div className="cv-none">That chat is no longer in this workspace.</div>
+              ))}
+          </main>
+        </div>
+      </>
+    )
+  }
+
+  return body()
+}
+
+export default function App() {
+  return (
+    <ConsoleProvider>
+      <div className="app">
+        <Shell />
+      </div>
+    </ConsoleProvider>
   )
 }

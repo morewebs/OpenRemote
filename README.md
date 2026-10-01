@@ -24,14 +24,30 @@ npm run dev            # browser only
 npx tauri dev          # desktop shell (Windows tested)
 ```
 
+The desktop shell runs the daemon as a sidecar; stage its binary first
+(and after daemon changes):
+
+```sh
+npm run daemon         # debug daemon; OR_RELEASE=1 for release
+```
+
+To run the daemon yourself (the console's first-run steps can connect to
+it by address):
+
+```sh
+cd daemon && cargo run
+```
+
+It prints `READY 127.0.0.1:<port>` on stdout; all logs go to stderr. Its
+data dir is `~/.openremote` (override with `OPENREMOTE_DATA_DIR`), and the
+bearer token lives in `~/.openremote/token`.
+
 Tests:
 
 ```sh
-npm test               # engine tests (node --test)
+npm test               # console reducer tests
+cd daemon && cargo test --locked   # unit + e2e (drives the fixture agent)
 ```
-
-The daemon prints `READY 127.0.0.1:<port>` on stdout when it is listening;
-all logs go to stderr.
 
 ## Conventions
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, ArrowRight, Info, SidebarSimple } from '@phosphor-icons/react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import AboutModal from './AboutModal.jsx'
+import { useConsole } from './state/console.jsx'
 import './titlebar.css'
 
 const hasTauri = typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__
@@ -13,11 +14,8 @@ export default function TitleBar({
   onForward,
   canBack,
   canForward,
-  version,
-  latest,
-  reduceMotion,
-  onUpdated,
 }) {
+  const { capabilities } = useConsole()
   const [maximized, setMaximized] = useState(false)
   const [about, setAbout] = useState(false)
 
@@ -89,16 +87,7 @@ export default function TitleBar({
           {'\uE8BB'}
         </button>
       </div>
-      {about && (
-        <AboutModal
-          onClose={() => setAbout(false)}
-          version={version}
-          latest={latest}
-          reduceMotion={reduceMotion}
-          onUpdated={onUpdated}
-        />
-      )}
+      {about && <AboutModal onClose={() => setAbout(false)} daemonVersion={capabilities?.daemon ?? null} />}
     </header>
   )
 }
-

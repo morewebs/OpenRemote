@@ -329,3 +329,10 @@
 .dv-host input[type='time'] {
   color-scheme: dark;
 }
+
+/* ---- phone width: settings rows breathe with less gutter ---- */
+@media (max-width: 640px) {
+  .panel {
+    padding: 18px 16px 40px;
+  }
+}

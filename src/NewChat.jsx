@@ -1,40 +1,74 @@
-import { useState } from 'react'
-import { ArrowUp, House } from '@phosphor-icons/react'
+import { useEffect, useState } from 'react'
+import { ArrowUp, Asterisk, House, FolderOpen } from '@phosphor-icons/react'
 import PickerMenu from './PickerMenu.jsx'
-import { HarnessIcon } from './BrandIcon.jsx'
-import { MODELS, deviceIcon, harnessName } from './catalog.js'
-import { PROJECTS } from './world.js'
+import { useConsole } from './state/console.jsx'
 import './newchat.css'
 import './composer.css'
 
-const DEVICE_STATUS = { online: 'Online', offline: 'Offline', waiting: 'Waiting' }
+const RECENTS_KEY = 'openremote-recent-workspaces'
 
-export default function NewChat({ mode, onCreate, devices, harnesses, defaults, chats, onOpen }) {
+function loadRecents() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(RECENTS_KEY) ?? '[]')
+    return Array.isArray(raw) ? raw.filter((p) => typeof p === 'string').slice(0, 8) : []
+  } catch {
+    return []
+  }
+}
+
+function saveRecents(list) {
+  try {
+    localStorage.setItem(RECENTS_KEY, JSON.stringify(list.slice(0, 8)))
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+const HARNESS = { id: 'claude', name: 'Claude Code' }
+
+export default function NewChat({ onOpen }) {
+  const { connection, sessions, chats, createChat } = useConsole()
   const [text, setText] = useState('')
-  const [harness, setHarness] = useState(defaults?.harness ?? 'cc')
-  const [model, setModel] = useState(defaults?.model ?? 'sonnet')
-  const [device, setDevice] = useState(defaults?.deviceId ?? devices[0]?.id)
-  const [project, setProject] = useState(defaults?.project ?? PROJECTS[0].id)
+  const [workspace, setWorkspace] = useState(null)
+  const [customPath, setCustomPath] = useState('')
   const [picker, setPicker] = useState(null)
-  const canSend = text.trim().length > 0
-  const currentHarness = harnesses.find((h) => h.id === harness) ?? harnesses[0]
-  const modelList = MODELS[harness] ?? []
-  const currentModel = modelList.find((m) => m.id === model) ?? modelList[0]
-  const currentDevice = devices.find((d) => d.id === device) ?? devices[0]
-  const currentProject = PROJECTS.find((p) => p.id === project) ?? PROJECTS[0]
-  const resume = (chats ?? []).filter((c) => c.status === 'running' || c.status === 'waiting')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
 
-  const openPicker = (kind) => (e) => setPicker({ kind, x: e.clientX, y: e.clientY })
+  useEffect(() => {
+    if (workspace == null) setWorkspace(loadRecents()[0] ?? null)
+  }, [workspace])
 
-  const chooseHarness = (id) => {
-    setHarness(id)
-    setModel(MODELS[id][0].id)
-    setPicker(null)
+  const canSend = text.trim().length > 0 && workspace && !busy
+  const recents = loadRecents()
+  const active = workspace ?? ''
+  const inProgress = (sessions ?? []).filter((s) => ['starting', 'working', 'waiting'].includes(s.status))
+
+  const openPicker = (e) => setPicker({ x: e.clientX, y: e.clientY })
+
+  const start = async () => {
+    if (!canSend) return
+    setBusy(true)
+    setError(null)
+    try {
+      const id = await createChat(text.trim(), workspace)
+      saveRecents([workspace, ...recents.filter((p) => p !== workspace)])
+      setText('')
+      onOpen(id)
+    } catch (err) {
+      setError(err.message ?? String(err))
+    } finally {
+      setBusy(false)
+    }
   }
 
-  const send = () => {
-    if (!canSend || !currentModel) return
-    onCreate(text, harness, currentModel.id, currentDevice?.id, currentProject.id)
+  const addCustomPath = () => {
+    const path = customPath.trim()
+    if (!path) return
+    setWorkspace(path)
+    saveRecents([path, ...recents.filter((p) => p !== path)])
+    setCustomPath('')
+    setPicker(null)
   }
 
   return (
@@ -47,7 +81,7 @@ export default function NewChat({ mode, onCreate, devices, harnesses, defaults, 
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
-              send()
+              start()
             }
           }}
           placeholder="Describe the task"
@@ -56,154 +90,87 @@ export default function NewChat({ mode, onCreate, devices, harnesses, defaults, 
         />
         <div className="nc-foot">
           <div className="nc-pickers">
-            <button
-              className="nc-meta"
-              onClick={openPicker('model')}
-              aria-haspopup="listbox"
-              aria-expanded={picker?.kind === 'model'}
-              title="Model"
-            >
-              {currentModel?.name ?? 'Model'}
-            </button>
-            <span className="nc-via">via</span>
-            <button
-              className="nc-meta"
-              onClick={openPicker('harness')}
-              aria-haspopup="listbox"
-              aria-expanded={picker?.kind === 'harness'}
-              title="Harness"
-            >
-              <HarnessIcon harness={currentHarness} size={13} />
-              {currentHarness?.name ?? harness}
-            </button>
-            {picker?.kind === 'model' && (
-              <PickerMenu
-                label="Model"
-                searchPlaceholder="Search models"
-                items={modelList}
-                groups={null}
-                selectedId={currentModel?.id}
-                onChoose={(id) => {
-                  setModel(id)
-                  setPicker(null)
-                }}
-                onClose={() => setPicker(null)}
-                anchor={{ left: picker.x, top: picker.y }}
-              />
-            )}
-            {picker?.kind === 'harness' && (
-              <PickerMenu
-                label="Harness"
-                searchPlaceholder="Search harnesses"
-                items={harnesses}
-                groups
-                selectedId={harness}
-                onChoose={chooseHarness}
-                onClose={() => setPicker(null)}
-                anchor={{ left: picker.x, top: picker.y }}
-                renderIcon={(h) => <HarnessIcon harness={h} size={14} />}
-              />
-            )}
+            <span className="nc-meta nc-static" title="The one harness this build drives">
+              <Asterisk size={13} weight="light" />
+              {HARNESS.name}
+            </span>
           </div>
           <div className="nc-send-group">
-            <button className="nc-send" onClick={send} disabled={!canSend} title="Start task">
+            <button className="nc-send" onClick={start} disabled={!canSend} title="Start task">
               <ArrowUp size={15} weight="bold" />
             </button>
           </div>
         </div>
       </div>
       <div className="nc-under">
-      <div className="nc-below">
-        <div className="nc-device">
-          <button
-            className="nc-meta"
-            onClick={openPicker('project')}
-            aria-haspopup="listbox"
-            aria-expanded={picker?.kind === 'project'}
-            title={currentProject.path}
-          >
-            {currentProject.name}
-          </button>
-          {picker?.kind === 'project' && (
-            <PickerMenu
-              label="Project"
-              searchPlaceholder="Search projects"
-              items={PROJECTS}
-              groups={null}
-              selectedId={currentProject.id}
-              onChoose={(id) => {
-                setProject(id)
-                setPicker(null)
-              }}
-              onClose={() => setPicker(null)}
-              anchor={{ left: picker.x, top: picker.y }}
-              renderTrailing={(p) => <span className="nc-item-path">{p.path}</span>}
-            />
-          )}
-        </div>
-        {mode === 'cloud' && currentDevice ? (
+        <div className="nc-below">
           <div className="nc-device">
             <button
               className="nc-meta"
-              onClick={openPicker('device')}
+              onClick={openPicker}
               aria-haspopup="listbox"
-              aria-expanded={picker?.kind === 'device'}
-              title={DEVICE_STATUS[currentDevice.status]}
+              aria-expanded={picker != null}
+              title="The folder the harness works in"
             >
-              {(() => {
-                const Icon = deviceIcon(currentDevice.kind)
-                return <Icon size={13} weight="light" />
-              })()}
-              {currentDevice.name}
-              <span className={`nc-dev-dot nc-dev-dot--${currentDevice.status}`} />
+              <FolderOpen size={13} weight="light" />
+              {active ? active.split(/[\\/]/).filter(Boolean).pop() : 'Choose a folder'}
             </button>
-            {picker?.kind === 'device' && (
+            {picker != null && (
               <PickerMenu
-                label="Device"
-                searchPlaceholder="Search devices"
-                items={devices}
+                label="Workspace"
+                searchPlaceholder="Search workspaces"
+                items={recents.map((p) => ({ id: p, name: p.split(/[\\/]/).filter(Boolean).pop() }))}
                 groups={null}
-                selectedId={device}
+                selectedId={active}
                 onChoose={(id) => {
-                  setDevice(id)
+                  setWorkspace(id)
                   setPicker(null)
                 }}
                 onClose={() => setPicker(null)}
                 anchor={{ left: picker.x, top: picker.y }}
-                renderIcon={(d) => {
-                  const Icon = deviceIcon(d.kind)
-                  return <Icon size={14} weight="light" />
-                }}
-                renderTrailing={(d) => (
-                  <span className={`nc-dev-dot nc-dev-dot--${d.status}`} title={DEVICE_STATUS[d.status]} />
-                )}
+                renderTrailing={(p) => <span className="nc-item-path">{p.id}</span>}
               />
             )}
           </div>
-        ) : (
           <span className="nc-meta nc-static">
             <House size={13} weight="light" />
             This computer
           </span>
-        )}
-      </div>
-      {resume.length > 0 && (
-        <div className="nc-resume">
-          <div className="nc-resume-label">In progress</div>
-          {resume.map((c) => {
-            const where = c.machine ? (devices.find((d) => d.id === c.machine)?.name ?? c.machine) : 'this computer'
-            return (
-              <button key={c.id} type="button" onClick={() => onOpen(c.id)}>
-                <span className={`dot dot--${c.status}`} />
-                <span className="nc-resume-title">{c.title}</span>
-                <span className="nc-resume-meta">
-                  {c.status === 'waiting' ? 'Needs a decision' : harnessName(c.harness)} · {where}
-                </span>
-              </button>
-            )
-          })}
+          <input
+            className="nc-path-input"
+            placeholder="…or type a folder path"
+            value={customPath}
+            onChange={(e) => setCustomPath(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                addCustomPath()
+              }
+            }}
+            spellCheck={false}
+          />
         </div>
-      )}
+        {error && <p className="nc-error">{error}</p>}
+        {inProgress.length > 0 && (
+          <div className="nc-resume">
+            <div className="nc-resume-label">In progress</div>
+            {inProgress.map((session) => {
+              const chat = chats[session.id]
+              const title = chat?.title ?? 'A new task'
+              return (
+                <button key={session.id} type="button" onClick={() => onOpen(session.id)}>
+                  <span className={`dot dot--${chat?.status ?? session.status}`} />
+                  <span className="nc-resume-title">{title}</span>
+                  <span className="nc-resume-meta">
+                    {session.status === 'waiting'
+                      ? 'Needs a decision'
+                      : `${HARNESS.name} · ${session.workspace?.split(/[\\/]/).filter(Boolean).pop() ?? ''}`}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )
