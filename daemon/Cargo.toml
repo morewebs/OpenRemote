@@ -2,7 +2,9 @@
 resolver = "2"
 members = [
     "crates/openremote-core",
+    "crates/openremote-harness",
     "crates/openremote-claude",
+    "crates/openremote-codex",
     "crates/openremote-daemon",
     "crates/fixture-agent",
 ]

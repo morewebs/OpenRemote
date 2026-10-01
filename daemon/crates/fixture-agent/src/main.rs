@@ -1,11 +1,18 @@
 //! A scriptable fake harness CLI for daemon e2e tests.
 //!
-//! Speaks the Claude Code wire protocol exactly as the daemon's driver
-//! expects it: `--input-format stream-json` envelopes on stdin, NDJSON
-//! frames on stdout, `control_request` / `control_response` for approvals
-//! and interrupts, `result` as the turn boundary. The scenario is chosen
-//! with `FIXTURE_AGENT_SCENARIO` (or a `fixture-scenario` file in the
-//! cwd) so the daemon's argv stays honest.
+//! One binary, many wire protocols — chosen by the argv the real driver
+//! builds, so e2e never smuggles fake flags:
+//!
+//! - Claude Code (`--output-format stream-json --input-format
+//!   stream-json …`): user envelopes on stdin, NDJSON frames on stdout,
+//!   `control_request`/`control_response` for approvals and interrupts,
+//!   `result` as the turn boundary.
+//! - Codex (`app-server --listen stdio://`): JSON-lines RPC — calls,
+//!   notifications, and server→client approval requests answered with
+//!   `{id, result: {decision}}`.
+//!
+//! The scenario is chosen with `FIXTURE_AGENT_SCENARIO` (or a
+//! `fixture-scenario` file in the cwd).
 //!
 //! One reader owns stdin for the whole run — a turn that waits for an
 //! approval parks in `pending_approval` and the main loop keeps reading;
@@ -15,9 +22,17 @@
 //! Lines are accepted with either `\r\n` or `\n` delimiters — the ICRNL
 //! lesson, paid for once in a PTY and never again.
 
+mod codex;
+
 use std::io::{BufRead, Write};
 
 fn main() {
+    // Protocol inference from the real driver's argv.
+    let argv: Vec<String> = std::env::args().skip(1).collect();
+    if argv.iter().any(|a| a == "app-server") {
+        codex::main_codex();
+        return;
+    }
     let mut agent = FixtureAgent::from_env();
     agent.run();
 }

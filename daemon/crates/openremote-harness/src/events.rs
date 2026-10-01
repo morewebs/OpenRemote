@@ -64,11 +64,13 @@ pub enum DriverEvent {
     },
     /// The turn boundary. `subtype` is the harness's own outcome string
     /// verbatim (claude `result.subtype`, codex `turn.status`, …); `coarse`
-    /// is the grid-facing enum.
+    /// is the grid-facing enum. `error_message` is the harness's own
+    /// failure explanation when the turn failed (codex `turn.error.message`).
     TurnCompleted {
         subtype: String,
         coarse: openremote_core::TurnOutcome,
         is_error: bool,
+        error_message: Option<String>,
     },
     /// Harness stderr, line by line — diagnostics ride with everything.
     Stderr {

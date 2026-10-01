@@ -23,24 +23,28 @@ pub enum AnswerOutcome {
 /// One harness's driving backend: the resolved CLI plus the spawn it fronts.
 pub enum Backend {
     Claude(openremote_claude::Resolution),
+    Codex(openremote_codex::Resolution),
 }
 
 /// A live session's driver, dispatch-only — every method reaches the
 /// concrete driver behind the same vocabulary.
 pub enum SessionDriver {
     Claude(openremote_claude::Driver),
+    Codex(openremote_codex::Driver),
 }
 
 impl SessionDriver {
     pub async fn send_prompt(&mut self, text: &str) -> Result<(), DriverError> {
         match self {
             SessionDriver::Claude(driver) => driver.send_prompt(text).await,
+            SessionDriver::Codex(driver) => driver.send_prompt(text).await,
         }
     }
 
     pub async fn interrupt(&mut self) -> Result<(), DriverError> {
         match self {
             SessionDriver::Claude(driver) => driver.interrupt().await,
+            SessionDriver::Codex(driver) => driver.interrupt().await,
         }
     }
 
@@ -55,18 +59,31 @@ impl SessionDriver {
                 driver.answer(harness_ref, choice, request).await?;
                 Ok(AnswerOutcome::Continues)
             }
+            SessionDriver::Codex(driver) => {
+                driver.answer(harness_ref, choice, request).await?;
+                // Codex's own semantics (schema): decline continues the
+                // turn, cancel interrupts it.
+                Ok(if choice == "cancel" {
+                    AnswerOutcome::Interrupts
+                } else {
+                    AnswerOutcome::Continues
+                })
+            }
         }
     }
 
     pub async fn shutdown(&mut self) -> Result<Option<i32>, DriverError> {
         match self {
             SessionDriver::Claude(driver) => driver.shutdown().await,
+            SessionDriver::Codex(driver) => driver.shutdown().await,
         }
     }
 }
 
 impl Backend {
-    pub fn spawn(
+    /// Codex's spawn runs its app-server handshake before returning; the
+    /// claude transport boots without one. Both land on the same shape.
+    pub async fn spawn(
         &self,
         opts: SpawnOptions,
     ) -> Result<(SessionDriver, mpsc::Receiver<DriverEvent>), DriverError> {
@@ -74,6 +91,10 @@ impl Backend {
             Backend::Claude(resolution) => {
                 let (driver, rx) = openremote_claude::Driver::spawn(resolution, opts)?;
                 Ok((SessionDriver::Claude(driver), rx))
+            }
+            Backend::Codex(resolution) => {
+                let (driver, rx) = openremote_codex::Driver::spawn(resolution, opts).await?;
+                Ok((SessionDriver::Codex(driver), rx))
             }
         }
     }
@@ -84,6 +105,7 @@ impl Backend {
     pub async fn models(&self) -> Option<Vec<ModelDescriptor>> {
         match self {
             Backend::Claude(_) => None,
+            Backend::Codex(resolution) => openremote_codex::models(resolution).await.ok(),
         }
     }
 }
@@ -129,6 +151,17 @@ impl HarnessRegistry {
         };
         entries.push(RegistryEntry {
             harness: harness_from("claude", "Claude Code", &claude),
+            backend,
+        });
+
+        let codex = openremote_codex::resolve_codex(overrides.get("codex").map(|p| p.as_path()));
+        let backend = if codex.is_available() {
+            Some(Backend::Codex(codex.clone()))
+        } else {
+            None
+        };
+        entries.push(RegistryEntry {
+            harness: harness_from("codex", "Codex", &codex),
             backend,
         });
 

@@ -335,6 +335,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "openremote-codex"
+version = "0.1.0"
+dependencies = [
+ "openremote-core",
+ "openremote-harness",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "openremote-core"
 version = "0.1.0"
 dependencies = [
@@ -351,6 +363,7 @@ dependencies = [
  "axum",
  "futures-util",
  "openremote-claude",
+ "openremote-codex",
  "openremote-core",
  "openremote-harness",
  "serde",

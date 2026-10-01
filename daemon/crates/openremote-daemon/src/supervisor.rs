@@ -177,7 +177,7 @@ impl Supervisor {
             resume: None,
             include_deltas: false,
         };
-        match backend.spawn(opts) {
+        match backend.spawn(opts).await {
             Ok((driver, rx)) => {
                 let mut sessions = self.sessions.lock().await;
                 sessions.insert(
@@ -289,7 +289,7 @@ impl Supervisor {
             resume: Some(harness_ref),
             include_deltas: false,
         };
-        let (driver, rx) = backend.spawn(opts)?;
+        let (driver, rx) = backend.spawn(opts).await?;
         {
             let mut sessions = self.sessions.lock().await;
             sessions.insert(
@@ -488,22 +488,26 @@ impl Supervisor {
                 subtype,
                 coarse,
                 is_error: _,
+                error_message,
             } => {
                 let turn = self.current_turn(id);
-                self.emit_all(
-                    id,
-                    vec![
-                        EventPayload::TurnCompleted {
-                            turn,
-                            outcome: subtype,
-                            coarse,
-                        },
-                        EventPayload::SessionStatusChanged {
-                            status: SessionStatus::Idle,
-                            reason: None,
-                        },
-                    ],
-                )?;
+                let mut payloads = vec![
+                    EventPayload::TurnCompleted {
+                        turn,
+                        outcome: subtype,
+                        coarse,
+                    },
+                    EventPayload::SessionStatusChanged {
+                        status: SessionStatus::Idle,
+                        reason: None,
+                    },
+                ];
+                // A failed turn explains itself: the harness's own message
+                // lands in the transcript as a note.
+                if let Some(message) = error_message {
+                    payloads.push(EventPayload::DaemonError { message });
+                }
+                self.emit_all(id, payloads)?;
             }
             DriverEvent::Stderr { line } => {
                 eprintln!("session {id} harness stderr: {line}");

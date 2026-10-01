@@ -347,6 +347,7 @@ async fn read_stdout(
                 subtype: subtype.clone(),
                 coarse: coarse_outcome(&subtype, terminal_reason.as_deref()),
                 is_error,
+                error_message: None,
             }),
             Frame::ControlRequest {
                 request_id,
