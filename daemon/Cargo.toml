@@ -1,0 +1,29 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/openremote-core",
+    "crates/openremote-claude",
+    "crates/openremote-daemon",
+    "crates/fixture-agent",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util", "io-std", "sync", "time", "fs", "signal"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+thiserror = "2"
+axum = "0.8"
+futures-util = "0.3"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }

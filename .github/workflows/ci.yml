@@ -26,3 +26,45 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+
+  daemon:
+    name: daemon (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: daemon
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: daemon
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      # The e2e suite locates the fixture binary in target/debug; build it
+      # up front so no test ever spawns a nested cargo build under the
+      # target-dir lock.
+      - run: cargo build -p fixture-agent --locked
+      - run: cargo test --locked
+
+  # The declared MSRV must hold against the real lockfile: transitive deps
+  # can silently raise the floor (the yoke 0.8.3 lesson).
+  msrv:
+    name: daemon MSRV (1.85)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: daemon
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.85"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: daemon
+      - run: cargo check --locked --all-targets

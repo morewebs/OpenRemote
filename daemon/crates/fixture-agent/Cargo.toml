@@ -1,0 +1,17 @@
+[package]
+name = "fixture-agent"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Scriptable fake harness CLI speaking the Claude Code stream-json wire protocol, for daemon e2e tests"
+
+[[bin]]
+name = "fixture-agent"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,19 @@
+[package]
+name = "openremote-claude"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Claude Code harness driver: a Rust port of the claude-agent-sdk process transport"
+
+[dependencies]
+openremote-core = { path = "../openremote-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+
+[lints]
+workspace = true
