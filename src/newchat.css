@@ -174,32 +174,12 @@
 }
 
 
-/* the inline "add a workspace by path" input (slice-1 local chat) */
-.nc-path-input {
-  flex: 1 1 160px;
-  min-width: 120px;
-  height: 26px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg-hover);
-  color: var(--text-1);
-  font-size: 12.5px;
-  font-family: var(--font-sans);
-  outline: none;
-}
-
-.nc-path-input:focus {
-  border-color: var(--accent);
-}
-
-.nc-path-input::placeholder {
-  color: var(--text-3);
-}
-
-/* the native folder dialog's trigger — quiet chrome beside the path
-   input; the OS dialog does the actual picking */
+/* the native folder dialog's trigger — quiet chrome; the OS dialog
+   does the actual picking */
 .nc-browse {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex: none;
   height: 26px;
   padding: 0 11px;

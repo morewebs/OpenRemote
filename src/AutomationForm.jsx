@@ -262,26 +262,28 @@ export default function AutomationForm({ rule, onClose }) {
               )}
             </div>
           </div>
-          <label className="af-workspace">
-            Workspace
+          <div className="af-workspace">
+            <span className="af-label">Workspace</span>
             <span className="af-workspace-row">
-              <input
-                value={workspace}
-                onChange={(e) => setWorkspace(e.target.value)}
-                placeholder="The folder the agent works in"
-                spellCheck={false}
-                aria-label="Workspace folder"
-              />
-              {canPickFolder && (
-                <button type="button" className="af-browse" onClick={async () => {
-                  const path = await pickFolder()
-                  if (path) setWorkspace(path)
-                }}>
+              <span className="af-chip af-workspace-value" title={workspace || undefined}>
+                {workspace ? workspace.split(/[\\/]/).filter(Boolean).pop() : 'None yet'}
+              </span>
+              {canPickFolder ? (
+                <button
+                  type="button"
+                  className="af-browse"
+                  onClick={async () => {
+                    const path = await pickFolder()
+                    if (path) setWorkspace(path)
+                  }}
+                >
                   Browse…
                 </button>
+              ) : (
+                <span className="af-when-note">Choose a folder in the desktop app.</span>
               )}
             </span>
-          </label>
+          </div>
         </div>
 
         <div className="af-section">

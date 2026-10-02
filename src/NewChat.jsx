@@ -32,7 +32,6 @@ export default function NewChat({ onOpen }) {
   const [defaults] = useState(() => loadDefaults())
   const [text, setText] = useState('')
   const [workspace, setWorkspace] = useState(() => defaults.workspace ?? loadRecents()[0] ?? null)
-  const [customPath, setCustomPath] = useState('')
   const [picker, setPicker] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -89,15 +88,6 @@ export default function NewChat({ onOpen }) {
     } finally {
       setBusy(false)
     }
-  }
-
-  const addCustomPath = () => {
-    const path = customPath.trim()
-    if (!path) return
-    setWorkspace(path)
-    saveRecents([path, ...recents.filter((p) => p !== path)])
-    setCustomPath('')
-    setPicker(null)
   }
 
   // The native folder dialog — one click instead of a typed absolute path.
@@ -213,74 +203,54 @@ export default function NewChat({ onOpen }) {
       </div>
       <div className="nc-under">
         <div className="nc-below">
-          {/* First run has no recent folders — an empty picker is a dead
-              control, so the button only renders when it has something
-              to show; the path input is always the honest affordance. */}
-          {recents.length > 0 || active ? (
+          {/* The workspace is picked, never typed: the recents picker
+              when there are any, the OS folder dialog beside it. An
+              empty recents list is no dead control — Browse is the
+              affordance. */}
+          {recents.length > 0 && (
             <div className="nc-device">
-              {recents.length > 0 ? (
-                <>
-                  <button
-                    className="nc-meta"
-                    onClick={openPicker('workspace')}
-                    aria-haspopup="listbox"
-                    aria-expanded={picker?.kind === 'workspace'}
-                    title={active || 'The folder the harness works in'}
-                  >
-                    <FolderOpen size={13} weight="light" />
-                    {active ? active.split(/[\\/]/).filter(Boolean).pop() : 'Choose a folder'}
-                  </button>
-                  {picker?.kind === 'workspace' && (
-                    <PickerMenu
-                      label="Workspace"
-                      searchPlaceholder="Search workspaces"
-                      wide
-                      items={recents.map((p) => ({
-                        id: p,
-                        name: p.split(/[\\/]/).filter(Boolean).pop(),
-                      }))}
-                      groups={null}
-                      selectedId={active}
-                      onChoose={(id) => {
-                        setWorkspace(id)
-                        setPicker(null)
-                      }}
-                      onClose={() => setPicker(null)}
-                      anchor={{ left: picker.x, top: picker.y }}
-                      renderSubline={(p) => <span className="nc-item-sub">{p.id}</span>}
-                    />
-                  )}
-                </>
-              ) : (
-                <span className="nc-meta nc-static" title={active}>
-                  <FolderOpen size={13} weight="light" />
-                  {active.split(/[\\/]/).filter(Boolean).pop()}
-                </span>
+              <button
+                className="nc-meta"
+                onClick={openPicker('workspace')}
+                aria-haspopup="listbox"
+                aria-expanded={picker?.kind === 'workspace'}
+                title={active || 'The folder the harness works in'}
+              >
+                <FolderOpen size={13} weight="light" />
+                {active ? active.split(/[\\/]/).filter(Boolean).pop() : 'Choose a folder'}
+              </button>
+              {picker?.kind === 'workspace' && (
+                <PickerMenu
+                  label="Workspace"
+                  searchPlaceholder="Search workspaces"
+                  wide
+                  items={recents.map((p) => ({
+                    id: p,
+                    name: p.split(/[\\/]/).filter(Boolean).pop(),
+                  }))}
+                  groups={null}
+                  selectedId={active}
+                  onChoose={(id) => {
+                    setWorkspace(id)
+                    setPicker(null)
+                  }}
+                  onClose={() => setPicker(null)}
+                  anchor={{ left: picker.x, top: picker.y }}
+                  renderSubline={(p) => <span className="nc-item-sub">{p.id}</span>}
+                />
               )}
             </div>
-          ) : null}
+          )}
+          {canPickFolder && (
+            <button type="button" className="nc-browse" onClick={browse} title="Choose a folder">
+              <FolderOpen size={13} weight="light" />
+              Browse…
+            </button>
+          )}
           <span className="nc-meta nc-static">
             <House size={13} weight="light" />
             This computer
           </span>
-          <input
-            className="nc-path-input"
-            placeholder="Workspace folder — where the agent works"
-            value={customPath}
-            onChange={(e) => setCustomPath(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                addCustomPath()
-              }
-            }}
-            spellCheck={false}
-          />
-          {canPickFolder && (
-            <button type="button" className="nc-browse" onClick={browse} title="Choose a folder">
-              Browse…
-            </button>
-          )}
         </div>
         {connection.state === 'error' && <p className="nc-error">{connection.error}</p>}
         {error && <p className="nc-error">{error}</p>}
