@@ -34,7 +34,13 @@ export default function AutomationForm({ rule, onClose }) {
   const [time, setTime] = useState(rule?.trigger?.time ?? '09:00')
   const [harness, setHarness] = useState(rule?.harness ?? available[0]?.id ?? null)
   const [model, setModel] = useState(rule?.model ?? null)
-  const [machineId, setMachineId] = useState(rule?.machine ?? online[0]?.machine.id ?? null)
+  // A draft or saved rule may name a machine that isn't online — the
+  // form preselects one that can actually run the rule.
+  const [machineId, setMachineId] = useState(
+    online.some((m) => m.machine.id === rule?.machine)
+      ? rule.machine
+      : online[0]?.machine.id ?? null,
+  )
   const [workspace, setWorkspace] = useState(rule?.workspace ?? defaultWorkspace())
   const [task, setTask] = useState(rule?.task ?? '')
   const [enabled, setEnabled] = useState(rule?.enabled ?? true)

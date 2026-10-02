@@ -82,6 +82,31 @@ export function ConsoleProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // The desktop shell owns the sidecar: while the connection holds an
+  // error, keep asking the shell for the daemon's address — a sidecar
+  // that came back on a new port is followed without a reload. The
+  // browser has only the address it was given; its error copy says so.
+  useEffect(() => {
+    if (!hasTauri || connection.state !== 'error') return
+    let cancelled = false
+    const ask = async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core')
+        const info = await invoke('daemon_info')
+        if (cancelled) return
+        if (info?.url && info?.token) connect(info.url, info.token)
+      } catch {
+        /* still gone — the next tick asks again */
+      }
+    }
+    const retry = setInterval(ask, 2500)
+    return () => {
+      cancelled = true
+      clearInterval(retry)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connection.state])
+
   // Verify the connection, then load capabilities + sessions.
   useEffect(() => {
     if (!api.ready || connection.state === 'connected') return
@@ -114,34 +139,40 @@ export function ConsoleProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, connection.state])
 
-  // Poll the session list while connected (the sidebar's live truth);
-  // machines ride the same beat (their sessions and presence move too).
+  // Poll the live lists while a daemon is configured (the sidebar's
+  // truth; machines, plugins, and rules ride the same beat). A single
+  // dropped call is nothing — but three beats with no answer at all
+  // means the daemon is gone, and the connection says so instead of
+  // freezing quietly on stale data. The poll keeps watching: the first
+  // answering beat heals it, and no screen has to be reloaded.
   useEffect(() => {
-    if (connection.state !== 'connected') return
+    if (!api.ready) return
+    let misses = 0
     const poll = setInterval(async () => {
-      try {
-        const list = await api.sessions()
-        setSessions(list ?? [])
-      } catch {
-        /* the next poll heals; the open chat's stream reports harder */
-      }
-      try {
-        const machineList = await api.machines()
-        setMachines(machineList ?? [])
-      } catch {
-        /* same beat, same healing */
-      }
-      try {
-        const pluginList = await api.plugins()
-        setPlugins(pluginList ?? [])
-      } catch {
-        /* and the plugins with them */
-      }
-      try {
-        const rules = await api.automations()
-        setAutomations(rules ?? [])
-      } catch {
-        /* and the rules on the same beat */
+      const [sessionList, machineList, pluginList, ruleList] = await Promise.allSettled([
+        api.sessions(),
+        api.machines(),
+        api.plugins(),
+        api.automations(),
+      ])
+      if (sessionList.status === 'fulfilled') setSessions(sessionList.value ?? [])
+      if (machineList.status === 'fulfilled') setMachines(machineList.value ?? [])
+      if (pluginList.status === 'fulfilled') setPlugins(pluginList.value ?? [])
+      if (ruleList.status === 'fulfilled') setAutomations(ruleList.value ?? [])
+      const answered = [sessionList, machineList, pluginList, ruleList].some(
+        (r) => r.status === 'fulfilled',
+      )
+      if (answered) {
+        misses = 0
+        if (connection.state === 'error') setConnection({ state: 'connected', error: null })
+      } else {
+        misses += 1
+        if (misses >= 3 && connection.state === 'connected') {
+          setConnection({
+            state: 'error',
+            error: 'The daemon stopped answering — it may have exited. Restart the app, or reconnect from Settings.',
+          })
+        }
       }
     }, 2500)
     return () => clearInterval(poll)

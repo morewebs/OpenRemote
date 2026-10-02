@@ -281,6 +281,67 @@ async fn webhooks_fire_only_with_their_own_key() {
 }
 
 #[tokio::test]
+async fn rules_wait_for_a_machine_that_hasnt_checked_in() {
+    let daemon = start_daemon(&[]).await;
+    let ws = workspace(Some("plain"));
+
+    // A waiting machine: added by name, never checked in.
+    let added = call(
+        &daemon,
+        "POST",
+        "/machines",
+        Some(json!({
+            "request_id": uuid::Uuid::new_v4().to_string(),
+            "name": "edge-box",
+            "platform": "linux",
+        })),
+    )
+    .await;
+    assert_eq!(added.status, 201, "raw: {}", added.raw);
+    let waiting = added.body["id"].as_str().expect("machine id").to_string();
+
+    // A rule may name it (the API is the backstop the form fronts) —
+    // but it cannot run there today.
+    let saved = call(
+        &daemon,
+        "POST",
+        "/automations",
+        Some(rule_body(
+            &waiting,
+            &ws,
+            json!({"name": "On the waiting box"}),
+        )),
+    )
+    .await;
+    assert_eq!(saved.status, 201, "raw: {}", saved.raw);
+    let rule_id = saved.body["id"].as_str().expect("rule id").to_string();
+
+    // Run now refuses with the wait named — never a quiet local run.
+    let run = call(
+        &daemon,
+        "POST",
+        &format!("/automations/{rule_id}/run"),
+        Some(json!({"request_id": uuid::Uuid::new_v4().to_string()})),
+    )
+    .await;
+    assert_eq!(run.status, 409, "raw: {}", run.raw);
+    assert!(
+        run.raw.contains("hasn't checked in"),
+        "the refusal names the wait: {}",
+        run.raw
+    );
+
+    // No chat opened anywhere.
+    let sessions = call(&daemon, "GET", "/sessions", None).await;
+    assert_eq!(
+        sessions.body.as_array().map(Vec::len),
+        Some(0),
+        "the refusal opened nothing; raw: {}",
+        sessions.raw
+    );
+}
+
+#[tokio::test]
 async fn the_clock_fires_schedules_on_the_machines_own_wall_time() {
     // A real daemon process with a fast clock tick and a fixture-backed
     // claude — the rule fires within the minute it was armed for.

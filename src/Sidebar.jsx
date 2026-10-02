@@ -89,7 +89,11 @@ export default function Sidebar({ open, active, onSelect, onReplayOnboarding }) 
         </button>
         <div className="section-title">Chats</div>
         {groups.length === 0 && (
-          <p className="sb-empty">No chats yet. Start one — it will appear here grouped by folder.</p>
+          <p className="sb-empty">
+            {query.trim()
+              ? `No chats match “${query.trim()}”.`
+              : 'No chats yet. Start one — it will appear here grouped by folder.'}
+          </p>
         )}
         {groups.map((group) => {
           const isCollapsed = !!collapsed[group.label]

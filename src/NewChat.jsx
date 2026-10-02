@@ -268,6 +268,7 @@ export default function NewChat({ onOpen }) {
             spellCheck={false}
           />
         </div>
+        {connection.state === 'error' && <p className="nc-error">{connection.error}</p>}
         {error && <p className="nc-error">{error}</p>}
         {inProgress.length > 0 && (
           <div className="nc-resume">

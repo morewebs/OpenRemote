@@ -547,6 +547,18 @@ impl Supervisor {
         self: &Arc<Self>,
         rule: &AutomationRule,
     ) -> Result<Session, SupervisorError> {
+        // Rules run where the agent is online: today that is this machine
+        // alone. A rule saved against a waiting machine refuses honestly
+        // instead of quietly running here.
+        if rule.machine != self.this_machine {
+            let name = self
+                .with_store(|s| s.machine(&rule.machine).map(|m| m.name.clone()))
+                .ok()
+                .unwrap_or_else(|| "that machine".to_string());
+            return Err(SupervisorError::Conflict(format!(
+                "'{name}' hasn't checked in — the rule waits until its agent is online"
+            )));
+        }
         let session = self
             .create_session(
                 &rule.harness,

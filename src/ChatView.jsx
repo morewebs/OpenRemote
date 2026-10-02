@@ -29,7 +29,7 @@ const LIVE_SETTINGS = {
 }
 
 export default function ChatView({ chat, onBack }) {
-  const { capabilities, sendPrompt, updateChatSettings, answerDecision, stopChat, resumeChat, modelsFor } =
+  const { capabilities, connection, sendPrompt, updateChatSettings, answerDecision, stopChat, resumeChat, modelsFor } =
     useConsole()
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -217,7 +217,12 @@ export default function ChatView({ chat, onBack }) {
                     </div>
                   </div>
                 )}
-                {item.pending && (
+                {item.pending && item.options.length === 0 && (
+                  <p className="cv-tool-state">
+                    No choices were offered — stop the session to end this turn.
+                  </p>
+                )}
+                {item.pending && item.options.length > 0 && (
                   <div className="cv-tool-actions">
                     {item.options.map((option, index) => (
                       <button
@@ -334,7 +339,9 @@ export default function ChatView({ chat, onBack }) {
             </div>
           </div>
         </div>
-        {error && <p className="cv-error-line">{error}</p>}
+        {(error || connection.state === 'error') && (
+          <p className="cv-error-line">{error ?? connection.error}</p>
+        )}
       </div>
     </div>
   )

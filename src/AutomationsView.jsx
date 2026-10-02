@@ -55,6 +55,10 @@ export default function AutomationsView({ onOpenChat }) {
     (capabilities?.harnesses ?? []).filter((h) => h.available).map((h) => h.id),
   )
   const machineName = (id) => (machines ?? []).find((m) => m.machine.id === id)?.machine.name ?? id
+  // Rules run where the agent is online — a waiting machine can host a
+  // draft, but the draft has to say so instead of firing on this one.
+  const machineOnline = (id) =>
+    (machines ?? []).some((m) => m.machine.id === id && m.machine.status === 'online')
 
   // The pill's context: machines, workspace folders, and the defaults a
   // draft falls back to.
@@ -338,6 +342,7 @@ export default function AutomationsView({ onOpenChat }) {
             const draft = item.draft
             const connectorKind = CONNECTOR_KINDS.includes(draft.trigger.kind)
             const hookKind = draft.trigger.kind === 'webhook'
+            const offlineMachine = draft.machineId && !machineOnline(draft.machineId)
             return (
               <div key={item.id} className="pt-card">
                 <div className="pt-card-head">
@@ -358,17 +363,23 @@ export default function AutomationsView({ onOpenChat }) {
                     fires today.
                   </p>
                 )}
+                {offlineMachine && (
+                  <p className="pt-card-note">
+                    {machineName(draft.machineId)} hasn’t checked in — rules run where the agent
+                    is online.
+                  </p>
+                )}
                 {!item.consumed && (
                   <div className="pt-card-actions">
                     <button
                       className="pt-primary"
-                      disabled={connectorKind || busyId != null}
+                      disabled={connectorKind || offlineMachine || busyId != null}
                       onClick={() => createFromDraft(draft, item.id)}
                     >
                       Create rule
                     </button>
                     <button
-                      disabled={connectorKind}
+                      disabled={connectorKind || offlineMachine}
                       onClick={() => editFromDraft(draft, item.id)}
                     >
                       Edit in form
