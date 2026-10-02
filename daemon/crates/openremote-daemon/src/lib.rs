@@ -3,6 +3,7 @@
 
 pub mod app;
 pub mod http;
+pub mod install;
 pub mod registry;
 pub mod supervisor;
 

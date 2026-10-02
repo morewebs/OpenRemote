@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{DecisionId, SessionId};
+use crate::ids::{DecisionId, MachineId, SessionId};
 
 /// An installed agent CLI the daemon can drive (`claude`, `codex`, …).
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -77,6 +77,69 @@ pub struct Session {
     /// vocabulary (codex `acceptForSession`, opencode `always`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub approved_tools: Vec<String>,
+}
+
+/// One computer that can run agent chats. The daemon's own machine is
+/// always present and online; others wait until their agent checks in
+/// (the check-in protocol is the next machines pass).
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum MachineStatus {
+    Online,
+    Offline,
+    Waiting,
+}
+
+/// One computer you own — the console's *machine*.
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct Machine {
+    pub id: MachineId,
+    /// Hostname slug, as it shows in the grid.
+    pub name: String,
+    /// `windows` / `macos` / `linux` — the daemon's own OS for this
+    /// machine; the OS picked at add time for a waiting one.
+    pub platform: String,
+    pub status: MachineStatus,
+    /// The daemon's own machine — always online, never removable.
+    #[serde(default)]
+    pub this_machine: bool,
+    /// Enrollment credential for the future check-in (waiting machines).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enrollment_token: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_seen: Option<i64>,
+}
+
+/// A harness whose install on this machine is a plain npm package — the
+/// command is shown verbatim and run as-is. Harnesses that install through
+/// their own roots (Grok, Antigravity) have no row: nothing honest to run.
+#[derive(Clone, Serialize, Debug)]
+pub struct InstallSpec {
+    pub harness_id: String,
+    pub name: String,
+    /// The command that installs it, shown and run verbatim.
+    pub command: String,
+}
+
+/// One machine as the console sees it: the machine plus what is really on
+/// it — the harness inventory (the daemon's own probe), the chats running
+/// there, the agent's presence over the last 24 hours, and the harnesses
+/// that could be installed.
+#[derive(Clone, Serialize, Debug)]
+pub struct MachineView {
+    pub machine: Machine,
+    pub harnesses: Vec<Harness>,
+    pub sessions: Vec<Session>,
+    /// 48 half-hour slices over the last 24h, oldest first; true = the
+    /// agent was present (the daemon runs, or the check-in arrived).
+    pub presence: Vec<bool>,
+    pub installable: Vec<InstallSpec>,
+    /// The waiting machine's install command, per its OS — the enrollment
+    /// credential rides beside it (the check-in consumes both).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub install_command: Option<String>,
 }
 
 /// Coarse turn outcome for grid-at-a-glance; the harness's own string rides

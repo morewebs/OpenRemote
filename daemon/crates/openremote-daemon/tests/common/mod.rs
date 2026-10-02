@@ -51,6 +51,77 @@ pub struct TestDaemon {
     pub token: String,
     pub addr: std::net::SocketAddr,
     _data_dir: tempfile::TempDir,
+    _child: Option<Box<DaemonChild>>,
+}
+
+/// A daemon spawned as its own process (the real binary, its own env).
+/// Dropping kills it; its stdin closes first, which the daemon's own
+/// watchdog honors anyway.
+pub struct DaemonChild(std::process::Child, Option<std::process::ChildStdin>);
+
+impl Drop for DaemonChild {
+    fn drop(&mut self) {
+        let _ = self.1.take();
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+/// Spawn the daemon binary as a real process with `extra_env` — for the
+/// flows that ride process env (the install command override). The token
+/// is pre-written into a fresh data dir; the address comes from the
+/// binary's own `READY` line.
+pub async fn spawn_daemon_process(extra_env: &[(&str, String)]) -> TestDaemon {
+    let target = std::env::var("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target"));
+    let name = if cfg!(windows) {
+        "openremote-daemon.exe"
+    } else {
+        "openremote-daemon"
+    };
+    let bin = target.join("debug").join(name);
+    assert!(
+        bin.is_file(),
+        "daemon binary not found at {}",
+        bin.display()
+    );
+
+    let data_dir = tempfile::tempdir().expect("temp data dir");
+    let token = uuid::Uuid::new_v4().to_string();
+    std::fs::create_dir_all(data_dir.path()).expect("data dir");
+    std::fs::write(data_dir.path().join("token"), &token).expect("token file");
+
+    let mut command = std::process::Command::new(&bin);
+    command
+        .env("OPENREMOTE_DATA_DIR", data_dir.path())
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null());
+    for (key, value) in extra_env {
+        command.env(key, value);
+    }
+    let mut child = command.spawn().expect("spawn daemon process");
+    let stdout = child.stdout.take().expect("daemon stdout piped");
+    let stdin = child.stdin.take();
+
+    // The binary announces itself: `READY 127.0.0.1:<port>`.
+    use std::io::BufRead;
+    let mut addr = None;
+    for line in std::io::BufReader::new(stdout).lines() {
+        let line = line.expect("daemon stdout");
+        if let Some(rest) = line.strip_prefix("READY ") {
+            addr = rest.parse::<std::net::SocketAddr>().ok();
+            break;
+        }
+    }
+    let addr = addr.expect("daemon printed READY with an address");
+    TestDaemon {
+        token,
+        addr,
+        _data_dir: data_dir,
+        _child: Some(Box::new(DaemonChild(child, stdin))),
+    }
 }
 
 pub async fn start_daemon(overrides: &[(&str, PathBuf)]) -> TestDaemon {
@@ -91,6 +162,7 @@ pub async fn start_daemon(overrides: &[(&str, PathBuf)]) -> TestDaemon {
         token,
         addr,
         _data_dir: data_dir,
+        _child: None,
     }
 }
 
@@ -169,7 +241,7 @@ pub async fn sse_collect(daemon: &TestDaemon, path: &str, want: usize) -> Vec<(u
     {
         Ok(events) => events,
         Err(_) => panic!(
-            "sse collection timed out after 15s (wanted {want} events); seen so far:\n{}",
+            "sse collection timed out after {timeout:?} (wanted {want} events); seen so far:\n{}",
             dump(&collected)
         ),
     }

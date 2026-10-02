@@ -5,11 +5,12 @@ import NewChat from './NewChat.jsx'
 import ChatView from './ChatView.jsx'
 import Onboarding from './Onboarding.jsx'
 import Panels from './Panels.jsx'
+import MachinesView from './MachinesView.jsx'
 import { ConsoleProvider, useConsole } from './state/console.jsx'
 
 const OB_KEY = 'openremote-onboarded'
 const STORE_KEY = 'openremote-view-state'
-const STATIC_VIEWS = ['new', 'settings']
+const STATIC_VIEWS = ['new', 'machines', 'settings']
 
 function loadViewState(sessions) {
   let saved = null
@@ -135,6 +136,7 @@ function Shell() {
           <Sidebar open={sidebarOpen} active={view === 'new' ? null : view} onSelect={openSession} />
           <main className="main">
             {view === 'new' && <NewChat onOpen={openSession} />}
+            {view === 'machines' && <MachinesView onOpenChat={openSession} />}
             {view === 'settings' && <Panels onReplay={replayOnboarding} />}
             {!STATIC_VIEWS.includes(view) &&
               (chat ? (

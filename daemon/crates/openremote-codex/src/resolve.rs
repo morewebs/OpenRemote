@@ -9,10 +9,14 @@ use std::path::{Path, PathBuf};
 use openremote_harness::Resolution;
 
 pub(crate) fn resolve_impl(override_path: Option<PathBuf>) -> Resolution {
+    // An override is authoritative: an injected daemon never leaks to the
+    // machine's real CLIs, and an install test can make this harness
+    // appear by materializing exactly this path.
     if let Some(path) = override_path {
         if path.is_file() {
             return Resolution::Executable(path);
         }
+        return Resolution::Unavailable;
     }
     let name = if cfg!(windows) { "codex.exe" } else { "codex" };
     if let Some(dir) = which_dir(name) {

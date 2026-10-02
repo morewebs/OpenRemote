@@ -116,6 +116,28 @@ export class DaemonApi {
     return this.call('GET', `/sessions/${id}/decisions`)
   }
 
+  // ---- machines ----
+
+  machines() {
+    return this.call('GET', '/machines')
+  }
+
+  createMachine({ name, platform }) {
+    return this.call('POST', '/machines', { request_id: newRequestId(), name, platform })
+  }
+
+  removeMachine(id) {
+    return this.call('DELETE', `/machines/${id}?request_id=${encodeURIComponent(newRequestId())}`)
+  }
+
+  // The long one: npm runs minutes — the receipt carries the wait.
+  installHarness(machineId, harnessId) {
+    return this.call('POST', `/machines/${machineId}/harnesses`, {
+      request_id: newRequestId(),
+      harness: harnessId,
+    })
+  }
+
   // The models a harness advertises, in its own words (empty = the slot
   // stays reserved for that harness).
   models(harnessId) {

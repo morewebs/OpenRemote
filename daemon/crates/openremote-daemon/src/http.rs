@@ -12,7 +12,7 @@ use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use openremote_core::{DecisionId, Receipt, ReceiptStatus, SessionId};
+use openremote_core::{DecisionId, MachineId, Receipt, ReceiptStatus, SessionId};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -24,6 +24,9 @@ pub fn router(app: Arc<App>) -> Router {
     let authed = Router::new()
         .route("/capabilities", get(capabilities))
         .route("/harnesses/{id}/models", get(harness_models))
+        .route("/machines", get(list_machines).post(create_machine))
+        .route("/machines/{id}", get(get_machine).delete(remove_machine))
+        .route("/machines/{id}/harnesses", post(install_harness))
         .route("/sessions", get(list_sessions).post(create_session))
         .route("/sessions/{id}", get(get_session))
         .route("/sessions/{id}/events", get(session_events))
@@ -100,6 +103,170 @@ async fn capabilities(State(app): State<Arc<App>>) -> Response {
 async fn harness_models(State(app): State<Arc<App>>, AxumPath(id): AxumPath<String>) -> Response {
     let models = app.supervisor.models(&id).await;
     Json(models).into_response()
+}
+
+// ---- machines ----
+
+async fn list_machines(State(app): State<Arc<App>>) -> Response {
+    Json(app.supervisor.machines()).into_response()
+}
+
+async fn get_machine(State(app): State<Arc<App>>, AxumPath(id): AxumPath<String>) -> Response {
+    match MachineId::parse(&id) {
+        Some(id) => match app.supervisor.machine(&id) {
+            Ok(view) => Json(view).into_response(),
+            Err(err) => supervisor_error(err),
+        },
+        None => error(StatusCode::BAD_REQUEST, "bad machine id"),
+    }
+}
+
+#[derive(Deserialize)]
+struct CreateMachineBody {
+    request_id: String,
+    name: String,
+    /// `windows` / `macos` / `linux` — picks the install command shown.
+    platform: String,
+}
+
+async fn create_machine(
+    State(app): State<Arc<App>>,
+    Json(body): Json<CreateMachineBody>,
+) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&body.request_id) {
+        return receipt_response(&receipt);
+    }
+    match app.supervisor.create_machine(&body.name, &body.platform) {
+        Ok(machine) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Completed,
+                result: Some(serde_json::to_value(&machine).unwrap_or(Value::Null)),
+                error: None,
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            (StatusCode::CREATED, Json(machine)).into_response()
+        }
+        Err(err) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Failed,
+                result: None,
+                error: Some(err.to_string()),
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            supervisor_error(err)
+        }
+    }
+}
+
+// DELETE carries no body — the request_id rides as a query param.
+#[derive(Deserialize)]
+struct MachineActionQuery {
+    request_id: String,
+}
+
+async fn remove_machine(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+    axum::extract::Query(query): axum::extract::Query<MachineActionQuery>,
+) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&query.request_id) {
+        return receipt_response(&receipt);
+    }
+    let Some(machine_id) = MachineId::parse(&id) else {
+        return error(StatusCode::BAD_REQUEST, "bad machine id");
+    };
+    match app.supervisor.remove_machine(&machine_id) {
+        Ok(()) => {
+            let receipt = Receipt {
+                request_id: query.request_id,
+                session_id: None,
+                status: ReceiptStatus::Completed,
+                result: Some(json!({"removed": true})),
+                error: None,
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            receipt_response(&receipt)
+        }
+        Err(err) => {
+            let receipt = Receipt {
+                request_id: query.request_id,
+                session_id: None,
+                status: ReceiptStatus::Failed,
+                result: None,
+                error: Some(err.to_string()),
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            supervisor_error(err)
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct InstallHarnessBody {
+    request_id: String,
+    harness: String,
+}
+
+async fn install_harness(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<InstallHarnessBody>,
+) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&body.request_id) {
+        return receipt_response(&receipt);
+    }
+    let Some(machine_id) = MachineId::parse(&id) else {
+        return error(StatusCode::BAD_REQUEST, "bad machine id");
+    };
+    // npm runs minutes, not milliseconds — accepted first, terminal state
+    // when the install settles (a crash between surfaces as unknown work).
+    let accepted = Receipt {
+        request_id: body.request_id.clone(),
+        session_id: None,
+        status: ReceiptStatus::Accepted,
+        result: None,
+        error: None,
+        updated_at: openremote_core::now_ms(),
+    };
+    app.supervisor.record_receipt(accepted);
+    match app
+        .supervisor
+        .install_harness(&machine_id, &body.harness)
+        .await
+    {
+        Ok(view) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Completed,
+                result: Some(serde_json::to_value(&view).unwrap_or(Value::Null)),
+                error: None,
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            receipt_response(&receipt)
+        }
+        Err(err) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Failed,
+                result: None,
+                error: Some(err.to_string()),
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            supervisor_error(err)
+        }
+    }
 }
 
 #[derive(Deserialize)]

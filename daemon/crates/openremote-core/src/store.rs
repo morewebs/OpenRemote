@@ -5,9 +5,32 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
+/// Millis in half an hour — the uptime band's slice size.
+const HALF_HOUR_MS: i64 = 1_800_000;
+
+/// The grid's hostname slug: lowercase, alphanumerics and single dashes
+/// (runs of separators collapse — `Build  BOX` and `build-box` are the
+/// same machine).
+fn slug(name: &str) -> String {
+    let mut out = String::new();
+    let mut dash = false;
+    for c in name.trim().chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+            dash = false;
+        } else if !dash && !out.is_empty() {
+            out.push('-');
+            dash = true;
+        }
+    }
+    out.trim_matches('-').to_string()
+}
+
 use crate::events::{Event, EventPayload};
-use crate::ids::{DecisionId, SessionId};
-use crate::model::{Decision, DecisionState, Receipt, ReceiptStatus, Session, SessionStatus};
+use crate::ids::{DecisionId, MachineId, SessionId};
+use crate::model::{
+    Decision, DecisionState, Machine, MachineStatus, Receipt, ReceiptStatus, Session, SessionStatus,
+};
 
 #[derive(Debug, Error)]
 pub enum StoreError {
@@ -36,6 +59,11 @@ struct State {
     receipts: BTreeMap<String, Receipt>,
     #[serde(default)]
     next_seq: BTreeMap<SessionId, u64>,
+    #[serde(default)]
+    machines: BTreeMap<MachineId, Machine>,
+    /// Per machine: the half-hour starts (ms) the agent was present for.
+    #[serde(default)]
+    presence: BTreeMap<MachineId, Vec<i64>>,
 }
 
 pub struct Store {
@@ -80,8 +108,12 @@ impl Store {
                 }
             }
         }
-        let store = Self { dir, state };
-        if !crashed.is_empty() {
+        let mut store = Self { dir, state };
+        let had_this_machine = store.machines().iter().any(|m| m.this_machine);
+        let this_id = store.ensure_this_machine();
+        // Opening the store means the daemon is running — present now.
+        store.mark_present(&this_id).ok();
+        if !crashed.is_empty() || !had_this_machine {
             store.persist()?;
         }
         Ok(store)
@@ -116,6 +148,124 @@ impl Store {
     pub fn receipt(&self, request_id: &str) -> Option<&Receipt> {
         self.state.receipts.get(request_id)
     }
+
+    // ---- machines ----
+
+    /// The daemon's own machine: created on first open, one stable id for
+    /// the install's lifetime.
+    pub fn ensure_this_machine(&mut self) -> MachineId {
+        if let Some((id, _)) = self.state.machines.iter().find(|(_, m)| m.this_machine) {
+            return *id;
+        }
+        let id = MachineId::new();
+        let hostname = std::env::var("COMPUTERNAME")
+            .or_else(|_| std::env::var("HOSTNAME"))
+            .unwrap_or_else(|_| "this-computer".to_string());
+        let machine = Machine {
+            id,
+            name: slug(&hostname),
+            platform: std::env::consts::OS.to_string(),
+            status: MachineStatus::Online,
+            this_machine: true,
+            enrollment_token: None,
+            created_at: crate::now_ms(),
+            updated_at: crate::now_ms(),
+            last_seen: Some(crate::now_ms()),
+        };
+        self.state.machines.insert(id, machine);
+        id
+    }
+
+    pub fn machines(&self) -> Vec<&Machine> {
+        self.state.machines.values().collect()
+    }
+
+    pub fn machine(&self, id: &MachineId) -> Result<&Machine, StoreError> {
+        self.state
+            .machines
+            .get(id)
+            .ok_or_else(|| StoreError::NotFound(format!("machine {id}")))
+    }
+
+    /// Add a machine: it lands `waiting` — it comes online when its agent
+    /// checks in (the next machines pass), never from this call. Duplicate
+    /// hostnames are rejected.
+    pub fn create_machine(&mut self, name: &str, platform: &str) -> Result<Machine, StoreError> {
+        let name = slug(name);
+        if name.is_empty() {
+            return Err(StoreError::BadState("a machine needs a name".into()));
+        }
+        if self.state.machines.values().any(|m| m.name == name) {
+            return Err(StoreError::Conflict(format!(
+                "'{name}' is already in the list"
+            )));
+        }
+        let machine = Machine {
+            id: MachineId::new(),
+            name,
+            platform: platform.to_string(),
+            status: MachineStatus::Waiting,
+            this_machine: false,
+            enrollment_token: Some(uuid::Uuid::new_v4().to_string()),
+            created_at: crate::now_ms(),
+            updated_at: crate::now_ms(),
+            last_seen: None,
+        };
+        let id = machine.id;
+        self.state.machines.insert(id, machine.clone());
+        self.persist()?;
+        Ok(machine)
+    }
+
+    pub fn remove_machine(&mut self, id: &MachineId) -> Result<(), StoreError> {
+        let machine = self.machine(id)?;
+        if machine.this_machine {
+            return Err(StoreError::Conflict(
+                "this machine is the daemon itself".into(),
+            ));
+        }
+        self.state.machines.remove(id);
+        self.state.presence.remove(id);
+        self.persist()
+    }
+
+    /// Record the current half-hour as present for a machine. Metadata,
+    /// not history — nothing renders from the raw list; `presence` folds
+    /// it into the 24-hour band. Returns true when a new slice landed (it
+    /// persists then and only then).
+    pub fn mark_present(&mut self, id: &MachineId) -> Result<bool, StoreError> {
+        if self.machine(id).is_err() {
+            return Ok(false);
+        }
+        let now = crate::now_ms();
+        let slice = now - (now % HALF_HOUR_MS);
+        let entries = self.state.presence.entry(*id).or_default();
+        if entries.last().is_some_and(|last| *last >= slice) {
+            return Ok(false);
+        }
+        entries.push(slice);
+        let floor = slice - HALF_HOUR_MS * 48;
+        entries.retain(|start| *start >= floor);
+        self.persist()?;
+        Ok(true)
+    }
+
+    /// 48 half-hour slices over the last 24 hours, oldest first; true =
+    /// the agent was present.
+    pub fn presence(&self, id: &MachineId) -> Vec<bool> {
+        let now = crate::now_ms();
+        let current = now - (now % HALF_HOUR_MS);
+        let up = self.state.presence.get(id);
+        (0..48)
+            .rev()
+            .map(|offset| {
+                let start = current - offset * HALF_HOUR_MS;
+                up.is_some_and(|entries| entries.binary_search(&start).is_ok())
+            })
+            .collect()
+    }
+
+    // ---- receipts ----
 
     /// Record a receipt. An `accepted` receipt may progress to a terminal
     /// state (the same request completing); a terminal receipt is final —
@@ -599,5 +749,65 @@ mod tests {
             store.receipt("req-2").unwrap().status,
             crate::model::ReceiptStatus::Completed
         );
+    }
+
+    #[test]
+    fn this_machine_exists_from_the_first_open_and_keeps_its_id() {
+        let dir = tempdir();
+        let mut store = Store::open(dir.clone()).unwrap();
+        let id = store.ensure_this_machine();
+        let machine = store.machine(&id).unwrap().clone();
+        assert!(machine.this_machine);
+        assert_eq!(machine.status, MachineStatus::Online);
+        assert_eq!(machine.platform, std::env::consts::OS);
+
+        // Reopen: same machine, same id, no duplicates.
+        drop(store);
+        let reopened = Store::open(dir).unwrap();
+        assert_eq!(reopened.machines().len(), 1);
+        assert_eq!(reopened.machine(&id).unwrap().id, id);
+    }
+
+    #[test]
+    fn added_machines_wait_and_duplicates_are_rejected() {
+        let dir = tempdir();
+        let mut store = Store::open(dir).unwrap();
+        let added = store.create_machine("Build Box", "macos").unwrap();
+        assert_eq!(added.status, MachineStatus::Waiting);
+        assert_eq!(added.name, "build-box");
+        assert!(added.enrollment_token.is_some());
+        assert!(!added.this_machine);
+
+        // slug-equal names are duplicates, whatever they were typed as
+        assert!(store.create_machine("build  BOX", "linux").is_err());
+        assert!(store.create_machine("  ", "linux").is_err());
+        assert_eq!(store.machines().len(), 2); // this machine + the waiting one
+
+        // waiting machines go away; this machine never does
+        store.remove_machine(&added.id).unwrap();
+        assert_eq!(store.machines().len(), 1);
+        let this_id = store.ensure_this_machine();
+        assert!(store.remove_machine(&this_id).is_err());
+    }
+
+    #[test]
+    fn presence_folds_into_the_24_hour_band() {
+        let dir = tempdir();
+        let mut store = Store::open(dir).unwrap();
+        let id = store.ensure_this_machine();
+
+        // present right now: the last slice is up, the rest is history
+        let band = store.presence(&id);
+        assert_eq!(band.len(), 48);
+        assert!(band[47]);
+
+        // marking again within the same half hour changes nothing
+        let before = store.presence(&id);
+        store.mark_present(&id).unwrap();
+        assert_eq!(store.presence(&id), before);
+
+        // a machine that never checked in has an all-down band
+        let added = store.create_machine("spare", "linux").unwrap();
+        assert!(!store.presence(&added.id).iter().any(|up| *up));
     }
 }

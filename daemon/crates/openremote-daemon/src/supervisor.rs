@@ -12,11 +12,11 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock};
 
 use openremote_core::{
-    Decision, DecisionId, DecisionState, Event, EventPayload, Harness, Receipt, Session, SessionId,
-    SessionStatus, Store, now_ms,
+    Decision, DecisionId, DecisionState, Event, EventPayload, Harness, Machine, MachineId,
+    MachineView, Receipt, Session, SessionId, SessionStatus, Store, now_ms,
 };
 use openremote_harness::DriverEvent;
 use serde_json::Value;
@@ -24,7 +24,47 @@ use thiserror::Error;
 use tokio::sync::{Mutex as AsyncMutex, broadcast, mpsc, oneshot};
 use uuid::Uuid;
 
-use crate::registry::{HarnessRegistry, SessionDriver};
+use crate::registry::{Backend, HarnessRegistry, SessionDriver};
+
+/// Store conflicts surface as their own shape, not a generic store error.
+fn store_error(e: openremote_core::store::StoreError) -> SupervisorError {
+    match e {
+        openremote_core::store::StoreError::NotFound(m) => SupervisorError::NotFound(m),
+        openremote_core::store::StoreError::Conflict(m) => SupervisorError::Conflict(m),
+        other => SupervisorError::Store(other),
+    }
+}
+
+/// One machine's console view: this machine carries its real inventory,
+/// sessions, presence, and install rows; a waiting one carries the install
+/// command for its OS (the enrollment token rides beside it).
+fn machine_view(s: &Store, harnesses: &[Harness], machine: &Machine) -> MachineView {
+    let mut view = MachineView {
+        machine: machine.clone(),
+        harnesses: Vec::new(),
+        sessions: Vec::new(),
+        presence: Vec::new(),
+        installable: Vec::new(),
+        install_command: None,
+    };
+    if machine.this_machine {
+        view.harnesses = harnesses.to_vec();
+        view.sessions = s.sessions().into_iter().cloned().collect();
+        view.presence = s.presence(&machine.id);
+        let installed: Vec<String> = harnesses
+            .iter()
+            .filter(|h| h.available)
+            .map(|h| h.id.clone())
+            .collect();
+        view.installable = crate::install::installable(&installed);
+    } else {
+        view.install_command = Some(match machine.platform.as_str() {
+            "windows" => "irm openremote.space/install.ps1 | iex".to_string(),
+            _ => "curl -fsSL openremote.space/install | sh".to_string(),
+        });
+    }
+    view
+}
 
 #[derive(Debug, Error)]
 pub enum SupervisorError {
@@ -53,7 +93,8 @@ pub struct Supervisor {
     store: Arc<StdMutex<Store>>,
     sessions: AsyncMutex<HashMap<SessionId, SessionEntry>>,
     events: broadcast::Sender<String>,
-    registry: HarnessRegistry,
+    /// Swappable: an install re-probes the machine and trades the set in.
+    registry: StdRwLock<HarnessRegistry>,
 }
 
 impl Supervisor {
@@ -61,21 +102,54 @@ impl Supervisor {
     /// The registry is injected so tests can point harnesses at fixture
     /// agents; production passes `HarnessRegistry::probe(&HashMap::new())`.
     pub fn new(store: Arc<StdMutex<Store>>, registry: HarnessRegistry) -> Arc<Self> {
-        Arc::new(Self {
+        let this_machine = {
+            let mut guard = store.lock().expect("store lock");
+            guard.ensure_this_machine()
+        };
+        let supervisor = Arc::new(Self {
             store,
             sessions: AsyncMutex::new(HashMap::new()),
             events: broadcast::channel(1024).0,
-            registry,
-        })
+            registry: StdRwLock::new(registry),
+        });
+        supervisor.spawn_presence_ticker(this_machine);
+        supervisor
+    }
+
+    /// The agent's own presence: mark this machine's half-hour slice while
+    /// the daemon runs (the uptime band's truth).
+    fn spawn_presence_ticker(self: &Arc<Self>, machine: MachineId) {
+        let supervisor = Arc::clone(self);
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            loop {
+                tick.tick().await;
+                let _ = supervisor.with_store(|s| s.mark_present(&machine));
+            }
+        });
     }
 
     pub fn harnesses(&self) -> Vec<Harness> {
-        self.registry.harnesses()
+        self.registry.read().expect("registry lock").harnesses()
     }
 
     /// Advertised models for a harness (empty = the slot stays reserved).
     pub async fn models(&self, harness: &str) -> Vec<openremote_harness::ModelDescriptor> {
-        self.registry.models(harness).await
+        match self.backend(harness) {
+            Some(backend) => backend.models().await.unwrap_or_default(),
+            None => Vec::new(),
+        }
+    }
+
+    /// A clone of the harness's backend — never a borrowed guard, so
+    /// nothing holds the registry across an await.
+    fn backend(&self, id: &str) -> Option<Backend> {
+        self.registry
+            .read()
+            .expect("registry lock")
+            .backend(id)
+            .cloned()
     }
 
     /// Subscribe to the live event stream (serialized event JSON).
@@ -138,6 +212,92 @@ impl Supervisor {
         self.with_store(|s| s.record_receipt(receipt).unwrap_or(false))
     }
 
+    // ---- machines ----
+
+    /// Every machine as the console sees it: what's really on it, what
+    /// runs there, and — for this machine — what could be installed.
+    pub fn machines(&self) -> Vec<MachineView> {
+        let harnesses = self.registry.read().expect("registry lock").harnesses();
+        self.with_store(|s| {
+            s.machines()
+                .iter()
+                .map(|machine| machine_view(s, &harnesses, machine))
+                .collect()
+        })
+    }
+
+    pub fn machine(&self, id: &MachineId) -> Result<MachineView, SupervisorError> {
+        let harnesses = self.registry.read().expect("registry lock").harnesses();
+        self.with_store(|s| s.machine(id).map(|m| machine_view(s, &harnesses, m)))
+            .map_err(store_error)
+    }
+
+    /// Add a machine: it lands `waiting` — it comes online when its agent
+    /// checks in (the next machines pass), never from this call.
+    pub fn create_machine(&self, name: &str, platform: &str) -> Result<Machine, SupervisorError> {
+        self.with_store(|s| s.create_machine(name, platform))
+            .map_err(store_error)
+    }
+
+    pub fn remove_machine(&self, id: &MachineId) -> Result<(), SupervisorError> {
+        self.with_store(|s| s.remove_machine(id))
+            .map_err(store_error)
+    }
+
+    /// Install a harness on this machine: run its install command, re-probe
+    /// with the same overrides, and hand back the machine's refreshed
+    /// view. The receipt carries the long wait — npm runs minutes.
+    pub async fn install_harness(
+        &self,
+        machine_id: &MachineId,
+        harness_id: &str,
+    ) -> Result<MachineView, SupervisorError> {
+        let machine = self
+            .with_store(|s| s.machine(machine_id).cloned())
+            .map_err(store_error)?;
+        if !machine.this_machine {
+            return Err(SupervisorError::Conflict(format!(
+                "{} has not checked in yet",
+                machine.name
+            )));
+        }
+        let entry = self
+            .registry
+            .read()
+            .expect("registry lock")
+            .harnesses()
+            .into_iter()
+            .find(|h| h.id == harness_id);
+        let Some(entry) = entry else {
+            return Err(SupervisorError::Harness(format!(
+                "harness '{harness_id}' is not known"
+            )));
+        };
+        if entry.available {
+            return Err(SupervisorError::Conflict(format!(
+                "'{harness_id}' is already installed on {}",
+                machine.name
+            )));
+        }
+
+        crate::install::install(harness_id)
+            .await
+            .map_err(SupervisorError::Harness)?;
+
+        // Fresh facts. The guard is never held across the await: clone the
+        // overrides, probe, then swap the whole registry in.
+        let overrides = self
+            .registry
+            .read()
+            .expect("registry lock")
+            .overrides()
+            .clone();
+        let fresh = HarnessRegistry::probe(&overrides).await;
+        *self.registry.write().expect("registry lock") = fresh;
+
+        self.machine(machine_id)
+    }
+
     // ---- session lifecycle ----
 
     /// Create a session and spawn its harness driver. The session exists
@@ -150,7 +310,7 @@ impl Supervisor {
         permission_mode: Option<String>,
         fast: bool,
     ) -> Result<Session, SupervisorError> {
-        let Some(backend) = self.registry.backend(harness) else {
+        let Some(backend) = self.backend(harness) else {
             return Err(SupervisorError::Harness(format!(
                 "harness '{harness}' is not available"
             )));
@@ -303,7 +463,7 @@ impl Supervisor {
                 "the harness never reported a conversation to resume".to_string(),
             )
         })?;
-        let Some(backend) = self.registry.backend(&session.harness) else {
+        let Some(backend) = self.backend(&session.harness) else {
             return Err(SupervisorError::Harness(format!(
                 "harness '{}' is not available",
                 session.harness
@@ -361,6 +521,12 @@ impl Supervisor {
         let session_id = decision.session_id;
         let entry = self.entry(&session_id).await?;
 
+        // The order lock is held ACROSS the answer write: the harness's
+        // consequence events (tool results, turn completion) arrive on the
+        // pump while we emit, and without this the pump can grab the lock
+        // first — recording the consequence before the answer itself. The
+        // write never needs the pump, so holding across it is deadlock-free.
+        let _order = entry.order.lock().await;
         let outcome = entry
             .driver
             .lock()
@@ -373,7 +539,6 @@ impl Supervisor {
             )
             .await?;
         {
-            let _order = entry.order.lock().await;
             let mut payloads = vec![EventPayload::DecisionResponded {
                 decision_id: *decision_id,
                 choice: choice.to_string(),

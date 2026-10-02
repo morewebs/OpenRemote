@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CaretDown, GearSix, MagnifyingGlass, Plus, X } from '@phosphor-icons/react'
+import { CaretDown, GearSix, MagnifyingGlass, Plus, WifiHigh, X } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { workspaceName } from './state/reducer.js'
 import './sidebar.css'
@@ -66,6 +66,13 @@ export default function Sidebar({ open, active, onSelect, onReplayOnboarding }) 
       </div>
 
       <nav className="sb-list" aria-label="Chats">
+        <button
+          className={`chat-row nav-tile${active === 'machines' ? ' active' : ''}`}
+          onClick={() => onSelect('machines')}
+        >
+          <WifiHigh size={15} className="nav-tile-icon" />
+          Machines
+        </button>
         <div className="section-title">Chats</div>
         {groups.length === 0 && (
           <p className="sb-empty">No chats yet. Start one — it will appear here grouped by folder.</p>

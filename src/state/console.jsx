@@ -21,6 +21,7 @@ export function ConsoleProvider({ children }) {
   })
   const [capabilities, setCapabilities] = useState(null)
   const [sessions, setSessions] = useState([])
+  const [machines, setMachines] = useState([])
   const [chats, setChats] = useState({})
   const [modelsByHarness, setModelsByHarness] = useState({})
   const [openChatId, setOpenChatId] = useState(null)
@@ -83,15 +84,17 @@ export function ConsoleProvider({ children }) {
     if (!api.ready || connection.state === 'connected') return
     let cancelled = false
     ;(async () => {
-      try {
-        await api.health()
-        const caps = await api.capabilities()
-        const list = await api.sessions()
-        if (cancelled) return
-        setCapabilities(caps)
-        setSessions(list ?? [])
-        setConnection({ state: 'connected', error: null })
-      } catch (err) {
+    try {
+      await api.health()
+      const caps = await api.capabilities()
+      const list = await api.sessions()
+      const machineList = await api.machines()
+      if (cancelled) return
+      setCapabilities(caps)
+      setSessions(list ?? [])
+      setMachines(machineList ?? [])
+      setConnection({ state: 'connected', error: null })
+    } catch (err) {
         if (cancelled) return
         setConnection({ state: 'error', error: err.message ?? String(err) })
       }
@@ -102,7 +105,8 @@ export function ConsoleProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api, connection.state])
 
-  // Poll the session list while connected (the sidebar's live truth).
+  // Poll the session list while connected (the sidebar's live truth);
+  // machines ride the same beat (their sessions and presence move too).
   useEffect(() => {
     if (connection.state !== 'connected') return
     const poll = setInterval(async () => {
@@ -111,6 +115,12 @@ export function ConsoleProvider({ children }) {
         setSessions(list ?? [])
       } catch {
         /* the next poll heals; the open chat's stream reports harder */
+      }
+      try {
+        const machineList = await api.machines()
+        setMachines(machineList ?? [])
+      } catch {
+        /* same beat, same healing */
       }
     }, 2500)
     return () => clearInterval(poll)
@@ -249,6 +259,43 @@ export function ConsoleProvider({ children }) {
     [api],
   )
 
+  // ---- machines ----
+
+  const refreshMachines = useCallback(async () => {
+    try {
+      setMachines((await api.machines()) ?? [])
+    } catch {
+      /* the poll heals */
+    }
+  }, [api])
+
+  const createMachine = useCallback(
+    async (name, platform) => {
+      const machine = await api.createMachine({ name, platform })
+      await refreshMachines()
+      return machine
+    },
+    [api, refreshMachines],
+  )
+
+  const removeMachine = useCallback(
+    async (machineId) => {
+      await api.removeMachine(machineId)
+      await refreshMachines()
+    },
+    [api, refreshMachines],
+  )
+
+  // The long one — npm runs minutes. The receipt contract carries the
+  // wait; a resolved promise means the harness landed on the machine.
+  const installHarness = useCallback(
+    async (machineId, harnessId) => {
+      await api.installHarness(machineId, harnessId)
+      await refreshMachines()
+    },
+    [api, refreshMachines],
+  )
+
   const resumeChat = useCallback(
     async (chatId) => {
       await api.resume(chatId)
@@ -262,6 +309,7 @@ export function ConsoleProvider({ children }) {
       connection,
       capabilities,
       sessions,
+      machines,
       chats,
       openChat,
       openChatId,
@@ -274,12 +322,16 @@ export function ConsoleProvider({ children }) {
       answerDecision,
       stopChat,
       resumeChat,
+      createMachine,
+      removeMachine,
+      installHarness,
     }),
     [
       api,
       connection,
       capabilities,
       sessions,
+      machines,
       chats,
       openChat,
       openChatId,
@@ -292,6 +344,9 @@ export function ConsoleProvider({ children }) {
       answerDecision,
       stopChat,
       resumeChat,
+      createMachine,
+      removeMachine,
+      installHarness,
     ],
   )
   return <ConsoleContext.Provider value={value}>{children}</ConsoleContext.Provider>

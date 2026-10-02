@@ -15,6 +15,7 @@ use tokio::sync::mpsc;
 pub use openremote_harness::AnswerOutcome;
 
 /// One harness's driving backend: the resolved CLI plus the spawn it fronts.
+#[derive(Clone)]
 pub enum Backend {
     Claude(openremote_claude::Resolution),
     Codex(openremote_codex::Resolution),
@@ -185,6 +186,9 @@ struct RegistryEntry {
 
 pub struct HarnessRegistry {
     entries: Vec<RegistryEntry>,
+    /// The overrides this registry was probed with — an install re-probes
+    /// with the same ones.
+    overrides: HashMap<String, PathBuf>,
 }
 
 fn harness_from(id: &str, name: &str, resolution: &Resolution, version: Option<&str>) -> Harness {
@@ -206,10 +210,10 @@ fn harness_from(id: &str, name: &str, resolution: &Resolution, version: Option<&
 
 impl HarnessRegistry {
     /// Probe every supported harness. `overrides` maps harness ids to
-    /// binaries (e2e points them at fixture agents); probed CLIs win for
-    /// everything not overridden. One bounded `--version` per harness runs
-    /// in parallel — a CLI that doesn't answer just stays unprobed, never
-    /// a startup gate.
+    /// binaries (e2e points them at fixture agents) and is authoritative
+    /// where given. One bounded `--version` per harness runs in parallel —
+    /// a CLI that doesn't answer just stays unprobed, never a startup
+    /// gate.
     pub async fn probe(overrides: &HashMap<String, PathBuf>) -> Self {
         let claude =
             openremote_claude::resolve_claude(overrides.get("claude").map(|p| p.as_path()));
@@ -255,7 +259,21 @@ impl HarnessRegistry {
         push("opencode", "OpenCode", opencode, v_opencode);
         push("agy", "Antigravity", agy, v_agy);
 
-        Self { entries }
+        Self {
+            entries,
+            overrides: overrides.clone(),
+        }
+    }
+
+    /// Re-run the probe with the same overrides — after an install
+    /// changed what's on this machine.
+    pub async fn reprobe(&self) -> Self {
+        Self::probe(&self.overrides).await
+    }
+
+    /// The overrides this registry was probed with.
+    pub fn overrides(&self) -> &HashMap<String, PathBuf> {
+        &self.overrides
     }
 
     pub fn harnesses(&self) -> Vec<Harness> {
@@ -277,6 +295,27 @@ impl HarnessRegistry {
             None => Vec::new(),
         }
     }
+}
+
+/// Debug/testing escape hatch: `OPENREMOTE_<HARNESS>_PATH` forces a
+/// harness's binary (e.g. a fixture agent) without touching PATH. The
+/// override is authoritative — an injected daemon never leaks to the
+/// machine's real CLIs.
+pub fn env_overrides() -> HashMap<String, PathBuf> {
+    let mut map = HashMap::new();
+    for (key, value) in std::env::vars_os() {
+        let Some(key) = key.to_str() else { continue };
+        let Some(rest) = key.strip_prefix("OPENREMOTE_") else {
+            continue;
+        };
+        let Some(harness) = rest.strip_suffix("_PATH") else {
+            continue;
+        };
+        if !harness.is_empty() {
+            map.insert(harness.to_ascii_lowercase(), PathBuf::from(value));
+        }
+    }
+    map
 }
 
 /// Whether the harness's own fast mode is usable at the probed version:
