@@ -11,7 +11,7 @@ openremote-core = { path = "../openremote-core" }
 openremote-harness = { path = "../openremote-harness" }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["net"] }
 uuid = { workspace = true }
 
 [lints]

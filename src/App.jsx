@@ -112,18 +112,24 @@ function Shell() {
     setOnboarded(false)
   }
 
-  const body = () => {
-    if (!onboarded) return <Onboarding onDone={finishOnboarding} />
-    return (
-      <>
-        <TitleBar
-          sidebarOpen={sidebarOpen}
-          onToggleSidebar={() => setSidebarOpen((v) => !v)}
-          onBack={goBack}
-          onForward={goForward}
-          canBack={hIndex > 0}
-          canForward={hIndex < history.length - 1}
-        />
+  const body = () => (
+    <>
+      {/* The frameless window has no OS chrome — the titlebar (drag,
+          minimize, maximize, close) renders on every screen, onboarding
+          included. */}
+      <TitleBar
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={onboarded ? () => setSidebarOpen((v) => !v) : undefined}
+        onBack={goBack}
+        onForward={goForward}
+        canBack={onboarded && hIndex > 0}
+        canForward={onboarded && hIndex < history.length - 1}
+      />
+      {!onboarded ? (
+        <div className="app-body">
+          <Onboarding onDone={finishOnboarding} />
+        </div>
+      ) : (
         <div className="app-body">
           {sidebarOpen && <div className="sb-backdrop" onClick={() => setSidebarOpen(false)} />}
           <Sidebar open={sidebarOpen} active={view === 'new' ? null : view} onSelect={openSession} />
@@ -138,9 +144,9 @@ function Shell() {
               ))}
           </main>
         </div>
-      </>
-    )
-  }
+      )}
+    </>
+  )
 
   return body()
 }

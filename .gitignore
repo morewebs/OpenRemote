@@ -6,6 +6,8 @@ node_modules/
 target/
 # tauri generated schemas
 src-tauri/gen/schemas/
+# the staged daemon sidecar (npm run daemon regenerates it)
+src-tauri/binaries/
 # local knowledge: wayfinder map, research, session plans
 .tasks/
 .zcode/

@@ -47,13 +47,15 @@ export default function TitleBar({
   return (
     <header className="titlebar" data-tauri-drag-region>
       <div className="tb-left" data-tauri-drag-region>
-        <button
-          className="tb-toggle"
-          onClick={onToggleSidebar}
-          title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-        >
-          <SidebarSimple size={15} />
-        </button>
+        {onToggleSidebar && (
+          <button
+            className="tb-toggle"
+            onClick={onToggleSidebar}
+            title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+          >
+            <SidebarSimple size={15} />
+          </button>
+        )}
         <button className="tb-toggle" onClick={onBack} disabled={!canBack} title="Back">
           <ArrowLeft size={15} />
         </button>

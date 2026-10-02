@@ -6,7 +6,7 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "",
+    "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build"
   },
   "app": {
@@ -26,8 +26,13 @@
     }
   },
   "bundle": {
-    "targets": ["msi", "nsis"],
-    "externalBin": ["binaries/openremote-daemon"],
+    "targets": [
+      "msi",
+      "nsis"
+    ],
+    "externalBin": [
+      "binaries/openremote-daemon"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

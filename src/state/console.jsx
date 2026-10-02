@@ -51,19 +51,26 @@ export function ConsoleProvider({ children }) {
   useEffect(() => {
     if (!hasTauri) return
     let cancelled = false
-    ;(async () => {
+    let attempt = 0
+    const ask = async () => {
       try {
         const { invoke } = await import('@tauri-apps/api/core')
         const info = await invoke('daemon_info')
-        if (!cancelled && info?.url && info?.token) {
+        if (cancelled) return
+        if (info?.url && info?.token) {
           connect(info.url, info.token)
-        } else if (!cancelled && !api.ready) {
+        } else if (attempt < 20) {
+          // The sidecar is still booting — ask again shortly.
+          attempt += 1
+          setTimeout(ask, 600)
+        } else if (!api.ready) {
           setConnection({ state: 'waiting-daemon', error: null })
         }
       } catch {
         /* the shell will report when it can; the wizard remains reachable */
       }
-    })()
+    }
+    ask()
     return () => {
       cancelled = true
     }

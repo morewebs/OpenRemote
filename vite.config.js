@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     host: true,
     watch: {
-      ignored: ['**/src-tauri/**'],
+      ignored: ['**/src-tauri/**', '**/daemon/**'],
     },
   },
 })
