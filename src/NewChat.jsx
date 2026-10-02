@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { ArrowUp, House, FolderOpen, Lightning } from '@phosphor-icons/react'
 import PickerMenu from './PickerMenu.jsx'
+import { HarnessIcon } from './BrandIcon.jsx'
 import { useConsole } from './state/console.jsx'
-import { harnessName } from './harness-names.js'
+import { harnessName, harnessIcon } from './harness-names.js'
 import { loadDefaults } from './defaults.js'
 import { canPickFolder, pickFolder } from './pick-folder.js'
 import './newchat.css'
@@ -165,6 +166,7 @@ export default function NewChat({ onOpen }) {
               aria-expanded={picker?.kind === 'harness'}
               title="Harness"
             >
+              <HarnessIcon harness={currentHarness && { ...currentHarness, ...harnessIcon(currentHarness.id) }} size={13} />
               {currentHarness?.name ?? 'No harness installed'}
             </button>
             {picker?.kind === 'harness' && (

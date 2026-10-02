@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowUp, Lightning, Stop, Play } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { railItems } from './state/reducer.js'
-import { harnessName } from './harness-names.js'
+import { harnessName, harnessIcon } from './harness-names.js'
+import { HarnessIcon } from './BrandIcon.jsx'
 import ContextRing from './ContextRing.jsx'
 import PickerMenu from './PickerMenu.jsx'
 import './chatview.css'
@@ -269,7 +270,13 @@ export default function ChatView({ chat, onBack }) {
           />
           <div className="cv-foot">
             <div className="nc-pickers">
-              <span className="nc-meta nc-static">{harnessName(chat.harness)}</span>
+              {(canChange.model ? models.length > 0 : Boolean(chat.model)) && (
+                <span className="nc-via">via</span>
+              )}
+              <span className="nc-meta nc-static">
+                <HarnessIcon harness={{ icon: harnessIcon(chat.harness)?.icon, brand: harnessIcon(chat.harness)?.brand }} size={13} />
+                {harnessName(chat.harness)}
+              </span>
               {canChange.model && models.length > 0 ? (
                 <button
                   type="button"
