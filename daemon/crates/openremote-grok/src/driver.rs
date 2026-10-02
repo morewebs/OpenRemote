@@ -251,6 +251,7 @@ async fn read_prompt(
                 subtype,
                 terminal_reason,
                 is_error,
+                usage: _,
             } => {
                 saw_result = true;
                 let coarse = if subtype == "success" {

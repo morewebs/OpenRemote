@@ -265,6 +265,7 @@ async fn plugins_ride_sessions_without_breaking_their_spawns() {
             "turn.started",
             "message.added",
             "message.added",
+            "context.used",
             "turn.completed",
             "session.status_changed",
         ],

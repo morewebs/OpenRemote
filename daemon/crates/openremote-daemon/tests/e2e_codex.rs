@@ -66,6 +66,7 @@ async fn a_codex_prompt_runs_a_real_turn_end_to_end() {
             "turn.started",
             "message.added",
             "message.added",
+            "context.used",
             "turn.completed",
             "session.status_changed",
         ],

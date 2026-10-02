@@ -55,6 +55,19 @@ pub enum EventPayload {
         output: serde_json::Value,
         is_error: bool,
     },
+    /// The harness reported the conversation's context size — its own
+    /// numbers, never ours. The window only rides where the harness
+    /// reports one.
+    #[serde(rename = "context.used")]
+    ContextUsed {
+        used: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        window: Option<u64>,
+    },
+    /// An informational line in the transcript (compaction notices) — the
+    /// console renders it like its other notes.
+    #[serde(rename = "note.added")]
+    NoteAdded { text: String },
     #[serde(rename = "decision.requested")]
     DecisionRequested { decision: Decision },
     #[serde(rename = "decision.responded")]
@@ -79,6 +92,8 @@ impl Event {
             EventPayload::MessageDelta { .. } => "message.delta",
             EventPayload::ToolStarted { .. } => "tool.started",
             EventPayload::ToolResult { .. } => "tool.result",
+            EventPayload::ContextUsed { .. } => "context.used",
+            EventPayload::NoteAdded { .. } => "note.added",
             EventPayload::DecisionRequested { .. } => "decision.requested",
             EventPayload::DecisionResponded { .. } => "decision.responded",
             EventPayload::DaemonError { .. } => "daemon.error",

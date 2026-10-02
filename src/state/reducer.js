@@ -41,6 +41,8 @@ export function chatFromSession(session) {
     model: session.model ?? null,
     fast: session.fast ?? false,
     approvedTools: session.approved_tools ?? [],
+    // The harness's own context numbers, when it reports them.
+    context: null,
     lastError: session.last_error ?? null,
     running: ['starting', 'working', 'waiting'].includes(session.status),
     title: null,
@@ -101,6 +103,19 @@ export function foldEvent(chat, event) {
         input: payload.input,
         state: 'ok',
         result: null,
+      })
+      break
+    }
+    case 'context.used': {
+      chat.context = { used: payload.used, window: payload.window ?? null }
+      break
+    }
+    case 'note.added': {
+      chat.timeline.push({
+        kind: 'message',
+        id: `note-${event.seq}`,
+        role: 'note',
+        text: payload.text,
       })
       break
     }

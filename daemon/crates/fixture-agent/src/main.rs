@@ -316,6 +316,28 @@ impl FixtureAgent {
                 self.assistant_text("Hello world");
                 self.result("success", "Hello world", "completed");
             }
+            // The conversation outgrew its window: the harness compacted
+            // before answering (claude's own marker).
+            "compact" => {
+                self.out(serde_json::json!({
+                    "type": "system",
+                    "subtype": "compact_boundary"
+                }));
+                self.assistant_text("the fixture compacted and continued");
+                self.out(serde_json::json!({
+                    "type": "result",
+                    "subtype": "success",
+                    "session_id": self.session_id,
+                    "result": "done",
+                    "is_error": false,
+                    "num_turns": self.prompt_count,
+                    "terminal_reason": "completed",
+                    "duration_ms": 9,
+                    "total_cost_usd": 0,
+                    "usage": {"input_tokens": 40, "cache_read_input_tokens": 12000,
+                              "cache_creation_input_tokens": 260, "output_tokens": 60}
+                }));
+            }
             _ => {
                 self.assistant_text(&format!("done: {prompt}"));
                 self.result("success", &format!("done: {prompt}"), "completed");

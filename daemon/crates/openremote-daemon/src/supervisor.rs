@@ -1034,6 +1034,19 @@ impl Supervisor {
                 }
                 self.emit_all(id, payloads)?;
             }
+            DriverEvent::ContextUsed { used, window } => {
+                self.emit_all(id, vec![EventPayload::ContextUsed { used, window }])?;
+            }
+            DriverEvent::Compacted => {
+                // The harness compacted its own conversation — the
+                // transcript says so where it happened.
+                self.emit_all(
+                    id,
+                    vec![EventPayload::NoteAdded {
+                        text: "This session was compacted before this message.".to_string(),
+                    }],
+                )?;
+            }
             DriverEvent::Stderr { line } => {
                 eprintln!("session {id} harness stderr: {line}");
             }

@@ -198,6 +198,32 @@ impl CodexFixture {
                             "itemId": item_id,
                             "item": {"type": "agentMessage", "id": item_id, "text": format!("done: {prompt}")}
                         }));
+                        // The thread's own context numbers — the harness
+                        // reports both the used tokens and the window.
+                        self.notify(
+                            "thread/tokenUsage/updated",
+                            json!({
+                                "threadId": self.thread(),
+                                "turnId": turn,
+                                "tokenUsage": {
+                                    "total": {"totalTokens": 1250, "inputTokens": 1000,
+                                              "cachedInputTokens": 200, "cacheWriteInputTokens": 50,
+                                              "outputTokens": 250, "reasoningOutputTokens": 0},
+                                    "last": {"totalTokens": 300, "inputTokens": 250,
+                                             "cachedInputTokens": 0, "cacheWriteInputTokens": 0,
+                                             "outputTokens": 50, "reasoningOutputTokens": 0},
+                                    "modelContextWindow": 200000
+                                }
+                            }),
+                        );
+                        // The compact scenario: the conversation outgrew
+                        // its window first.
+                        if self.scenario == "compact" {
+                            self.notify(
+                                "thread/compacted",
+                                json!({"threadId": self.thread(), "turnId": turn}),
+                            );
+                        }
                         self.finish_turn(&turn, "completed");
                     }
                 }

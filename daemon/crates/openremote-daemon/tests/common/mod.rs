@@ -27,16 +27,14 @@ pub fn fixture_agent() -> PathBuf {
         "fixture-agent"
     };
     let path = target.join("debug").join(name);
-    if !path.is_file() {
-        // Workspace-root `cargo test` builds it already; a targeted run may
-        // not have. Build on demand.
-        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
-        let status = std::process::Command::new(cargo)
-            .args(["build", "-p", "fixture-agent"])
-            .status()
-            .expect("spawn cargo to build the fixture agent");
-        assert!(status.success(), "cargo build -p fixture-agent failed");
-    }
+    // Always build: a no-op when fresh, a rescue when a targeted test run
+    // would otherwise drive a stale fixture from an earlier build.
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+    let status = std::process::Command::new(cargo)
+        .args(["build", "-p", "fixture-agent"])
+        .status()
+        .expect("spawn cargo to build the fixture agent");
+    assert!(status.success(), "cargo build -p fixture-agent failed");
     assert!(
         path.is_file(),
         "fixture agent binary not found at {}",

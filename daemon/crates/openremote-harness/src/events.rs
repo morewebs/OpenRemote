@@ -72,6 +72,17 @@ pub enum DriverEvent {
         is_error: bool,
         error_message: Option<String>,
     },
+    /// The harness reported the conversation's context size — its own
+    /// numbers (claude's result usage, codex `thread/tokenUsage/updated`).
+    /// `window` is only set where the harness reports it (codex's
+    /// `modelContextWindow`; claude's stream-json has no window field).
+    ContextUsed {
+        used: u64,
+        window: Option<u64>,
+    },
+    /// The harness compacted the conversation (claude's own
+    /// `compact_boundary` marker, codex `thread/compacted`).
+    Compacted,
     /// Harness stderr, line by line — diagnostics ride with everything.
     Stderr {
         line: String,

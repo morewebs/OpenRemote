@@ -483,6 +483,19 @@ fn notification(method: &str, params: &Value, shared: &Shared) -> Option<DriverE
                     text: format!("\n{text}"),
                 })
         }
+        // The thread's own context numbers: total tokens against the
+        // model's window, both reported by the harness itself.
+        "thread/tokenUsage/updated" => {
+            let used = params
+                .pointer("/tokenUsage/total/totalTokens")
+                .and_then(Value::as_u64)?;
+            let window = params
+                .get("tokenUsage")
+                .and_then(|u| u.get("modelContextWindow"))
+                .and_then(Value::as_u64);
+            Some(DriverEvent::ContextUsed { used, window })
+        }
+        "thread/compacted" => Some(DriverEvent::Compacted),
         "item/started" => {
             let item = params.get("item")?;
             match item.get("type").and_then(Value::as_str)? {

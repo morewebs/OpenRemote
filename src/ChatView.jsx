@@ -3,6 +3,7 @@ import { ArrowUp, Stop, Play } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { railItems } from './state/reducer.js'
 import { harnessName } from './harness-names.js'
+import ContextRing from './ContextRing.jsx'
 import './chatview.css'
 import './composer.css'
 
@@ -211,6 +212,9 @@ export default function ChatView({ chat, onBack }) {
           <div className="cv-foot">
             <div className="nc-pickers">
               <span className="nc-meta nc-static">{harnessName(chat.harness)}</span>
+              {chat.context?.window != null && (
+                <ContextRing used={chat.context.used} window={chat.context.window} />
+              )}
             </div>
             <div className="nc-send-group">
               <button className="nc-send" onClick={send} disabled={!canSend} title="Send">

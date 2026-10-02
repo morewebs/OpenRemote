@@ -623,6 +623,8 @@ impl Store {
             | EventPayload::MessageDelta { .. }
             | EventPayload::ToolStarted { .. }
             | EventPayload::ToolResult { .. }
+            | EventPayload::ContextUsed { .. }
+            | EventPayload::NoteAdded { .. }
             | EventPayload::DaemonError { .. } => {
                 if let Some(session) = self.state.sessions.get_mut(&event.session_id) {
                     session.updated_at = now;

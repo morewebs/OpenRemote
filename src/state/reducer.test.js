@@ -144,3 +144,20 @@ test('session.updated folds the session-scoped grant into the chat', () => {
   assert.equal(chat.status, 'waiting')
   assert.equal(chat.running, true)
 })
+
+test('the harness\'s own context numbers fold in, and compaction notes land in order', () => {
+  let chat = chatFromSession(session())
+  chat = foldEvent(chat, event(9, { type: 'context.used', used: 1250, window: 200000 }))
+  assert.deepEqual(chat.context, { used: 1250, window: 200000 })
+  // a harness that reports no window leaves it unset
+  chat = foldEvent(chat, event(10, { type: 'context.used', used: 40 }))
+  assert.deepEqual(chat.context, { used: 40, window: null })
+  // the compaction marker becomes a transcript note, in event order
+  chat = foldEvent(
+    chat,
+    event(11, { type: 'note.added', text: 'This session was compacted before this message.' }),
+  )
+  const rail = railItems(chat)
+  assert.equal(rail.at(-1).role, 'note')
+  assert.match(rail.at(-1).text, /compacted/)
+})

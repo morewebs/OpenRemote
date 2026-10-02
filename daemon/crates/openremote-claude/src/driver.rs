@@ -143,6 +143,17 @@ fn coarse_outcome(subtype: &str, terminal_reason: Option<&str>) -> TurnOutcome {
     }
 }
 
+/// The SDK's own context math: what the model read this turn — its input
+/// tokens plus both cache fields. `None` when the frame carried no usage.
+fn context_used(usage: Option<&Value>) -> Option<u64> {
+    let usage = usage?;
+    let field = |name: &str| usage.get(name).and_then(|v| v.as_u64()).unwrap_or(0);
+    let used = field("input_tokens")
+        + field("cache_read_input_tokens")
+        + field("cache_creation_input_tokens");
+    (used > 0).then_some(used)
+}
+
 /// Build the decision spec from a `can_use_tool` request: approvals and
 /// questions are one concept; the options are the harness's own words.
 fn decision_spec(request: &Value) -> DecisionSpec {
@@ -365,16 +376,32 @@ async fn read_stdout(
                 continue;
             }
             Frame::TextDelta { text } => Some(DriverEvent::TextDelta { text }),
+            Frame::CompactBoundary => Some(DriverEvent::Compacted),
             Frame::Result {
                 subtype,
                 terminal_reason,
                 is_error,
-            } => Some(DriverEvent::TurnCompleted {
-                subtype: subtype.clone(),
-                coarse: coarse_outcome(&subtype, terminal_reason.as_deref()),
-                is_error,
-                error_message: None,
-            }),
+                usage,
+            } => {
+                // The turn's own usage is the conversation's context: the
+                // SDK's input fields together (its own semantics — the
+                // context the model saw). No window rides this wire.
+                if let Some(used) = context_used(usage.as_ref()) {
+                    if tx
+                        .send(DriverEvent::ContextUsed { used, window: None })
+                        .await
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
+                Some(DriverEvent::TurnCompleted {
+                    subtype: subtype.clone(),
+                    coarse: coarse_outcome(&subtype, terminal_reason.as_deref()),
+                    is_error,
+                    error_message: None,
+                })
+            }
             Frame::ControlRequest {
                 request_id,
                 request,

@@ -28,11 +28,17 @@ pub enum Frame {
     /// `--include-partial-messages`).
     TextDelta { text: String },
     /// `result` — the turn boundary. Never guess turn state before it.
+    /// `usage` rides verbatim (the SDK's own fields: input_tokens,
+    /// cache_read_input_tokens, cache_creation_input_tokens, …).
     Result {
         subtype: String,
         terminal_reason: Option<String>,
         is_error: bool,
+        usage: Option<Value>,
     },
+    /// `system` with `subtype: "compact_boundary"` — the conversation was
+    /// compacted here (the SDK's own marker).
+    CompactBoundary,
     /// CLI → host control request, e.g. `can_use_tool`.
     ControlRequest { request_id: String, request: Value },
     /// host ↔ CLI control response (ours out; theirs in for interrupts).
@@ -105,6 +111,7 @@ pub fn parse_frame(line: &str) -> Option<Frame> {
                     .and_then(|m| m.as_str())
                     .map(String::from),
             }),
+            Some("compact_boundary") => Some(Frame::CompactBoundary),
             _ => Some(Frame::Other { kind, raw }),
         },
         "assistant" => Some(Frame::Assistant {
@@ -161,6 +168,7 @@ pub fn parse_frame(line: &str) -> Option<Frame> {
                 .get("is_error")
                 .and_then(|e| e.as_bool())
                 .unwrap_or(false),
+            usage: raw.get("usage").cloned(),
         }),
         "control_request" => Some(Frame::ControlRequest {
             request_id: raw.get("request_id").and_then(|r| r.as_str())?.to_string(),
@@ -253,9 +261,27 @@ mod tests {
             Frame::Result {
                 subtype: "error_during_execution".into(),
                 terminal_reason: Some("aborted_tools".into()),
-                is_error: true
+                is_error: true,
+                usage: None
             }
         );
+        // The turn's own usage rides verbatim, and the compaction marker
+        // parses on its own.
+        let with_usage = parse_frame(
+            r#"{"type":"result","subtype":"success","usage":{"input_tokens":10,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":5}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            with_usage,
+            Frame::Result {
+                subtype: "success".into(),
+                terminal_reason: None,
+                is_error: false,
+                usage: Some(json!({"input_tokens": 10, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0, "output_tokens": 5}))
+            }
+        );
+        let boundary = parse_frame(r#"{"type":"system","subtype":"compact_boundary"}"#).unwrap();
+        assert_eq!(boundary, Frame::CompactBoundary);
         let delta = parse_frame(
             r#"{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Hel"}}}"#,
         )
