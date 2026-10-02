@@ -18,6 +18,8 @@ export default function PickerMenu({
   anchor, // { x, y }
   renderIcon,
   renderTrailing,
+  renderSubline, // a muted second line inside the item (efforts, paths)
+  wide, // room for sublines without cramped trailing text
 }) {
   const [query, setQuery] = useState('')
   const [cursor, setCursor] = useState(0)
@@ -105,7 +107,13 @@ export default function PickerMenu({
   let flatIndex = -1
 
   return (
-    <div ref={ref} className="nc-menu" role="listbox" aria-label={label} style={anchor}>
+    <div
+      ref={ref}
+      className={`nc-menu${wide ? ' nc-menu--wide' : ''}`}
+      role="listbox"
+      aria-label={label}
+      style={anchor}
+    >
       <label className="nc-search">
         <MagnifyingGlass size={13} />
         <input
@@ -143,10 +151,13 @@ export default function PickerMenu({
                   onClick={() => onChoose(item.id)}
                   onMouseEnter={() => setCursor(i)}
                 >
-                  {renderIcon?.(item)}
-                  <span className="nc-item-name">{item.name}</span>
-                  {renderTrailing?.(item)}
-                  {item.id === selectedId && <Check size={13} className="nc-check" />}
+                  <span className="nc-item-main">
+                    {renderIcon?.(item)}
+                    <span className="nc-item-name">{item.name}</span>
+                    {renderTrailing?.(item)}
+                    {item.id === selectedId && <Check size={13} className="nc-check" />}
+                  </span>
+                  {renderSubline?.(item)}
                 </button>
               )
             })}

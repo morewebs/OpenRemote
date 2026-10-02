@@ -130,6 +130,7 @@ export default function NewChat({ onOpen }) {
                   <PickerMenu
                     label="Model"
                     searchPlaceholder="Search models"
+                    wide
                     items={models.map((m) => ({
                       id: m.model,
                       name: m.display_name ?? m.model,
@@ -143,9 +144,11 @@ export default function NewChat({ onOpen }) {
                     }}
                     onClose={() => setPicker(null)}
                     anchor={{ left: picker.x, top: picker.y }}
-                    renderTrailing={(m) =>
+                    renderSubline={(m) =>
                       m.reasoning_efforts?.length ? (
-                        <span className="nc-item-path">{m.reasoning_efforts.join(' · ')}</span>
+                        <span className="nc-item-sub">
+                          {m.reasoning_efforts.join(' · ')}
+                        </span>
                       ) : null
                     }
                   />
@@ -208,6 +211,7 @@ export default function NewChat({ onOpen }) {
                     <PickerMenu
                       label="Workspace"
                       searchPlaceholder="Search workspaces"
+                      wide
                       items={recents.map((p) => ({
                         id: p,
                         name: p.split(/[\\/]/).filter(Boolean).pop(),
@@ -220,7 +224,7 @@ export default function NewChat({ onOpen }) {
                       }}
                       onClose={() => setPicker(null)}
                       anchor={{ left: picker.x, top: picker.y }}
-                      renderTrailing={(p) => <span className="nc-item-path">{p.id}</span>}
+                      renderSubline={(p) => <span className="nc-item-sub">{p.id}</span>}
                     />
                   )}
                 </>
