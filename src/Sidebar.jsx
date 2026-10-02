@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CaretDown, GearSix, Lightning, MagnifyingGlass, Plus, PuzzlePiece, WifiHigh, X } from '@phosphor-icons/react'
+import { CaretDown, Cloud, GearSix, House, Lightning, MagnifyingGlass, Plus, PuzzlePiece, WifiHigh, X } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { workspaceName } from './state/reducer.js'
 import './sidebar.css'
@@ -45,6 +45,19 @@ export default function Sidebar({ open, active, onSelect, onReplayOnboarding }) 
   return (
     <aside className={`sidebar${open ? '' : ' collapsed'}`}>
       <div className="sb-actions">
+        {/* The mode switch keeps the prototype's shape with Local
+            pressed; Cloud arrives with remote check-in and stays quiet
+            until then. */}
+        <div className="mode-switch" role="group" aria-label="Connection mode">
+          <button className="on" aria-pressed="true">
+            <House size={13} />
+            Local
+          </button>
+          <button disabled title="Cloud arrives with remote machine check-in">
+            <Cloud size={13} />
+            Cloud
+          </button>
+        </div>
         <button className="side-tile" onClick={() => onSelect('new')}>
           <Plus size={17} weight="bold" />
           New chat
@@ -63,30 +76,30 @@ export default function Sidebar({ open, active, onSelect, onReplayOnboarding }) 
             </button>
           )}
         </label>
-      </div>
-
-      <nav className="sb-list" aria-label="Chats">
         <button
-          className={`chat-row nav-tile${active === 'machines' ? ' active' : ''}`}
-          onClick={() => onSelect('machines')}
-        >
-          <WifiHigh size={15} className="nav-tile-icon" />
-          Machines
-        </button>
-        <button
-          className={`chat-row nav-tile${active === 'plugins' ? ' active' : ''}`}
+          className={`side-tile${active === 'plugins' ? ' on' : ''}`}
           onClick={() => onSelect('plugins')}
         >
-          <PuzzlePiece size={15} className="nav-tile-icon" />
+          <PuzzlePiece size={17} />
           Plugins
         </button>
         <button
-          className={`chat-row nav-tile${active === 'automations' ? ' active' : ''}`}
+          className={`side-tile${active === 'automations' ? ' on' : ''}`}
           onClick={() => onSelect('automations')}
         >
-          <Lightning size={15} className="nav-tile-icon" />
+          <Lightning size={17} />
           Automations
         </button>
+        <button
+          className={`side-tile${active === 'machines' ? ' on' : ''}`}
+          onClick={() => onSelect('machines')}
+        >
+          <WifiHigh size={17} />
+          Machines
+        </button>
+      </div>
+
+      <nav className="sb-list" aria-label="Chats">
         <div className="section-title">Chats</div>
         {groups.length === 0 && (
           <p className="sb-empty">
