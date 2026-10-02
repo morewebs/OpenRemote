@@ -682,6 +682,35 @@ async fn console_origins_can_fetch_the_daemon_and_foreign_origins_cannot() {
         "no CORS grant for foreign origins; raw: {}",
         foreign.raw
     );
+
+    // Removing a machine rides DELETE — the preflight must allow it or the
+    // webview's fetch dies (the webview-only failure raw TCP can't see).
+    let preflight = raw_http(
+        &daemon,
+        "OPTIONS",
+        "/machines",
+        &[
+            ("Origin", "http://localhost:5173"),
+            ("Access-Control-Request-Method", "DELETE"),
+            ("Access-Control-Request-Headers", "authorization"),
+        ],
+        None,
+    )
+    .await;
+    assert_eq!(preflight.status, 200, "raw: {}", preflight.raw);
+    let methods = preflight
+        .headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("access-control-allow-methods"))
+        .map(|(_, v)| v.clone())
+        .unwrap_or_default();
+    assert!(
+        methods
+            .split(',')
+            .any(|m| m.trim().eq_ignore_ascii_case("DELETE")),
+        "DELETE must be allowed for the console; raw: {}",
+        preflight.raw
+    );
 }
 
 #[tokio::test]

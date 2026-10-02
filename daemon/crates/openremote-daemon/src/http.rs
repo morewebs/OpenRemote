@@ -69,7 +69,7 @@ fn console_cors() -> CorsLayer {
                 "localhost" | "127.0.0.1" | "[::1]" | "tauri.localhost"
             )
         }))
-        .allow_methods([Method::GET, Method::POST])
+        .allow_methods([Method::GET, Method::POST, Method::DELETE])
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
 }
 
