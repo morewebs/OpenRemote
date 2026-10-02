@@ -1,24 +1,45 @@
-import { useState } from 'react'
-import { ArrowRight } from '@phosphor-icons/react'
+import { useEffect, useState } from 'react'
 import { useConsole } from './state/console.jsx'
 import { harnessName } from './harness-names.js'
 import './onboarding.css'
 
-const STEPS = ['welcome', 'connect', 'ready']
-
+// The happy path is two steps — welcome, ready — and the user never sees
+// connection plumbing: the daemon comes up with the app. A quiet setup
+// beat shows only while it boots (a moment), and the manual connect form
+// is a fallback for when auto-connection genuinely fails (browser mode,
+// a daemon that never answered).
 export default function Onboarding({ onDone }) {
-  const { connection, connect, capabilities } = useConsole()
-  const [step, setStep] = useState('welcome')
+  const { connection, capabilities, connect } = useConsole()
+  const [step, setStep] = useState('welcome') // welcome | setup | ready
+  const [manual, setManual] = useState(false)
   const [url, setUrl] = useState('')
   const [token, setToken] = useState('')
 
-  const next = () => {
-    const i = STEPS.indexOf(step)
-    if (i < STEPS.length - 1) setStep(STEPS[i + 1])
-    else onDone()
+  const available = (capabilities?.harnesses ?? []).filter((h) => h.available)
+
+  const begin = () => {
+    if (connection.state === 'connected') setStep('ready')
+    else setStep('setup')
   }
 
-  const available = (capabilities?.harnesses ?? []).filter((h) => h.available)
+  // The quiet setup beat: advance the moment the daemon answers; offer
+  // the manual form only if it truly can't (an error, or a slow boot).
+  useEffect(() => {
+    if (step !== 'setup') return
+    if (connection.state === 'connected') {
+      setStep('ready')
+      return
+    }
+    if (connection.state === 'error') {
+      setManual(true)
+      return
+    }
+    const slowBoot = setTimeout(() => setManual(true), 15000)
+    return () => clearTimeout(slowBoot)
+  }, [step, connection.state])
+
+  const dots = manual ? 3 : 2
+  const dotOn = step === 'welcome' ? 0 : manual ? 1 : dots - 1
 
   return (
     <div className="ob">
@@ -30,54 +51,52 @@ export default function Onboarding({ onDone }) {
               Claude Code stays installed where it is. OpenRemote is where you start a
               task, read the session, and approve what it runs.
             </p>
-            <button className="ob-cta" onClick={next}>
+            <button className="ob-cta" onClick={begin}>
               Get started
             </button>
           </>
         )}
 
-        {step === 'connect' && (
+        {step === 'setup' && !manual && (
+          <>
+            <h1 className="ob-title">Setting up this machine</h1>
+            <p className="ob-sub">This only takes a moment.</p>
+          </>
+        )}
+
+        {step === 'setup' && manual && (
           <>
             <h1 className="ob-title">Connect to the daemon</h1>
             <p className="ob-sub">
-              {connection.state === 'connected'
-                ? 'The daemon on this machine answered. Its address came from the app.'
-                : 'In the app the daemon starts on its own. Connect by address if you run it yourself.'}
+              The daemon on this machine didn't answer. Connect by address if you run it
+              yourself, or reopen the app to try again.
             </p>
-            {connection.state !== 'connected' && (
-              <div className="ob-harnesses">
-                <input
-                  className="ob-input"
-                  placeholder="http://127.0.0.1:5175"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  spellCheck={false}
-                />
-                <input
-                  className="ob-input"
-                  placeholder="Token"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  spellCheck={false}
-                />
-                <button
-                  className="ob-harness ob-cta ob-cta--primary"
-                  onClick={() => connect(url.trim(), token.trim())}
-                  disabled={!url.trim() || !token.trim()}
-                >
-                  Connect
-                </button>
-                {connection.state === 'error' && (
-                  <p className="ob-sub">Could not reach it: {connection.error}</p>
-                )}
-              </div>
-            )}
-            {connection.state === 'connected' && (
-              <button className="ob-cta ob-cta--primary" onClick={next}>
-                Continue
-                <ArrowRight size={13} weight="bold" />
+            <div className="ob-harnesses">
+              <input
+                className="ob-input"
+                placeholder="http://127.0.0.1:5175"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                spellCheck={false}
+              />
+              <input
+                className="ob-input"
+                placeholder="Token"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                spellCheck={false}
+              />
+              <button
+                className="ob-harness ob-cta ob-cta--primary"
+                onClick={() => connect(url.trim(), token.trim())}
+                disabled={!url.trim() || !token.trim()}
+              >
+                Connect
               </button>
-            )}
+              {connection.state === 'error' && (
+                <p className="ob-sub">Could not reach it: {connection.error}</p>
+              )}
+            </div>
           </>
         )}
 
@@ -97,16 +116,16 @@ export default function Onboarding({ onDone }) {
                 </div>
               ))}
             </div>
-            <button className="ob-cta ob-cta--primary" onClick={next}>
+            <button className="ob-cta ob-cta--primary" onClick={onDone}>
               Open OpenRemote
             </button>
           </>
         )}
 
         <div className="ob-progress">
-          <span className={`ob-dot${step === 'welcome' ? ' on' : ''}`} />
-          <span className={`ob-dot${step === 'connect' ? ' on' : ''}`} />
-          <span className={`ob-dot${step === 'ready' ? ' on' : ''}`} />
+          {Array.from({ length: dots }, (_, i) => (
+            <span key={i} className={`ob-dot${i <= dotOn ? ' on' : ''}`} />
+          ))}
         </div>
       </div>
     </div>
