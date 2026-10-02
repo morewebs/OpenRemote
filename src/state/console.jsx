@@ -59,8 +59,9 @@ export function ConsoleProvider({ children }) {
         if (cancelled) return
         if (info?.url && info?.token) {
           connect(info.url, info.token)
-        } else if (attempt < 20) {
-          // The sidecar is still booting — ask again shortly.
+        } else if (attempt < 150) {
+          // The sidecar is still booting (a freshly built exe can take a
+          // slow first run) — keep asking for a long while yet.
           attempt += 1
           setTimeout(ask, 600)
         } else if (!api.ready) {

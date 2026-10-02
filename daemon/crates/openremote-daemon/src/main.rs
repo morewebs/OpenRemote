@@ -14,11 +14,10 @@ fn main() {
     runtime.block_on(async move {
         let data_dir = app::default_data_dir();
         let token = app::load_or_create_token(&data_dir).expect("token");
-        let app = App::new(AppOptions {
-            data_dir: data_dir.clone(),
-            token: token.clone(),
-        })
-        .await;
+        // Bind and announce BEFORE the app assembles: the registry probe
+        // spawns each harness's `--version` (bounded), and the shell should
+        // know the address long before that finishes. The listener's
+        // backlog holds any early request until `serve` picks it up.
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
             .await
             .expect("bind loopback");
@@ -29,6 +28,12 @@ fn main() {
             "openremote-daemon: token at {}",
             data_dir.join("token").display()
         );
+
+        let app = App::new(AppOptions {
+            data_dir: data_dir.clone(),
+            token: token.clone(),
+        })
+        .await;
 
         // The sidecar watchdog: when the shell dies, our stdin closes, and
         // the daemon must not outlive its owner.
