@@ -366,6 +366,17 @@ html[data-reduce-motion] .am-row-actions {
 
 /* slice-4 additions */
 
+.am-starter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.am-starter > div {
+  flex: 1;
+  min-width: 0;
+}
+
 .am-hook {
   display: block;
   margin-top: 3px;
