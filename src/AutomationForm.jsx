@@ -23,7 +23,9 @@ export default function AutomationForm({ rule, onClose }) {
     enableAutomation,
     api,
   } = useConsole()
-  const editing = rule != null
+  // A saved rule carries its id (an edit); a prefilled draft from the
+  // starter or the pill carries only fields.
+  const editing = rule?.id != null
   const available = (capabilities?.harnesses ?? []).filter((h) => h.available)
   const online = (machines ?? []).filter((m) => m.machine.status === 'online')
 

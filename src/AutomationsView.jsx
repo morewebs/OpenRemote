@@ -303,7 +303,9 @@ export default function AutomationsView({ onOpenChat }) {
 
       {error && <p className="am-error">{error}</p>}
 
-      {editing != null && <AutomationForm rule={editing.id ? editing : null} onClose={() => setEditing(null)} />}
+      {editing != null && (
+        <AutomationForm rule={editing} onClose={() => setEditing(null)} />
+      )}
 
       <div className="pill-dock">
         <div className="pt-stack">
