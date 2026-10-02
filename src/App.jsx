@@ -58,9 +58,14 @@ function Shell() {
   const chat = STATIC_VIEWS.includes(view) ? null : chats[view] ?? null
 
   // Reconcile navigation with the live session list (a chat in the history
-  // that no longer exists falls back to New chat).
+  // that no longer exists falls back to New chat). A chat reached by hash
+  // still needs its record — ensure it, the same as a sidebar open.
   useEffect(() => {
-    setNav(loadViewState(sessions))
+    const state = loadViewState(sessions)
+    setNav(state)
+    const view = state.history[state.hIndex]
+    const session = (sessions ?? []).find((s) => s.id === view)
+    if (session) ensureChat(session)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions])
 

@@ -149,6 +149,8 @@ export function ConsoleProvider({ children }) {
 
   // Keep chat records in step with the polled session list: merge
   // identities (status/workspace) without disturbing folded transcripts.
+  // Event-folded facts the session payload doesn't carry (the context
+  // numbers, the decisions list) survive the merge — the stream owns them.
   useEffect(() => {
     setChats((current) => {
       const next = { ...current }
@@ -161,6 +163,8 @@ export function ConsoleProvider({ children }) {
           title: existing.title ?? fresh.title,
           timeline: existing.timeline,
           pendingDecisionId: existing.pendingDecisionId,
+          context: existing.context,
+          decisionsList: existing.decisionsList,
         }
       }
       return next
@@ -227,7 +231,13 @@ export function ConsoleProvider({ children }) {
 
   const ensureChat = useCallback(
     (session) => {
-      setChats((current) => current[session.id] ?? chatFromSession(session))
+      // Merge into the map — the record never replaces it. Idempotent, so
+      // the shell can ensure the chat for a hash-reached view too.
+      setChats((current) =>
+        current[session.id]
+          ? current
+          : { ...current, [session.id]: chatFromSession(session) },
+      )
       setOpenChatId(session.id)
     },
     [],
