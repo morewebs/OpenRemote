@@ -366,6 +366,53 @@ html[data-reduce-motion] .am-row-actions {
 
 /* slice-4 additions */
 
+.am-rule {
+  padding: 12px 0;
+}
+
+.am-rule-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.am-rule-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.am-line {
+  margin-top: 3px;
+  color: var(--text-3);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.am-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.am-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.am-icon:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
 .am-starter {
   display: flex;
   align-items: center;
@@ -415,20 +462,63 @@ html[data-reduce-motion] .am-row-actions {
   overflow-y: auto;
 }
 
+/* Rules and starters stay in the prototype's column. A row that spans
+   the whole window strands its action at the far edge. */
+.am-list,
+.am-starters,
+.am-empty {
+  width: min(640px, 100%);
+}
+
+.am-empty {
+  margin: 28px 0 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.am-starters {
+  margin-top: 36px;
+}
+
+.am-starters-title {
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.am-starter {
+  padding: 12px 0;
+}
+
+.am-starter .am-line {
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
 /* phone width: rules stack their actions, the form fills the sheet. */
 @media (max-width: 639px) {
   .automations {
-    padding: 20px 16px 24px;
+    padding: 28px 20px 28px;
+  }
+
+  .dv-head .dv-act {
+    margin-top: 16px;
+  }
+
+  .am-starter {
+    align-items: flex-start;
+    padding: 14px 0;
+  }
+
+  .am-add,
+  .am-added {
+    margin-top: 2px;
   }
 
   .am-rule-main {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-
-  .am-actions {
-    opacity: 1;
+    gap: 10px;
   }
 
   .pill-dock {

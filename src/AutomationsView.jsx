@@ -291,15 +291,20 @@ export default function AutomationsView({ onOpenChat }) {
                   Every day at {starter.time} · {harnessName('claude')}
                 </div>
               </div>
-              <button
-                type="button"
-                className="am-icon"
-                disabled={busyId != null}
-                onClick={() => addStarter(starter)}
-                title={added ? 'Added' : 'Add'}
-              >
-                {added ? <Check size={13} /> : <Plus size={13} />}
-              </button>
+              {added ? (
+                <span className="am-added">
+                  <Check size={12} /> Added
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="am-add"
+                  disabled={busyId != null}
+                  onClick={() => addStarter(starter)}
+                >
+                  <Plus size={12} /> Add
+                </button>
+              )}
             </div>
           )
         })}
