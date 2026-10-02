@@ -263,8 +263,8 @@ export default function ChatView({ chat, onBack }) {
                 send()
               }
             }}
-            placeholder={pendingDecision ? 'Decide above to continue' : chat.running ? 'Steer the session' : 'Resume the session to continue'}
-            disabled={pendingDecision || !chat.running}
+            placeholder={pendingDecision ? 'Decide above to continue' : alive ? (chat.running ? 'Steer the session' : 'Send a message') : 'Resume the session to continue'}
+            disabled={pendingDecision || !alive}
             spellCheck={false}
           />
           <div className="cv-foot">
