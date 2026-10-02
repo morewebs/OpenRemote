@@ -20,10 +20,9 @@ const STATUS_LABEL = {
 
 const TOOL_LABEL = { ok: 'Done', failed: 'Failed' }
 
-// Codex applies model, effort, and fast on the next turn of a live thread.
-// Pi applies model and thinking level on the running process. The others
-// take them when the process starts, so a stopped chat can still change
-// them — resume is what lands the change.
+// Codex and Pi apply model, effort, and fast on the running thread now.
+// The others take them when the process starts, so a stopped chat can
+// still change them — resume is what lands the change.
 const LIVE_SETTINGS = {
   codex: { model: true, effort: true, fast: true },
   pi: { model: true, effort: true, fast: false },

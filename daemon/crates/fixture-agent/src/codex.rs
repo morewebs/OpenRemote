@@ -27,6 +27,9 @@ struct CodexFixture {
     turn_count: u64,
     thread_id: Option<String>,
     active_turn: Option<String>,
+    /// The model the host last applied through thread/settings/update —
+    /// echoed into turn answers so e2e can see it land.
+    applied_model: Option<String>,
     /// A turn parked on the host's approval answer.
     pending_approval: Option<PendingTurn>,
 }
@@ -53,6 +56,7 @@ impl CodexFixture {
             turn_count: 0,
             thread_id: None,
             active_turn: None,
+            applied_model: None,
             pending_approval: None,
         }
     }
@@ -192,11 +196,13 @@ impl CodexFixture {
                     }
                     _ => {
                         let item_id = format!("msg-{}", self.turn_count);
+                        let model = self.applied_model.as_deref().unwrap_or("gpt-5.1-codex");
                         self.notify("item/completed", json!({
                             "threadId": self.thread(),
                             "turnId": turn,
                             "itemId": item_id,
-                            "item": {"type": "agentMessage", "id": item_id, "text": format!("done: {prompt}")}
+                            "item": {"type": "agentMessage", "id": item_id,
+                                     "text": format!("done: {prompt} on {model}")}
                         }));
                         // The thread's own context numbers — the harness
                         // reports both the used tokens and the window.
@@ -274,6 +280,21 @@ impl CodexFixture {
                         eprintln!("fixture-codex: unknown model cursor {other}");
                     }
                 }
+            }
+            ("thread/settings/update", Some(id)) => {
+                // The host's live settings change: record the model and
+                // echo it back — the real app-server answers the thread's
+                // settings and notifies; the e2e asserts the call carried
+                // the right words.
+                if let Some(model) = params.get("model").and_then(Value::as_str) {
+                    self.applied_model = Some(model.to_string());
+                }
+                let model = self.applied_model.as_deref().unwrap_or("gpt-5.1-codex");
+                self.notify(
+                    "thread/settings/updated",
+                    json!({"threadId": self.thread(), "model": model}),
+                );
+                self.respond(id, json!({"model": model}));
             }
             (method, Some(id)) => {
                 eprintln!("fixture-codex: unknown call {method}");

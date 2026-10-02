@@ -455,3 +455,94 @@ async fn accept_for_session_grants_the_tool_for_the_chat() {
         session.raw
     );
 }
+
+#[tokio::test]
+async fn a_live_model_change_lands_on_the_running_thread() {
+    let (daemon, ws) = codex_daemon(Some("plain")).await;
+    let id = create_codex(&daemon, &ws).await;
+
+    // A first turn completes on the fixture's default model.
+    let prompt = call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "c-p1", "text": "first turn"})),
+    )
+    .await;
+    assert_eq!(prompt.status, 200, "raw: {}", prompt.raw);
+    let events = until_kinds(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        &["turn.completed", "session.status_changed"],
+    )
+    .await;
+    let agent = events
+        .iter()
+        .find(|(_, p)| kind(p) == "message.added" && p["message"]["role"] == "assistant")
+        .expect("agent message");
+    assert!(
+        agent.1["message"]["text"]
+            .as_str()
+            .unwrap_or("")
+            .contains("done: first turn on gpt-5.1-codex"),
+        "the fixture's default model; events:\n{}",
+        dump(&events)
+    );
+
+    // The live change: the daemon drives thread/settings/update on the
+    // running thread — not a staged turn param.
+    let settings = call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/settings"),
+        Some(json!({"request_id": "c-model", "model": "gpt-5.1-codex-max"})),
+    )
+    .await;
+    assert_eq!(settings.status, 200, "raw: {}", settings.raw);
+    assert_eq!(
+        settings.body["model"], "gpt-5.1-codex-max",
+        "raw: {}",
+        settings.raw
+    );
+
+    // The next turn answers on the changed model — the fixture echoes the
+    // model the settings call carried into its turn answer.
+    let second = call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "c-p2", "text": "second turn"})),
+    )
+    .await;
+    assert_eq!(second.status, 200, "raw: {}", second.raw);
+    // Both turns' completions — the suffix would match the first turn's
+    // tail before the second even lands.
+    let events = until_count(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        "turn.completed",
+        2,
+    )
+    .await;
+    let agent = events
+        .iter()
+        .filter(|(_, p)| kind(p) == "message.added" && p["message"]["role"] == "assistant")
+        .last()
+        .expect("second agent message");
+    assert!(
+        agent.1["message"]["text"]
+            .as_str()
+            .unwrap_or("")
+            .contains("done: second turn on gpt-5.1-codex-max"),
+        "the changed model answered; events:\n{}",
+        dump(&events)
+    );
+
+    // The session record agrees — the facts row renders from this.
+    let session = call(&daemon, "GET", &format!("/sessions/{id}"), None).await;
+    assert_eq!(
+        session.body["model"], "gpt-5.1-codex-max",
+        "raw: {}",
+        session.raw
+    );
+}

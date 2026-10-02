@@ -56,7 +56,9 @@ impl SessionDriver {
     pub async fn apply_settings(&mut self, settings: &SessionSettings) -> Result<(), DriverError> {
         match self {
             SessionDriver::Claude(driver) => driver.stage_settings(settings),
-            SessionDriver::Codex(driver) => driver.stage_settings(settings),
+            // Codex's own wire is thread/settings/update — a turn/start
+            // override is ignored once the thread adopted a model.
+            SessionDriver::Codex(driver) => driver.apply_settings(settings).await,
             // Grok, OpenCode, and Antigravity take model and effort on the
             // process that starts the chat. A running process has no wire
             // for a change; resume is how it lands.

@@ -879,7 +879,7 @@ impl Supervisor {
     /// Change model, effort, or fast on a live chat, in the harness's own
     /// words. A harness that only accepts the change at process start gets
     /// it on the next resume — the chat must be stopped first, and the
-    /// error says so. Codex stages it for the next turn; Pi applies it now.
+    /// error says so. Codex and Pi apply it on the running thread now.
     pub async fn update_settings(
         &self,
         id: &SessionId,

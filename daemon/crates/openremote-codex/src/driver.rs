@@ -41,11 +41,6 @@ pub struct Driver {
     shared: Arc<Shared>,
     thread_id: String,
     next_id: u64,
-    /// Overrides for the next `turn/start`. Codex applies them to that turn
-    /// and the ones after; a steer does not carry them.
-    pending_model: Option<String>,
-    pending_effort: Option<String>,
-    pending_tier: Option<String>,
 }
 
 impl Driver {
@@ -108,9 +103,6 @@ impl Driver {
             shared,
             thread_id: String::new(),
             next_id: 1,
-            pending_model: None,
-            pending_effort: None,
-            pending_tier: None,
         };
 
         // Handshake (cloudroom lines 22-25): initialize, then the
@@ -179,23 +171,11 @@ impl Driver {
             )
             .await?;
         } else {
-            let mut params = json!({
+            let params = json!({
                 "threadId": self.thread_id,
                 "clientUserMessageId": Uuid::new_v4().to_string(),
                 "input": input,
             });
-            // Codex's own words: model, effort, and serviceTier override
-            // this turn and the ones after it. Taken once — the thread
-            // keeps them.
-            if let Some(model) = self.pending_model.take() {
-                params["model"] = json!(model);
-            }
-            if let Some(effort) = self.pending_effort.take() {
-                params["effort"] = json!(effort);
-            }
-            if let Some(tier) = self.pending_tier.take() {
-                params["serviceTier"] = json!(tier);
-            }
             let result = self.call("turn/start", params).await?;
             if result.pointer("/turn/id").and_then(Value::as_str).is_none() {
                 return Err(DriverError::Protocol(
@@ -206,25 +186,28 @@ impl Driver {
         Ok(())
     }
 
-    /// Apply model, effort, or fast to this thread. Codex's own contract
-    /// (`turn/start`): a model, effort, or serviceTier override applies to
-    /// this turn and the ones after it. There is no turn yet — the next
-    /// prompt carries the override, and a steer of a running turn does not
-    /// (Codex ignores a tier change on a turn being steered).
-    pub fn stage_settings(&mut self, settings: &SessionSettings) -> Result<(), DriverError> {
+    /// Apply model, effort, or fast to this thread now. Codex's own wire
+    /// is `thread/settings/update` with flat params: a `turn/start`
+    /// override only works before the thread has adopted a model — after
+    /// that it is silently ignored, so the settings call is the only
+    /// honest path for a live change. Verified against the real
+    /// app-server (0.160.0): effort and serviceTier ride the same flat
+    /// shape, and the fast tier is codex's own `fast` word.
+    pub async fn apply_settings(&mut self, settings: &SessionSettings) -> Result<(), DriverError> {
+        if settings.model.is_none() && settings.effort.is_none() && settings.fast.is_none() {
+            return Ok(());
+        }
+        let mut params = json!({"threadId": self.thread_id});
         if let Some(model) = &settings.model {
-            self.pending_model = Some(model.clone());
+            params["model"] = json!(model);
         }
         if let Some(effort) = &settings.effort {
-            self.pending_effort = Some(effort.clone());
+            params["effort"] = json!(effort);
         }
         if let Some(fast) = settings.fast {
-            self.pending_tier = Some(if fast {
-                "fast".to_string()
-            } else {
-                "default".to_string()
-            });
+            params["serviceTier"] = json!(if fast { "fast" } else { "default" });
         }
+        self.call("thread/settings/update", params).await?;
         Ok(())
     }
 
