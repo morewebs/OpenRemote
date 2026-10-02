@@ -202,6 +202,7 @@ export function ConsoleProvider({ children }) {
           ...fresh,
           title: existing.title ?? fresh.title,
           timeline: existing.timeline,
+          foldedSeq: existing.foldedSeq,
           pendingDecisionId: existing.pendingDecisionId,
           context: existing.context,
           decisionsList: existing.decisionsList,
@@ -238,11 +239,16 @@ export function ConsoleProvider({ children }) {
       setChats((current) => {
         const chat = current[openChatId]
         if (!chat) return current
-        return { ...current, [openChatId]: foldEvent({ ...chat, timeline: [...chat.timeline] }, event) }
+        const folded = foldEvent({ ...chat, timeline: [...chat.timeline] }, event)
+        return { ...current, [openChatId]: folded }
       })
     }
+    // Replay only what this chat hasn't folded yet — a chat reopened
+    // after a switch already holds its timeline; `after: null` would
+    // fold the whole history in a second time.
+    const after = chats[openChatId]?.foldedSeq ?? null
     const stop = api.events(openChatId, {
-      after: null,
+      after,
       onEvent: apply,
       onClose: () => {
         if (cancelled || openChatRef.current !== openChatId) return

@@ -161,3 +161,26 @@ test('the harness\'s own context numbers fold in, and compaction notes land in o
   assert.equal(rail.at(-1).role, 'note')
   assert.match(rail.at(-1).text, /compacted/)
 })
+
+test('a chat with embedded events carries its folded seq, and a replay never doubles the transcript', () => {
+  // A session fetched with its events folds them once.
+  const withEvents = session({
+    events: [
+      event(2, { type: 'message.added', message: { id: 'm1', turn: 1, role: 'user', text: 'do the thing' } }),
+      event(3, { type: 'message.added', message: { id: 'm2', turn: 1, role: 'assistant', text: 'done' } }),
+    ],
+  })
+  const chat = chatFromSession(withEvents)
+  assert.equal(chat.foldedSeq, 3)
+  assert.equal(railItems(chat).length, 2)
+
+  // The fold itself advances the seq — any path that folds without the
+  // console's guard still cannot double: a replayed seq never regresses.
+  const folded = foldEvent(chat, event(3, { type: 'message.added', message: { id: 'm2', turn: 1, role: 'assistant', text: 'done' } }))
+  assert.equal(folded.foldedSeq, 3, 'a replayed seq does not regress the fold cursor')
+
+  // A fresh event past the seq folds in and advances it.
+  const next = foldEvent(folded, event(4, { type: 'message.added', message: { id: 'm3', turn: 2, role: 'user', text: 'again' } }))
+  assert.equal(next.timeline.length, 3)
+  assert.equal(next.foldedSeq, 4)
+})

@@ -49,15 +49,30 @@ export function chatFromSession(session) {
     title: null,
     timeline: [],
     pendingDecisionId: null,
+    // The highest event seq already folded into the timeline — reopening
+    // a chat replays only from here, so the transcript never doubles.
+    foldedSeq: null,
   }
-  for (const event of session.events ?? []) foldEvent(chat, event)
+  for (const event of session.events ?? []) {
+    foldEvent(chat, event)
+    if (event.seq != null) chat.foldedSeq = event.seq
+  }
   return chat
 }
 
 /// Fold one event into the chat. Events arrive in seq order; the timeline
-/// preserves that order verbatim.
+/// preserves that order verbatim. `foldedSeq` advances with each fold —
+/// the seq the timeline has already accounted for, so a replay (a chat
+/// reopened) never doubles the transcript.
 export function foldEvent(chat, event) {
   const payload = event
+  // A replayed event — one at or below the fold cursor — is a duplicate:
+  // the timeline already accounts for it. Folding is idempotent, so no
+  // caller (a reopened chat, a reconnect) can double the transcript.
+  if (event.seq != null) {
+    if (chat.foldedSeq != null && event.seq <= chat.foldedSeq) return chat
+    chat.foldedSeq = event.seq
+  }
   switch (payload.type) {
     case 'session.created': {
       const session = payload.session
