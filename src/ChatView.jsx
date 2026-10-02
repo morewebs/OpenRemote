@@ -4,6 +4,7 @@ import { useConsole } from './state/console.jsx'
 import { railItems } from './state/reducer.js'
 import { harnessName, harnessIcon } from './harness-names.js'
 import { HarnessIcon } from './BrandIcon.jsx'
+import { editRows, isFileEdit, writeRows } from './diff.js'
 import ContextRing from './ContextRing.jsx'
 import PickerMenu from './PickerMenu.jsx'
 import './chatview.css'
@@ -182,13 +183,33 @@ export default function ChatView({ chat, onBack }) {
               return <p key={item.id} className="cv-node cv-agent">{item.text}</p>
             }
             if (item.kind === 'tool') {
+              // A file edit renders as a split diff — the tool card's
+              // honest shape, never a JSON dump of its input.
+              const edit = isFileEdit(item.input)
+                ? item.input.old_string != null
+                  ? editRows(item.input.old_string, item.input.new_string)
+                  : writeRows(item.input.content)
+                : null
               return (
                 <div key={item.id} className={`cv-node cv-node--${item.state}`}>
                   <div className="cv-tool-line">
                     <span className="cv-tool-name">{item.name}</span>
                     {item.state !== 'ok' && <span className="cv-tool-state">{TOOL_LABEL[item.state] ?? item.state}</span>}
                   </div>
-                  {(item.input || item.result) && (
+                  {edit && edit.length > 0 && (
+                    <div className="cv-diff">
+                      <div className="cv-diff-file">{item.input.file_path}</div>
+                      <div className="cv-diff-grid">
+                        {edit.map((row, i) => (
+                          <div className="cv-diff-row" key={i}>
+                            <span className={`cv-diff-side cv-diff-side--${row.left.kind ?? 'empty'}`}>{row.left.text}</span>
+                            <span className={`cv-diff-side cv-diff-side--${row.right.kind ?? 'empty'}`}>{row.right.text}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {(item.input || item.result) && !edit && (
                     <div className="cv-io">
                       {item.input && (
                         <div className="cv-io-row">
