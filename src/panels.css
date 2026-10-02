@@ -307,6 +307,98 @@
   margin-top: 14px;
 }
 
+/* the trigger choice: chips in a row, the time field beside them */
+.af-trigger-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.af-chips {
+  display: flex;
+  gap: 8px;
+}
+
+/* a picker chip in the Then grid — same anatomy as the prototype's
+   af-chip: a quiet bordered button that opens a PickerMenu */
+.af-pick,
+.af-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.af-pick:hover,
+.af-chip:hover {
+  background: var(--bg-hover);
+}
+
+/* the workspace field: path input with the native picker's trigger */
+.af-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 10px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+.af-workspace-row {
+  display: flex;
+  gap: 8px;
+}
+
+.af-workspace input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.af-workspace input:focus {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.af-browse {
+  flex: none;
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.af-browse:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
 .dv-host textarea {
   min-height: 72px;
   padding: 8px 10px;

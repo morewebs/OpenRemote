@@ -4,6 +4,7 @@ import PickerMenu from './PickerMenu.jsx'
 import { useConsole } from './state/console.jsx'
 import { harnessName } from './harness-names.js'
 import { loadDefaults } from './defaults.js'
+import { canPickFolder, pickFolder } from './pick-folder.js'
 import './newchat.css'
 import './composer.css'
 
@@ -97,6 +98,14 @@ export default function NewChat({ onOpen }) {
     saveRecents([path, ...recents.filter((p) => p !== path)])
     setCustomPath('')
     setPicker(null)
+  }
+
+  // The native folder dialog — one click instead of a typed absolute path.
+  const browse = async () => {
+    const path = await pickFolder()
+    if (!path) return
+    setWorkspace(path)
+    saveRecents([path, ...recents.filter((p) => p !== path)])
   }
 
   return (
@@ -256,7 +265,7 @@ export default function NewChat({ onOpen }) {
           </span>
           <input
             className="nc-path-input"
-            placeholder="Workspace folder — where the agent works, e.g. C:/Users/W/src/myapp"
+            placeholder="Workspace folder — where the agent works"
             value={customPath}
             onChange={(e) => setCustomPath(e.target.value)}
             onKeyDown={(e) => {
@@ -267,6 +276,11 @@ export default function NewChat({ onOpen }) {
             }}
             spellCheck={false}
           />
+          {canPickFolder && (
+            <button type="button" className="nc-browse" onClick={browse} title="Choose a folder">
+              Browse…
+            </button>
+          )}
         </div>
         {connection.state === 'error' && <p className="nc-error">{connection.error}</p>}
         {error && <p className="nc-error">{error}</p>}

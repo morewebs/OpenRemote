@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { X } from '@phosphor-icons/react'
 import PickerMenu from './PickerMenu.jsx'
 import { useConsole } from './state/console.jsx'
+import { canPickFolder, pickFolder } from './pick-folder.js'
 import './devices.css'
 import './automations.css'
 
@@ -263,13 +264,23 @@ export default function AutomationForm({ rule, onClose }) {
           </div>
           <label className="af-workspace">
             Workspace
-            <input
-              value={workspace}
-              onChange={(e) => setWorkspace(e.target.value)}
-              placeholder="C:/Users/W/src/myapp"
-              spellCheck={false}
-              aria-label="Workspace folder"
-            />
+            <span className="af-workspace-row">
+              <input
+                value={workspace}
+                onChange={(e) => setWorkspace(e.target.value)}
+                placeholder="The folder the agent works in"
+                spellCheck={false}
+                aria-label="Workspace folder"
+              />
+              {canPickFolder && (
+                <button type="button" className="af-browse" onClick={async () => {
+                  const path = await pickFolder()
+                  if (path) setWorkspace(path)
+                }}>
+                  Browse…
+                </button>
+              )}
+            </span>
           </label>
         </div>
 

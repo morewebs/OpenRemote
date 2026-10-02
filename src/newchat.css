@@ -197,6 +197,27 @@
   color: var(--text-3);
 }
 
+/* the native folder dialog's trigger — quiet chrome beside the path
+   input; the OS dialog does the actual picking */
+.nc-browse {
+  flex: none;
+  height: 26px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.nc-browse:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
 .nc-error {
   margin: 10px 0 0;
   color: var(--red, #f87171);
