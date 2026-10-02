@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import AboutModal from './AboutModal.jsx'
+import SignInModal from './SignInModal.jsx'
 import PickerMenu from './PickerMenu.jsx'
 import { useConsole } from './state/console.jsx'
 import { harnessName } from './harness-names.js'
@@ -16,6 +17,10 @@ function loadRecentWorkspaces() {
   }
 }
 
+// The harnesses whose own login command the daemon can relay — the
+// Sign-in action renders only there (no dead UI elsewhere).
+const SIGNIN_HARNESSES = new Set(['claude', 'codex', 'grok'])
+
 export default function Panels({ onReplay }) {
   const { connection, capabilities, sessions, disconnect, modelsFor } = useConsole()
   const harnessList = capabilities?.harnesses ?? []
@@ -24,6 +29,7 @@ export default function Panels({ onReplay }) {
   const [models, setModels] = useState([])
   const [picker, setPicker] = useState(null)
   const [about, setAbout] = useState(false)
+  const [signInFor, setSignInFor] = useState(null)
   const recents = loadRecentWorkspaces()
   const defaultHarness = available.find((h) => h.id === defaults.harness) ?? available[0] ?? null
   const defaultWorkspace = defaults.workspace && recents.includes(defaults.workspace)
@@ -231,9 +237,15 @@ export default function Panels({ onReplay }) {
               <div className="pn-name">{harnessName(h.id)}</div>
               <div className="pn-detail">{h.available ? h.path : 'Not found on this machine.'}</div>
             </div>
-            <span className={`pn-btn${h.available && h.signed_in !== false ? ' on' : ''}`}>
-              {!h.available ? 'Missing' : h.signed_in === false ? 'Not signed in' : h.signed_in ? 'Signed in' : 'Ready'}
-            </span>
+            {h.available && h.signed_in === false && SIGNIN_HARNESSES.has(h.id) ? (
+              <button type="button" className="pn-btn" onClick={() => setSignInFor(h.id)}>
+                Sign in
+              </button>
+            ) : (
+              <span className={`pn-btn${h.available && h.signed_in !== false ? ' on' : ''}`}>
+                {!h.available ? 'Missing' : h.signed_in === false ? 'Not signed in' : h.signed_in ? 'Signed in' : 'Ready'}
+              </span>
+            )}
           </div>
         ))}
       </div>
@@ -270,6 +282,7 @@ export default function Panels({ onReplay }) {
       </div>
 
       {about && <AboutModal onClose={() => setAbout(false)} daemonVersion={capabilities?.daemon ?? null} />}
+      {signInFor && <SignInModal harnessId={signInFor} onDone={() => setSignInFor(null)} />}
     </div>
   )
 }

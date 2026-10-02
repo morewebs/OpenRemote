@@ -227,6 +227,35 @@ export class DaemonApi {
     return this.call('GET', `/harnesses/${harnessId}/models`)
   }
 
+  // ---- harness sign-in ----
+
+  // Start the harness's own login command, relayed: the returned view is
+  // the first beat; poll signInView for the CLI's words, feed the human's
+  // answers through signInInput.
+  startSignIn(harnessId) {
+    return this.call('POST', `/harnesses/${harnessId}/signin`, {
+      request_id: newRequestId(),
+    })
+  }
+
+  signInView(harnessId) {
+    return this.call('GET', `/harnesses/${harnessId}/signin`)
+  }
+
+  signInInput(harnessId, text) {
+    return this.call('POST', `/harnesses/${harnessId}/signin/input`, {
+      request_id: newRequestId(),
+      text,
+    })
+  }
+
+  // Stop a running sign-in relay — the abandoned-browser-flow answer.
+  stopSignIn(harnessId) {
+    return this.call('POST', `/harnesses/${harnessId}/signin/stop`, {
+      request_id: newRequestId(),
+    })
+  }
+
   answer(decisionId, choice) {
     return this.call('POST', `/decisions/${decisionId}/answer`, {
       request_id: newRequestId(),

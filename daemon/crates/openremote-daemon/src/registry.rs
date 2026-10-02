@@ -329,6 +329,14 @@ impl HarnessRegistry {
             .and_then(|e| e.backend.as_ref())
     }
 
+    /// Whether this harness slot is fixture-backed — the e2e suite
+    /// injects binaries through the override map, and a fixture's login
+    /// behavior is not a real sign-in. Production probed with no
+    /// overrides; nothing there is a fixture.
+    pub fn is_fixture(&self, id: &str) -> bool {
+        self.overrides.contains_key(id)
+    }
+
     /// Advertised models for a harness; empty when the harness doesn't
     /// advertise through us.
     pub async fn models(&self, id: &str) -> Vec<ModelDescriptor> {

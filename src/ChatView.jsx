@@ -270,13 +270,6 @@ export default function ChatView({ chat, onBack }) {
           />
           <div className="cv-foot">
             <div className="nc-pickers">
-              {(canChange.model ? models.length > 0 : Boolean(chat.model)) && (
-                <span className="nc-via">via</span>
-              )}
-              <span className="nc-meta nc-static">
-                <HarnessIcon harness={{ icon: harnessIcon(chat.harness)?.icon, brand: harnessIcon(chat.harness)?.brand }} size={13} />
-                {harnessName(chat.harness)}
-              </span>
               {canChange.model && models.length > 0 ? (
                 <button
                   type="button"
@@ -291,6 +284,13 @@ export default function ChatView({ chat, onBack }) {
               ) : (
                 chat.model && <span className="nc-meta nc-static">{chat.model}</span>
               )}
+              {(canChange.model ? models.length > 0 : Boolean(chat.model)) && (
+                <span className="nc-via">via</span>
+              )}
+              <span className="nc-meta nc-static">
+                <HarnessIcon harness={{ icon: harnessIcon(chat.harness)?.icon, brand: harnessIcon(chat.harness)?.brand }} size={13} />
+                {harnessName(chat.harness)}
+              </span>
               {picker?.kind === 'model' && (
                 <PickerMenu
                   label="Model"

@@ -6,6 +6,7 @@ pub mod http;
 pub mod install;
 pub mod plugins;
 pub mod registry;
+pub mod signin;
 pub mod supervisor;
 
 pub use app::{AppOptions, serve};

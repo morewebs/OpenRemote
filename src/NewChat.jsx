@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowUp, House, FolderOpen, Lightning } from '@phosphor-icons/react'
 import PickerMenu from './PickerMenu.jsx'
+import SignInModal from './SignInModal.jsx'
 import { HarnessIcon } from './BrandIcon.jsx'
 import { useConsole } from './state/console.jsx'
 import { harnessName, harnessIcon } from './harness-names.js'
@@ -8,6 +9,11 @@ import { loadDefaults } from './defaults.js'
 import { canPickFolder, pickFolder } from './pick-folder.js'
 import './newchat.css'
 import './composer.css'
+
+// The harnesses whose own login command the daemon can relay — the
+// sign-in prompt offers the relay only there; the others say their own
+// honest words.
+const SIGNIN_HARNESSES = new Set(['claude', 'codex', 'grok'])
 
 const RECENTS_KEY = 'openremote-recent-workspaces'
 
@@ -40,10 +46,14 @@ export default function NewChat({ onOpen }) {
   const [model, setModel] = useState(null)
   const [models, setModels] = useState([])
   const [fast, setFast] = useState(false)
+  const [signInFor, setSignInFor] = useState(null)
 
   // Only what the daemon reports installed — no dead UI.
   const available = (capabilities?.harnesses ?? []).filter((h) => h.available)
   const currentHarness = available.find((h) => h.id === harness) ?? available[0] ?? null
+  // The picked harness's own sign-in fact: a harness that isn't signed in
+  // says so right here — the task is about to run on it.
+  const needsSignIn = currentHarness && currentHarness.signed_in === false
 
   // The model slot: filled where the harness advertises, reserved
   // (not rendered) where it doesn't. Fast mode follows the same rule —
@@ -69,6 +79,7 @@ export default function NewChat({ onOpen }) {
 
   const canSend =
     text.trim().length > 0 && workspace && !busy && currentHarness && connection.state === 'connected'
+    && !needsSignIn
   const recents = loadRecents()
   const active = workspace ?? ''
   const inProgress = (sessions ?? []).filter((s) => ['starting', 'working', 'waiting'].includes(s.status))
@@ -102,6 +113,28 @@ export default function NewChat({ onOpen }) {
   return (
     <div className="newchat">
       <h1 className="nc-greeting">What are we working on?</h1>
+      {needsSignIn && (
+        <div className="nc-signin">
+          <div className="nc-signin-note">
+            {SIGNIN_HARNESSES.has(currentHarness.id) ? (
+              <>
+                {harnessName(currentHarness.id)} isn’t signed in on this computer. Sign in to
+                start tasks with it.
+              </>
+            ) : (
+              <>
+                {harnessName(currentHarness.id)} isn’t signed in — it signs in through its own
+                setup.
+              </>
+            )}
+          </div>
+          {SIGNIN_HARNESSES.has(currentHarness.id) && (
+            <button className="nc-signin-btn" onClick={() => setSignInFor(currentHarness.id)}>
+              Sign in
+            </button>
+          )}
+        </div>
+      )}
       <div className="nc-box">
         <textarea
           value={text}
@@ -256,6 +289,12 @@ export default function NewChat({ onOpen }) {
         </div>
         {connection.state === 'error' && <p className="nc-error">{connection.error}</p>}
         {error && <p className="nc-error">{error}</p>}
+        {signInFor && (
+          <SignInModal
+            harnessId={signInFor}
+            onDone={() => setSignInFor(null)}
+          />
+        )}
         {inProgress.length > 0 && (
           <div className="nc-resume">
             <div className="nc-resume-label">In progress</div>

@@ -50,6 +50,16 @@ export function ConsoleProvider({ children }) {
     setOpenChatId(null)
   }, [])
 
+  // Fresh capabilities — the harness rows carry the harness's own status
+  // words; a sign-in that settled re-reads them.
+  const refreshCapabilities = useCallback(async () => {
+    try {
+      setCapabilities((await api.capabilities()) ?? null)
+    } catch {
+      /* the poll heals */
+    }
+  }, [api])
+
   // In the desktop shell the daemon is a sidecar: ask the shell for its
   // address once on boot before falling back to the saved connection.
   useEffect(() => {
@@ -381,6 +391,67 @@ export function ConsoleProvider({ children }) {
     [api, refreshMachines],
   )
 
+  // ---- harness sign-in ----
+
+  // The relay: the harness's own login command runs on the machine, the
+  // CLI's words stream into the view, the human's answers ride back.
+  // `onBeat` receives each view while the login runs; the promise settles
+  // when the CLI exits, and the capabilities are re-read so the row
+  // carries the harness's own fresh status words.
+  const signIn = useCallback(
+    async (harnessId, { onBeat } = {}) => {
+      let start
+      try {
+        start = await api.startSignIn(harnessId)
+      } catch (err) {
+        // A relay already running is one the human abandoned (or a modal
+        // reopened): stop the stale attempt, then start fresh — the new
+        // CLI's own login server is the one that must answer the browser.
+        if (err?.status !== 409) throw err
+        await api.stopSignIn(harnessId)
+        await new Promise((r) => setTimeout(r, 400))
+        start = await api.startSignIn(harnessId)
+      }
+      const first = start?.result ?? start
+      onBeat?.(first)
+      if (first?.done) {
+        await refreshCapabilities()
+        return first
+      }
+      return await new Promise((resolve) => {
+        const poll = setInterval(async () => {
+          let view = null
+          try {
+            view = await api.signInView(harnessId)
+          } catch {
+            return // the poll heals
+          }
+          onBeat?.(view)
+          if (view?.done) {
+            clearInterval(poll)
+            await refreshCapabilities()
+            resolve(view)
+          }
+        }, 800)
+      })
+    },
+    [api, refreshCapabilities],
+  )
+
+  const feedSignIn = useCallback(
+    async (harnessId, text) => {
+      await api.signInInput(harnessId, text)
+    },
+    [api],
+  )
+
+  const stopSignIn = useCallback(
+    async (harnessId) => {
+      await api.stopSignIn(harnessId)
+    },
+    [api],
+  )
+
   // ---- plugins ----
 
   const refreshPlugins = useCallback(async () => {
@@ -502,6 +573,9 @@ export function ConsoleProvider({ children }) {
       createMachine,
       removeMachine,
       installHarness,
+      signIn,
+      feedSignIn,
+      stopSignIn,
       installPlugin,
       removePlugin,
       setPluginEnabled,
@@ -536,6 +610,9 @@ export function ConsoleProvider({ children }) {
       createMachine,
       removeMachine,
       installHarness,
+      signIn,
+      feedSignIn,
+      stopSignIn,
       installPlugin,
       removePlugin,
       setPluginEnabled,

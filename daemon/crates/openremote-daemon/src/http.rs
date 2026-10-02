@@ -24,6 +24,9 @@ pub fn router(app: Arc<App>) -> Router {
     let authed = Router::new()
         .route("/capabilities", get(capabilities))
         .route("/harnesses/{id}/models", get(harness_models))
+        .route("/harnesses/{id}/signin", post(start_sign_in).get(sign_in_view))
+        .route("/harnesses/{id}/signin/input", post(sign_in_input))
+        .route("/harnesses/{id}/signin/stop", post(stop_sign_in))
         .route("/machines", get(list_machines).post(create_machine))
         .route("/machines/{id}", get(get_machine).delete(remove_machine))
         .route("/machines/{id}/harnesses", post(install_harness))
@@ -117,6 +120,119 @@ async fn capabilities(State(app): State<Arc<App>>) -> Response {
 async fn harness_models(State(app): State<Arc<App>>, AxumPath(id): AxumPath<String>) -> Response {
     let models = app.supervisor.models(&id).await;
     Json(models).into_response()
+}
+
+// ---- harness sign-in ----
+
+#[derive(Deserialize)]
+struct SignInBody {
+    request_id: String,
+}
+
+/// Start the harness's own login command, relayed. The CLI's words arrive
+/// through the view; a human's answers ride `/signin/input`. The receipt
+/// contract dedups the start itself — the relay continues after it.
+async fn start_sign_in(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<SignInBody>,
+) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&body.request_id) {
+        return receipt_response(&receipt);
+    }
+    match app.supervisor.start_sign_in(&id).await {
+        Ok(view) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Completed,
+                result: Some(serde_json::to_value(&view).unwrap_or(Value::Null)),
+                error: None,
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            receipt_response(&receipt)
+        }
+        Err(err) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Failed,
+                result: None,
+                error: Some(err.to_string()),
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            supervisor_error(err)
+        }
+    }
+}
+
+/// The current beat of a harness's sign-in relay — the console polls it.
+async fn sign_in_view(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    match app.supervisor.sign_in_view(&id) {
+        Some(view) => Json(view).into_response(),
+        None => error(StatusCode::NOT_FOUND, "no sign-in has been started"),
+    }
+}
+
+#[derive(Deserialize)]
+struct SignInInputBody {
+    request_id: String,
+    text: String,
+}
+
+/// Feed one line to the harness's own login prompt (claude's pasted
+/// code). The CLI's words in answer arrive through the view.
+async fn sign_in_input(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<SignInInputBody>,
+) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&body.request_id) {
+        return receipt_response(&receipt);
+    }
+    match app.supervisor.feed_sign_in(&id, &body.text) {
+        Ok(()) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Completed,
+                result: Some(json!({"delivered": true})),
+                error: None,
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            receipt_response(&receipt)
+        }
+        Err(err) => supervisor_error(err),
+    }
+}
+
+/// Stop a running sign-in relay — the abandoned-browser-flow answer. The
+/// settled view (`done: stopped`) arrives through the poll.
+async fn stop_sign_in(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<SignInBody>,
+) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&body.request_id) {
+        return receipt_response(&receipt);
+    }
+    app.supervisor.stop_sign_in(&id);
+    let receipt = Receipt {
+        request_id: body.request_id,
+        session_id: None,
+        status: ReceiptStatus::Completed,
+        result: Some(json!({"stopped": true})),
+        error: None,
+        updated_at: openremote_core::now_ms(),
+    };
+    app.supervisor.record_receipt(receipt.clone());
+    receipt_response(&receipt)
 }
 
 // ---- machines ----

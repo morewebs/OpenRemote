@@ -116,12 +116,28 @@ struct SessionEntry {
     done: Option<oneshot::Sender<Session>>,
 }
 
+/// The resolved CLI behind a backend — every variant holds one, and the
+/// sign-in relay drives it with the same resolution the sessions do.
+fn backend_resolution(backend: &crate::registry::Backend) -> &openremote_harness::Resolution {
+    match backend {
+        crate::registry::Backend::Claude(r) => r,
+        crate::registry::Backend::Codex(r) => r,
+        crate::registry::Backend::Grok(r) => r,
+        crate::registry::Backend::Pi(r) => r,
+        crate::registry::Backend::Opencode(r) => r,
+        crate::registry::Backend::Agy(r) => r,
+    }
+}
+
 pub struct Supervisor {
     store: Arc<StdMutex<Store>>,
     sessions: AsyncMutex<HashMap<SessionId, SessionEntry>>,
     events: broadcast::Sender<String>,
     /// Swappable: an install re-probes the machine and trades the set in.
     registry: StdRwLock<HarnessRegistry>,
+    /// Live sign-in relays, one per harness: the console polls their view
+    /// and feeds the human's answers through.
+    signins: StdMutex<HashMap<String, Arc<crate::signin::SignInRun>>>,
     /// The daemon's own machine — sessions run here, plugins ride from here.
     this_machine: MachineId,
 }
@@ -140,6 +156,7 @@ impl Supervisor {
             sessions: AsyncMutex::new(HashMap::new()),
             events: broadcast::channel(1024).0,
             registry: StdRwLock::new(registry),
+            signins: StdMutex::new(HashMap::new()),
             this_machine,
         });
         supervisor.spawn_presence_ticker(this_machine);
@@ -315,8 +332,141 @@ impl Supervisor {
             .await
             .map_err(SupervisorError::Harness)?;
 
-        // Fresh facts. The guard is never held across the await: clone the
-        // overrides, probe, then swap the whole registry in.
+        self.swap_in_fresh_registry().await;
+
+        self.machine(machine_id)
+    }
+
+    /// Run the harness's own login command, relayed. The console streams
+    /// the CLI's own words and feeds the human's answers through; when
+    /// the CLI exits, the registry is re-probed so the sign-in fact comes
+    /// from the harness's own status words. The returned view is the
+    /// first beat of the relay.
+    pub async fn start_sign_in(
+        self: &Arc<Self>,
+        harness_id: &str,
+    ) -> Result<crate::signin::SignInView, SupervisorError> {
+        if !crate::signin::login_supported(harness_id) {
+            return Err(SupervisorError::Harness(format!(
+                "'{harness_id}' signs in through its own setup — no login command to relay"
+            )));
+        }
+        let resolution = {
+            let registry = self.registry.read().expect("registry lock");
+            let entry = registry
+                .harnesses()
+                .into_iter()
+                .find(|h| h.id == harness_id)
+                .ok_or_else(|| {
+                    SupervisorError::Harness(format!("harness '{harness_id}' is not known"))
+                })?;
+            if !entry.available {
+                return Err(SupervisorError::Harness(format!(
+                    "'{harness_id}' is not installed on this machine"
+                )));
+            }
+            if registry.is_fixture(harness_id) {
+                return Err(SupervisorError::Harness(format!(
+                    "'{harness_id}' has no login command to relay"
+                )));
+            }
+            let backend = registry
+                .backend(harness_id)
+                .ok_or_else(|| {
+                    SupervisorError::Harness(format!("'{harness_id}' is not available to the daemon"))
+                })?;
+            backend_resolution(backend).clone()
+        };
+        // A settled relay makes room for the fresh one: the old run's view
+        // stays answerable (the console may still be showing its last
+        // beat), but the new run replaces it in the map.
+        if let Some(existing) = self.signins.lock().expect("signin lock").get(harness_id) {
+            if existing.view().running {
+                return Err(SupervisorError::Conflict(format!(
+                    "a sign-in for '{harness_id}' is already in progress"
+                )));
+            }
+        }
+
+        let (run, mut child) = crate::signin::spawn_login(harness_id, &resolution)
+            .await
+            .map_err(SupervisorError::Harness)?;
+        self.signins
+            .lock()
+            .expect("signin lock")
+            .insert(harness_id.to_string(), std::sync::Arc::clone(&run));
+
+        // The reaper: the CLI's exit settles the relay, then the registry
+        // re-probes so the sign-in fact is the harness's own status words.
+        let supervisor = Arc::clone(self);
+        let reaper_run = std::sync::Arc::clone(&run);
+        tokio::spawn(async move {
+            // The login runs until the CLI exits, the human stops it, or
+            // the timeout trips. The stop signal stores its permit, so a
+            // stop that lands before the reaper reaches its wait still
+            // takes effect.
+            let stop = reaper_run.stopped();
+            tokio::select! {
+                status = child.wait() => {
+                    let settled = match status {
+                        Ok(status) => crate::signin::settle(&reaper_run, &status),
+                        Err(err) => crate::signin::fail(&reaper_run, &err.to_string()),
+                    };
+                    if settled.ok {
+                        supervisor.swap_in_fresh_registry().await;
+                    }
+                }
+                _ = stop => {
+                    let _ = child.kill().await;
+                    crate::signin::fail(&reaper_run, "stopped");
+                }
+                _ = tokio::time::sleep(crate::signin::timeout()) => {
+                    let _ = child.kill().await;
+                    crate::signin::fail(&reaper_run, "login timed out after ten minutes");
+                }
+            }
+        });
+        Ok(run.view())
+    }
+
+    /// The current beat of a harness's sign-in relay — `None` when none
+    /// was ever started for it.
+    pub fn sign_in_view(&self, harness_id: &str) -> Option<crate::signin::SignInView> {
+        self.signins
+            .lock()
+            .expect("signin lock")
+            .get(harness_id)
+            .map(|run| run.view())
+    }
+
+    /// Feed one line to the harness's own login prompt (claude's pasted
+    /// code). The words the CLI prints back arrive through the view.
+    pub fn feed_sign_in(&self, harness_id: &str, line: &str) -> Result<(), SupervisorError> {
+        let run = self
+            .signins
+            .lock()
+            .expect("signin lock")
+            .get(harness_id)
+            .cloned()
+            .ok_or_else(|| {
+                SupervisorError::Conflict(format!("no sign-in is running for '{harness_id}'"))
+            })?;
+        run.feed(line).map_err(SupervisorError::Harness)
+    }
+
+    /// Stop a running sign-in relay — a human who abandoned the browser
+    /// flow should not wait out the timeout to try again. Stopping a
+    /// relay that already settled is a no-op, not an error.
+    pub fn stop_sign_in(&self, harness_id: &str) {
+        if let Some(run) = self.signins.lock().expect("signin lock").get(harness_id) {
+            run.stop();
+        }
+    }
+
+    /// Fresh facts after the machine changed underneath us — an install
+    /// landed, a login finished. The guard is never held across the
+    /// await: clone the overrides, probe, then swap the whole registry in.
+    async fn swap_in_fresh_registry(&self) {
         let overrides = self
             .registry
             .read()
@@ -325,8 +475,6 @@ impl Supervisor {
             .clone();
         let fresh = HarnessRegistry::probe(&overrides).await;
         *self.registry.write().expect("registry lock") = fresh;
-
-        self.machine(machine_id)
     }
 
     // ---- plugins ----
