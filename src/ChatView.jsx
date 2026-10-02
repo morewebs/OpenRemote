@@ -40,7 +40,12 @@ export default function ChatView({ chat, onBack }) {
   const composerRef = useRef(null)
   const rail = railItems(chat)
   const pendingDecision = rail.find((item) => item.kind === 'decision' && item.pending)
-  const canSend = text.trim().length > 0 && !pendingDecision && chat.running && !busy
+  // The daemon takes a prompt on any session whose driver is alive — an
+  // idle chat (its last turn finished) is sendable; only stopped/failed
+  // need Resume first. Gating on `running` dead-locked the composer
+  // after the first turn completed.
+  const alive = !['stopped', 'failed'].includes(chat.status)
+  const canSend = text.trim().length > 0 && !pendingDecision && alive && !busy
   const harness = (capabilities?.harnesses ?? []).find((h) => h.id === chat.harness)
   const live = LIVE_SETTINGS[chat.harness] ?? { model: false, effort: false, fast: false }
   // A stopped chat can change anything the harness accepts at start. A
