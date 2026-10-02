@@ -685,3 +685,14 @@
     border-radius: 14px 14px 0 0;
   }
 }
+
+/* the Settings reduce-motion switch carries here too: no modal pop, no
+   breathing dots (the uptime band's slices stay — they are data, not motion) */
+html[data-reduce-motion] .dv-modal-backdrop,
+html[data-reduce-motion] .dv-modal {
+  animation: none;
+}
+
+html[data-reduce-motion] .dv-agent-dot {
+  animation: none;
+}

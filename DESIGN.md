@@ -135,3 +135,43 @@ spacing.
   harness (the daemon domain says *session*; the console boundary translates).
   *machine* is a computer you own (the Devices view renames to Machines).
   *task* is the prompt text a human or automation sends.
+
+---
+
+## Shipped — the parity build (2026-10-02)
+
+Every screen the prototype promises, backed by the real daemon:
+
+- **New chat** — the greeting + composer; harness picker (installed only),
+  model picker where the harness advertises (its own catalog, efforts as
+  sublines), the Fast toggle where the harness's own fast mode is usable
+  (claude `fastMode` ≥ 2.1.205, codex `fast` service tier ≥ 0.110), the
+  workspace (recents + free path), the In-progress list.
+- **Chat** — the rail transcript (user cards, agent text, notes, tool
+  cards with In/Out, decisions in the harness's own words with its
+  affirmative first), the facts row (workspace · harness · model · Fast ·
+  «tool» allowed for this chat · status), stop/resume, the floating
+  composer with the ContextRing where the harness reports its window
+  (codex; claude reports usage but no window on the wire).
+- **Machines** — this machine real from first boot (its inventory, its
+  sessions with jumps, its 24h presence band), added machines waiting
+  with their per-OS install command + enrollment token, the local
+  harness install chain (claude/codex/pi/opencode — their own npm
+  packages; grok/agy install through their own roots, no row).
+- **Plugins** — per-machine MCP installs from the marketplace (the
+  prototype's seven servers, launch commands verified on npm/PyPI) or by
+  hand; the needs-key lifecycle (keys never cross the API); the
+  ride-along through each harness's own MCP wire (claude `--mcp-config`
+  JSON string, codex `thread/start` config keyPaths).
+- **Automations** — rules with real sources only (a schedule on the
+  machine's own clock, a webhook with its own key), Run now, the form,
+  the starter, and the everywhere-pill (the prototype's keyword parser,
+  the rule-draft action card, honest refusals for connector-only kinds).
+- **Settings** — new-task defaults (harness/model/workspace), the daemon
+  connection, the harness list, reduce-motion (carried into every
+  restored view), first-run replay.
+
+Deferred with the map's tickets: remote-machine check-in + relay + cloud
+placement, the connector triggers (pipeline/errors/review/release), the
+agent behind the pill, the updater, per-chat model/effort switching,
+claude's context window (no wire fact yet), grok/pi/opencode/agy MCP wires.

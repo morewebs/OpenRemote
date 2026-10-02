@@ -3,6 +3,7 @@ import { ArrowUp, House, FolderOpen, Lightning } from '@phosphor-icons/react'
 import PickerMenu from './PickerMenu.jsx'
 import { useConsole } from './state/console.jsx'
 import { harnessName } from './harness-names.js'
+import { loadDefaults } from './defaults.js'
 import './newchat.css'
 import './composer.css'
 
@@ -27,20 +28,17 @@ function saveRecents(list) {
 
 export default function NewChat({ onOpen }) {
   const { connection, capabilities, sessions, chats, createChat, modelsFor } = useConsole()
+  const [defaults] = useState(() => loadDefaults())
   const [text, setText] = useState('')
-  const [workspace, setWorkspace] = useState(null)
+  const [workspace, setWorkspace] = useState(() => defaults.workspace ?? loadRecents()[0] ?? null)
   const [customPath, setCustomPath] = useState('')
   const [picker, setPicker] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
-  const [harness, setHarness] = useState(null)
+  const [harness, setHarness] = useState(() => loadDefaults().harness)
   const [model, setModel] = useState(null)
   const [models, setModels] = useState([])
   const [fast, setFast] = useState(false)
-
-  useEffect(() => {
-    if (workspace == null) setWorkspace(loadRecents()[0] ?? null)
-  }, [workspace])
 
   // Only what the daemon reports installed — no dead UI.
   const available = (capabilities?.harnesses ?? []).filter((h) => h.available)
@@ -48,10 +46,12 @@ export default function NewChat({ onOpen }) {
 
   // The model slot: filled where the harness advertises, reserved
   // (not rendered) where it doesn't. Fast mode follows the same rule —
-  // and both choices are per-harness, so switching resets them.
+  // and both choices are per-harness, so switching resets them. The
+  // saved defaults preselect their own harness's slots.
   useEffect(() => {
     let cancelled = false
-    setModel(null)
+    const defaults = loadDefaults()
+    setModel(currentHarness?.id === defaults.harness ? defaults.model : null)
     setFast(false)
     if (!currentHarness) {
       setModels([])
