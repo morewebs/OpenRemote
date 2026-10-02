@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock};
 
 use openremote_core::{
     Decision, DecisionId, DecisionState, Event, EventPayload, Harness, Machine, MachineId,
-    MachineView, Receipt, Session, SessionId, SessionStatus, Store, now_ms,
+    MachineStatus, MachineView, Plugin, Receipt, Session, SessionId, SessionStatus, Store, now_ms,
 };
 use openremote_harness::DriverEvent;
 use serde_json::Value;
@@ -95,6 +95,8 @@ pub struct Supervisor {
     events: broadcast::Sender<String>,
     /// Swappable: an install re-probes the machine and trades the set in.
     registry: StdRwLock<HarnessRegistry>,
+    /// The daemon's own machine — sessions run here, plugins ride from here.
+    this_machine: MachineId,
 }
 
 impl Supervisor {
@@ -111,6 +113,7 @@ impl Supervisor {
             sessions: AsyncMutex::new(HashMap::new()),
             events: broadcast::channel(1024).0,
             registry: StdRwLock::new(registry),
+            this_machine,
         });
         supervisor.spawn_presence_ticker(this_machine);
         supervisor
@@ -298,6 +301,111 @@ impl Supervisor {
         self.machine(machine_id)
     }
 
+    // ---- plugins ----
+
+    pub fn plugins(&self) -> Vec<Plugin> {
+        self.with_store(|s| s.plugins().into_iter().cloned().collect())
+    }
+
+    /// Install a plugin from the marketplace (by catalog id) or written by
+    /// hand, on a machine that has checked in. The store dedups; the
+    /// machine's reachability is ruled here. A custom plugin is
+    /// `(name, detail, command, needs_key)`.
+    pub fn install_plugin(
+        &self,
+        machine_id: &MachineId,
+        catalog_id: Option<&str>,
+        custom: Option<(&str, &str, &str, bool)>,
+    ) -> Result<Plugin, SupervisorError> {
+        let machine = self
+            .with_store(|s| s.machine(machine_id).cloned())
+            .map_err(store_error)?;
+        if machine.status != MachineStatus::Online {
+            return Err(SupervisorError::Conflict(format!(
+                "{} has not checked in yet",
+                machine.name
+            )));
+        }
+        let plugin = match (catalog_id, custom) {
+            (Some(catalog_id), _) => {
+                let entry = crate::plugins::catalog_entry(catalog_id).ok_or_else(|| {
+                    SupervisorError::NotFound(format!("no marketplace entry '{catalog_id}'"))
+                })?;
+                Plugin {
+                    id: format!("{catalog_id}@{}", machine.id),
+                    catalog_id: Some(entry.id),
+                    name: entry.name,
+                    detail: entry.detail,
+                    command: entry.command,
+                    machine: machine.id,
+                    needs_key: entry.needs_key,
+                    has_key: false,
+                    enabled: true,
+                    created_at: now_ms(),
+                    updated_at: now_ms(),
+                }
+            }
+            (None, Some((name, detail, command, needs_key))) => Plugin {
+                id: format!("custom-{}@{}", uuid::Uuid::new_v4(), machine.id),
+                catalog_id: None,
+                name: name.to_string(),
+                detail: detail.to_string(),
+                command: command.to_string(),
+                machine: machine.id,
+                needs_key,
+                has_key: false,
+                enabled: true,
+                created_at: now_ms(),
+                updated_at: now_ms(),
+            },
+            (None, None) => {
+                return Err(SupervisorError::Conflict(
+                    "a plugin comes from the marketplace or by hand — one of the two".into(),
+                ));
+            }
+        };
+        self.with_store(|s| s.install_plugin(plugin))
+            .map_err(store_error)
+    }
+
+    pub fn remove_plugin(&self, id: &str) -> Result<(), SupervisorError> {
+        self.with_store(|s| s.remove_plugin(id))
+            .map_err(store_error)
+    }
+
+    pub fn set_plugin_enabled(&self, id: &str, enabled: bool) -> Result<Plugin, SupervisorError> {
+        self.with_store(|s| s.set_plugin_enabled(id, enabled))
+            .map_err(store_error)
+    }
+
+    pub fn acknowledge_plugin_key(&self, id: &str) -> Result<Plugin, SupervisorError> {
+        self.with_store(|s| s.acknowledge_plugin_key(id))
+            .map_err(store_error)
+    }
+
+    /// The MCP servers a new session on this machine should start: every
+    /// enabled plugin whose key (if it needs one) the machine has. A plugin
+    /// still waiting on its key acknowledgment doesn't ride — starting it
+    /// would just fail.
+    fn mcp_servers(&self) -> Vec<openremote_harness::McpServer> {
+        let machine = self.this_machine;
+        self.with_store(|s| {
+            s.plugins()
+                .iter()
+                .filter(|p| p.machine == machine && p.state() == "running")
+                .filter_map(|p| {
+                    let mut words = p.command.split_whitespace();
+                    let command = words.next()?.to_string();
+                    Some(openremote_harness::McpServer {
+                        id: p.server_id(),
+                        command,
+                        args: words.map(String::from).collect(),
+                    })
+                })
+                .collect()
+        })
+    }
+
     // ---- session lifecycle ----
 
     /// Create a session and spawn its harness driver. The session exists
@@ -341,6 +449,7 @@ impl Supervisor {
             resume: None,
             include_deltas: false,
             fast: current.fast,
+            mcp_servers: self.mcp_servers(),
         };
         match backend.spawn(opts).await {
             Ok((driver, rx)) => {
@@ -476,6 +585,7 @@ impl Supervisor {
             resume: Some(harness_ref),
             include_deltas: false,
             fast: session.fast,
+            mcp_servers: self.mcp_servers(),
         };
         let (driver, rx) = backend.spawn(opts).await?;
         {

@@ -330,9 +330,32 @@
   color-scheme: dark;
 }
 
-/* ---- phone width: settings rows breathe with less gutter ---- */
-@media (max-width: 640px) {
+/* slice-3 additions */
+
+.pn-error {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+/* phone width: plugin rows stack their actions and the wide lists fill
+   the screen. */
+@media (max-width: 639px) {
   .panel {
-    padding: 18px 16px 40px;
+    padding: 20px 16px 32px;
+  }
+
+  .pn-list--wide {
+    width: 100%;
+  }
+
+  .pn-row-main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .pn-pick {
+    flex-direction: column;
   }
 }

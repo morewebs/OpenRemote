@@ -6,11 +6,12 @@ import ChatView from './ChatView.jsx'
 import Onboarding from './Onboarding.jsx'
 import Panels from './Panels.jsx'
 import MachinesView from './MachinesView.jsx'
+import PluginsView from './PluginsView.jsx'
 import { ConsoleProvider, useConsole } from './state/console.jsx'
 
 const OB_KEY = 'openremote-onboarded'
 const STORE_KEY = 'openremote-view-state'
-const STATIC_VIEWS = ['new', 'machines', 'settings']
+const STATIC_VIEWS = ['new', 'machines', 'plugins', 'settings']
 
 function loadViewState(sessions) {
   let saved = null
@@ -137,6 +138,7 @@ function Shell() {
           <main className="main">
             {view === 'new' && <NewChat onOpen={openSession} />}
             {view === 'machines' && <MachinesView onOpenChat={openSession} />}
+            {view === 'plugins' && <PluginsView />}
             {view === 'settings' && <Panels onReplay={replayOnboarding} />}
             {!STATIC_VIEWS.includes(view) &&
               (chat ? (

@@ -327,6 +327,17 @@ fn thread_params(opts: &SpawnOptions) -> Value {
     if opts.fast {
         params["serviceTier"] = json!("fast");
     }
+    if !opts.mcp_servers.is_empty() {
+        // Codex's own wire: the config-override map, dotted keyPaths —
+        // `mcp_servers.<id>.command` / `.args` (verified against the real
+        // app-server: the injected server shows up connected on the thread).
+        let mut config = json!({});
+        for server in &opts.mcp_servers {
+            config[format!("mcp_servers.{}.command", server.id)] = json!(server.command);
+            config[format!("mcp_servers.{}.args", server.id)] = json!(server.args);
+        }
+        params["config"] = config;
+    }
     params
 }
 
@@ -619,5 +630,35 @@ mod tests {
         let params = thread_params(&opts);
         assert_eq!(params["serviceTier"].as_str(), Some("fast"));
         assert_eq!(params["approvalPolicy"].as_str(), Some("on-request"));
+    }
+
+    #[test]
+    fn plugins_ride_codexs_own_config_overrides() {
+        let opts = SpawnOptions {
+            cwd: PathBuf::from("/w"),
+            mcp_servers: vec![openremote_harness::McpServer {
+                id: "github".into(),
+                command: "npx".into(),
+                args: vec!["-y".into(), "@modelcontextprotocol/server-github".into()],
+            }],
+            ..Default::default()
+        };
+        let params = thread_params(&opts);
+        // Codex's own shape: dotted keyPaths into the config map.
+        assert_eq!(
+            params["config"]["mcp_servers.github.command"].as_str(),
+            Some("npx")
+        );
+        assert_eq!(
+            params["config"]["mcp_servers.github.args"],
+            json!(["-y", "@modelcontextprotocol/server-github"])
+        );
+
+        // No plugins, no config map.
+        let plain = thread_params(&SpawnOptions {
+            cwd: PathBuf::from("/w"),
+            ..Default::default()
+        });
+        assert!(plain.get("config").is_none());
     }
 }

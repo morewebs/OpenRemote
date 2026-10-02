@@ -27,6 +27,11 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/machines", get(list_machines).post(create_machine))
         .route("/machines/{id}", get(get_machine).delete(remove_machine))
         .route("/machines/{id}/harnesses", post(install_harness))
+        .route("/plugins", get(list_plugins).post(create_plugin))
+        .route("/plugins/marketplace", get(plugin_marketplace))
+        .route("/plugins/{id}", axum::routing::delete(remove_plugin))
+        .route("/plugins/{id}/enabled", post(set_plugin_enabled))
+        .route("/plugins/{id}/key", post(acknowledge_plugin_key))
         .route("/sessions", get(list_sessions).post(create_session))
         .route("/sessions/{id}", get(get_session))
         .route("/sessions/{id}/events", get(session_events))
@@ -213,6 +218,218 @@ async fn remove_machine(
 struct InstallHarnessBody {
     request_id: String,
     harness: String,
+}
+
+// ---- plugins ----
+
+async fn list_plugins(State(app): State<Arc<App>>) -> Response {
+    Json(app.supervisor.plugins()).into_response()
+}
+
+async fn plugin_marketplace() -> Response {
+    Json(crate::plugins::marketplace()).into_response()
+}
+
+#[derive(Deserialize)]
+struct CreatePluginBody {
+    request_id: String,
+    machine: String,
+    #[serde(default)]
+    catalog_id: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    detail: Option<String>,
+    #[serde(default)]
+    command: Option<String>,
+    #[serde(default)]
+    needs_key: bool,
+}
+
+async fn create_plugin(
+    State(app): State<Arc<App>>,
+    Json(body): Json<CreatePluginBody>,
+) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&body.request_id) {
+        return receipt_response(&receipt);
+    }
+    let Some(machine_id) = MachineId::parse(&body.machine) else {
+        return error(StatusCode::BAD_REQUEST, "bad machine id");
+    };
+    // A marketplace install names the entry; a custom one carries its own
+    // name, detail, and launch command.
+    let custom = match (
+        body.catalog_id.is_none(),
+        &body.name,
+        &body.detail,
+        &body.command,
+    ) {
+        (true, Some(name), Some(detail), Some(command)) => {
+            if name.trim().is_empty() || command.trim().is_empty() {
+                return error(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "a custom plugin needs a name and a launch command",
+                );
+            }
+            Some((name.trim(), detail.trim(), command.trim(), body.needs_key))
+        }
+        (true, _, _, _) => {
+            return error(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "a custom plugin needs a name, a detail, and a launch command",
+            );
+        }
+        _ => None,
+    };
+    match app.supervisor.install_plugin(
+        &machine_id,
+        body.catalog_id.as_deref(),
+        custom.as_ref().map(|(n, d, c, k)| (*n, *d, *c, *k)),
+    ) {
+        Ok(plugin) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Completed,
+                result: Some(serde_json::to_value(&plugin).unwrap_or(Value::Null)),
+                error: None,
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            (StatusCode::CREATED, Json(plugin)).into_response()
+        }
+        Err(err) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Failed,
+                result: None,
+                error: Some(err.to_string()),
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            supervisor_error(err)
+        }
+    }
+}
+
+async fn remove_plugin(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+    axum::extract::Query(query): axum::extract::Query<MachineActionQuery>,
+) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&query.request_id) {
+        return receipt_response(&receipt);
+    }
+    match app.supervisor.remove_plugin(&id) {
+        Ok(()) => {
+            let receipt = Receipt {
+                request_id: query.request_id,
+                session_id: None,
+                status: ReceiptStatus::Completed,
+                result: Some(json!({"removed": true})),
+                error: None,
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            receipt_response(&receipt)
+        }
+        Err(err) => {
+            let receipt = Receipt {
+                request_id: query.request_id,
+                session_id: None,
+                status: ReceiptStatus::Failed,
+                result: None,
+                error: Some(err.to_string()),
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            supervisor_error(err)
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct PluginEnabledBody {
+    request_id: String,
+    enabled: bool,
+}
+
+async fn set_plugin_enabled(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<PluginEnabledBody>,
+) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&body.request_id) {
+        return receipt_response(&receipt);
+    }
+    match app.supervisor.set_plugin_enabled(&id, body.enabled) {
+        Ok(plugin) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Completed,
+                result: Some(serde_json::to_value(&plugin).unwrap_or(Value::Null)),
+                error: None,
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            (StatusCode::OK, Json(plugin)).into_response()
+        }
+        Err(err) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Failed,
+                result: None,
+                error: Some(err.to_string()),
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            supervisor_error(err)
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct PluginKeyBody {
+    request_id: String,
+}
+
+async fn acknowledge_plugin_key(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<PluginKeyBody>,
+) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&body.request_id) {
+        return receipt_response(&receipt);
+    }
+    match app.supervisor.acknowledge_plugin_key(&id) {
+        Ok(plugin) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Completed,
+                result: Some(serde_json::to_value(&plugin).unwrap_or(Value::Null)),
+                error: None,
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            (StatusCode::OK, Json(plugin)).into_response()
+        }
+        Err(err) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Failed,
+                result: None,
+                error: Some(err.to_string()),
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            supervisor_error(err)
+        }
+    }
 }
 
 async fn install_harness(

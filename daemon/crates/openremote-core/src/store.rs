@@ -29,7 +29,8 @@ fn slug(name: &str) -> String {
 use crate::events::{Event, EventPayload};
 use crate::ids::{DecisionId, MachineId, SessionId};
 use crate::model::{
-    Decision, DecisionState, Machine, MachineStatus, Receipt, ReceiptStatus, Session, SessionStatus,
+    Decision, DecisionState, Machine, MachineStatus, Plugin, Receipt, ReceiptStatus, Session,
+    SessionStatus,
 };
 
 #[derive(Debug, Error)]
@@ -64,6 +65,8 @@ struct State {
     /// Per machine: the half-hour starts (ms) the agent was present for.
     #[serde(default)]
     presence: BTreeMap<MachineId, Vec<i64>>,
+    #[serde(default)]
+    plugins: BTreeMap<String, Plugin>,
 }
 
 pub struct Store {
@@ -263,6 +266,83 @@ impl Store {
                 up.is_some_and(|entries| entries.binary_search(&start).is_ok())
             })
             .collect()
+    }
+
+    // ---- plugins ----
+
+    pub fn plugins(&self) -> Vec<&Plugin> {
+        self.state.plugins.values().collect()
+    }
+
+    pub fn plugin(&self, id: &str) -> Result<&Plugin, StoreError> {
+        self.state
+            .plugins
+            .get(id)
+            .ok_or_else(|| StoreError::NotFound(format!("plugin {id}")))
+    }
+
+    /// Install a plugin on a machine. Marketplace installs dedup by
+    /// `catalog@machine`; custom ones by name per machine. The state
+    /// change only — machine reachability is the caller's ruling.
+    pub fn install_plugin(&mut self, mut plugin: Plugin) -> Result<Plugin, StoreError> {
+        let dup = match &plugin.catalog_id {
+            Some(_) => self.state.plugins.contains_key(&plugin.id),
+            None => self.state.plugins.values().any(|p| {
+                p.catalog_id.is_none() && p.machine == plugin.machine && p.name == plugin.name
+            }),
+        };
+        if dup {
+            return Err(StoreError::Conflict(format!(
+                "'{}' is already on that machine",
+                plugin.name
+            )));
+        }
+        plugin.updated_at = crate::now_ms();
+        let id = plugin.id.clone();
+        self.state.plugins.insert(id, plugin.clone());
+        self.persist()?;
+        Ok(plugin)
+    }
+
+    pub fn remove_plugin(&mut self, id: &str) -> Result<(), StoreError> {
+        if self.state.plugins.remove(id).is_none() {
+            return Err(StoreError::NotFound(format!("plugin {id}")));
+        }
+        self.persist()
+    }
+
+    pub fn set_plugin_enabled(&mut self, id: &str, enabled: bool) -> Result<Plugin, StoreError> {
+        let plugin = self
+            .state
+            .plugins
+            .get_mut(id)
+            .ok_or_else(|| StoreError::NotFound(format!("plugin {id}")))?;
+        plugin.enabled = enabled;
+        plugin.updated_at = crate::now_ms();
+        let out = plugin.clone();
+        self.persist()?;
+        Ok(out)
+    }
+
+    /// Record that the machine has the key this plugin needs — the key
+    /// itself never crosses this API.
+    pub fn acknowledge_plugin_key(&mut self, id: &str) -> Result<Plugin, StoreError> {
+        let plugin = self
+            .state
+            .plugins
+            .get_mut(id)
+            .ok_or_else(|| StoreError::NotFound(format!("plugin {id}")))?;
+        if !plugin.needs_key {
+            return Err(StoreError::Conflict(format!(
+                "'{}' does not need a key",
+                plugin.name
+            )));
+        }
+        plugin.has_key = true;
+        plugin.updated_at = crate::now_ms();
+        let out = plugin.clone();
+        self.persist()?;
+        Ok(out)
     }
 
     // ---- receipts ----

@@ -22,6 +22,8 @@ export function ConsoleProvider({ children }) {
   const [capabilities, setCapabilities] = useState(null)
   const [sessions, setSessions] = useState([])
   const [machines, setMachines] = useState([])
+  const [plugins, setPlugins] = useState([])
+  const [marketplace, setMarketplace] = useState([])
   const [chats, setChats] = useState({})
   const [modelsByHarness, setModelsByHarness] = useState({})
   const [openChatId, setOpenChatId] = useState(null)
@@ -89,10 +91,14 @@ export function ConsoleProvider({ children }) {
       const caps = await api.capabilities()
       const list = await api.sessions()
       const machineList = await api.machines()
+      const pluginList = await api.plugins()
+      const market = await api.pluginMarketplace()
       if (cancelled) return
       setCapabilities(caps)
       setSessions(list ?? [])
       setMachines(machineList ?? [])
+      setPlugins(pluginList ?? [])
+      setMarketplace(market ?? [])
       setConnection({ state: 'connected', error: null })
     } catch (err) {
         if (cancelled) return
@@ -121,6 +127,12 @@ export function ConsoleProvider({ children }) {
         setMachines(machineList ?? [])
       } catch {
         /* same beat, same healing */
+      }
+      try {
+        const pluginList = await api.plugins()
+        setPlugins(pluginList ?? [])
+      } catch {
+        /* and the plugins with them */
       }
     }, 2500)
     return () => clearInterval(poll)
@@ -296,6 +308,49 @@ export function ConsoleProvider({ children }) {
     [api, refreshMachines],
   )
 
+  // ---- plugins ----
+
+  const refreshPlugins = useCallback(async () => {
+    try {
+      setPlugins((await api.plugins()) ?? [])
+    } catch {
+      /* the poll heals */
+    }
+  }, [api])
+
+  const installPlugin = useCallback(
+    async (machineId, entry) => {
+      const plugin = await api.installPlugin(machineId, entry)
+      await refreshPlugins()
+      return plugin
+    },
+    [api, refreshPlugins],
+  )
+
+  const removePlugin = useCallback(
+    async (pluginId) => {
+      await api.removePlugin(pluginId)
+      await refreshPlugins()
+    },
+    [api, refreshPlugins],
+  )
+
+  const setPluginEnabled = useCallback(
+    async (pluginId, enabled) => {
+      await api.setPluginEnabled(pluginId, enabled)
+      await refreshPlugins()
+    },
+    [api, refreshPlugins],
+  )
+
+  const acknowledgePluginKey = useCallback(
+    async (pluginId) => {
+      await api.acknowledgePluginKey(pluginId)
+      await refreshPlugins()
+    },
+    [api, refreshPlugins],
+  )
+
   const resumeChat = useCallback(
     async (chatId) => {
       await api.resume(chatId)
@@ -310,6 +365,8 @@ export function ConsoleProvider({ children }) {
       capabilities,
       sessions,
       machines,
+      plugins,
+      marketplace,
       chats,
       openChat,
       openChatId,
@@ -325,6 +382,10 @@ export function ConsoleProvider({ children }) {
       createMachine,
       removeMachine,
       installHarness,
+      installPlugin,
+      removePlugin,
+      setPluginEnabled,
+      acknowledgePluginKey,
     }),
     [
       api,
@@ -332,6 +393,8 @@ export function ConsoleProvider({ children }) {
       capabilities,
       sessions,
       machines,
+      plugins,
+      marketplace,
       chats,
       openChat,
       openChatId,
@@ -347,6 +410,10 @@ export function ConsoleProvider({ children }) {
       createMachine,
       removeMachine,
       installHarness,
+      installPlugin,
+      removePlugin,
+      setPluginEnabled,
+      acknowledgePluginKey,
     ],
   )
   return <ConsoleContext.Provider value={value}>{children}</ConsoleContext.Provider>

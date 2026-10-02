@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use openremote_core::{DecisionKind, DecisionOption, TurnOutcome};
 use openremote_harness::{DriverError, DriverEvent, Resolution, SpawnOptions};
-use serde_json::Value;
+use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, mpsc};
@@ -255,6 +255,25 @@ fn build_argv(opts: &SpawnOptions) -> Vec<std::ffi::OsString> {
         argv.push("--settings".into());
         argv.push(r#"{"fastMode":true}"#.into());
     }
+    if !opts.mcp_servers.is_empty() {
+        // Claude's own wire: `--mcp-config` takes a JSON string, wrapper
+        // key camelCase `mcpServers`, stdio entries (CLI reference +
+        // MCP docs). Passed verbatim in argv — no shell, no quoting.
+        let mut servers = serde_json::Map::new();
+        for server in &opts.mcp_servers {
+            servers.insert(
+                server.id.clone(),
+                json!({"type": "stdio", "command": server.command, "args": server.args}),
+            );
+        }
+        let config = json!({ "mcpServers": servers });
+        argv.push("--mcp-config".into());
+        argv.push(
+            serde_json::to_string(&config)
+                .expect("mcp config serializes")
+                .into(),
+        );
+    }
     if let Some(id) = &opts.resume {
         argv.push(format!("--resume={id}").into());
     }
@@ -415,6 +434,7 @@ async fn read_stderr(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use openremote_harness::McpServer;
     use serde_json::json;
 
     #[test]
@@ -426,6 +446,7 @@ mod tests {
             resume: Some("abc; --dangerously-skip-permissions".into()),
             include_deltas: true,
             fast: false,
+            mcp_servers: Vec::new(),
         };
         let argv = build_argv(&opts);
         let joined = argv
@@ -464,6 +485,39 @@ mod tests {
             .position(|s| *s == std::ffi::OsStr::new("--settings"))
             .expect("fast mode passes --settings");
         assert_eq!(argv[settings + 1].to_string_lossy(), r#"{"fastMode":true}"#);
+    }
+
+    #[test]
+    fn plugins_ride_claudes_own_mcp_config_flag() {
+        let opts = SpawnOptions {
+            cwd: std::path::PathBuf::from("/w"),
+            mcp_servers: vec![McpServer {
+                id: "github".into(),
+                command: "npx".into(),
+                args: vec!["-y".into(), "@modelcontextprotocol/server-github".into()],
+            }],
+            ..Default::default()
+        };
+        let argv = build_argv(&opts);
+        let flag = argv
+            .iter()
+            .position(|s| *s == std::ffi::OsStr::new("--mcp-config"))
+            .expect("plugins pass --mcp-config");
+        let config: Value =
+            serde_json::from_str(&argv[flag + 1].to_string_lossy()).expect("config is JSON");
+        // Claude's own shape: camelCase wrapper, stdio entry.
+        assert_eq!(
+            config["mcpServers"]["github"],
+            json!({"type": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"]})
+        );
+
+        // No plugins, no flag.
+        let plain = build_argv(&SpawnOptions::default());
+        assert!(
+            !plain
+                .iter()
+                .any(|s| *s == std::ffi::OsStr::new("--mcp-config"))
+        );
     }
 
     #[test]

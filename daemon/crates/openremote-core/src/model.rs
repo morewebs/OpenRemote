@@ -123,6 +123,57 @@ pub struct InstallSpec {
     pub command: String,
 }
 
+/// One MCP server a session can call, installed on a machine from the
+/// marketplace or written by hand. The launch command is what that machine
+/// would start; a key, if the plugin needs one, never leaves the machine —
+/// `has_key` only records that the machine has one.
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct Plugin {
+    /// `catalogId@machine` from the marketplace; `custom-…@machine` when
+    /// written by hand.
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalog_id: Option<String>,
+    pub name: String,
+    pub detail: String,
+    /// The launch command, as that machine would start it.
+    pub command: String,
+    pub machine: MachineId,
+    pub needs_key: bool,
+    #[serde(default)]
+    pub has_key: bool,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Plugin {
+    /// The console's state word, derived like the prototype ruled: a
+    /// disabled plugin is off; one still waiting on its key acknowledgment
+    /// is `needs-key`; otherwise it rides sessions — running.
+    pub fn state(&self) -> &'static str {
+        if !self.enabled {
+            "off"
+        } else if self.needs_key && !self.has_key {
+            "needs-key"
+        } else {
+            "running"
+        }
+    }
+
+    /// The server id on a harness's own MCP wire.
+    pub fn server_id(&self) -> String {
+        self.catalog_id
+            .clone()
+            .unwrap_or_else(|| self.name.to_lowercase().replace([' ', '_'], "-"))
+    }
+}
+
 /// One machine as the console sees it: the machine plus what is really on
 /// it — the harness inventory (the daemon's own probe), the chats running
 /// there, the agent's presence over the last 24 hours, and the harnesses

@@ -58,6 +58,22 @@ pub struct SpawnOptions {
     /// Run the harness's own fast mode (claude `fastMode`, codex service
     /// tier `fast`) — the harness's speed tier, never a model switch.
     pub fast: bool,
+    /// MCP servers an enabled plugin asked to ride along — each harness
+    /// maps these onto its own wire (claude `--mcp-config`, codex
+    /// `mcp_servers.<id>.*` config overrides). A harness with no wire for
+    /// them simply doesn't run plugins.
+    pub mcp_servers: Vec<McpServer>,
+}
+
+/// One MCP server a session should start, from an enabled plugin on the
+/// machine the session runs on.
+#[derive(Clone, Debug)]
+pub struct McpServer {
+    /// The server's id on the harness's own wire (claude's key inside
+    /// `mcpServers`, codex's `<id>` in `mcp_servers.<id>`).
+    pub id: String,
+    pub command: String,
+    pub args: Vec<String>,
 }
 
 /// What one decision answer means for the turn and the session — filled

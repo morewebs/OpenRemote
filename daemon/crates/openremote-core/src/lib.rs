@@ -26,7 +26,7 @@ pub use events::{Event, EventPayload};
 pub use ids::{DecisionId, MachineId, SessionId};
 pub use model::{
     ChatMessage, Decision, DecisionKind, DecisionOption, DecisionState, Harness, InstallSpec,
-    Machine, MachineStatus, MachineView, MessageRole, Receipt, ReceiptStatus, Session,
+    Machine, MachineStatus, MachineView, MessageRole, Plugin, Receipt, ReceiptStatus, Session,
     SessionStatus, TurnOutcome,
 };
 pub use store::Store;

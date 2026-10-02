@@ -138,6 +138,39 @@ export class DaemonApi {
     })
   }
 
+  // ---- plugins ----
+
+  plugins() {
+    return this.call('GET', '/plugins')
+  }
+
+  pluginMarketplace() {
+    return this.call('GET', '/plugins/marketplace')
+  }
+
+  installPlugin(machineId, { catalogId, name, detail, command, needsKey }) {
+    return this.call('POST', '/plugins', {
+      request_id: newRequestId(),
+      machine: machineId,
+      ...(catalogId ? { catalog_id: catalogId } : { name, detail, command, needs_key: needsKey }),
+    })
+  }
+
+  removePlugin(pluginId) {
+    return this.call('DELETE', `/plugins/${pluginId}?request_id=${encodeURIComponent(newRequestId())}`)
+  }
+
+  setPluginEnabled(pluginId, enabled) {
+    return this.call('POST', `/plugins/${pluginId}/enabled`, {
+      request_id: newRequestId(),
+      enabled,
+    })
+  }
+
+  acknowledgePluginKey(pluginId) {
+    return this.call('POST', `/plugins/${pluginId}/key`, { request_id: newRequestId() })
+  }
+
   // The models a harness advertises, in its own words (empty = the slot
   // stays reserved for that harness).
   models(harnessId) {
