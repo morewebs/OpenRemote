@@ -595,3 +595,90 @@ async fn an_unavailable_harness_creates_a_failed_session_not_an_error() {
         created.raw
     );
 }
+
+#[tokio::test]
+async fn console_origins_can_fetch_the_daemon_and_foreign_origins_cannot() {
+    // The console is a webview on another origin (vite dev on
+    // http://localhost:5173; Tauri production on http://tauri.localhost /
+    // tauri://localhost) — without CORS headers its fetches are blocked
+    // by the webview. This is the test that would have caught the
+    // first-run "connect to the daemon" dead end.
+    let daemon = start_daemon(&[("claude", fixture_agent())]).await;
+
+    // Preflight for a bearer-authed POST from the dev origin.
+    let preflight = raw_http(
+        &daemon,
+        "OPTIONS",
+        "/sessions",
+        &[
+            ("Origin", "http://localhost:5173"),
+            ("Access-Control-Request-Method", "POST"),
+            (
+                "Access-Control-Request-Headers",
+                "authorization, content-type",
+            ),
+        ],
+        None,
+    )
+    .await;
+    assert_eq!(preflight.status, 200, "raw: {}", preflight.raw);
+    let allow_origin = preflight
+        .headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("access-control-allow-origin"))
+        .map(|(_, v)| v.clone())
+        .unwrap_or_default();
+    assert_eq!(
+        allow_origin, "http://localhost:5173",
+        "the console origin is echoed; raw: {}",
+        preflight.raw
+    );
+    assert!(
+        preflight
+            .raw
+            .to_ascii_lowercase()
+            .contains("access-control-allow-headers"),
+        "authorization must be allowed; raw: {}",
+        preflight.raw
+    );
+
+    // A Tauri production origin is allowed too (any port on localhost).
+    for origin in [
+        "http://tauri.localhost",
+        "tauri://localhost",
+        "http://localhost:5174",
+    ] {
+        let reply = raw_http(&daemon, "GET", "/healthz", &[("Origin", origin)], None).await;
+        assert_eq!(reply.status, 200, "raw: {}", reply.raw);
+        let echoed = reply
+            .headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("access-control-allow-origin"))
+            .map(|(_, v)| v.clone())
+            .unwrap_or_default();
+        assert_eq!(
+            echoed, origin,
+            "origin {origin} must be allowed; raw: {}",
+            reply.raw
+        );
+    }
+
+    // A foreign website gets no CORS grant — its reads stay blocked.
+    let foreign = raw_http(
+        &daemon,
+        "GET",
+        "/healthz",
+        &[("Origin", "https://evil.example")],
+        None,
+    )
+    .await;
+    assert_eq!(foreign.status, 200, "healthz answers; raw: {}", foreign.raw);
+    assert!(
+        !foreign
+            .headers
+            .iter()
+            .any(|(k, _)| k.eq_ignore_ascii_case("access-control-allow-origin")),
+        "no CORS grant for foreign origins; raw: {}",
+        foreign.raw
+    );
+}

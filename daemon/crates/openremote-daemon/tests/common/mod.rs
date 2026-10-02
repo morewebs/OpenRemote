@@ -279,3 +279,57 @@ pub async fn until_count(
         dump(&seen)
     );
 }
+
+/// A raw HTTP request with arbitrary headers (CORS probes), returning
+/// the parsed status plus every response header line.
+pub struct RawReply {
+    pub status: u16,
+    pub headers: Vec<(String, String)>,
+    pub raw: String,
+}
+
+pub async fn raw_http(
+    daemon: &TestDaemon,
+    method: &str,
+    path: &str,
+    headers: &[(&str, &str)],
+    body: Option<String>,
+) -> RawReply {
+    let mut stream = tokio::net::TcpStream::connect(daemon.addr)
+        .await
+        .expect("connect");
+    let body = body.unwrap_or_default();
+    let mut request = format!(
+        "{method} {path} HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {}\r\n",
+        daemon.token
+    );
+    for (key, value) in headers {
+        request.push_str(&format!("{key}: {value}\r\n"));
+    }
+    request.push_str(&format!(
+        "Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    ));
+    stream.write_all(request.as_bytes()).await.expect("write");
+    let mut raw = Vec::new();
+    stream.read_to_end(&mut raw).await.expect("read");
+    let raw = String::from_utf8_lossy(&raw).to_string();
+    let (head, _) = raw.split_once("\r\n\r\n").expect("header block");
+    let status: u16 = head
+        .lines()
+        .next()
+        .and_then(|l| l.split_whitespace().nth(1))
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(0);
+    let headers = head
+        .lines()
+        .skip(1)
+        .filter_map(|l| l.split_once(':'))
+        .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
+        .collect();
+    RawReply {
+        status,
+        headers,
+        raw,
+    }
+}

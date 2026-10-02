@@ -187,41 +187,58 @@ export default function NewChat({ onOpen }) {
       </div>
       <div className="nc-under">
         <div className="nc-below">
-          <div className="nc-device">
-            <button
-              className="nc-meta"
-              onClick={openPicker}
-              aria-haspopup="listbox"
-              aria-expanded={picker != null}
-              title="The folder the harness works in"
-            >
-              <FolderOpen size={13} weight="light" />
-              {active ? active.split(/[\\/]/).filter(Boolean).pop() : 'Choose a folder'}
-            </button>
-            {picker != null && (
-              <PickerMenu
-                label="Workspace"
-                searchPlaceholder="Search workspaces"
-                items={recents.map((p) => ({ id: p, name: p.split(/[\\/]/).filter(Boolean).pop() }))}
-                groups={null}
-                selectedId={active}
-                onChoose={(id) => {
-                  setWorkspace(id)
-                  setPicker(null)
-                }}
-                onClose={() => setPicker(null)}
-                anchor={{ left: picker.x, top: picker.y }}
-                renderTrailing={(p) => <span className="nc-item-path">{p.id}</span>}
-              />
-            )}
-          </div>
+          {/* First run has no recent folders — an empty picker is a dead
+              control, so the button only renders when it has something
+              to show; the path input is always the honest affordance. */}
+          {recents.length > 0 || active ? (
+            <div className="nc-device">
+              {recents.length > 0 ? (
+                <>
+                  <button
+                    className="nc-meta"
+                    onClick={openPicker}
+                    aria-haspopup="listbox"
+                    aria-expanded={picker != null}
+                    title={active || 'The folder the harness works in'}
+                  >
+                    <FolderOpen size={13} weight="light" />
+                    {active ? active.split(/[\\/]/).filter(Boolean).pop() : 'Choose a folder'}
+                  </button>
+                  {picker != null && (
+                    <PickerMenu
+                      label="Workspace"
+                      searchPlaceholder="Search workspaces"
+                      items={recents.map((p) => ({
+                        id: p,
+                        name: p.split(/[\\/]/).filter(Boolean).pop(),
+                      }))}
+                      groups={null}
+                      selectedId={active}
+                      onChoose={(id) => {
+                        setWorkspace(id)
+                        setPicker(null)
+                      }}
+                      onClose={() => setPicker(null)}
+                      anchor={{ left: picker.x, top: picker.y }}
+                      renderTrailing={(p) => <span className="nc-item-path">{p.id}</span>}
+                    />
+                  )}
+                </>
+              ) : (
+                <span className="nc-meta nc-static" title={active}>
+                  <FolderOpen size={13} weight="light" />
+                  {active.split(/[\\/]/).filter(Boolean).pop()}
+                </span>
+              )}
+            </div>
+          ) : null}
           <span className="nc-meta nc-static">
             <House size={13} weight="light" />
             This computer
           </span>
           <input
             className="nc-path-input"
-            placeholder="…or type a folder path"
+            placeholder="Workspace folder — where the agent works, e.g. C:/Users/W/src/myapp"
             value={customPath}
             onChange={(e) => setCustomPath(e.target.value)}
             onKeyDown={(e) => {
@@ -247,7 +264,7 @@ export default function NewChat({ onOpen }) {
                   <span className="nc-resume-meta">
                     {session.status === 'waiting'
                       ? 'Needs a decision'
-                      : `${HARNESS.name} · ${session.workspace?.split(/[\\/]/).filter(Boolean).pop() ?? ''}`}
+                      : `${harnessName(session.harness)} · ${session.workspace?.split(/[\\/]/).filter(Boolean).pop() ?? ''}`}
                   </span>
                 </button>
               )

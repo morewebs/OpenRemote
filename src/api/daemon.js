@@ -37,7 +37,11 @@ export function newRequestId() {
 
 export class DaemonApi {
   constructor(url, token) {
-    this.url = url?.replace(/\/+$/, '') ?? null
+    let clean = url?.replace(/\/+$/, '') ?? null
+    // Manual entry often omits the scheme; without one, fetch treats the
+    // address as a relative path and fails confusingly.
+    if (clean && !/^https?:\/\//.test(clean)) clean = `http://${clean}`
+    this.url = clean
     this.token = token
   }
 

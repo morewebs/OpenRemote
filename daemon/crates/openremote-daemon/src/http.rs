@@ -7,7 +7,7 @@ use std::sync::Arc;
 use axum::body::Body;
 use axum::extract::Path as AxumPath;
 use axum::extract::{Request, State};
-use axum::http::{StatusCode, header};
+use axum::http::{Method, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -15,6 +15,7 @@ use axum::{Json, Router};
 use openremote_core::{DecisionId, Receipt, ReceiptStatus, SessionId};
 use serde::Deserialize;
 use serde_json::{Value, json};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::app::App;
 use crate::supervisor::SupervisorError;
@@ -37,7 +38,36 @@ pub fn router(app: Arc<App>) -> Router {
     Router::new()
         .route("/healthz", get(healthz))
         .merge(authed)
+        .layer(console_cors())
         .with_state(app)
+}
+
+/// The console is a webview on a different origin than the daemon
+/// (vite dev `http://localhost:5173`, Tauri production
+/// `http://tauri.localhost` / `tauri://localhost`), and webviews enforce
+/// same-origin on fetch — without these headers the console can never
+/// reach the daemon. Loopback-only console origins; everything else
+/// stays blocked (the bearer token still guards every real route).
+fn console_cors() -> CorsLayer {
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::predicate(|origin, _| {
+            let Ok(s) = origin.to_str() else {
+                return false;
+            };
+            let rest = s
+                .strip_prefix("http://")
+                .or_else(|| s.strip_prefix("https://"))
+                .or_else(|| s.strip_prefix("tauri://"))
+                .or_else(|| s.strip_prefix("ios://"))
+                .unwrap_or("");
+            let host = rest.split([':', '/']).next().unwrap_or("");
+            matches!(
+                host,
+                "localhost" | "127.0.0.1" | "[::1]" | "tauri.localhost"
+            )
+        }))
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
 }
 
 async fn healthz() -> impl IntoResponse {
