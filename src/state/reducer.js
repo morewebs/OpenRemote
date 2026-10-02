@@ -39,6 +39,8 @@ export function chatFromSession(session) {
     workspace: session.workspace,
     project: workspaceName(session.workspace),
     model: session.model ?? null,
+    fast: session.fast ?? false,
+    approvedTools: session.approved_tools ?? [],
     lastError: session.last_error ?? null,
     running: ['starting', 'working', 'waiting'].includes(session.status),
     title: null,
@@ -65,6 +67,19 @@ export function foldEvent(chat, event) {
       chat.status = chatStatus(payload.status)
       chat.lastError = payload.reason ?? chat.lastError
       chat.running = ['starting', 'working', 'waiting'].includes(payload.status)
+      break
+    }
+    case 'session.updated': {
+      // Session facts outside the status lifecycle — a session-scoped tool
+      // grant landing. The whole session rides along; fold the fields the
+      // facts row renders.
+      const session = payload.session
+      chat.status = chatStatus(session.status)
+      chat.running = ['starting', 'working', 'waiting'].includes(session.status)
+      chat.lastError = session.last_error ?? chat.lastError
+      if (session.model) chat.model = session.model
+      chat.fast = session.fast ?? chat.fast
+      chat.approvedTools = session.approved_tools ?? chat.approvedTools
       break
     }
     case 'message.added': {

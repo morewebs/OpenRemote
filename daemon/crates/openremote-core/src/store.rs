@@ -208,6 +208,27 @@ impl Store {
         self.persist()
     }
 
+    /// Record a tool the harness granted for the rest of the session (its
+    /// own session-scope answer word). Facts, not history — the
+    /// `session.updated` event that follows carries them to the console.
+    pub fn note_approved_tool(
+        &mut self,
+        session_id: &SessionId,
+        tool: &str,
+    ) -> Result<(), StoreError> {
+        let session = self
+            .state
+            .sessions
+            .get_mut(session_id)
+            .ok_or_else(|| StoreError::NotFound(format!("session {session_id}")))?;
+        if !session.approved_tools.iter().any(|t| t == tool) {
+            session.approved_tools.push(tool.to_string());
+            session.updated_at = crate::now_ms();
+            self.persist()?;
+        }
+        Ok(())
+    }
+
     /// Append an event: assigns `seq`, applies it to state, persists both.
     pub fn append(
         &mut self,
@@ -291,6 +312,9 @@ impl Store {
             EventPayload::SessionCreated { session } => {
                 self.state.sessions.insert(session.id, session.clone());
             }
+            EventPayload::SessionUpdated { session } => {
+                self.state.sessions.insert(session.id, session.clone());
+            }
             EventPayload::SessionStatusChanged { status, reason } => {
                 let session = self
                     .state
@@ -371,6 +395,8 @@ mod tests {
             updated_at: 0,
             last_error: None,
             next_turn: 1,
+            fast: false,
+            approved_tools: Vec::new(),
         }
     }
 
@@ -383,6 +409,7 @@ mod tests {
             state: DecisionState::Pending,
             harness_request: serde_json::json!({"tool_name": "Bash", "input": {"command": "ls"}}),
             harness_ref: Some("cr-1".into()),
+            tool_name: Some("Bash".into()),
             options: vec![
                 DecisionOption {
                     id: "allow".into(),

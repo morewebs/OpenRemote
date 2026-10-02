@@ -96,6 +96,12 @@ export default function ChatView({ chat, onBack }) {
           <span className="cv-where">{chat.workspace}</span>
           <span className="cv-fact">{harnessName(chat.harness)}</span>
           {chat.model && <span className="cv-fact">{chat.model}</span>}
+          {chat.fast && <span className="cv-fact">Fast</span>}
+          {chat.approvedTools?.length > 0 && (
+            <span className="cv-fact">
+              {chat.approvedTools.join(' · ')} allowed for this chat
+            </span>
+          )}
           <span className="cv-fact">{STATUS_LABEL[chat.status] ?? chat.status}</span>
           {chat.running && (
             <button className="cv-fact-btn" onClick={() => control(() => stopChat(chat.id))} title="Stop the session">
@@ -164,11 +170,11 @@ export default function ChatView({ chat, onBack }) {
                 )}
                 {item.pending && (
                   <div className="cv-tool-actions">
-                    {item.options.map((option) => (
+                    {item.options.map((option, index) => (
                       <button
                         key={option.id}
                         type="button"
-                        className={option.id === 'allow' ? 'primary' : ''}
+                        className={index === 0 ? 'primary' : ''}
                         onClick={() => answer(item.id, option.id)}
                       >
                         {option.label}
@@ -179,7 +185,11 @@ export default function ChatView({ chat, onBack }) {
               </div>
             )
           })}
-          {chat.running && !pendingDecision && <p className="cv-node cv-node--run cv-running">With Claude Code · this computer</p>}
+          {chat.running && !pendingDecision && (
+            <p className="cv-node cv-node--run cv-running">
+              With {harnessName(chat.harness)} · this computer
+            </p>
+          )}
         </div>
       </div>
 

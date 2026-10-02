@@ -248,6 +248,13 @@ fn build_argv(opts: &SpawnOptions) -> Vec<std::ffi::OsString> {
         argv.push("--permission-mode".into());
         argv.push(mode.into());
     }
+    if opts.fast {
+        // Claude's own headless fast-mode form: `--settings '{"fastMode":
+        // true}'` (v2.1.205+). Not a model switch — the CLI keeps Opus and
+        // only swaps the speed configuration.
+        argv.push("--settings".into());
+        argv.push(r#"{"fastMode":true}"#.into());
+    }
     if let Some(id) = &opts.resume {
         argv.push(format!("--resume={id}").into());
     }
@@ -418,6 +425,7 @@ mod tests {
             permission_mode: Some("default".into()),
             resume: Some("abc; --dangerously-skip-permissions".into()),
             include_deltas: true,
+            fast: false,
         };
         let argv = build_argv(&opts);
         let joined = argv
@@ -434,6 +442,28 @@ mod tests {
         // equals form: the id cannot smuggle a second flag
         assert!(argv.iter().any(|s| *s == std::ffi::OsStr::new("--resume=abc; --dangerously-skip-permissions")));
         assert!(joined.contains("--include-partial-messages"));
+    }
+
+    #[test]
+    fn fast_mode_rides_claudes_own_settings_flag() {
+        let mut opts = SpawnOptions {
+            cwd: std::path::PathBuf::from("/w"),
+            ..Default::default()
+        };
+        let argv = build_argv(&opts);
+        assert!(
+            !argv
+                .iter()
+                .any(|s| *s == std::ffi::OsStr::new("--settings"))
+        );
+
+        opts.fast = true;
+        let argv = build_argv(&opts);
+        let settings = argv
+            .iter()
+            .position(|s| *s == std::ffi::OsStr::new("--settings"))
+            .expect("fast mode passes --settings");
+        assert_eq!(argv[settings + 1].to_string_lossy(), r#"{"fastMode":true}"#);
     }
 
     #[test]

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowUp, House, FolderOpen } from '@phosphor-icons/react'
+import { ArrowUp, House, FolderOpen, Lightning } from '@phosphor-icons/react'
 import PickerMenu from './PickerMenu.jsx'
 import { useConsole } from './state/console.jsx'
 import { harnessName } from './harness-names.js'
@@ -36,6 +36,7 @@ export default function NewChat({ onOpen }) {
   const [harness, setHarness] = useState(null)
   const [model, setModel] = useState(null)
   const [models, setModels] = useState([])
+  const [fast, setFast] = useState(false)
 
   useEffect(() => {
     if (workspace == null) setWorkspace(loadRecents()[0] ?? null)
@@ -46,10 +47,12 @@ export default function NewChat({ onOpen }) {
   const currentHarness = available.find((h) => h.id === harness) ?? available[0] ?? null
 
   // The model slot: filled where the harness advertises, reserved
-  // (not rendered) where it doesn't.
+  // (not rendered) where it doesn't. Fast mode follows the same rule —
+  // and both choices are per-harness, so switching resets them.
   useEffect(() => {
     let cancelled = false
     setModel(null)
+    setFast(false)
     if (!currentHarness) {
       setModels([])
       return
@@ -76,7 +79,7 @@ export default function NewChat({ onOpen }) {
     setBusy(true)
     setError(null)
     try {
-      const id = await createChat(text.trim(), workspace, currentHarness.id, model ?? undefined)
+      const id = await createChat(text.trim(), workspace, currentHarness.id, model ?? undefined, fast || undefined)
       saveRecents([workspace, ...recents.filter((p) => p !== workspace)])
       setText('')
       onOpen(id)
@@ -180,6 +183,17 @@ export default function NewChat({ onOpen }) {
                 anchor={{ left: picker.x, top: picker.y }}
               />
             )}
+            {currentHarness?.fast_supported && (
+              <button
+                className={`nc-meta nc-fast${fast ? ' on' : ''}`}
+                onClick={() => setFast((v) => !v)}
+                aria-pressed={fast}
+                title="The harness's own fast mode — its speed tier, never a model switch"
+              >
+                <Lightning size={13} weight={fast ? 'fill' : 'light'} />
+                Fast
+              </button>
+            )}
           </div>
           <div className="nc-send-group">
             <button className="nc-send" onClick={start} disabled={!canSend} title="Start task">
@@ -199,15 +213,15 @@ export default function NewChat({ onOpen }) {
                 <>
                   <button
                     className="nc-meta"
-                    onClick={openPicker}
+                    onClick={openPicker('workspace')}
                     aria-haspopup="listbox"
-                    aria-expanded={picker != null}
+                    aria-expanded={picker?.kind === 'workspace'}
                     title={active || 'The folder the harness works in'}
                   >
                     <FolderOpen size={13} weight="light" />
                     {active ? active.split(/[\\/]/).filter(Boolean).pop() : 'Choose a folder'}
                   </button>
-                  {picker != null && (
+                  {picker?.kind === 'workspace' && (
                     <PickerMenu
                       label="Workspace"
                       searchPlaceholder="Search workspaces"

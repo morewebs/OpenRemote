@@ -54,8 +54,20 @@ pub struct TestDaemon {
 }
 
 pub async fn start_daemon(overrides: &[(&str, PathBuf)]) -> TestDaemon {
+    // Every harness slot defaults to the fixture agent, so the registry's
+    // probes stay hermetic and cheap (no real CLIs get spawned from a
+    // suite); a suite overrides only the harness it drives. The
+    // "no such harness" path is still reachable — an id no slot fills.
+    let fixture = fixture_agent();
+    let mut filled: Vec<(&str, PathBuf)> = Vec::new();
+    for id in ["claude", "codex", "grok", "pi", "opencode", "agy"] {
+        if !overrides.iter().any(|(k, _)| *k == id) {
+            filled.push((id, fixture.clone()));
+        }
+    }
     let overrides: std::collections::HashMap<String, PathBuf> = overrides
         .iter()
+        .chain(filled.iter())
         .map(|(k, v)| ((*k).to_string(), v.clone()))
         .collect();
     let data_dir = tempfile::tempdir().expect("temp data dir");
@@ -63,7 +75,7 @@ pub async fn start_daemon(overrides: &[(&str, PathBuf)]) -> TestDaemon {
     let store = Arc::new(StdMutex::new(
         Store::open(data_dir.path().to_path_buf()).expect("store"),
     ));
-    let supervisor = Supervisor::new(store.clone(), HarnessRegistry::probe(&overrides));
+    let supervisor = Supervisor::new(store.clone(), HarnessRegistry::probe(&overrides).await);
     let app = Arc::new(App {
         token: token.clone(),
         data_dir: data_dir.path().to_path_buf(),

@@ -119,15 +119,7 @@ impl Driver {
         driver.notify("initialized", json!({})).await?;
 
         // Thread: start or resume (cloudroom lines 70-99).
-        let mut params = json!({
-            "cwd": opts.cwd,
-            "approvalPolicy": opts.permission_mode.clone().unwrap_or_else(|| DEFAULT_APPROVAL_POLICY.to_string()),
-            "sandbox": DEFAULT_SANDBOX,
-            "ephemeral": false,
-        });
-        if let Some(model) = &opts.model {
-            params["model"] = json!(model);
-        }
+        let mut params = thread_params(&opts);
         let (method, thread_id) = if let Some(resume) = &opts.resume {
             params["threadId"] = json!(resume);
             params["excludeTurns"] = json!(true);
@@ -316,6 +308,26 @@ fn approval_spec(tool: &str, summary: Option<String>) -> DecisionSpec {
         summary,
         interrupts_turn: vec!["cancel".to_string()],
     }
+}
+
+/// The `thread/start` (and `thread/resume`) params. Fast mode rides
+/// Codex's own service-tier word on the thread — `serviceTier: "fast"`
+/// (v0.110.0+; a model that doesn't advertise the tier drops it with a
+/// warning, so it is safe to always pass when asked).
+fn thread_params(opts: &SpawnOptions) -> Value {
+    let mut params = json!({
+        "cwd": opts.cwd,
+        "approvalPolicy": opts.permission_mode.clone().unwrap_or_else(|| DEFAULT_APPROVAL_POLICY.to_string()),
+        "sandbox": DEFAULT_SANDBOX,
+        "ephemeral": false,
+    });
+    if let Some(model) = &opts.model {
+        params["model"] = json!(model);
+    }
+    if opts.fast {
+        params["serviceTier"] = json!("fast");
+    }
+    params
 }
 
 fn coarse_outcome(status: &str) -> TurnOutcome {
@@ -585,5 +597,27 @@ async fn read_stderr(
         if tx.send(DriverEvent::Stderr { line }).await.is_err() {
             return;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fast_mode_rides_codex_service_tier_word() {
+        let mut opts = SpawnOptions {
+            cwd: PathBuf::from("/w"),
+            model: Some("gpt-6.1-sol".into()),
+            ..Default::default()
+        };
+        let params = thread_params(&opts);
+        assert_eq!(params["model"].as_str(), Some("gpt-6.1-sol"));
+        assert!(params.get("serviceTier").is_none());
+
+        opts.fast = true;
+        let params = thread_params(&opts);
+        assert_eq!(params["serviceTier"].as_str(), Some("fast"));
+        assert_eq!(params["approvalPolicy"].as_str(), Some("on-request"));
     }
 }

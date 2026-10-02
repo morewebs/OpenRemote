@@ -17,7 +17,8 @@ fn main() {
         let app = App::new(AppOptions {
             data_dir: data_dir.clone(),
             token: token.clone(),
-        });
+        })
+        .await;
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
             .await
             .expect("bind loopback");

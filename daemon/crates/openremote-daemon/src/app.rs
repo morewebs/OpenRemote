@@ -25,10 +25,13 @@ pub struct AppOptions {
 }
 
 impl App {
-    pub fn new(options: AppOptions) -> Arc<Self> {
+    pub async fn new(options: AppOptions) -> Arc<Self> {
         let store = Store::open(options.data_dir.clone()).expect("store opens");
         let store = Arc::new(StdMutex::new(store));
-        let supervisor = Supervisor::new(store.clone(), HarnessRegistry::probe(&env_overrides()));
+        let supervisor = Supervisor::new(
+            store.clone(),
+            HarnessRegistry::probe(&env_overrides()).await,
+        );
         Arc::new(Self {
             token: options.token,
             data_dir: options.data_dir,

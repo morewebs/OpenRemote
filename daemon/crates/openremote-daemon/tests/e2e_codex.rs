@@ -365,3 +365,92 @@ async fn codex_sessions_resume_on_the_same_thread() {
         dump(&events)
     );
 }
+
+#[tokio::test]
+async fn accept_for_session_grants_the_tool_for_the_chat() {
+    let (daemon, ws) = codex_daemon(Some("approve")).await;
+    let id = create_codex(&daemon, &ws).await;
+    until_kinds(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        &["session.status_changed"],
+    )
+    .await;
+
+    call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "c-prompt", "text": "run the thing"})),
+    )
+    .await;
+
+    let events = until_kinds(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        &["decision.requested", "session.status_changed"],
+    )
+    .await;
+    let decision_event = events
+        .iter()
+        .find(|(_, p)| kind(p) == "decision.requested")
+        .expect("decision.requested");
+    let decision_id = decision_event.1["decision"]["id"]
+        .as_str()
+        .expect("decision id")
+        .to_string();
+    // The tool the harness asked about rides the decision in its own
+    // vocabulary — the grant names it back.
+    assert_eq!(
+        decision_event.1["decision"]["tool_name"],
+        "commandExecution",
+        "events:\n{}",
+        dump(&events)
+    );
+
+    // Codex's own session-scope word.
+    let answer = call(
+        &daemon,
+        "POST",
+        &format!("/decisions/{decision_id}/answer"),
+        Some(json!({"request_id": "c-answer", "choice": "acceptForSession"})),
+    )
+    .await;
+    assert_eq!(answer.status, 200, "raw: {}", answer.raw);
+
+    // The grant lands as a session fact between the answer and the turn's
+    // own completion; the suffix waits the turn out like every other test
+    // (session.updated slots in right after the answer).
+    let events = until_kinds(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        &[
+            "session.updated",
+            "session.status_changed",
+            "tool.result",
+            "message.added",
+            "turn.completed",
+            "session.status_changed",
+        ],
+    )
+    .await;
+    let updated = events
+        .iter()
+        .find(|(_, p)| kind(p) == "session.updated")
+        .expect("session.updated after the grant");
+    assert_eq!(
+        updated.1["session"]["approved_tools"],
+        json!(["commandExecution"]),
+        "the grant is a session fact; events:\n{}",
+        dump(&events)
+    );
+
+    // And the session endpoint agrees — the facts row renders from this.
+    let session = call(&daemon, "GET", &format!("/sessions/{id}"), None).await;
+    assert_eq!(
+        session.body["approved_tools"],
+        json!(["commandExecution"]),
+        "raw: {}",
+        session.raw
+    );
+}

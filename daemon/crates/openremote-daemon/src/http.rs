@@ -111,6 +111,10 @@ struct CreateSessionBody {
     model: Option<String>,
     #[serde(default)]
     permission_mode: Option<String>,
+    /// Run the harness's own fast mode (claude `fastMode`, codex service
+    /// tier `fast`).
+    #[serde(default)]
+    fast: bool,
 }
 
 async fn create_session(
@@ -130,7 +134,13 @@ async fn create_session(
     }
     match app
         .supervisor
-        .create_session(&body.harness, workspace, body.model, body.permission_mode)
+        .create_session(
+            &body.harness,
+            workspace,
+            body.model,
+            body.permission_mode,
+            body.fast,
+        )
         .await
     {
         Ok(session) => {

@@ -55,6 +55,21 @@ pub struct SpawnOptions {
     /// codex `thread/resume`, pi `--session`, …).
     pub resume: Option<String>,
     pub include_deltas: bool,
+    /// Run the harness's own fast mode (claude `fastMode`, codex service
+    /// tier `fast`) — the harness's speed tier, never a model switch.
+    pub fast: bool,
+}
+
+/// What one decision answer means for the turn and the session — filled
+/// from each harness's own semantics at the dispatch layer.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AnswerOutcome {
+    /// The answer interrupts the running turn; its boundary event settles it.
+    pub interrupts_turn: bool,
+    /// The harness's own session-scope choice word was picked, granting
+    /// this tool for the rest of the session (codex `acceptForSession`,
+    /// opencode `always`) — named in the harness's own tool vocabulary.
+    pub session_grant: Option<String>,
 }
 
 /// A model a harness advertises, in the harness's own words. Backs the

@@ -31,8 +31,15 @@ mod pi;
 use std::io::{BufRead, Write};
 
 fn main() {
-    // Protocol inference from the real driver's argv.
+    // Protocol inference from the real driver's argv. `--version` is the
+    // registry's catalog probe — answered before any protocol dispatch.
     let argv: Vec<String> = std::env::args().skip(1).collect();
+    if argv.iter().any(|a| a == "--version") {
+        let version =
+            std::env::var("FIXTURE_AGENT_VERSION").unwrap_or_else(|_| "9.9.9".to_string());
+        println!("fixture-agent {version}");
+        return;
+    }
     if argv.iter().any(|a| a == "app-server") {
         codex::main_codex();
         return;

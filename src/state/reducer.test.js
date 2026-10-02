@@ -119,3 +119,28 @@ test('daemon errors land as notes in the transcript', () => {
   assert.equal(rail.at(-1).role, 'note')
   assert.equal(rail.at(-1).text, 'boom')
 })
+
+test('a session carries its fast mode and approved tools from the daemon', () => {
+  const chat = chatFromSession(session({ fast: true, approved_tools: ['commandExecution'] }))
+  assert.equal(chat.fast, true)
+  assert.deepEqual(chat.approvedTools, ['commandExecution'])
+  // old sessions (and harnesses without a fast mode) fold to the defaults
+  const plain = chatFromSession(session())
+  assert.equal(plain.fast, false)
+  assert.deepEqual(plain.approvedTools, [])
+})
+
+test('session.updated folds the session-scoped grant into the chat', () => {
+  let chat = chatFromSession(session())
+  chat = foldEvent(
+    chat,
+    event(8, {
+      type: 'session.updated',
+      session: session({ status: 'waiting', fast: true, approved_tools: ['commandExecution'] }),
+    }),
+  )
+  assert.equal(chat.fast, true)
+  assert.deepEqual(chat.approvedTools, ['commandExecution'])
+  assert.equal(chat.status, 'waiting')
+  assert.equal(chat.running, true)
+})

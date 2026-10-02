@@ -16,6 +16,10 @@ pub struct Harness {
     /// `claude --version` output, when probed.
     pub version: Option<String>,
     pub available: bool,
+    /// The harness's own fast mode is usable at this version (claude
+    /// `fastMode` headless ≥ 2.1.205, codex service tier `fast` ≥ 0.110.0).
+    #[serde(default)]
+    pub fast_supported: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
@@ -65,6 +69,14 @@ pub struct Session {
     /// Next turn number to hand out (per-session monotonic).
     #[serde(default)]
     pub next_turn: u64,
+    /// The chat runs the harness's own fast mode (claude `fastMode`, codex
+    /// service tier `fast`) — its speed tier, not a model.
+    #[serde(default)]
+    pub fast: bool,
+    /// Tools the harness granted for the rest of this session, in its own
+    /// vocabulary (codex `acceptForSession`, opencode `always`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub approved_tools: Vec<String>,
 }
 
 /// Coarse turn outcome for grid-at-a-glance; the harness's own string rides
@@ -132,6 +144,10 @@ pub struct Decision {
     /// `request_id`) — what an answer is routed with.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub harness_ref: Option<String>,
+    /// The tool the harness asked about, in its own vocabulary
+    /// (`Bash`, `commandExecution`, opencode's action word, …).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_name: Option<String>,
     /// Answer choices rendered with the harness's own vocabulary.
     pub options: Vec<DecisionOption>,
     pub created_at: i64,

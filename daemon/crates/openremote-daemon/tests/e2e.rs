@@ -573,7 +573,8 @@ async fn sse_resume_after_seq_gets_only_the_tail() {
 async fn an_unavailable_harness_creates_a_failed_session_not_an_error() {
     // A harness the registry knows nothing about: the same path a probe
     // that found nothing takes (backend lookup fails → explicit error, no
-    // phantom session). Machine-dependent probe results aren't asserted.
+    // phantom session). The registry's slots don't matter — an id no slot
+    // fills is unavailable everywhere.
     let daemon = start_daemon(&[]).await;
     let ws = workspace(None);
     let created = call(
@@ -681,4 +682,58 @@ async fn console_origins_can_fetch_the_daemon_and_foreign_origins_cannot() {
         "no CORS grant for foreign origins; raw: {}",
         foreign.raw
     );
+}
+
+#[tokio::test]
+async fn fast_mode_rides_the_session_and_the_capability_gates_on_the_cli() {
+    let daemon = start_daemon(&[("claude", fixture_agent())]).await;
+    let ws = workspace(Some("plain"));
+
+    // The fixture answers the registry's --version probe (9.9.9 ≥ claude's
+    // own 2.1.205 fast-mode minimum); a harness without a fast mode never
+    // advertises one, whatever its version.
+    let caps = call(&daemon, "GET", "/capabilities", None).await;
+    let harnesses = caps.body["harnesses"].as_array().expect("harnesses");
+    let claude = harnesses
+        .iter()
+        .find(|h| h["id"] == "claude")
+        .expect("claude in capabilities")
+        .clone();
+    assert_eq!(claude["version"].as_str(), Some("9.9.9"));
+    assert_eq!(claude["fast_supported"], true, "raw: {}", caps.raw);
+    let grok = harnesses
+        .iter()
+        .find(|h| h["id"] == "grok")
+        .expect("grok in capabilities");
+    assert_eq!(
+        grok["fast_supported"], false,
+        "no fast mode to offer; raw: {}",
+        caps.raw
+    );
+
+    // The choice rides the session it was made on.
+    let created = call(
+        &daemon,
+        "POST",
+        "/sessions",
+        Some(json!({
+            "request_id": "r-create",
+            "harness": "claude",
+            "workspace": ws.path(),
+            "fast": true
+        })),
+    )
+    .await;
+    assert_eq!(created.status, 201, "raw: {}", created.raw);
+    assert_eq!(created.body["fast"], true, "raw: {}", created.raw);
+
+    let plain = call(
+        &daemon,
+        "POST",
+        "/sessions",
+        Some(json!({"request_id": "r-plain", "harness": "claude", "workspace": ws.path()})),
+    )
+    .await;
+    assert_eq!(plain.status, 201, "raw: {}", plain.raw);
+    assert_eq!(plain.body["fast"], false, "raw: {}", plain.raw);
 }

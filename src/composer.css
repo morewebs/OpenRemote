@@ -35,6 +35,20 @@
   font-size: 11px;
 }
 
+/* The harness's own fast mode, toggled on per chat. Off sits with the other
+   chips; on goes green — the running/ok language, never decorative. */
+.nc-fast {
+  cursor: default;
+}
+
+.nc-fast.on {
+  color: var(--green);
+}
+
+.nc-fast.on svg {
+  color: var(--green);
+}
+
 .nc-device {
   position: relative;
   display: flex;

@@ -18,6 +18,11 @@ pub struct Event {
 pub enum EventPayload {
     #[serde(rename = "session.created")]
     SessionCreated { session: Session },
+    /// Session facts changed outside the status lifecycle — session-scoped
+    /// tool grants landing. The whole session rides along; the console
+    /// folds the fields it renders.
+    #[serde(rename = "session.updated")]
+    SessionUpdated { session: Session },
     #[serde(rename = "session.status_changed")]
     SessionStatusChanged {
         status: SessionStatus,
@@ -66,6 +71,7 @@ impl Event {
     pub fn kind(&self) -> &'static str {
         match &self.payload {
             EventPayload::SessionCreated { .. } => "session.created",
+            EventPayload::SessionUpdated { .. } => "session.updated",
             EventPayload::SessionStatusChanged { .. } => "session.status_changed",
             EventPayload::TurnStarted { .. } => "turn.started",
             EventPayload::TurnCompleted { .. } => "turn.completed",

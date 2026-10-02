@@ -24,7 +24,7 @@ use thiserror::Error;
 use tokio::sync::{Mutex as AsyncMutex, broadcast, mpsc, oneshot};
 use uuid::Uuid;
 
-use crate::registry::{AnswerOutcome, HarnessRegistry, SessionDriver};
+use crate::registry::{HarnessRegistry, SessionDriver};
 
 #[derive(Debug, Error)]
 pub enum SupervisorError {
@@ -148,6 +148,7 @@ impl Supervisor {
         workspace: std::path::PathBuf,
         model: Option<String>,
         permission_mode: Option<String>,
+        fast: bool,
     ) -> Result<Session, SupervisorError> {
         let Some(backend) = self.registry.backend(harness) else {
             return Err(SupervisorError::Harness(format!(
@@ -166,16 +167,20 @@ impl Supervisor {
             updated_at: now_ms(),
             last_error: None,
             next_turn: 0,
+            fast,
+            approved_tools: Vec::new(),
         };
         let id = session.id;
         self.emit_all(&id, vec![EventPayload::SessionCreated { session }])?;
 
+        let current = self.session(&id)?;
         let opts = openremote_harness::SpawnOptions {
-            cwd: self.session(&id)?.workspace.clone(),
-            model: self.session(&id)?.model.clone(),
-            permission_mode: self.session(&id)?.permission_mode.clone(),
+            cwd: current.workspace.clone(),
+            model: current.model.clone(),
+            permission_mode: current.permission_mode.clone(),
             resume: None,
             include_deltas: false,
+            fast: current.fast,
         };
         match backend.spawn(opts).await {
             Ok((driver, rx)) => {
@@ -310,6 +315,7 @@ impl Supervisor {
             permission_mode: session.permission_mode.clone(),
             resume: Some(harness_ref),
             include_deltas: false,
+            fast: session.fast,
         };
         let (driver, rx) = backend.spawn(opts).await?;
         {
@@ -359,7 +365,12 @@ impl Supervisor {
             .driver
             .lock()
             .await
-            .answer(&harness_ref, choice, &decision.harness_request)
+            .answer(
+                &harness_ref,
+                choice,
+                &decision.harness_request,
+                decision.tool_name.as_deref(),
+            )
             .await?;
         {
             let _order = entry.order.lock().await;
@@ -367,9 +378,18 @@ impl Supervisor {
                 decision_id: *decision_id,
                 choice: choice.to_string(),
             }];
+            // The harness's own session-scope word granted the tool for the
+            // rest of the chat — record it and let the fresh session ride
+            // out so the console renders "«tool» allowed for this chat".
+            if let Some(tool) = &outcome.session_grant {
+                self.with_store(|s| s.note_approved_tool(&session_id, tool))?;
+                if let Ok(session) = self.session(&session_id) {
+                    payloads.push(EventPayload::SessionUpdated { session });
+                }
+            }
             // Choices that continue the turn move the session back to
             // working; interrupting choices let the boundary event settle it.
-            if outcome == AnswerOutcome::Continues {
+            if !outcome.interrupts_turn {
                 payloads.push(EventPayload::SessionStatusChanged {
                     status: SessionStatus::Working,
                     reason: None,
@@ -491,6 +511,7 @@ impl Supervisor {
                     state: DecisionState::Pending,
                     harness_request: approval.request,
                     harness_ref: Some(approval.harness_ref),
+                    tool_name: approval.spec.tool_name,
                     options: approval.spec.options,
                     created_at: now_ms(),
                     answer: None,
