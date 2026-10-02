@@ -130,7 +130,16 @@ export function ConsoleProvider({ children }) {
       setConnection({ state: 'connected', error: null })
     } catch (err) {
         if (cancelled) return
-        setConnection({ state: 'error', error: err.message ?? String(err) })
+        // A fetch that never answered is the daemon being unreachable —
+        // say that, not the browser's own "Failed to fetch". Anything the
+        // daemon answered with (a refused token, a status) is its words.
+        const unreachable = err instanceof TypeError
+        setConnection({
+          state: 'error',
+          error: unreachable
+            ? "The daemon didn't answer — check that it's running, or reconnect from Settings."
+            : err.message ?? String(err),
+        })
       }
     })()
     return () => {
