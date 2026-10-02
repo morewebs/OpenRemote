@@ -20,6 +20,11 @@ pub struct Harness {
     /// `fastMode` headless ≥ 2.1.205, codex service tier `fast` ≥ 0.110.0).
     #[serde(default)]
     pub fast_supported: bool,
+    /// Whether this CLI is signed in, in its own words. `None` means this
+    /// harness has no status command we can ask — the row stays Ready or
+    /// Missing, never a guessed sign-in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signed_in: Option<bool>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
@@ -57,6 +62,9 @@ pub struct Session {
     pub status: SessionStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// The harness's own effort word for this chat, when one was chosen.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permission_mode: Option<String>,
     /// The harness's own conversation id (`session_id` on the wire) — data, never identity.

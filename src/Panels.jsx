@@ -231,7 +231,9 @@ export default function Panels({ onReplay }) {
               <div className="pn-name">{harnessName(h.id)}</div>
               <div className="pn-detail">{h.available ? h.path : 'Not found on this machine.'}</div>
             </div>
-            <span className={`pn-btn${h.available ? ' on' : ''}`}>{h.available ? 'Ready' : 'Missing'}</span>
+            <span className={`pn-btn${h.available && h.signed_in !== false ? ' on' : ''}`}>
+              {!h.available ? 'Missing' : h.signed_in === false ? 'Not signed in' : h.signed_in ? 'Signed in' : 'Ready'}
+            </span>
           </div>
         ))}
       </div>

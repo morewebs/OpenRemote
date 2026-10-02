@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Stop, Play } from '@phosphor-icons/react'
+import { ArrowUp, Lightning, Stop, Play } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { railItems } from './state/reducer.js'
 import { harnessName } from './harness-names.js'
 import ContextRing from './ContextRing.jsx'
+import PickerMenu from './PickerMenu.jsx'
 import './chatview.css'
 import './composer.css'
 
@@ -18,16 +19,62 @@ const STATUS_LABEL = {
 
 const TOOL_LABEL = { ok: 'Done', failed: 'Failed' }
 
+// Codex applies model, effort, and fast on the next turn of a live thread.
+// Pi applies model and thinking level on the running process. The others
+// take them when the process starts, so a stopped chat can still change
+// them — resume is what lands the change.
+const LIVE_SETTINGS = {
+  codex: { model: true, effort: true, fast: true },
+  pi: { model: true, effort: true, fast: false },
+}
+
 export default function ChatView({ chat, onBack }) {
-  const { sendPrompt, answerDecision, stopChat, resumeChat } = useConsole()
+  const { capabilities, sendPrompt, updateChatSettings, answerDecision, stopChat, resumeChat, modelsFor } =
+    useConsole()
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const [picker, setPicker] = useState(null)
+  const [models, setModels] = useState([])
   const scrollRef = useRef(null)
   const composerRef = useRef(null)
   const rail = railItems(chat)
   const pendingDecision = rail.find((item) => item.kind === 'decision' && item.pending)
   const canSend = text.trim().length > 0 && !pendingDecision && chat.running && !busy
+  const harness = (capabilities?.harnesses ?? []).find((h) => h.id === chat.harness)
+  const live = LIVE_SETTINGS[chat.harness] ?? { model: false, effort: false, fast: false }
+  // A stopped chat can change anything the harness accepts at start. A
+  // running one only where the wire accepts it now.
+  const canChange = chat.running ? live : { model: true, effort: true, fast: Boolean(harness?.fast_supported) }
+  const currentModel = models.find((m) => m.model === chat.model)
+  const efforts = currentModel?.reasoning_efforts ?? []
+
+  useEffect(() => {
+    let cancelled = false
+    if (!canChange.model && !canChange.effort) return
+    modelsFor(chat.harness).then((list) => {
+      if (!cancelled) setModels(list ?? [])
+    })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chat.harness])
+
+  const openPicker = (kind) => (e) => setPicker({ kind, x: e.clientX, y: e.clientY })
+
+  const changeSettings = async (settings) => {
+    setPicker(null)
+    setBusy(true)
+    setError(null)
+    try {
+      await updateChatSettings(chat.id, settings)
+    } catch (err) {
+      setError(err.message ?? String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   useEffect(() => {
     const el = scrollRef.current
@@ -97,6 +144,7 @@ export default function ChatView({ chat, onBack }) {
           <span className="cv-where">{chat.workspace}</span>
           <span className="cv-fact">{harnessName(chat.harness)}</span>
           {chat.model && <span className="cv-fact">{chat.model}</span>}
+          {chat.effort && <span className="cv-fact">{chat.effort}</span>}
           {chat.fast && <span className="cv-fact">Fast</span>}
           {chat.approvedTools?.length > 0 && (
             <span className="cv-fact">
@@ -212,6 +260,69 @@ export default function ChatView({ chat, onBack }) {
           <div className="cv-foot">
             <div className="nc-pickers">
               <span className="nc-meta nc-static">{harnessName(chat.harness)}</span>
+              {canChange.model && models.length > 0 ? (
+                <button
+                  type="button"
+                  className="nc-meta"
+                  onClick={openPicker('model')}
+                  aria-haspopup="listbox"
+                  aria-expanded={picker?.kind === 'model'}
+                  title="Model — applies to the next turn"
+                >
+                  {chat.model ?? 'Model'}
+                </button>
+              ) : (
+                chat.model && <span className="nc-meta nc-static">{chat.model}</span>
+              )}
+              {picker?.kind === 'model' && (
+                <PickerMenu
+                  label="Model"
+                  searchPlaceholder="Search models"
+                  wide
+                  items={models.map((m) => ({ id: m.model, name: m.display_name ?? m.model }))}
+                  groups={null}
+                  selectedId={chat.model ?? ''}
+                  onChoose={(id) => changeSettings({ model: id })}
+                  onClose={() => setPicker(null)}
+                  anchor={{ left: picker.x, top: picker.y }}
+                />
+              )}
+              {canChange.effort && efforts.length > 0 && (
+                <button
+                  type="button"
+                  className="nc-meta"
+                  onClick={openPicker('effort')}
+                  aria-haspopup="listbox"
+                  aria-expanded={picker?.kind === 'effort'}
+                  title="The harness's own effort"
+                >
+                  {chat.effort ?? 'Effort'}
+                </button>
+              )}
+              {picker?.kind === 'effort' && (
+                <PickerMenu
+                  label="Effort"
+                  searchPlaceholder="Search efforts"
+                  items={efforts.map((effort) => ({ id: effort, name: effort }))}
+                  groups={null}
+                  selectedId={chat.effort ?? ''}
+                  onChoose={(id) => changeSettings({ effort: id })}
+                  onClose={() => setPicker(null)}
+                  anchor={{ left: picker.x, top: picker.y }}
+                />
+              )}
+              {canChange.fast && harness?.fast_supported && (
+                <button
+                  type="button"
+                  className={`nc-meta nc-fast${chat.fast ? ' on' : ''}`}
+                  onClick={() => changeSettings({ fast: !chat.fast })}
+                  aria-pressed={Boolean(chat.fast)}
+                  title="The harness's own fast mode"
+                >
+                  <Lightning size={13} weight={chat.fast ? 'fill' : 'light'} />
+                  Fast
+                </button>
+              )}
               {chat.context?.window != null && (
                 <ContextRing used={chat.context.used} window={chat.context.window} />
               )}

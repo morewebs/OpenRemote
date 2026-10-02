@@ -142,6 +142,35 @@ impl Store {
             .ok_or_else(|| StoreError::NotFound(format!("decision {id}")))
     }
 
+    /// Record a live model, effort, or fast change. A `None` field is left
+    /// as it was; fast is only written when the caller changed it.
+    pub fn update_session_settings(
+        &mut self,
+        id: &SessionId,
+        model: Option<String>,
+        effort: Option<String>,
+        fast: Option<bool>,
+    ) -> Result<Session, StoreError> {
+        let session = self
+            .state
+            .sessions
+            .get_mut(id)
+            .ok_or_else(|| StoreError::NotFound(format!("session {id}")))?;
+        if model.is_some() {
+            session.model = model;
+        }
+        if effort.is_some() {
+            session.effort = effort;
+        }
+        if let Some(fast) = fast {
+            session.fast = fast;
+        }
+        session.updated_at = crate::now_ms();
+        let updated = session.clone();
+        self.persist()?;
+        Ok(updated)
+    }
+
     pub fn decisions(&self, session_id: &SessionId) -> Vec<&Decision> {
         self.state
             .decisions
@@ -665,6 +694,7 @@ mod tests {
             workspace: "/tmp/w".into(),
             status: SessionStatus::Starting,
             model: None,
+            effort: None,
             permission_mode: None,
             harness_session_ref: None,
             created_at: 0,

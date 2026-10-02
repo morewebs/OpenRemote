@@ -18,7 +18,7 @@ use std::time::Duration;
 
 use openremote_core::{DecisionKind, DecisionOption, TurnOutcome};
 use openremote_harness::events::{ApprovalRequest, DecisionSpec};
-use openremote_harness::{DriverError, DriverEvent, Resolution, SpawnOptions};
+use openremote_harness::{DriverError, DriverEvent, Resolution, SessionSettings, SpawnOptions};
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
@@ -141,6 +141,22 @@ impl Driver {
     /// Fire one prompt; pi's turn boundary arrives as `message_end`.
     pub async fn send_prompt(&mut self, text: &str) -> Result<(), DriverError> {
         self.write(json!({"type": "prompt", "message": text})).await
+    }
+
+    /// Pi's own rpc: `set_model` and `set_thinking_level` apply to the
+    /// running process. Pi has no fast mode.
+    pub async fn apply_settings(&mut self, settings: &SessionSettings) -> Result<(), DriverError> {
+        if settings.fast.is_some() {
+            return Err(DriverError::Harness("Pi Agent has no fast mode".into()));
+        }
+        if let Some(model) = &settings.model {
+            self.call("set_model", json!({"model": model})).await?;
+        }
+        if let Some(effort) = &settings.effort {
+            self.call("set_thinking_level", json!({"level": effort}))
+                .await?;
+        }
+        Ok(())
     }
 
     /// Abort the running turn (`message_end` with `stopReason: aborted`

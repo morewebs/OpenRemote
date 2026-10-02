@@ -88,6 +88,20 @@ pub struct AnswerOutcome {
     pub session_grant: Option<String>,
 }
 
+/// A change to a live chat's model, effort, or fast mode. `None` means
+/// "leave it". A harness that cannot apply a field on a running process
+/// returns an error for that field — the console does not render the
+/// control in that case.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SessionSettings {
+    pub model: Option<String>,
+    /// The harness's own effort word (`low`, `high`, `max`, …).
+    pub effort: Option<String>,
+    /// The harness's own fast mode. `Some(false)` returns to its standard
+    /// speed tier.
+    pub fast: Option<bool>,
+}
+
 /// A model a harness advertises, in the harness's own words. Backs the
 /// console's model slot; empty means the slot stays reserved.
 #[derive(Clone, Debug, serde::Serialize)]

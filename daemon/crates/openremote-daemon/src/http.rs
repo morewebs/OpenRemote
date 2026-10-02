@@ -41,6 +41,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/sessions/{id}/events", get(session_events))
         .route("/sessions/{id}/decisions", get(list_decisions))
         .route("/sessions/{id}/prompts", post(post_prompt))
+        .route("/sessions/{id}/settings", post(post_settings))
         .route("/sessions/{id}/interrupt", post(post_interrupt))
         .route("/sessions/{id}/stop", post(post_stop))
         .route("/sessions/{id}/resume", post(post_resume))
@@ -816,6 +817,63 @@ struct RequestBody {
 struct PromptBody {
     request_id: String,
     text: String,
+}
+
+#[derive(Deserialize)]
+struct SettingsBody {
+    request_id: String,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    effort: Option<String>,
+    #[serde(default)]
+    fast: Option<bool>,
+}
+
+/// Model, effort, and fast on a live chat. A harness that only accepts the
+/// change at process start answers 409 while the chat is running.
+async fn post_settings(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<SettingsBody>,
+) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&body.request_id) {
+        return receipt_response(&receipt);
+    }
+    let Some(session_id) = SessionId::parse(&id) else {
+        return error(StatusCode::BAD_REQUEST, "bad session id");
+    };
+    let settings = openremote_harness::SessionSettings {
+        model: body.model.filter(|m| !m.trim().is_empty()),
+        effort: body.effort.filter(|e| !e.trim().is_empty()),
+        fast: body.fast,
+    };
+    match app.supervisor.update_settings(&session_id, settings).await {
+        Ok(session) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: Some(session_id),
+                status: ReceiptStatus::Completed,
+                result: Some(serde_json::to_value(&session).unwrap_or(Value::Null)),
+                error: None,
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            (StatusCode::OK, Json(session)).into_response()
+        }
+        Err(err) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: Some(session_id),
+                status: ReceiptStatus::Failed,
+                result: None,
+                error: Some(err.to_string()),
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            supervisor_error(err)
+        }
+    }
 }
 
 async fn post_prompt(

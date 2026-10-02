@@ -39,6 +39,7 @@ export function chatFromSession(session) {
     workspace: session.workspace,
     project: workspaceName(session.workspace),
     model: session.model ?? null,
+    effort: session.effort ?? null,
     fast: session.fast ?? false,
     approvedTools: session.approved_tools ?? [],
     // The harness's own context numbers, when it reports them.
@@ -80,6 +81,7 @@ export function foldEvent(chat, event) {
       chat.running = ['starting', 'working', 'waiting'].includes(session.status)
       chat.lastError = session.last_error ?? chat.lastError
       if (session.model) chat.model = session.model
+      if (session.effort) chat.effort = session.effort
       chat.fast = session.fast ?? chat.fast
       chat.approvedTools = session.approved_tools ?? chat.approvedTools
       break

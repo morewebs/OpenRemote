@@ -10,7 +10,7 @@ use std::process::Stdio;
 use std::sync::Arc;
 
 use openremote_core::{DecisionKind, DecisionOption, TurnOutcome};
-use openremote_harness::{DriverError, DriverEvent, Resolution, SpawnOptions};
+use openremote_harness::{DriverError, DriverEvent, Resolution, SessionSettings, SpawnOptions};
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
@@ -87,6 +87,16 @@ impl Driver {
     /// Queue one user message; the CLI runs it as a turn.
     pub async fn send_prompt(&mut self, text: &str) -> Result<(), DriverError> {
         self.write_line(frames::user_envelope(text)).await
+    }
+
+    /// Claude's stream-json control protocol has no model, effort, or fast
+    /// field after spawn. Those ride argv and `--settings` at process start
+    /// (`--resume` keeps them). Changing one means the chat is stopped and
+    /// resumed — the console does that; this process cannot.
+    pub fn stage_settings(&mut self, _settings: &SessionSettings) -> Result<(), DriverError> {
+        Err(DriverError::Harness(
+            "Claude Code applies model, effort, and fast mode when the chat starts — stop it and resume to change them".into(),
+        ))
     }
 
     /// Ask the CLI to cancel the running turn.

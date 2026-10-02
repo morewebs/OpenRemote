@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use openremote_core::{DecisionKind, DecisionOption, TurnOutcome};
 use openremote_harness::events::{ApprovalRequest, DecisionSpec};
-use openremote_harness::{DriverError, DriverEvent, Resolution, SpawnOptions};
+use openremote_harness::{DriverError, DriverEvent, Resolution, SessionSettings, SpawnOptions};
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
@@ -41,6 +41,11 @@ pub struct Driver {
     shared: Arc<Shared>,
     thread_id: String,
     next_id: u64,
+    /// Overrides for the next `turn/start`. Codex applies them to that turn
+    /// and the ones after; a steer does not carry them.
+    pending_model: Option<String>,
+    pending_effort: Option<String>,
+    pending_tier: Option<String>,
 }
 
 impl Driver {
@@ -103,6 +108,9 @@ impl Driver {
             shared,
             thread_id: String::new(),
             next_id: 1,
+            pending_model: None,
+            pending_effort: None,
+            pending_tier: None,
         };
 
         // Handshake (cloudroom lines 22-25): initialize, then the
@@ -171,21 +179,51 @@ impl Driver {
             )
             .await?;
         } else {
-            let result = self
-                .call(
-                    "turn/start",
-                    json!({
-                        "threadId": self.thread_id,
-                        "clientUserMessageId": Uuid::new_v4().to_string(),
-                        "input": input,
-                    }),
-                )
-                .await?;
+            let mut params = json!({
+                "threadId": self.thread_id,
+                "clientUserMessageId": Uuid::new_v4().to_string(),
+                "input": input,
+            });
+            // Codex's own words: model, effort, and serviceTier override
+            // this turn and the ones after it. Taken once — the thread
+            // keeps them.
+            if let Some(model) = self.pending_model.take() {
+                params["model"] = json!(model);
+            }
+            if let Some(effort) = self.pending_effort.take() {
+                params["effort"] = json!(effort);
+            }
+            if let Some(tier) = self.pending_tier.take() {
+                params["serviceTier"] = json!(tier);
+            }
+            let result = self.call("turn/start", params).await?;
             if result.pointer("/turn/id").and_then(Value::as_str).is_none() {
                 return Err(DriverError::Protocol(
                     "turn/start returned no turn id; outcome uncertain".into(),
                 ));
             }
+        }
+        Ok(())
+    }
+
+    /// Apply model, effort, or fast to this thread. Codex's own contract
+    /// (`turn/start`): a model, effort, or serviceTier override applies to
+    /// this turn and the ones after it. There is no turn yet — the next
+    /// prompt carries the override, and a steer of a running turn does not
+    /// (Codex ignores a tier change on a turn being steered).
+    pub fn stage_settings(&mut self, settings: &SessionSettings) -> Result<(), DriverError> {
+        if let Some(model) = &settings.model {
+            self.pending_model = Some(model.clone());
+        }
+        if let Some(effort) = &settings.effort {
+            self.pending_effort = Some(effort.clone());
+        }
+        if let Some(fast) = settings.fast {
+            self.pending_tier = Some(if fast {
+                "fast".to_string()
+            } else {
+                "default".to_string()
+            });
         }
         Ok(())
     }

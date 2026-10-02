@@ -276,6 +276,14 @@ export function ConsoleProvider({ children }) {
     [api],
   )
 
+  // Model, effort, or fast on a live chat. The session.updated event folds
+  // the new facts; this returns the session so the composer can show a
+  // harness that refused.
+  const updateChatSettings = useCallback(
+    async (chatId, settings) => api.updateSettings(chatId, settings),
+    [api],
+  )
+
   const answerDecision = useCallback(
     async (decisionId, choice) => {
       await api.answer(decisionId, choice)
@@ -441,6 +449,7 @@ export function ConsoleProvider({ children }) {
       createChat,
       modelsFor,
       sendPrompt,
+      updateChatSettings,
       answerDecision,
       stopChat,
       resumeChat,
@@ -474,6 +483,7 @@ export function ConsoleProvider({ children }) {
       createChat,
       modelsFor,
       sendPrompt,
+      updateChatSettings,
       answerDecision,
       stopChat,
       resumeChat,

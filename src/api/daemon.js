@@ -104,6 +104,17 @@ export class DaemonApi {
     return this.call('POST', `/sessions/${id}/prompts`, { request_id: newRequestId(), text })
   }
 
+  // Model, effort, and fast on a live chat. A harness that only accepts the
+  // change when the chat starts answers 409 — the composer says so.
+  updateSettings(id, { model, effort, fast }) {
+    return this.call('POST', `/sessions/${id}/settings`, {
+      request_id: newRequestId(),
+      ...(model ? { model } : {}),
+      ...(effort ? { effort } : {}),
+      ...(fast != null ? { fast } : {}),
+    })
+  }
+
   stop(id) {
     return this.call('POST', `/sessions/${id}/stop`, { request_id: newRequestId() })
   }

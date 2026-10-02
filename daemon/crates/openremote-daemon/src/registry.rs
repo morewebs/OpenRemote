@@ -6,7 +6,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use openremote_core::Harness;
-use openremote_harness::{DriverError, DriverEvent, ModelDescriptor, Resolution, SpawnOptions};
+use openremote_harness::{
+    DriverError, DriverEvent, ModelDescriptor, Resolution, SessionSettings, SpawnOptions,
+};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
@@ -45,6 +47,25 @@ impl SessionDriver {
             SessionDriver::Pi(driver) => driver.send_prompt(text).await,
             SessionDriver::Opencode(driver) => driver.send_prompt(text).await,
             SessionDriver::Agy(driver) => driver.send_prompt(text).await,
+        }
+    }
+
+    /// Apply a live model, effort, or fast change in the harness's own
+    /// words. A harness with no wire for a field says so — the console
+    /// does not render that control.
+    pub async fn apply_settings(&mut self, settings: &SessionSettings) -> Result<(), DriverError> {
+        match self {
+            SessionDriver::Claude(driver) => driver.stage_settings(settings),
+            SessionDriver::Codex(driver) => driver.stage_settings(settings),
+            // Grok, OpenCode, and Antigravity take model and effort on the
+            // process that starts the chat. A running process has no wire
+            // for a change; resume is how it lands.
+            SessionDriver::Grok(_) | SessionDriver::Opencode(_) | SessionDriver::Agy(_) => {
+                Err(DriverError::Harness(
+                    "this harness applies model and effort when the chat starts — stop it and resume to change them".into(),
+                ))
+            }
+            SessionDriver::Pi(driver) => driver.apply_settings(settings).await,
         }
     }
 
@@ -205,6 +226,7 @@ fn harness_from(id: &str, name: &str, resolution: &Resolution, version: Option<&
         version: version.map(String::from),
         available: resolution.is_available(),
         fast_supported: fast_supported(id, version),
+        signed_in: None,
     }
 }
 
@@ -232,6 +254,15 @@ impl HarnessRegistry {
             probe_version(&opencode),
             probe_version(&agy),
         );
+        // Sign-in is a separate fact from "the CLI is installed". Only a
+        // harness with its own status command is asked; the others stay
+        // unknown rather than guessed.
+        let (s_claude, s_codex, s_grok, s_opencode) = tokio::join!(
+            probe_signed_in(&claude, &["auth", "status"]),
+            probe_signed_in(&codex, &["login", "status"]),
+            probe_grok_signed_in(&grok),
+            probe_signed_in(&opencode, &["providers", "list"]),
+        );
 
         let mut entries = Vec::new();
         let mut push = |id: &str, name: &str, resolution: Resolution, version: Option<String>| {
@@ -258,6 +289,17 @@ impl HarnessRegistry {
         push("pi", "Pi Agent", pi, v_pi);
         push("opencode", "OpenCode", opencode, v_opencode);
         push("agy", "Antigravity", agy, v_agy);
+        for entry in &mut entries {
+            entry.harness.signed_in = match entry.harness.id.as_str() {
+                "claude" => s_claude,
+                "codex" => s_codex,
+                "grok" => s_grok,
+                "opencode" => s_opencode,
+                // Pi's check needs a provider, and Antigravity has no status
+                // command. Unknown, not a guessed sign-in.
+                _ => None,
+            };
+        }
 
         Self {
             entries,
@@ -381,6 +423,96 @@ async fn probe_version(resolution: &Resolution) -> Option<String> {
     parse_version(&String::from_utf8_lossy(&output.stdout))
 }
 
+/// Grok has no status command. Its own sign-in fact is `~/.grok/auth.json`,
+/// written by `grok login` and nowhere else. A fixture binary is not Grok,
+/// so it stays unknown.
+async fn probe_grok_signed_in(resolution: &Resolution) -> Option<bool> {
+    let version = probe_version(resolution).await?;
+    if !version.starts_with("1.") {
+        return None;
+    }
+    grok_auth_file_present()
+}
+
+/// Whether the CLI reports itself signed in, in its own words.
+///
+/// - Claude: `auth status` JSON `loggedIn`.
+/// - Codex: `login status` prints "Logged in" or "Not logged in".
+/// - OpenCode: `providers list` ends with "N credentials".
+///
+/// `None` when the command cannot be asked (fixture binaries, a CLI that
+/// did not answer). A fixture must not be reported as signed out.
+async fn probe_signed_in(resolution: &Resolution, args: &[&str]) -> Option<bool> {
+    let (program, mut argv): (PathBuf, Vec<std::ffi::OsString>) = match resolution {
+        Resolution::Executable(path) => (path.clone(), Vec::new()),
+        Resolution::NodeScript { node, script } => {
+            (node.clone(), vec![script.as_os_str().to_os_string()])
+        }
+        Resolution::Unavailable => return None,
+    };
+    argv.extend(args.iter().map(|arg| (*arg).into()));
+    let probe = tokio::process::Command::new(&program)
+        .args(&argv)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output();
+    let output = tokio::time::timeout(std::time::Duration::from_secs(8), probe)
+        .await
+        .ok()?
+        .ok()?;
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    parse_signed_in(&text)
+}
+
+/// Grok writes `auth.json` when `grok login` succeeds and nowhere else.
+/// An empty or missing file is signed out; a file we cannot read is unknown.
+fn grok_auth_file_present() -> Option<bool> {
+    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))?;
+    let path = PathBuf::from(home).join(".grok").join("auth.json");
+    match std::fs::read_to_string(&path) {
+        Ok(text) => Some(!text.trim().is_empty() && text.trim() != "{}"),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Some(false),
+        Err(_) => None,
+    }
+}
+
+/// The harness's own status words. Anything else — a fixture's usage
+/// text, a command the binary does not have — is unknown, not signed out.
+fn parse_signed_in(text: &str) -> Option<bool> {
+    let lower = text.to_ascii_lowercase();
+    if let Some(value) = serde_json::from_str::<serde_json::Value>(text.trim())
+        .ok()
+        .and_then(|v| v.get("loggedIn").and_then(|b| b.as_bool()))
+    {
+        return Some(value);
+    }
+    if lower.contains("not logged in") {
+        return Some(false);
+    }
+    if lower.contains("logged in") {
+        return Some(true);
+    }
+    // OpenCode: "8 credentials" / "0 credentials". The box-drawing list
+    // is not the fact; the count line is.
+    if let Some(rest) = lower.split("credentials").next() {
+        if lower.contains("credentials") {
+            let count = rest
+                .split(|c: char| !c.is_ascii_digit())
+                .rfind(|p| !p.is_empty())
+                .and_then(|p| p.parse::<u64>().ok());
+            if let Some(count) = count {
+                return Some(count > 0);
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -403,6 +535,18 @@ mod tests {
         assert_eq!(parse_version("1.2"), None);
         // a pre-release suffix never corrupts the number
         assert_eq!(parse_version("2.1.205-beta.1"), Some("2.1.205".to_string()));
+    }
+
+    #[test]
+    fn sign_in_uses_the_harnesss_own_words() {
+        assert_eq!(parse_signed_in(r#"{"loggedIn": true}"#), Some(true));
+        assert_eq!(parse_signed_in(r#"{"loggedIn": false}"#), Some(false));
+        assert_eq!(parse_signed_in("Logged in using ChatGPT"), Some(true));
+        assert_eq!(parse_signed_in("Not logged in\n"), Some(false));
+        assert_eq!(parse_signed_in("└  8 credentials\n"), Some(true));
+        assert_eq!(parse_signed_in("0 credentials"), Some(false));
+        // A fixture's usage text is not a sign-in fact.
+        assert_eq!(parse_signed_in("fixture-agent 9.9.9\nUsage: fixture"), None);
     }
 
     #[test]

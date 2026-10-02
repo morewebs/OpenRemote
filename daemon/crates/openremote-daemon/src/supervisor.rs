@@ -636,6 +636,7 @@ impl Supervisor {
             workspace,
             status: SessionStatus::Starting,
             model,
+            effort: None,
             permission_mode,
             harness_session_ref: None,
             created_at: now_ms(),
@@ -713,6 +714,51 @@ impl Supervisor {
         drop(_order);
         entry.driver.lock().await.send_prompt(text).await?;
         Ok(())
+    }
+
+    /// Change model, effort, or fast on a live chat, in the harness's own
+    /// words. A harness that only accepts the change at process start gets
+    /// it on the next resume — the chat must be stopped first, and the
+    /// error says so. Codex stages it for the next turn; Pi applies it now.
+    pub async fn update_settings(
+        &self,
+        id: &SessionId,
+        settings: openremote_harness::SessionSettings,
+    ) -> Result<Session, SupervisorError> {
+        if settings.model.is_none() && settings.effort.is_none() && settings.fast.is_none() {
+            return self.session(id);
+        }
+        let session = self.session(id)?;
+        if let Ok(entry) = self.entry(id).await {
+            entry
+                .driver
+                .lock()
+                .await
+                .apply_settings(&settings)
+                .await
+                .map_err(SupervisorError::from)?;
+        } else if session.status.is_alive() {
+            return Err(SupervisorError::Conflict(
+                "the chat is starting — try again in a moment".into(),
+            ));
+        }
+        let updated = self
+            .with_store(|s| {
+                s.update_session_settings(
+                    id,
+                    settings.model.clone(),
+                    settings.effort.clone(),
+                    settings.fast,
+                )
+            })
+            .map_err(store_error)?;
+        self.emit_all(
+            id,
+            vec![EventPayload::SessionUpdated {
+                session: updated.clone(),
+            }],
+        )?;
+        Ok(updated)
     }
 
     /// Interrupt the running turn (the harness cancels; its boundary event
