@@ -32,6 +32,10 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/plugins/{id}", axum::routing::delete(remove_plugin))
         .route("/plugins/{id}/enabled", post(set_plugin_enabled))
         .route("/plugins/{id}/key", post(acknowledge_plugin_key))
+        .route("/automations", get(list_rules).post(save_rule))
+        .route("/automations/{id}", axum::routing::delete(remove_rule))
+        .route("/automations/{id}/enabled", post(set_rule_enabled))
+        .route("/automations/{id}/run", post(run_rule))
         .route("/sessions", get(list_sessions).post(create_session))
         .route("/sessions/{id}", get(get_session))
         .route("/sessions/{id}/events", get(session_events))
@@ -45,6 +49,10 @@ pub fn router(app: Arc<App>) -> Router {
         .layer(middleware::from_fn_with_state(Arc::clone(&app), auth));
     Router::new()
         .route("/healthz", get(healthz))
+        // Webhooks arrive from outside the console's trust — the rule's
+        // own key is the credential, not the daemon token. (The loopback
+        // binding still keeps the surface local.)
+        .route("/hooks/{id}", post(incoming_webhook))
         .merge(authed)
         .layer(console_cors())
         .with_state(app)
@@ -430,6 +438,230 @@ async fn acknowledge_plugin_key(
             supervisor_error(err)
         }
     }
+}
+
+// ---- automations ----
+
+async fn list_rules(State(app): State<Arc<App>>) -> Response {
+    Json(app.supervisor.rules()).into_response()
+}
+
+#[derive(Deserialize)]
+struct SaveRuleBody {
+    request_id: String,
+    #[serde(default)]
+    id: Option<String>,
+    name: String,
+    trigger: openremote_core::Trigger,
+    harness: String,
+    #[serde(default)]
+    model: Option<String>,
+    workspace: String,
+    machine: String,
+    task: String,
+    #[serde(default)]
+    enabled: bool,
+}
+
+async fn save_rule(State(app): State<Arc<App>>, Json(body): Json<SaveRuleBody>) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&body.request_id) {
+        return receipt_response(&receipt);
+    }
+    let (Some(machine_id), existing) = (
+        openremote_core::MachineId::parse(&body.machine),
+        body.id.as_deref().and_then(openremote_core::RuleId::parse),
+    ) else {
+        return error(StatusCode::BAD_REQUEST, "bad machine id");
+    };
+    let rule = openremote_core::AutomationRule {
+        id: existing.unwrap_or_default(),
+        name: body.name,
+        trigger: body.trigger,
+        harness: body.harness,
+        model: body.model,
+        workspace: std::path::PathBuf::from(&body.workspace),
+        machine: machine_id,
+        task: body.task,
+        // the store rules on save; the body's flag only applies to edits
+        enabled: existing.is_none() || body.enabled,
+        last_chat: None,
+        last_run: None,
+        created_at: openremote_core::now_ms(),
+        updated_at: openremote_core::now_ms(),
+    };
+    match app.supervisor.save_rule(rule, existing) {
+        Ok(rule) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Completed,
+                result: Some(serde_json::to_value(&rule).unwrap_or(Value::Null)),
+                error: None,
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            (StatusCode::CREATED, Json(rule)).into_response()
+        }
+        Err(err) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Failed,
+                result: None,
+                error: Some(err.to_string()),
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            supervisor_error(err)
+        }
+    }
+}
+
+async fn remove_rule(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+    axum::extract::Query(query): axum::extract::Query<MachineActionQuery>,
+) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&query.request_id) {
+        return receipt_response(&receipt);
+    }
+    let Some(rule_id) = openremote_core::RuleId::parse(&id) else {
+        return error(StatusCode::BAD_REQUEST, "bad rule id");
+    };
+    match app.supervisor.remove_rule(&rule_id) {
+        Ok(()) => {
+            let receipt = Receipt {
+                request_id: query.request_id,
+                session_id: None,
+                status: ReceiptStatus::Completed,
+                result: Some(json!({"removed": true})),
+                error: None,
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            receipt_response(&receipt)
+        }
+        Err(err) => {
+            let receipt = Receipt {
+                request_id: query.request_id,
+                session_id: None,
+                status: ReceiptStatus::Failed,
+                result: None,
+                error: Some(err.to_string()),
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            supervisor_error(err)
+        }
+    }
+}
+
+async fn set_rule_enabled(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<PluginEnabledBody>,
+) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&body.request_id) {
+        return receipt_response(&receipt);
+    }
+    let Some(rule_id) = openremote_core::RuleId::parse(&id) else {
+        return error(StatusCode::BAD_REQUEST, "bad rule id");
+    };
+    match app.supervisor.set_rule_enabled(&rule_id, body.enabled) {
+        Ok(rule) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Completed,
+                result: Some(serde_json::to_value(&rule).unwrap_or(Value::Null)),
+                error: None,
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            (StatusCode::OK, Json(rule)).into_response()
+        }
+        Err(err) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Failed,
+                result: None,
+                error: Some(err.to_string()),
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            supervisor_error(err)
+        }
+    }
+}
+
+async fn run_rule(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<PluginKeyBody>,
+) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&body.request_id) {
+        return receipt_response(&receipt);
+    }
+    let Some(rule_id) = openremote_core::RuleId::parse(&id) else {
+        return error(StatusCode::BAD_REQUEST, "bad rule id");
+    };
+    match app.supervisor.run_rule(&rule_id).await {
+        Ok(session) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: Some(session.id),
+                status: ReceiptStatus::Completed,
+                result: Some(serde_json::to_value(&session).unwrap_or(Value::Null)),
+                error: None,
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            (StatusCode::OK, Json(session)).into_response()
+        }
+        Err(err) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Failed,
+                result: None,
+                error: Some(err.to_string()),
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            supervisor_error(err)
+        }
+    }
+}
+
+/// A webhook arriving for a rule — open route, the rule's key is the
+/// credential: `/hooks/{rule-id}?key=…`.
+async fn incoming_webhook(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+    axum::extract::Query(query): axum::extract::Query<WebhookQuery>,
+) -> Response {
+    let Some(rule_id) = openremote_core::RuleId::parse(&id) else {
+        return error(StatusCode::BAD_REQUEST, "bad rule id");
+    };
+    match app
+        .supervisor
+        .fire_webhook(&rule_id, query.key.as_deref())
+        .await
+    {
+        Ok(session) => (
+            StatusCode::OK,
+            Json(json!({"fired": true, "chat": session.id.to_string()})),
+        )
+            .into_response(),
+        Err(err) => supervisor_error(err),
+    }
+}
+
+#[derive(Deserialize)]
+struct WebhookQuery {
+    #[serde(default)]
+    key: Option<String>,
 }
 
 async fn install_harness(

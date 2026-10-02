@@ -171,6 +171,45 @@ export class DaemonApi {
     return this.call('POST', `/plugins/${pluginId}/key`, { request_id: newRequestId() })
   }
 
+  // ---- automations ----
+
+  automations() {
+    return this.call('GET', '/automations')
+  }
+
+  // `id` on the body edits; its absence creates.
+  saveRule(rule) {
+    return this.call('POST', '/automations', {
+      request_id: newRequestId(),
+      name: rule.name,
+      trigger: rule.trigger,
+      harness: rule.harness,
+      ...(rule.model ? { model: rule.model } : {}),
+      workspace: rule.workspace,
+      machine: rule.machine,
+      task: rule.task,
+      ...(rule.id ? { id: rule.id, enabled: rule.enabled } : {}),
+    })
+  }
+
+  removeRule(ruleId) {
+    return this.call(
+      'DELETE',
+      `/automations/${ruleId}?request_id=${encodeURIComponent(newRequestId())}`,
+    )
+  }
+
+  setRuleEnabled(ruleId, enabled) {
+    return this.call('POST', `/automations/${ruleId}/enabled`, {
+      request_id: newRequestId(),
+      enabled,
+    })
+  }
+
+  runRule(ruleId) {
+    return this.call('POST', `/automations/${ruleId}/run`, { request_id: newRequestId() })
+  }
+
   // The models a harness advertises, in its own words (empty = the slot
   // stays reserved for that harness).
   models(harnessId) {

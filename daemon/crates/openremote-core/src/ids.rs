@@ -42,6 +42,7 @@ macro_rules! id_newtype {
 id_newtype!(SessionId);
 id_newtype!(DecisionId);
 id_newtype!(MachineId);
+id_newtype!(RuleId);
 
 #[cfg(test)]
 mod tests {

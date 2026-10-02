@@ -27,10 +27,10 @@ fn slug(name: &str) -> String {
 }
 
 use crate::events::{Event, EventPayload};
-use crate::ids::{DecisionId, MachineId, SessionId};
+use crate::ids::{DecisionId, MachineId, RuleId, SessionId};
 use crate::model::{
-    Decision, DecisionState, Machine, MachineStatus, Plugin, Receipt, ReceiptStatus, Session,
-    SessionStatus,
+    AutomationRule, Decision, DecisionState, Machine, MachineStatus, Plugin, Receipt,
+    ReceiptStatus, Session, SessionStatus,
 };
 
 #[derive(Debug, Error)]
@@ -67,6 +67,8 @@ struct State {
     presence: BTreeMap<MachineId, Vec<i64>>,
     #[serde(default)]
     plugins: BTreeMap<String, Plugin>,
+    #[serde(default)]
+    rules: BTreeMap<RuleId, AutomationRule>,
 }
 
 pub struct Store {
@@ -343,6 +345,48 @@ impl Store {
         let out = plugin.clone();
         self.persist()?;
         Ok(out)
+    }
+
+    // ---- automations ----
+
+    pub fn rules(&self) -> Vec<&AutomationRule> {
+        self.state.rules.values().collect()
+    }
+
+    pub fn rule(&self, id: &RuleId) -> Result<&AutomationRule, StoreError> {
+        self.state
+            .rules
+            .get(id)
+            .ok_or_else(|| StoreError::NotFound(format!("rule {id}")))
+    }
+
+    pub fn save_rule(&mut self, mut rule: AutomationRule) -> Result<AutomationRule, StoreError> {
+        rule.updated_at = crate::now_ms();
+        let id = rule.id;
+        self.state.rules.insert(id, rule.clone());
+        self.persist()?;
+        Ok(rule)
+    }
+
+    pub fn remove_rule(&mut self, id: &RuleId) -> Result<(), StoreError> {
+        if self.state.rules.remove(id).is_none() {
+            return Err(StoreError::NotFound(format!("rule {id}")));
+        }
+        self.persist()
+    }
+
+    /// The rule fired: its chat and time are recorded for the list's
+    /// "ran Mon DD, HH:MM" and the jump to the chat.
+    pub fn record_rule_run(&mut self, id: &RuleId, chat: SessionId) -> Result<(), StoreError> {
+        let rule = self
+            .state
+            .rules
+            .get_mut(id)
+            .ok_or_else(|| StoreError::NotFound(format!("rule {id}")))?;
+        rule.last_chat = Some(chat);
+        rule.last_run = Some(crate::now_ms());
+        rule.updated_at = crate::now_ms();
+        self.persist()
     }
 
     // ---- receipts ----

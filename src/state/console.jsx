@@ -24,6 +24,7 @@ export function ConsoleProvider({ children }) {
   const [machines, setMachines] = useState([])
   const [plugins, setPlugins] = useState([])
   const [marketplace, setMarketplace] = useState([])
+  const [automations, setAutomations] = useState([])
   const [chats, setChats] = useState({})
   const [modelsByHarness, setModelsByHarness] = useState({})
   const [openChatId, setOpenChatId] = useState(null)
@@ -93,12 +94,14 @@ export function ConsoleProvider({ children }) {
       const machineList = await api.machines()
       const pluginList = await api.plugins()
       const market = await api.pluginMarketplace()
+      const rules = await api.automations()
       if (cancelled) return
       setCapabilities(caps)
       setSessions(list ?? [])
       setMachines(machineList ?? [])
       setPlugins(pluginList ?? [])
       setMarketplace(market ?? [])
+      setAutomations(rules ?? [])
       setConnection({ state: 'connected', error: null })
     } catch (err) {
         if (cancelled) return
@@ -133,6 +136,12 @@ export function ConsoleProvider({ children }) {
         setPlugins(pluginList ?? [])
       } catch {
         /* and the plugins with them */
+      }
+      try {
+        const rules = await api.automations()
+        setAutomations(rules ?? [])
+      } catch {
+        /* and the rules on the same beat */
       }
     }, 2500)
     return () => clearInterval(poll)
@@ -351,6 +360,51 @@ export function ConsoleProvider({ children }) {
     [api, refreshPlugins],
   )
 
+  // ---- automations ----
+
+  const refreshAutomations = useCallback(async () => {
+    try {
+      setAutomations((await api.automations()) ?? [])
+    } catch {
+      /* the poll heals */
+    }
+  }, [api])
+
+  const saveAutomation = useCallback(
+    async (rule) => {
+      const saved = await api.saveRule(rule)
+      await refreshAutomations()
+      return saved
+    },
+    [api, refreshAutomations],
+  )
+
+  const removeAutomation = useCallback(
+    async (ruleId) => {
+      await api.removeRule(ruleId)
+      await refreshAutomations()
+    },
+    [api, refreshAutomations],
+  )
+
+  const enableAutomation = useCallback(
+    async (ruleId, enabled) => {
+      await api.setRuleEnabled(ruleId, enabled)
+      await refreshAutomations()
+    },
+    [api, refreshAutomations],
+  )
+
+  // Run now — resolves with the chat the rule opened (the jump target).
+  const runAutomation = useCallback(
+    async (ruleId) => {
+      const session = await api.runRule(ruleId)
+      await refreshAutomations()
+      return session
+    },
+    [api, refreshAutomations],
+  )
+
   const resumeChat = useCallback(
     async (chatId) => {
       await api.resume(chatId)
@@ -367,6 +421,7 @@ export function ConsoleProvider({ children }) {
       machines,
       plugins,
       marketplace,
+      automations,
       chats,
       openChat,
       openChatId,
@@ -386,6 +441,10 @@ export function ConsoleProvider({ children }) {
       removePlugin,
       setPluginEnabled,
       acknowledgePluginKey,
+      saveAutomation,
+      removeAutomation,
+      enableAutomation,
+      runAutomation,
     }),
     [
       api,
@@ -395,6 +454,7 @@ export function ConsoleProvider({ children }) {
       machines,
       plugins,
       marketplace,
+      automations,
       chats,
       openChat,
       openChatId,
@@ -414,6 +474,10 @@ export function ConsoleProvider({ children }) {
       removePlugin,
       setPluginEnabled,
       acknowledgePluginKey,
+      saveAutomation,
+      removeAutomation,
+      enableAutomation,
+      runAutomation,
     ],
   )
   return <ConsoleContext.Provider value={value}>{children}</ConsoleContext.Provider>

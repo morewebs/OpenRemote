@@ -15,8 +15,9 @@ use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock};
 
 use openremote_core::{
-    Decision, DecisionId, DecisionState, Event, EventPayload, Harness, Machine, MachineId,
-    MachineStatus, MachineView, Plugin, Receipt, Session, SessionId, SessionStatus, Store, now_ms,
+    AutomationRule, Decision, DecisionId, DecisionState, Event, EventPayload, Harness, Machine,
+    MachineId, MachineStatus, MachineView, Plugin, Receipt, RuleId, Session, SessionId,
+    SessionStatus, Store, TriggerKind, now_ms,
 };
 use openremote_harness::DriverEvent;
 use serde_json::Value;
@@ -32,6 +33,32 @@ fn store_error(e: openremote_core::store::StoreError) -> SupervisorError {
         openremote_core::store::StoreError::NotFound(m) => SupervisorError::NotFound(m),
         openremote_core::store::StoreError::Conflict(m) => SupervisorError::Conflict(m),
         other => SupervisorError::Store(other),
+    }
+}
+
+/// `HH:MM` in the machine's own wall clock, plus the day-minute key the
+/// engine arms per rule (one fire per day at its time).
+fn current_local_minute() -> (String, String) {
+    let now = chrono::Local::now();
+    (
+        now.format("%Y-%m-%d %H:%M").to_string(),
+        now.format("%H:%M").to_string(),
+    )
+}
+
+/// `HH:MM` or a clear error — the schedule's own format.
+fn validate_time(time: Option<&str>) -> Result<String, SupervisorError> {
+    let Some(time) = time else {
+        return Err(SupervisorError::Conflict(
+            "a schedule needs a time — HH:MM".into(),
+        ));
+    };
+    if chrono::NaiveTime::parse_from_str(time, "%H:%M").is_ok() {
+        Ok(time.to_string())
+    } else {
+        Err(SupervisorError::Conflict(
+            "a schedule's time is HH:MM, local".into(),
+        ))
     }
 }
 
@@ -116,6 +143,7 @@ impl Supervisor {
             this_machine,
         });
         supervisor.spawn_presence_ticker(this_machine);
+        supervisor.spawn_schedule_engine();
         supervisor
     }
 
@@ -404,6 +432,185 @@ impl Supervisor {
                 })
                 .collect()
         })
+    }
+
+    // ---- automations ----
+
+    pub fn rules(&self) -> Vec<AutomationRule> {
+        self.with_store(|s| s.rules().into_iter().cloned().collect())
+    }
+
+    /// Save a rule (create or edit — the id decides). The workspace must
+    /// be real (the same bar POST /sessions holds); a webhook gets its
+    /// own key generated on create, kept on edit.
+    pub fn save_rule(
+        &self,
+        mut rule: AutomationRule,
+        existing: Option<RuleId>,
+    ) -> Result<AutomationRule, SupervisorError> {
+        if let Some(existing) = existing {
+            let _ = self
+                .with_store(|s| s.rule(&existing).cloned())
+                .map_err(store_error)?;
+            rule.id = existing;
+        } else {
+            rule.id = RuleId::new();
+            rule.created_at = now_ms();
+        }
+        if rule.name.trim().is_empty() || rule.task.trim().is_empty() {
+            return Err(SupervisorError::Conflict(
+                "a rule needs a name and a task".into(),
+            ));
+        }
+        if !rule.workspace.is_absolute() || !rule.workspace.is_dir() {
+            return Err(SupervisorError::Conflict(
+                "the workspace must be an absolute path to an existing directory".into(),
+            ));
+        }
+        match rule.trigger.kind {
+            TriggerKind::Schedule => {
+                rule.trigger.time = Some(validate_time(rule.trigger.time.as_deref())?);
+                rule.trigger.key = None;
+            }
+            TriggerKind::Webhook => {
+                rule.trigger.time = None;
+                // A webhook keeps the key it was born with — the hook
+                // URLs already in the wild must keep working.
+                rule.trigger.key = Some(
+                    rule.trigger
+                        .key
+                        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+                );
+            }
+        }
+        rule.updated_at = now_ms();
+        self.with_store(|s| s.save_rule(rule)).map_err(store_error)
+    }
+
+    pub fn remove_rule(&self, id: &RuleId) -> Result<(), SupervisorError> {
+        self.with_store(|s| s.remove_rule(id)).map_err(store_error)
+    }
+
+    pub fn set_rule_enabled(
+        &self,
+        id: &RuleId,
+        enabled: bool,
+    ) -> Result<AutomationRule, SupervisorError> {
+        let mut rule = self
+            .with_store(|s| s.rule(id).cloned())
+            .map_err(store_error)?;
+        rule.enabled = enabled;
+        self.with_store(|s| s.save_rule(rule)).map_err(store_error)
+    }
+
+    /// Run a rule now — the same path the clock and the webhook take: a
+    /// chat opens on the rule's machine with the rule's task.
+    pub async fn run_rule(self: &Arc<Self>, id: &RuleId) -> Result<Session, SupervisorError> {
+        let rule = self
+            .with_store(|s| s.rule(id).cloned())
+            .map_err(store_error)?;
+        if !rule.enabled {
+            return Err(SupervisorError::Conflict("the rule is not enabled".into()));
+        }
+        self.fire_rule(&rule).await
+    }
+
+    /// A webhook arrived: the rule must be a webhook rule, enabled, and
+    /// the request must carry the rule's own key.
+    pub async fn fire_webhook(
+        self: &Arc<Self>,
+        id: &RuleId,
+        key: Option<&str>,
+    ) -> Result<Session, SupervisorError> {
+        let rule = self
+            .with_store(|s| s.rule(id).cloned())
+            .map_err(store_error)?;
+        if rule.trigger.kind != TriggerKind::Webhook {
+            return Err(SupervisorError::Conflict("that rule has no webhook".into()));
+        }
+        if !rule.enabled {
+            return Err(SupervisorError::Conflict("the rule is not enabled".into()));
+        }
+        let expected = rule.trigger.key.clone().unwrap_or_default();
+        if key.unwrap_or_default() != expected {
+            return Err(SupervisorError::Conflict(
+                "the webhook key does not match".into(),
+            ));
+        }
+        self.fire_rule(&rule).await
+    }
+
+    /// The one firing path: create the chat, deliver the task, record the
+    /// run. A spawn that fails lands as the chat's first fact — the rule
+    /// still ran.
+    async fn fire_rule(
+        self: &Arc<Self>,
+        rule: &AutomationRule,
+    ) -> Result<Session, SupervisorError> {
+        let session = self
+            .create_session(
+                &rule.harness,
+                rule.workspace.clone(),
+                rule.model.clone(),
+                None,
+                false,
+            )
+            .await?;
+        let chat = session.id;
+        self.prompt(&chat, rule.task.trim()).await?;
+        self.with_store(|s| s.record_rule_run(&rule.id, chat))
+            .map_err(store_error)?;
+        Ok(session)
+    }
+
+    /// The clock: every enabled schedule rule fires once per day at its
+    /// own HH:MM. In-memory per-minute arming — a daemon restart re-arms;
+    /// the worst case is a second chat in the same minute.
+    fn spawn_schedule_engine(self: &Arc<Self>) {
+        let supervisor = Arc::clone(self);
+        tokio::spawn(async move {
+            let tick_ms = std::env::var("OPENREMOTE_SCHEDULE_TICK_MS")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(30_000);
+            let mut tick = tokio::time::interval(std::time::Duration::from_millis(tick_ms));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            let mut fired: HashMap<RuleId, String> = HashMap::new();
+            loop {
+                tick.tick().await;
+                let (now_minute, now_time) = current_local_minute();
+                let due: Vec<AutomationRule> = supervisor
+                    .with_store(|s| {
+                        s.rules()
+                            .into_iter()
+                            .filter(|r| {
+                                r.enabled
+                                    && r.trigger.kind == TriggerKind::Schedule
+                                    && r.trigger.time.as_deref() == Some(now_time.as_str())
+                            })
+                            .cloned()
+                            .collect::<Vec<AutomationRule>>()
+                    })
+                    .into_iter()
+                    .filter(|rule| {
+                        fired
+                            .get(&rule.id)
+                            .map(|m| m != &now_minute)
+                            .unwrap_or(true)
+                    })
+                    .collect();
+                for rule in due {
+                    fired.insert(rule.id, now_minute.clone());
+                    match supervisor.fire_rule(&rule).await {
+                        Ok(session) => eprintln!(
+                            "automation '{}': fired on the clock, chat {}",
+                            rule.name, session.id
+                        ),
+                        Err(err) => eprintln!("automation '{}': fire failed: {err}", rule.name),
+                    }
+                }
+            }
+        });
     }
 
     // ---- session lifecycle ----

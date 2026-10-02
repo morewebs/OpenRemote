@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{DecisionId, MachineId, SessionId};
+use crate::ids::{DecisionId, MachineId, RuleId, SessionId};
 
 /// An installed agent CLI the daemon can drive (`claude`, `codex`, …).
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -150,6 +150,53 @@ pub struct Plugin {
 
 fn default_true() -> bool {
     true
+}
+
+/// What makes a rule fire. The kinds with real event sources — the clock
+/// and an arriving webhook. The connector-backed kinds of the prototype
+/// (pipeline, errors, review, release) appear when their connectors do.
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum TriggerKind {
+    Schedule,
+    Webhook,
+}
+
+/// One rule's trigger, in its own words.
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct Trigger {
+    pub kind: TriggerKind,
+    /// `HH:MM` local, for schedules.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time: Option<String>,
+    /// The webhook's own key — every hook URL carries one; a request
+    /// without the matching key does not fire the rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+}
+
+/// One automation: when a trigger fires, a chat opens on the rule's
+/// machine with the rule's task. Run-now is the same path by hand.
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct AutomationRule {
+    pub id: RuleId,
+    pub name: String,
+    pub trigger: Trigger,
+    pub harness: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// The chat's workspace — absolute, validated at save time.
+    pub workspace: PathBuf,
+    pub machine: MachineId,
+    pub task: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_chat: Option<SessionId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_run: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
 }
 
 impl Plugin {

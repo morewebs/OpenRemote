@@ -1,0 +1,416 @@
+/* automations — compact rule rows: name + one dim line at rest,
+   actions revealed on hover, a real switch for enabled state */
+
+.am-section {
+  margin: 30px 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.am-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: min(640px, 100%);
+}
+
+.am-row {
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.am-row:hover {
+  background: var(--bg-hover);
+}
+
+.am-row-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.am-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.am-name {
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-1);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.am-row.off .am-name {
+  color: var(--text-2);
+}
+
+.am-sub {
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 12.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* actions sit quiet until the row is hovered or focused */
+.am-row-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.am-row:hover .am-row-actions,
+.am-row:focus-within .am-row-actions {
+  opacity: 1;
+}
+
+.am-act {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  cursor: pointer;
+}
+
+.am-act:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-1);
+}
+
+.am-act:disabled {
+  cursor: default;
+  background: transparent;
+  color: var(--text-3);
+  opacity: 0.4;
+}
+
+/* the switch: green when on, knob slides; carries the row's state
+   without a word of text */
+.am-switch {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.am-switch:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.am-switch.on {
+  background: var(--green);
+}
+
+.am-switch.on:hover {
+  background: #5ec294;
+}
+
+.am-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-1);
+  transition: transform 0.15s ease;
+}
+
+.am-switch.on .am-knob {
+  transform: translateX(12px);
+  background: #0a0c0f;
+}
+
+/* starters are templates, not rules — lighter than rule rows, and an
+   added starter quiets down to a dim "Added" */
+.am-starter .am-name {
+  font-weight: 500;
+}
+
+.am-starter.added .am-name {
+  color: var(--text-2);
+}
+
+.am-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: 28px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.am-add:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.am-added {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.am-note {
+  margin: 7px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--accent);
+}
+
+html[data-reduce-motion] .am-knob,
+html[data-reduce-motion] .am-switch,
+html[data-reduce-motion] .am-row-actions {
+  transition: none;
+}
+
+/* ── automation form modal ── */
+
+.af-modal {
+  width: 560px;
+}
+
+.af-head {
+  margin-bottom: 4px;
+}
+
+.af-head-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* the name is the form's headline: borderless, title-weight */
+.af-name {
+  width: 100%;
+  padding: 8px 0 2px;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.af-name::placeholder {
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+.af-section {
+  margin: 20px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* When: labeled fields side by side, parameters swap with the kind */
+.af-when {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.af-field--kind {
+  width: 190px;
+}
+
+.af-field--branch,
+.af-field--time {
+  width: 128px;
+}
+
+.af-field--project {
+  width: 150px;
+}
+
+.af-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.af-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+.af-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.af-chip:hover {
+  background: var(--bg-hover);
+}
+
+.af-chip svg {
+  flex: none;
+  color: var(--text-3);
+}
+
+.af-input {
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.af-input:focus,
+.af-task:focus {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+/* the trigger in one plain sentence — the source of truth the fields edit */
+.af-preview {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+/* Then: labeled 2x2 */
+.af-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.af-task {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+}
+
+.af-task::placeholder {
+  color: var(--text-3);
+}
+
+/* footer: right-aligned actions; dv-connect is full-width by default,
+   restrained to content width inside the footer */
+.af-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.af-foot .dv-act {
+  width: auto;
+  justify-content: center;
+  margin-top: 0;
+}
+
+/* slice-4 additions */
+
+.am-hook {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  font-family: var(--font-mono, 'Geist Mono', ui-monospace, Consolas, monospace);
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.am-error {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.af-when-note,
+.af-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.af-error {
+  color: var(--accent);
+}
+
+/* phone width: rules stack their actions, the form fills the sheet. */
+@media (max-width: 639px) {
+  .automations {
+    padding: 20px 16px 140px;
+  }
+
+  .am-rule-main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .am-actions {
+    opacity: 1;
+  }
+
+  .pill-dock {
+    width: calc(100% - 32px);
+  }
+}

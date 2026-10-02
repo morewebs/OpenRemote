@@ -23,11 +23,11 @@ pub mod model;
 pub mod store;
 
 pub use events::{Event, EventPayload};
-pub use ids::{DecisionId, MachineId, SessionId};
+pub use ids::{DecisionId, MachineId, RuleId, SessionId};
 pub use model::{
-    ChatMessage, Decision, DecisionKind, DecisionOption, DecisionState, Harness, InstallSpec,
-    Machine, MachineStatus, MachineView, MessageRole, Plugin, Receipt, ReceiptStatus, Session,
-    SessionStatus, TurnOutcome,
+    AutomationRule, ChatMessage, Decision, DecisionKind, DecisionOption, DecisionState, Harness,
+    InstallSpec, Machine, MachineStatus, MachineView, MessageRole, Plugin, Receipt, ReceiptStatus,
+    Session, SessionStatus, Trigger, TriggerKind, TurnOutcome,
 };
 pub use store::Store;
 

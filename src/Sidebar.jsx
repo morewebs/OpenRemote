@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CaretDown, GearSix, MagnifyingGlass, Plus, PuzzlePiece, WifiHigh, X } from '@phosphor-icons/react'
+import { CaretDown, GearSix, Lightning, MagnifyingGlass, Plus, PuzzlePiece, WifiHigh, X } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { workspaceName } from './state/reducer.js'
 import './sidebar.css'
@@ -79,6 +79,13 @@ export default function Sidebar({ open, active, onSelect, onReplayOnboarding }) 
         >
           <PuzzlePiece size={15} className="nav-tile-icon" />
           Plugins
+        </button>
+        <button
+          className={`chat-row nav-tile${active === 'automations' ? ' active' : ''}`}
+          onClick={() => onSelect('automations')}
+        >
+          <Lightning size={15} className="nav-tile-icon" />
+          Automations
         </button>
         <div className="section-title">Chats</div>
         {groups.length === 0 && (
