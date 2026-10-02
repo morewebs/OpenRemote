@@ -161,6 +161,11 @@
   z-index: 100;
   display: grid;
   place-items: center;
+  /* definite tracks: an auto track sizes itself to the item, so the
+     modal's max-width: 100% resolved against a 560px track and never
+     clamped — every dv-modal spilled at phone width. */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   padding: 24px;
   background: rgba(4, 6, 9, 0.55);
   animation: dv-fade 0.12s ease-out;
