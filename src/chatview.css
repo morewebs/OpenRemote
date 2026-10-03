@@ -378,15 +378,20 @@
 /* ── math: KaTeX's own output, in the room's colors ── */
 
 .cv-agent .md-math-block {
-  margin: 8px 0;
+  margin: 10px 0;
   overflow-x: auto;
   color: var(--text-1);
-  font-size: 14px;
+  font-size: 17px;
+  line-height: 1.8;
+}
+
+.cv-agent .md-math-block .katex-display {
+  margin: 0;
 }
 
 .cv-agent .katex {
   color: var(--text-1);
-  font-size: 1em;
+  font-size: 1.15em;
 }
 
 .cv-agent .md-pre {
