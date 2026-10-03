@@ -184,3 +184,34 @@ test('a chat with embedded events carries its folded seq, and a replay never dou
   assert.equal(next.timeline.length, 3)
   assert.equal(next.foldedSeq, 4)
 })
+
+test('stream deltas grow a live item, and the settled message replaces it whole', () => {
+  const chat = chatFromSession(session())
+  // Three fragments of the agent's reply, then the settled message.
+  foldEvent(chat, event(2, { type: 'turn.started', turn: 1 }))
+  foldEvent(chat, event(3, { type: 'message.delta', turn: 1, text: 'Let me ' }))
+  foldEvent(chat, event(4, { type: 'message.delta', turn: 1, text: 'check ' }))
+  foldEvent(chat, event(5, { type: 'message.delta', turn: 1, text: 'that file.' }))
+  let rail = railItems(chat)
+  assert.equal(rail.length, 1, 'one live stream item grows')
+  assert.equal(rail[0].kind, 'stream')
+  assert.equal(rail[0].text, 'Let me check that file.')
+
+  // The settled assistant message replaces the stream — never both.
+  foldEvent(chat, event(6, {
+    type: 'message.added',
+    message: { id: 'm2', turn: 1, role: 'assistant', text: 'Let me check that file.' },
+  }))
+  rail = railItems(chat)
+  assert.equal(rail.length, 1, 'the settled message replaces the stream item')
+  assert.equal(rail[0].kind, 'message')
+  assert.equal(rail[0].text, 'Let me check that file.')
+
+  // A second turn streams into its own item, the first stays settled.
+  foldEvent(chat, event(7, { type: 'turn.started', turn: 2 }))
+  foldEvent(chat, event(8, { type: 'message.delta', turn: 2, text: 'Done. ' }))
+  rail = railItems(chat)
+  assert.equal(rail.length, 2)
+  assert.equal(rail.at(-1).kind, 'stream')
+  assert.equal(rail.at(-1).text, 'Done. ')
+})

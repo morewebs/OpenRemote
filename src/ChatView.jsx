@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Lightning, Stop, Play } from '@phosphor-icons/react'
+import { ArrowUp, Lightning, Stop, Play, HandPalm } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { railItems } from './state/reducer.js'
 import { harnessName, harnessIcon } from './harness-names.js'
@@ -30,7 +30,7 @@ const LIVE_SETTINGS = {
 }
 
 export default function ChatView({ chat, onBack }) {
-  const { capabilities, connection, sendPrompt, updateChatSettings, answerDecision, stopChat, resumeChat, modelsFor } =
+  const { capabilities, connection, sendPrompt, updateChatSettings, answerDecision, stopChat, interruptChat, resumeChat, modelsFor } =
     useConsole()
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -159,10 +159,16 @@ export default function ChatView({ chat, onBack }) {
           )}
           <span className="cv-fact">{STATUS_LABEL[chat.status] ?? chat.status}</span>
           {chat.running && (
-            <button className="cv-fact-btn" onClick={() => control(() => stopChat(chat.id))} title="Stop the session">
-              <Stop size={11} weight="fill" />
-              Stop
-            </button>
+            <>
+              <button className="cv-fact-btn" onClick={() => control(() => interruptChat(chat.id))} title="Interrupt the running turn — the session stays alive">
+                <HandPalm size={11} weight="fill" />
+                Interrupt
+              </button>
+              <button className="cv-fact-btn" onClick={() => control(() => stopChat(chat.id))} title="Stop the session">
+                <Stop size={11} weight="fill" />
+                Stop
+              </button>
+            </>
           )}
           {(chat.status === 'stopped' || chat.status === 'failed') && (
             <button className="cv-fact-btn" onClick={() => control(() => resumeChat(chat.id))} title="Resume the session">
@@ -177,6 +183,16 @@ export default function ChatView({ chat, onBack }) {
         <div className="cv-thread">
           {rail.length === 0 && <p className="cv-node cv-note">The transcript will appear here.</p>}
           {rail.map((item) => {
+            if (item.kind === 'stream') {
+              // The live reply — text as it arrives, with a breathing caret.
+              // The settled message.added replaces this item whole.
+              return (
+                <p key={item.id} className="cv-node cv-agent">
+                  {item.text}
+                  <span className="cv-caret" />
+                </p>
+              )
+            }
             if (item.kind === 'message') {
               if (item.role === 'user') return <div key={item.id} className="cv-user">{item.text}</div>
               if (item.role === 'note') return <p key={item.id} className="cv-node cv-note">{item.text}</p>

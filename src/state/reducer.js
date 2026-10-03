@@ -103,6 +103,17 @@ export function foldEvent(chat, event) {
     }
     case 'message.added': {
       const message = payload.message
+      // The settled agent message replaces the stream item it settles —
+      // the stream was its preview, never a second transcript entry.
+      if (message.role === 'assistant') {
+        for (let i = chat.timeline.length - 1; i >= 0; i--) {
+          const item = chat.timeline[i]
+          if (item.kind === 'stream') {
+            if (item.turn === message.turn) chat.timeline.splice(i, 1)
+            break
+          }
+        }
+      }
       chat.timeline.push({
         kind: 'message',
         id: message.id,
@@ -110,6 +121,20 @@ export function foldEvent(chat, event) {
         text: message.text,
       })
       if (message.role === 'user' && !chat.title) chat.title = titleFrom(message.text)
+      break
+    }
+    case 'message.delta': {
+      // A streaming fragment of the agent's reply. It grows the live
+      // streaming item; the final message.added replaces the whole thing,
+      // so the transcript never holds both the stream and its settled form.
+      let last = chat.timeline[chat.timeline.length - 1]
+      if (!last || last.kind !== 'stream' || last.turn !== payload.turn) {
+        last = { kind: 'stream', id: `stream-${payload.turn}`, turn: payload.turn, text: '' }
+        chat.timeline.push(last)
+        last.text = payload.text
+        break
+      }
+      last.text += payload.text
       break
     }
     case 'tool.started': {

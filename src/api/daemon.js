@@ -119,6 +119,12 @@ export class DaemonApi {
     return this.call('POST', `/sessions/${id}/stop`, { request_id: newRequestId() })
   }
 
+  // Interrupt the running turn — the harness cancels, the session stays
+  // alive for the next message. Unlike stop, nothing dies.
+  interrupt(id) {
+    return this.call('POST', `/sessions/${id}/interrupt`, { request_id: newRequestId() })
+  }
+
   resume(id) {
     return this.call('POST', `/sessions/${id}/resume`, { request_id: newRequestId() })
   }

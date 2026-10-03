@@ -815,7 +815,7 @@ impl Supervisor {
             model: current.model.clone(),
             permission_mode: current.permission_mode.clone(),
             resume: None,
-            include_deltas: false,
+            include_deltas: true,
             fast: current.fast,
             mcp_servers: self.mcp_servers(),
         };
@@ -996,7 +996,7 @@ impl Supervisor {
             model: session.model.clone(),
             permission_mode: session.permission_mode.clone(),
             resume: Some(harness_ref),
-            include_deltas: false,
+            include_deltas: true,
             fast: session.fast,
             mcp_servers: self.mcp_servers(),
         };

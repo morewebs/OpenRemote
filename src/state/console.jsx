@@ -354,6 +354,15 @@ export function ConsoleProvider({ children }) {
     [api],
   )
 
+  // Interrupt the running turn — the agent stops what it's doing but the
+  // session stays alive (stop kills the process; interrupt cancels the turn).
+  const interruptChat = useCallback(
+    async (chatId) => {
+      await api.interrupt(chatId)
+    },
+    [api],
+  )
+
   // ---- machines ----
 
   const refreshMachines = useCallback(async () => {
@@ -569,6 +578,7 @@ export function ConsoleProvider({ children }) {
       updateChatSettings,
       answerDecision,
       stopChat,
+      interruptChat,
       resumeChat,
       createMachine,
       removeMachine,
@@ -606,6 +616,7 @@ export function ConsoleProvider({ children }) {
       updateChatSettings,
       answerDecision,
       stopChat,
+      interruptChat,
       resumeChat,
       createMachine,
       removeMachine,
