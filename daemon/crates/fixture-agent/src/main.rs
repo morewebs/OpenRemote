@@ -245,7 +245,7 @@ impl FixtureAgent {
             "num_turns": self.prompt_count,
             "terminal_reason": terminal_reason,
             "duration_ms": 7,
-            "total_cost_usd": 0,
+            "total_cost_usd": 0.042,
             "usage": {"input_tokens": 10, "output_tokens": 5}
         }));
     }
@@ -333,7 +333,7 @@ impl FixtureAgent {
                     "num_turns": self.prompt_count,
                     "terminal_reason": "completed",
                     "duration_ms": 9,
-                    "total_cost_usd": 0,
+                    "total_cost_usd": 0.0075,
                     "usage": {"input_tokens": 40, "cache_read_input_tokens": 12000,
                               "cache_creation_input_tokens": 260, "output_tokens": 60}
                 }));

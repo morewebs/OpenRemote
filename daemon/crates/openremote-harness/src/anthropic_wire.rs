@@ -30,11 +30,13 @@ pub enum Frame {
     /// `result` — the turn boundary. Never guess turn state before it.
     /// `usage` rides verbatim (the SDK's own fields: input_tokens,
     /// cache_read_input_tokens, cache_creation_input_tokens, …).
+    /// `cost_usd` is the SDK's own `total_cost_usd`, a sibling of `usage`.
     Result {
         subtype: String,
         terminal_reason: Option<String>,
         is_error: bool,
         usage: Option<Value>,
+        cost_usd: Option<f64>,
     },
     /// `system` with `subtype: "compact_boundary"` — the conversation was
     /// compacted here (the SDK's own marker).
@@ -169,6 +171,9 @@ pub fn parse_frame(line: &str) -> Option<Frame> {
                 .and_then(|e| e.as_bool())
                 .unwrap_or(false),
             usage: raw.get("usage").cloned(),
+            cost_usd: raw
+                .get("total_cost_usd")
+                .and_then(|c| c.as_f64()),
         }),
         "control_request" => Some(Frame::ControlRequest {
             request_id: raw.get("request_id").and_then(|r| r.as_str())?.to_string(),
@@ -262,7 +267,8 @@ mod tests {
                 subtype: "error_during_execution".into(),
                 terminal_reason: Some("aborted_tools".into()),
                 is_error: true,
-                usage: None
+                usage: None,
+                cost_usd: None
             }
         );
         // The turn's own usage rides verbatim, and the compaction marker
@@ -277,9 +283,19 @@ mod tests {
                 subtype: "success".into(),
                 terminal_reason: None,
                 is_error: false,
-                usage: Some(json!({"input_tokens": 10, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0, "output_tokens": 5}))
+                usage: Some(json!({"input_tokens": 10, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0, "output_tokens": 5})),
+                cost_usd: None
             }
         );
+        // The SDK's cost is a sibling of usage, parsed on its own.
+        let with_cost = parse_frame(
+            r#"{"type":"result","subtype":"success","usage":{"input_tokens":10,"output_tokens":5},"total_cost_usd":0.042}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            with_cost,
+            Frame::Result { cost_usd: Some(0.042), .. }
+        ));
         let boundary = parse_frame(r#"{"type":"system","subtype":"compact_boundary"}"#).unwrap();
         assert_eq!(boundary, Frame::CompactBoundary);
         let delta = parse_frame(

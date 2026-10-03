@@ -44,6 +44,9 @@ export function chatFromSession(session) {
     approvedTools: session.approved_tools ?? [],
     // The harness's own context numbers, when it reports them.
     context: null,
+    // The session's running cost in USD — the harness's own numbers,
+    // summed. Only where the harness reports money.
+    costUsd: 0,
     lastError: session.last_error ?? null,
     running: ['starting', 'working', 'waiting'].includes(session.status),
     title: null,
@@ -150,6 +153,12 @@ export function foldEvent(chat, event) {
     }
     case 'context.used': {
       chat.context = { used: payload.used, window: payload.window ?? null }
+      break
+    }
+    case 'usage.cost': {
+      // The harness's own cost number for one turn, verbatim. The facts
+      // row shows the running total for the session.
+      chat.costUsd = (chat.costUsd ?? 0) + payload.cost_usd
       break
     }
     case 'note.added': {

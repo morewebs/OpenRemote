@@ -80,6 +80,12 @@ pub enum DriverEvent {
         used: u64,
         window: Option<u64>,
     },
+    /// The harness reported the turn's own cost in USD — claude's
+    /// `total_cost_usd` on the result frame, verbatim. None where the
+    /// harness doesn't report money.
+    TurnCost {
+        cost_usd: f64,
+    },
     /// The harness compacted the conversation (claude's own
     /// `compact_boundary` marker, codex `thread/compacted`).
     Compacted,

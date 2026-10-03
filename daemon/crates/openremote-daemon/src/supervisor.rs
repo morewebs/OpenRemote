@@ -1243,6 +1243,9 @@ impl Supervisor {
             DriverEvent::ContextUsed { used, window } => {
                 self.emit_all(id, vec![EventPayload::ContextUsed { used, window }])?;
             }
+            DriverEvent::TurnCost { cost_usd } => {
+                self.emit_all(id, vec![EventPayload::UsageCost { cost_usd }])?;
+            }
             DriverEvent::Compacted => {
                 // The harness compacted its own conversation — the
                 // transcript says so where it happened.

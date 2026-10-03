@@ -64,6 +64,10 @@ pub enum EventPayload {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         window: Option<u64>,
     },
+    /// The harness reported the turn's cost in USD — its own number,
+    /// verbatim. Only where the harness reports money.
+    #[serde(rename = "usage.cost")]
+    UsageCost { cost_usd: f64 },
     /// An informational line in the transcript (compaction notices) — the
     /// console renders it like its other notes.
     #[serde(rename = "note.added")]
@@ -93,6 +97,7 @@ impl Event {
             EventPayload::ToolStarted { .. } => "tool.started",
             EventPayload::ToolResult { .. } => "tool.result",
             EventPayload::ContextUsed { .. } => "context.used",
+            EventPayload::UsageCost { .. } => "usage.cost",
             EventPayload::NoteAdded { .. } => "note.added",
             EventPayload::DecisionRequested { .. } => "decision.requested",
             EventPayload::DecisionResponded { .. } => "decision.responded",

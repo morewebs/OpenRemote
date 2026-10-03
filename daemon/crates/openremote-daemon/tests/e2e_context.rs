@@ -49,6 +49,13 @@ async fn claude_reports_its_turns_context() {
         "claude's stream-json carries no window; events:\n{}",
         dump(&events)
     );
+
+    // The turn's cost, verbatim from the fixture's result frame.
+    let cost = events
+        .iter()
+        .find(|(_, p)| kind(p) == "usage.cost")
+        .expect("claude's own cost rides the turn");
+    assert_eq!(cost.1["cost_usd"], json!(0.042));
 }
 
 #[tokio::test]

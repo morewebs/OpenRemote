@@ -392,6 +392,7 @@ async fn read_stdout(
                 terminal_reason,
                 is_error,
                 usage,
+                cost_usd,
             } => {
                 // The turn's own usage is the conversation's context: the
                 // SDK's input fields together (its own semantics — the
@@ -402,6 +403,12 @@ async fn read_stdout(
                         .await
                         .is_err()
                     {
+                        return;
+                    }
+                }
+                // The turn's cost in USD, verbatim from the result frame.
+                if let Some(cost) = cost_usd {
+                    if tx.send(DriverEvent::TurnCost { cost_usd: cost }).await.is_err() {
                         return;
                     }
                 }

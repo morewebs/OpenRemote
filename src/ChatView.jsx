@@ -153,6 +153,9 @@ export default function ChatView({ chat, onBack }) {
           {chat.model && <span className="cv-fact">{chat.model}</span>}
           {chat.effort && <span className="cv-fact">{chat.effort}</span>}
           {chat.fast && <span className="cv-fact">Fast</span>}
+          {chat.costUsd > 0 && (
+            <span className="cv-fact">${chat.costUsd < 0.01 ? chat.costUsd.toFixed(4) : chat.costUsd.toFixed(2)}</span>
+          )}
           {chat.approvedTools?.length > 0 && (
             <span className="cv-fact">
               {chat.approvedTools.join(' · ')} allowed for this chat

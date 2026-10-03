@@ -653,6 +653,7 @@ impl Store {
             | EventPayload::ToolStarted { .. }
             | EventPayload::ToolResult { .. }
             | EventPayload::ContextUsed { .. }
+            | EventPayload::UsageCost { .. }
             | EventPayload::NoteAdded { .. }
             | EventPayload::DaemonError { .. } => {
                 if let Some(session) = self.state.sessions.get_mut(&event.session_id) {

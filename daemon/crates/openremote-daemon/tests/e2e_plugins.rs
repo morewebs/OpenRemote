@@ -266,6 +266,7 @@ async fn plugins_ride_sessions_without_breaking_their_spawns() {
             "message.added",
             "message.added",
             "context.used",
+            "usage.cost",
             "turn.completed",
             "session.status_changed",
         ],

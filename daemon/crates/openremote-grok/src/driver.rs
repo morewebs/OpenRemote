@@ -252,6 +252,7 @@ async fn read_prompt(
                 terminal_reason,
                 is_error,
                 usage: _,
+                cost_usd,
             } => {
                 saw_result = true;
                 let coarse = if subtype == "success" {
@@ -264,6 +265,13 @@ async fn read_prompt(
                 } else {
                     TurnOutcome::Failed
                 };
+                // Grok shares claude's wire — the turn's cost rides the
+                // result frame the same way, when the harness reports it.
+                if let Some(cost) = cost_usd {
+                    if tx.send(DriverEvent::TurnCost { cost_usd: cost }).await.is_err() {
+                        return;
+                    }
+                }
                 if tx
                     .send(DriverEvent::TurnCompleted {
                         subtype,
