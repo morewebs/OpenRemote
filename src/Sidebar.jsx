@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { CaretDown, Cloud, GearSix, House, Lightning, MagnifyingGlass, Plus, PuzzlePiece, WifiHigh, X } from '@phosphor-icons/react'
+import { CaretDown, Cloud, GearSix, House, Lightning, MagnifyingGlass, Plus, PuzzlePiece, X } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { workspaceName } from './state/reducer.js'
 import './sidebar.css'
@@ -90,13 +90,9 @@ export default function Sidebar({ open, active, onSelect, onReplayOnboarding }) 
           <Lightning size={17} />
           Automations
         </button>
-        <button
-          className={`side-tile${active === 'machines' ? ' on' : ''}`}
-          onClick={() => onSelect('machines')}
-        >
-          <WifiHigh size={17} />
-          Machines
-        </button>
+        {/* The Machines tile returns with remote check-in — until then its
+            Add-a-machine flow would point at an install command that
+            doesn't exist, and no dead UI is the rule. */}
       </div>
 
       <nav className="sb-list" aria-label="Chats">

@@ -153,9 +153,14 @@ Every screen the prototype promises, backed by the real daemon:
   «tool» allowed for this chat · status), stop/resume, the floating
   composer with the ContextRing where the harness reports its window
   (codex; claude reports usage but no window on the wire).
-- **Machines** — this machine real from first boot (its inventory, its
-  sessions with jumps, its 24h presence band), added machines waiting
-  with their per-OS install command + enrollment token, the local
+- **Machines** — hidden with remote check-in deferred (2026-10-03): the
+  view's Add-a-machine flow would point at an install command that
+  doesn't exist yet, and no-dead-UI is the rule. The components stay in
+  the tree (MachinesView, MachineModal, AddMachineModal); the sidebar
+  tile and route return when remote machines check in for real. Until
+  then a stale `#machines` hash or stored history falls back to New
+  chat. Previously shipped: this machine real from first boot (its
+  inventory, sessions with jumps, 24h presence band), the local
   harness install chain (claude/codex/pi/opencode — their own npm
   packages; grok/agy install through their own roots, no row).
 - **Plugins** — per-machine MCP installs from the marketplace (the
