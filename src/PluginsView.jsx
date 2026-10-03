@@ -40,6 +40,9 @@ export default function PluginsView() {
   const installed = plugins ?? []
   const catalog = (marketplace ?? []).filter((p) => !q || p.name.toLowerCase().includes(q))
   const onlineMachines = (machines ?? []).filter((m) => m.machine.status === 'online')
+  // One machine is the honest local state — the plural returns by itself
+  // when remote machines check in.
+  const machineWord = (machines ?? []).length === 1 ? 'machine' : 'machines'
 
   const run = async (action, ...args) => {
     setError(null)
@@ -65,9 +68,9 @@ export default function PluginsView() {
         </button>
       </header>
 
-      <h2 className="pn-section">On your machines</h2>
+      <h2 className="pn-section">On your {machineWord}</h2>
       {installed.length === 0 && (
-        <p className="pn-empty">Nothing on your machines yet. Install one below, or add your own.</p>
+        <p className="pn-empty">Nothing on your {machineWord} yet. Install one below, or add your own.</p>
       )}
       <div className="pn-list pn-list--wide">
         {installed.map((p) => {
