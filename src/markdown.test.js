@@ -37,6 +37,65 @@ test('inline shapes: code, bold, italic, safe links only', () => {
 test('headings and bullets render in the paragraph family', () => {
   const html = renderMarkdown('# Title\n\n- one\n- two\n\nDone.')
   assert.match(html, /<p class="md-h1">Title<\/p>/)
-  assert.match(html, /<span class="md-li">one<\/span>/)
+  assert.match(html, /<ul><li>one<\/li><li>two<\/li><\/ul>/)
   assert.ok(html.includes('Done.'))
+})
+
+test('tables render with alignment and escaped pipes survive', () => {
+  const html = renderMarkdown(
+    '| Syntax | Notes | Priority |\n' +
+    '|:-------|:-----:|---------:|\n' +
+    '| `code` | ✅ | 1 |\n' +
+    '| a \\| b | works\\|here | 2 |',
+  )
+  assert.match(html, /<table class="md-table">/)
+  assert.match(html, /<th style="text-align:left">Syntax<\/th>/)
+  assert.match(html, /<th style="text-align:center">Notes<\/th>/)
+  assert.match(html, /<th style="text-align:right">Priority<\/th>/)
+  assert.ok(html.includes('<code class="md-code">code</code>'), 'inline code in cells')
+  // The escaped pipe stays one cell with a literal | — backslash
+  // consumed, cell not split.
+  assert.match(html, /<td[^>]*>a \| b<\/td>/)
+  assert.match(html, /<td[^>]*>works\|here<\/td>/)
+  // A stray pipe line with no header above stays paragraph text.
+  const stray = renderMarkdown('nothing above\n| not | a | table |')
+  assert.ok(!stray.includes('<table'), 'no header + delimiter = not a table')
+})
+
+test('nested lists nest, ordered and unordered mix, tasks check', () => {
+  const html = renderMarkdown(
+    '1. Ordered parent\n' +
+    '   - [ ] Unchecked task\n' +
+    '   - [x] Checked task\n' +
+    '     1. Deep ordered item\n' +
+    '2. Second ordered item\n',
+  )
+  assert.match(html, /<ol><li>Ordered parent<\/li>/)
+  // The unordered sublist opens inside the ordered item's scope.
+  assert.match(html, /<ul><li><span class="md-task">○<\/span>Unchecked task<\/li>/)
+  assert.match(html, /<li><span class="md-task done">✓<\/span>Checked task<\/li>/)
+  assert.match(html, /<ol><li>Deep ordered item<\/li><\/ol>/)
+  assert.match(html, /<li>Second ordered item<\/li><\/ol>/)
+})
+
+test('strikethrough, titled links, bare URLs, images-as-links, rules, blockquotes', () => {
+  const html = renderMarkdown(
+    '~~struck~~ and [titled](https://example.com "hover") and https://example.com bare\n\n' +
+    '![alt text](https://example.com/cat.png)\n\n---\n\n> a quoted line',
+  )
+  assert.match(html, /<s>struck<\/s>/)
+  assert.match(html, /<a class="md-link" href="https:\/\/example\.com" target="_blank" rel="noopener noreferrer">titled<\/a>/)
+  assert.match(html, />https:\/\/example\.com<\/a>/, 'bare URL autolinks')
+  assert.match(html, /<a[^>]*>alt text<\/a>/, 'an image renders as its alt text linked')
+  assert.match(html, /<hr class="md-hr" \/>/)
+  assert.match(html, /<blockquote class="md-quote">a quoted line<\/blockquote>/)
+})
+
+test('javascript: and data: URLs never link, code spans protect their contents', () => {
+  const hostile = renderMarkdown('[evil](javascript:alert(1)) and [data](data:text/plain,x)')
+  assert.ok(!hostile.includes('href="javascript:'), 'script URLs stay inert')
+  assert.ok(!hostile.includes('href="data:'), 'data URLs stay inert')
+
+  const code = renderMarkdown('`**not bold** and https://example.com`')
+  assert.match(code, /<code class="md-code">\*\*not bold\*\* and https:\/\/example\.com<\/code>/, 'code spans untouched')
 })

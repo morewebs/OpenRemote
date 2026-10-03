@@ -259,6 +259,117 @@
   font-size: 12.5px;
 }
 
+/* ── tables: the machine-room grid's own family ── */
+
+.cv-agent .md-table-wrap {
+  margin: 8px 0;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.cv-agent .md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.cv-agent .md-table th,
+.cv-agent .md-table td {
+  padding: 5px 10px;
+  text-align: left;
+}
+
+.cv-agent .md-table th {
+  border-bottom: 1px solid var(--line);
+  color: var(--text-1);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cv-agent .md-table td {
+  color: var(--text-2);
+  border-top: 1px solid var(--line);
+}
+
+.cv-agent .md-table tbody tr:first-child td {
+  border-top: 0;
+}
+
+/* ── lists: quiet, indented, nested ── */
+
+.cv-agent ul,
+.cv-agent ol {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.cv-agent ul {
+  list-style: none;
+}
+
+.cv-agent ul > li {
+  position: relative;
+}
+
+.cv-agent ul > li::before {
+  content: '·';
+  position: absolute;
+  left: -10px;
+  color: var(--text-3);
+}
+
+.cv-agent ol {
+  list-style: decimal;
+}
+
+.cv-agent ol > li::marker {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.cv-agent li {
+  margin: 2px 0;
+}
+
+.cv-agent li > ul,
+.cv-agent li > ol {
+  margin: 2px 0;
+}
+
+.cv-agent .md-task {
+  margin-right: 6px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.cv-agent .md-task.done {
+  color: var(--green);
+}
+
+/* ── blockquotes, rules, strikes ── */
+
+.cv-agent .md-quote {
+  margin: 6px 0;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--line);
+  color: var(--text-3);
+  font-size: 13px;
+  font-style: italic;
+}
+
+.cv-agent .md-hr {
+  margin: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.cv-agent s {
+  color: var(--text-3);
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+}
+
 .cv-agent .md-pre {
   margin: 8px 0;
   padding: 10px 12px;
