@@ -263,13 +263,12 @@
 
 .cv-agent .md-table-wrap {
   /* An intrinsic table: as wide as its content needs, never more; a long
-     one scrolls inside its own border. Centered — the transcript's prose
-     column is centered too, and a small table floating left of center
-     reads as an accident. */
+     one scrolls inside its own border. Left like the prose and code,
+     with breathing room from the rail's edge. */
   display: block;
   width: fit-content;
   max-width: 100%;
-  margin: 8px auto;
+  margin: 8px 0 8px 14px;
   overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
