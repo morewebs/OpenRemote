@@ -378,8 +378,10 @@
 /* ── math: KaTeX's own output, in the room's colors ── */
 
 .cv-agent .md-math-block {
-  margin: 10px 0;
+  margin: 14px 0;
+  padding: 2px 0;
   overflow-x: auto;
+  overflow-y: hidden;
   color: var(--text-1);
   font-size: 17px;
   line-height: 1.8;
@@ -387,6 +389,22 @@
 
 .cv-agent .md-math-block .katex-display {
   margin: 0;
+}
+
+/* KaTeX's struts can trip a few px of phantom overflow — the scrollbar
+   appears as an ugly sliver next to the formula. Keep the scroll (long
+   formulas still pan) but the bar invisible until hovered. */
+.cv-agent .md-math-block::-webkit-scrollbar {
+  height: 5px;
+}
+
+.cv-agent .md-math-block::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: transparent;
+}
+
+.cv-agent .md-math-block:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .cv-agent .katex {
