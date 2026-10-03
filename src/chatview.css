@@ -162,7 +162,79 @@
   color: var(--text-2);
   font-size: 14px;
   line-height: 1.65;
-  white-space: pre-wrap;
+}
+
+/* ── markdown inside agent messages ── */
+
+.cv-agent p {
+  margin: 0;
+}
+
+.cv-agent p + p {
+  margin-top: 10px;
+}
+
+.cv-agent .md-h1,
+.cv-agent .md-h2,
+.cv-agent .md-h3,
+.cv-agent .md-h4 {
+  margin-top: 14px;
+  color: var(--text-1);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.cv-agent .md-h1 { font-size: 15px; }
+.cv-agent .md-h2 { font-size: 14.5px; }
+.cv-agent .md-h3,
+.cv-agent .md-h4 { font-size: 14px; }
+
+.cv-agent .md-li {
+  display: block;
+  padding-left: 14px;
+}
+
+.cv-agent .md-li::before {
+  content: '·';
+  margin-right: 7px;
+  color: var(--text-3);
+}
+
+.cv-agent .md-code {
+  padding: 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--text-1);
+  font-family: 'Geist Mono', ui-monospace, Consolas, monospace;
+  font-size: 12.5px;
+}
+
+.cv-agent .md-pre {
+  margin: 8px 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.cv-agent .md-pre code {
+  color: var(--text-1);
+  font-family: 'Geist Mono', ui-monospace, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.cv-agent .md-link {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+}
+
+.cv-agent .md-link:hover {
+  border-bottom-color: var(--accent);
 }
 
 .cv-running {

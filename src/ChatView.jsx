@@ -5,6 +5,7 @@ import { railItems } from './state/reducer.js'
 import { harnessName, harnessIcon } from './harness-names.js'
 import { HarnessIcon } from './BrandIcon.jsx'
 import { editRows, isFileEdit, writeRows } from './diff.js'
+import { renderMarkdown } from './markdown.js'
 import ContextRing from './ContextRing.jsx'
 import PickerMenu from './PickerMenu.jsx'
 import './chatview.css'
@@ -184,19 +185,29 @@ export default function ChatView({ chat, onBack }) {
           {rail.length === 0 && <p className="cv-node cv-note">The transcript will appear here.</p>}
           {rail.map((item) => {
             if (item.kind === 'stream') {
-              // The live reply — text as it arrives, with a breathing caret.
-              // The settled message.added replaces this item whole.
+              // The live reply — markdown as it arrives, with a breathing
+              // caret riding the end. The settled message.added replaces
+              // this item whole.
               return (
-                <p key={item.id} className="cv-node cv-agent">
-                  {item.text}
-                  <span className="cv-caret" />
-                </p>
+                <p
+                  key={item.id}
+                  className="cv-node cv-agent"
+                  dangerouslySetInnerHTML={{ __html: `${renderMarkdown(item.text)}<span class="cv-caret"></span>` }}
+                />
               )
             }
             if (item.kind === 'message') {
               if (item.role === 'user') return <div key={item.id} className="cv-user">{item.text}</div>
               if (item.role === 'note') return <p key={item.id} className="cv-node cv-note">{item.text}</p>
-              return <p key={item.id} className="cv-node cv-agent">{item.text}</p>
+              // Agent messages are markdown — the harness's own output
+              // shape — rendered through the escape-first mini renderer.
+              return (
+                <p
+                  key={item.id}
+                  className="cv-node cv-agent"
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(item.text) }}
+                />
+              )
             }
             if (item.kind === 'tool') {
               // A file edit renders as a split diff — the tool card's
