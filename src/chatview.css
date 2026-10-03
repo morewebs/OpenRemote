@@ -262,14 +262,20 @@
 /* ── tables: the machine-room grid's own family ── */
 
 .cv-agent .md-table-wrap {
-  margin: 8px 0;
+  /* An intrinsic table: as wide as its content needs, never more; a long
+     one scrolls inside its own border. Centered — the transcript's prose
+     column is centered too, and a small table floating left of center
+     reads as an accident. */
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 8px auto;
   overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
 }
 
 .cv-agent .md-table {
-  width: 100%;
   border-collapse: collapse;
   font-size: 12.5px;
   line-height: 1.5;
@@ -371,6 +377,12 @@
 }
 
 .cv-agent .md-pre {
+  /* As wide as the code needs, never the whole column — a three-line
+     snippet shouldn't wear a full-width frame. Aligned left like the
+     prose; long lines scroll inside the border. */
+  display: block;
+  width: fit-content;
+  max-width: 100%;
   margin: 8px 0;
   padding: 10px 12px;
   overflow-x: auto;
