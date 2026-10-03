@@ -189,3 +189,71 @@ async fn codex_compaction_lands_as_the_transcripts_note() {
         dump(&events)
     );
 }
+
+#[tokio::test]
+async fn claude_shares_its_reasoning_and_thinking_tokens() {
+    let daemon = start_daemon(&[("claude", fixture_agent())]).await;
+    let ws = workspace(Some("think"));
+    let created = call(
+        &daemon,
+        "POST",
+        "/sessions",
+        Some(json!({"request_id": "t-create", "harness": "claude", "workspace": ws.path()})),
+    )
+    .await;
+    let id = created.body["id"].as_str().expect("session id").to_string();
+    until_kinds(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        &["session.status_changed"],
+    )
+    .await;
+    call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "t-p", "text": "what is 17*23"})),
+    )
+    .await;
+
+    let events = until_count(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        "turn.completed",
+        1,
+    )
+    .await;
+    // The reasoning stream grew, and the settled thinking block replaced it.
+    let deltas: Vec<&str> = events
+        .iter()
+        .filter(|(_, p)| kind(p) == "reasoning.delta")
+        .filter_map(|(_, p)| p["text"].as_str())
+        .collect();
+    assert_eq!(
+        deltas,
+        vec!["Let me compute ", "17*23 ", "step by step."],
+        "thinking deltas stream in order; events:\n{}",
+        dump(&events)
+    );
+    let settled = events
+        .iter()
+        .find(|(_, p)| kind(p) == "reasoning.added")
+        .expect("the thinking block lands as reasoning.added");
+    assert_eq!(
+        settled.1["text"],
+        "Let me compute 17*23 step by step.",
+        "the harness's own thinking, verbatim"
+    );
+    // The reply itself stays unmixed.
+    let reply = events
+        .iter()
+        .find(|(_, p)| kind(p) == "message.added" && p["message"]["role"] == "assistant")
+        .expect("assistant reply");
+    assert_eq!(reply.1["message"]["text"], "done: what is 17*23");
+    // The turn's thinking tokens, the SDK's own field, verbatim.
+    let thinking = events
+        .iter()
+        .find(|(_, p)| kind(p) == "thinking.tokens")
+        .expect("thinking tokens ride the turn");
+    assert_eq!(thinking.1["tokens"], json!(42));
+}

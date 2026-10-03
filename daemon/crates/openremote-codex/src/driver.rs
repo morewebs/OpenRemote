@@ -529,6 +529,15 @@ fn notification(method: &str, params: &Value, shared: &Shared) -> Option<DriverE
                     name: "commandExecution".into(),
                     input: item.clone(),
                 }),
+                // Codex's own reasoning item, on models that emit them —
+                // its words, surfaced dim, never mixed into the reply.
+                "reasoning" => item
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .filter(|t| !t.is_empty())
+                    .map(|text| DriverEvent::ReasoningText {
+                        text: text.to_string(),
+                    }),
                 _ => None,
             }
         }

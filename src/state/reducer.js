@@ -47,6 +47,9 @@ export function chatFromSession(session) {
     // The session's running cost in USD — the harness's own numbers,
     // summed. Only where the harness reports money.
     costUsd: 0,
+    // The session's running thinking-token count — the harness's own
+    // number (claude's thinking_tokens), summed across turns.
+    thinkingTokens: 0,
     lastError: session.last_error ?? null,
     running: ['starting', 'working', 'waiting'].includes(session.status),
     title: null,
@@ -159,6 +162,43 @@ export function foldEvent(chat, event) {
       // The harness's own cost number for one turn, verbatim. The facts
       // row shows the running total for the session.
       chat.costUsd = (chat.costUsd ?? 0) + payload.cost_usd
+      break
+    }
+    case 'reasoning.added': {
+      // The harness's own reasoning, settled — its own block, dim and
+      // collapsible, never mixed into the reply text. Replaces the live
+      // reasoning stream of the same turn.
+      for (let i = chat.timeline.length - 1; i >= 0; i--) {
+        const item = chat.timeline[i]
+        if (item.kind === 'reasoning-stream') {
+          if (item.turn === payload.turn) chat.timeline.splice(i, 1)
+          break
+        }
+      }
+      chat.timeline.push({
+        kind: 'reasoning',
+        id: `reasoning-${event.seq}`,
+        turn: payload.turn,
+        text: payload.text,
+      })
+      break
+    }
+    case 'reasoning.delta': {
+      // A streaming fragment of the reasoning — grows the live item of
+      // that turn; reasoning.added for the same turn replaces it whole.
+      let last = chat.timeline[chat.timeline.length - 1]
+      if (!last || last.kind !== 'reasoning-stream' || last.turn !== payload.turn) {
+        last = { kind: 'reasoning-stream', id: `rstream-${payload.turn}`, turn: payload.turn, text: payload.text }
+        chat.timeline.push(last)
+        break
+      }
+      last.text += payload.text
+      break
+    }
+    case 'thinking.tokens': {
+      // The turn's thinking-token count, the harness's own number —
+      // the facts row shows the session's running total.
+      chat.thinkingTokens = (chat.thinkingTokens ?? 0) + payload.tokens
       break
     }
     case 'note.added': {

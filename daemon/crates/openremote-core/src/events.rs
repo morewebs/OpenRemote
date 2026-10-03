@@ -42,6 +42,17 @@ pub enum EventPayload {
     MessageAdded { message: ChatMessage },
     #[serde(rename = "message.delta")]
     MessageDelta { turn: u64, text: String },
+    /// The harness's own reasoning for the turn, when it shares it. Dim
+    /// and collapsible in the console; never mixed into the reply.
+    #[serde(rename = "reasoning.added")]
+    ReasoningAdded { turn: u64, text: String },
+    /// A streaming fragment of the reasoning — the live-thinking shape.
+    #[serde(rename = "reasoning.delta")]
+    ReasoningDelta { turn: u64, text: String },
+    /// The turn's thinking-token count — the harness's own number
+    /// (claude's `output_tokens_details.thinking_tokens`).
+    #[serde(rename = "thinking.tokens")]
+    ThinkingTokens { tokens: u64 },
     #[serde(rename = "tool.started")]
     ToolStarted {
         turn: u64,
@@ -98,6 +109,9 @@ impl Event {
             EventPayload::ToolResult { .. } => "tool.result",
             EventPayload::ContextUsed { .. } => "context.used",
             EventPayload::UsageCost { .. } => "usage.cost",
+            EventPayload::ReasoningAdded { .. } => "reasoning.added",
+            EventPayload::ReasoningDelta { .. } => "reasoning.delta",
+            EventPayload::ThinkingTokens { .. } => "thinking.tokens",
             EventPayload::NoteAdded { .. } => "note.added",
             EventPayload::DecisionRequested { .. } => "decision.requested",
             EventPayload::DecisionResponded { .. } => "decision.responded",

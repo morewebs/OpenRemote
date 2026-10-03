@@ -351,6 +351,14 @@ async fn read_stdout(
                         return;
                     }
                 }
+                // The model's own thinking blocks, when it shares them —
+                // dim and collapsible in the console, never mixed into the
+                // reply text.
+                for text in frames::block_thinking(&content) {
+                    if tx.send(DriverEvent::ReasoningText { text }).await.is_err() {
+                        return;
+                    }
+                }
                 for (tool_use_id, name, input) in frames::tool_use_blocks(&content) {
                     names.insert(tool_use_id.clone(), name.clone());
                     if tx
@@ -386,6 +394,7 @@ async fn read_stdout(
                 continue;
             }
             Frame::TextDelta { text } => Some(DriverEvent::TextDelta { text }),
+            Frame::ThinkingDelta { text } => Some(DriverEvent::ReasoningDelta { text }),
             Frame::CompactBoundary => Some(DriverEvent::Compacted),
             Frame::Result {
                 subtype,
@@ -409,6 +418,21 @@ async fn read_stdout(
                 // The turn's cost in USD, verbatim from the result frame.
                 if let Some(cost) = cost_usd {
                     if tx.send(DriverEvent::TurnCost { cost_usd: cost }).await.is_err() {
+                        return;
+                    }
+                }
+                // The turn's thinking tokens, verbatim — the SDK's own
+                // `usage.output_tokens_details.thinking_tokens`.
+                if let Some(thinking) = usage
+                    .as_ref()
+                    .and_then(|u| u.pointer("/output_tokens_details/thinking_tokens"))
+                    .and_then(|t| t.as_u64())
+                {
+                    if tx
+                        .send(DriverEvent::ThinkingTokens { tokens: thinking })
+                        .await
+                        .is_err()
+                    {
                         return;
                     }
                 }

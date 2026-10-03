@@ -48,6 +48,21 @@ pub enum DriverEvent {
     TextDelta {
         text: String,
     },
+    /// The harness's own reasoning for the turn, when it shares it —
+    /// claude's `thinking` content blocks and `thinking_delta` stream
+    /// events; codex reasoning items on models that emit them. Its words,
+    /// never ours; the console shows it dim and collapsible.
+    ReasoningText {
+        text: String,
+    },
+    ReasoningDelta {
+        text: String,
+    },
+    /// The turn's thinking-token count, verbatim — claude's own
+    /// `usage.output_tokens_details.thinking_tokens`.
+    ThinkingTokens {
+        tokens: u64,
+    },
     ToolStarted {
         tool_use_id: String,
         name: String,

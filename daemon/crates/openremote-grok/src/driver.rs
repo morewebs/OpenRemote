@@ -231,6 +231,13 @@ async fn read_prompt(
                         return;
                     }
                 }
+                // Grok shares claude's wire shape — thinking blocks ride
+                // the same content array when the model shares them.
+                for text in wire::block_thinking(&content) {
+                    if tx.send(DriverEvent::ReasoningText { text }).await.is_err() {
+                        return;
+                    }
+                }
             }
             wire::Frame::UserToolResults { content } => {
                 for (_id, text, is_error) in wire::tool_result_blocks(&content) {
@@ -246,6 +253,9 @@ async fn read_prompt(
             }
             wire::Frame::TextDelta { text } => {
                 let _ = tx.send(DriverEvent::TextDelta { text }).await;
+            }
+            wire::Frame::ThinkingDelta { text } => {
+                let _ = tx.send(DriverEvent::ReasoningDelta { text }).await;
             }
             wire::Frame::Result {
                 subtype,

@@ -215,3 +215,36 @@ test('stream deltas grow a live item, and the settled message replaces it whole'
   assert.equal(rail.at(-1).kind, 'stream')
   assert.equal(rail.at(-1).text, 'Done. ')
 })
+
+test('reasoning streams and settles as its own block, thinking tokens sum', () => {
+  const chat = chatFromSession(session())
+  // The thinking stream grows its own live item.
+  foldEvent(chat, event(2, { type: 'reasoning.delta', turn: 1, text: 'Let me ' }))
+  foldEvent(chat, event(3, { type: 'reasoning.delta', turn: 1, text: 'compute.' }))
+  let rail = railItems(chat)
+  assert.equal(rail.length, 1)
+  assert.equal(rail[0].kind, 'reasoning-stream')
+  assert.equal(rail[0].text, 'Let me compute.')
+
+  // The settled thinking block replaces the stream.
+  foldEvent(chat, event(4, { type: 'reasoning.added', turn: 1, text: 'Let me compute.' }))
+  rail = railItems(chat)
+  assert.equal(rail.length, 1)
+  assert.equal(rail[0].kind, 'reasoning')
+  assert.equal(rail[0].text, 'Let me compute.')
+
+  // The reply lands unmixed, after the reasoning.
+  foldEvent(chat, event(5, {
+    type: 'message.added',
+    message: { id: 'm1', turn: 1, role: 'assistant', text: '391' },
+  }))
+  rail = railItems(chat)
+  assert.equal(rail.length, 2)
+  assert.equal(rail[0].kind, 'reasoning')
+  assert.equal(rail[1].text, '391')
+
+  // Thinking tokens sum across turns.
+  foldEvent(chat, event(6, { type: 'thinking.tokens', tokens: 42 }))
+  foldEvent(chat, event(7, { type: 'thinking.tokens', tokens: 8 }))
+  assert.equal(chat.thinkingTokens, 50)
+})

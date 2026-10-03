@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Lightning, Stop, Play, HandPalm } from '@phosphor-icons/react'
+import { ArrowUp, Lightning, Stop, Play, HandPalm, Brain } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { railItems } from './state/reducer.js'
 import { harnessName, harnessIcon } from './harness-names.js'
@@ -21,6 +21,27 @@ const STATUS_LABEL = {
 }
 
 const TOOL_LABEL = { ok: 'Done', failed: 'Failed' }
+
+/// The harness's own reasoning, dim and collapsible. Collapsed by
+/// default; live streams breathe while the thinking runs.
+function ReasoningBlock({ text, live }) {
+  const [open, setOpen] = useState(false)
+  const label = live ? 'Thinking…' : 'Thought process'
+  return (
+    <div className="cv-reasoning">
+      <button type="button" className="cv-reasoning-head" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <Brain size={12} />
+        {label}
+      </button>
+      {(open || live) && (
+        <p
+          className={`cv-reasoning-body${live ? ' live' : ''}`}
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }}
+        />
+      )}
+    </div>
+  )
+}
 
 // Codex and Pi apply model, effort, and fast on the running thread now.
 // The others take them when the process starts, so a stopped chat can
@@ -156,6 +177,9 @@ export default function ChatView({ chat, onBack }) {
           {chat.costUsd > 0 && (
             <span className="cv-fact">${chat.costUsd < 0.01 ? chat.costUsd.toFixed(4) : chat.costUsd.toFixed(2)}</span>
           )}
+          {chat.thinkingTokens > 0 && (
+            <span className="cv-fact">{chat.thinkingTokens.toLocaleString()} thinking tokens</span>
+          )}
           {chat.approvedTools?.length > 0 && (
             <span className="cv-fact">
               {chat.approvedTools.join(' · ')} allowed for this chat
@@ -187,6 +211,14 @@ export default function ChatView({ chat, onBack }) {
         <div className="cv-thread">
           {rail.length === 0 && <p className="cv-node cv-note">The transcript will appear here.</p>}
           {rail.map((item) => {
+            if (item.kind === 'reasoning' || item.kind === 'reasoning-stream') {
+              // The harness's own thinking, dim and collapsible — never
+              // mixed into the reply. Collapsed by default; the live
+              // stream shows its tail growing while it runs.
+              return (
+                <ReasoningBlock key={item.id} text={item.text} live={item.kind === 'reasoning-stream'} />
+              )
+            }
             if (item.kind === 'stream') {
               // The live reply — markdown as it arrives, with a breathing
               // caret riding the end. The settled message.added replaces

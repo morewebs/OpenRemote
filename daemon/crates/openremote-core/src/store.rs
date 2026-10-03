@@ -654,6 +654,9 @@ impl Store {
             | EventPayload::ToolResult { .. }
             | EventPayload::ContextUsed { .. }
             | EventPayload::UsageCost { .. }
+            | EventPayload::ReasoningAdded { .. }
+            | EventPayload::ReasoningDelta { .. }
+            | EventPayload::ThinkingTokens { .. }
             | EventPayload::NoteAdded { .. }
             | EventPayload::DaemonError { .. } => {
                 if let Some(session) = self.state.sessions.get_mut(&event.session_id) {

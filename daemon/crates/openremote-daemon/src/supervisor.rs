@@ -1168,6 +1168,17 @@ impl Supervisor {
                 let turn = self.current_turn(id);
                 self.emit_all(id, vec![EventPayload::MessageDelta { turn, text }])?;
             }
+            DriverEvent::ReasoningText { text } => {
+                let turn = self.current_turn(id);
+                self.emit_all(id, vec![EventPayload::ReasoningAdded { turn, text }])?;
+            }
+            DriverEvent::ReasoningDelta { text } => {
+                let turn = self.current_turn(id);
+                self.emit_all(id, vec![EventPayload::ReasoningDelta { turn, text }])?;
+            }
+            DriverEvent::ThinkingTokens { tokens } => {
+                self.emit_all(id, vec![EventPayload::ThinkingTokens { tokens }])?;
+            }
             DriverEvent::ToolStarted { name, input, .. } => {
                 let turn = self.current_turn(id);
                 self.emit_all(id, vec![EventPayload::ToolStarted { turn, name, input }])?;

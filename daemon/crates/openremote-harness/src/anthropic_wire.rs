@@ -27,6 +27,9 @@ pub enum Frame {
     /// `stream_event` with a text delta (only with
     /// `--include-partial-messages`).
     TextDelta { text: String },
+    /// `stream_event` with a thinking delta (same flag) — the model's own
+    /// reasoning streaming, `delta.type: "thinking_delta"`.
+    ThinkingDelta { text: String },
     /// `result` — the turn boundary. Never guess turn state before it.
     /// `usage` rides verbatim (the SDK's own fields: input_tokens,
     /// cache_read_input_tokens, cache_creation_input_tokens, …).
@@ -55,6 +58,22 @@ pub fn block_texts(content: &[Value]) -> Vec<String> {
         .iter()
         .filter(|b| b.get("type").and_then(|t| t.as_str()) == Some("text"))
         .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+        .map(String::from)
+        .collect()
+}
+
+/// The thinking blocks of an assistant message — claude's own reasoning,
+/// `type: "thinking"` (or `redacted_thinking`, which carries no text).
+pub fn block_thinking(content: &[Value]) -> Vec<String> {
+    content
+        .iter()
+        .filter(|b| {
+            matches!(
+                b.get("type").and_then(|t| t.as_str()),
+                Some("thinking") | Some("redacted_thinking")
+            )
+        })
+        .filter_map(|b| b.get("thinking").and_then(|t| t.as_str()))
         .map(String::from)
         .collect()
 }
@@ -148,6 +167,14 @@ pub fn parse_frame(line: &str) -> Option<Frame> {
                 Some(Frame::TextDelta {
                     text: raw
                         .pointer("/event/delta/text")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or_default()
+                        .to_string(),
+                })
+            } else if delta_type == Some("thinking_delta") {
+                Some(Frame::ThinkingDelta {
+                    text: raw
+                        .pointer("/event/delta/thinking")
                         .and_then(|t| t.as_str())
                         .unwrap_or_default()
                         .to_string(),

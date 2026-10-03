@@ -316,6 +316,49 @@ impl FixtureAgent {
                 self.assistant_text("Hello world");
                 self.result("success", "Hello world", "completed");
             }
+            // The model shares its reasoning: thinking deltas stream, a
+            // thinking content block lands, and the result reports the
+            // turn's thinking tokens (claude's own fields).
+            "think" => {
+                for chunk in ["Let me compute ", "17*23 ", "step by step."] {
+                    self.out(serde_json::json!({
+                        "type": "stream_event",
+                        "parent_tool_use_id": null,
+                        "event": {"type": "content_block_delta",
+                                  "delta": {"type": "thinking_delta", "thinking": chunk}}
+                    }));
+                }
+                self.out(serde_json::json!({
+                    "type": "assistant",
+                    "session_id": self.session_id,
+                    "uuid": format!("asst-{}", self.prompt_count),
+                    "parent_tool_use_id": null,
+                    "message": {
+                        "id": format!("msg_{}", self.prompt_count),
+                        "role": "assistant",
+                        "model": "fixture-sonnet",
+                        "content": [
+                            {"type": "thinking", "thinking": "Let me compute 17*23 step by step."},
+                            {"type": "text", "text": format!("done: {prompt}")}
+                        ],
+                        "stop_reason": null,
+                        "usage": {"input_tokens": 10, "output_tokens": 5}
+                    }
+                }));
+                self.out(serde_json::json!({
+                    "type": "result",
+                    "subtype": "success",
+                    "session_id": self.session_id,
+                    "result": format!("done: {prompt}"),
+                    "is_error": false,
+                    "num_turns": self.prompt_count,
+                    "terminal_reason": "completed",
+                    "duration_ms": 9,
+                    "total_cost_usd": 0.042,
+                    "usage": {"input_tokens": 10, "output_tokens": 5,
+                              "output_tokens_details": {"thinking_tokens": 42}}
+                }));
+            }
             // The conversation outgrew its window: the harness compacted
             // before answering (claude's own marker).
             "compact" => {
