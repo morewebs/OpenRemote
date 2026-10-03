@@ -95,8 +95,8 @@ export default function Sidebar({ open, active, onSelect, onReplayOnboarding }) 
             doesn't exist, and no dead UI is the rule. */}
       </div>
 
-      <nav className="sb-list" aria-label="Chats">
-        <div className="section-title">Chats</div>
+      <nav className="sb-list" aria-label="Projects">
+        <div className="section-title">Projects</div>
         {groups.length === 0 && (
           <p className="sb-empty">
             {query.trim()
