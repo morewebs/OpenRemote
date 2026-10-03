@@ -1,13 +1,16 @@
 // Markdown for agent messages — the shapes harnesses actually emit:
 // headings, fenced code, tables, nested ordered/unordered lists, task
 // lists, blockquotes, strikethrough, inline code/bold/italic, http(s)
-// links (titled and bare), images-as-links, horizontal rules, hard breaks.
-// Escaped first so nothing raw ever renders — agent output is untrusted
-// input; we render only shapes we built. No dependencies, no supply chain.
+// links (titled and bare), images-as-links, horizontal rules, hard breaks,
+// and math (inline $…$ and display $$…$$) through KaTeX — the same engine
+// GitHub uses, bundled locally, no network calls. Escaped first so nothing
+// raw ever renders — agent output is untrusted input; we render only
+// shapes we built or KaTeX's own output.
 //
-// Deliberately not rendered, by design: raw HTML (stays inert), math,
-// footnotes, definition lists, mermaid. Agents rarely emit these and each
-// adds attack surface for no payoff.
+// Deliberately not rendered, by design: raw HTML (stays inert),
+// footnotes, definition lists, mermaid.
+
+import katex from 'katex'
 
 const ESCAPE = {
   '&': '&amp;',
@@ -27,15 +30,29 @@ function safeHref(url) {
 }
 
 /// Inline: `code`, **bold**, *italic*, ~~strike~~, [text](url "title"),
-/// ![alt](url) (as a link), bare http(s) URLs. Code spans are extracted
-/// first so nothing inside them is touched.
+/// ![alt](url) (as a link), bare http(s) URLs, $math$. Code spans and
+/// math are extracted first so nothing inside them is touched — KaTeX
+/// gets the raw source, everything else gets the escaped form.
 function inline(text) {
   const codes = []
+  const maths = []
   let out = escapeHtml(text)
   // Stash code spans so later passes can't mangle their contents.
   out = out.replace(/`([^`]+)`/g, (_, code) => {
     codes.push(code)
     return `\u0000${codes.length - 1}\u0000`
+  })
+  // Inline math: $…$ — only when the content actually looks like TeX (a
+  // backslash, superscript, subscript, or brace). "$5 and $10" is prose,
+  // never math. KaTeX renders the raw source; a parse error keeps the
+  // original as plain text.
+  out = out.replace(/(?<![\\$])\$([^$\n]*[\\^_{}][^$\n]*)\$(?!\$)/g, (m, tex) => {
+    try {
+      maths.push(katex.renderToString(tex, { throwOnError: false }))
+      return `\u0001${maths.length - 1}\u0001`
+    } catch {
+      return m
+    }
   })
   out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
   out = out.replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, '$1<em>$2</em>')
@@ -58,10 +75,11 @@ function inline(text) {
     /(?<!href=")(https?:\/\/[^\s<]+?)([.,;:!?)\]]*)(?=[\s<]|$)/g,
     '<a class="md-link" href="$1" target="_blank" rel="noopener noreferrer">$1</a>$2',
   )
-  // Restore the code spans, escaped, wrapped.
+  // Restore the code spans, escaped, wrapped; then the math.
   out = out.replace(/\u0000(\d+)\u0000/g, (_, i) =>
     `<code class="md-code">${codes[Number(i)]}</code>`,
   )
+  out = out.replace(/\u0001(\d+)\u0001/g, (_, i) => maths[Number(i)] ?? '')
   return out
 }
 
@@ -140,6 +158,7 @@ export function renderMarkdown(text) {
   let buffer = [] // paragraph lines
   let listStack = [] // open list depths, for <ul>/<ol> nesting
   let table = null // { align: [..], rows: [[..]] }
+  let displayMath = null // the $$…$$ block's lines, until its closer
 
   const closeLists = () => {
     while (listStack.length > 0) {
@@ -194,6 +213,27 @@ export function renderMarkdown(text) {
   }
 
   for (const line of lines) {
+    // ── display math: $$ opens, $$ closes, everything between is TeX ──
+    if (displayMath != null) {
+      if (/^\s*\$\$\s*$/.test(line)) {
+        const tex = displayMath.join('\n')
+        try {
+          out.push(`<div class="md-math-block">${katex.renderToString(tex, { displayMode: true, throwOnError: false })}</div>`)
+        } catch {
+          out.push(`<p>${escapeHtml(tex)}</p>`)
+        }
+        displayMath = null
+      } else {
+        displayMath.push(line)
+      }
+      continue
+    }
+    if (/^\s*\$\$\s*$/.test(line)) {
+      flushAll()
+      displayMath = []
+      continue
+    }
+
     // ── fenced code ──
     const fenceMatch = line.match(/^\s*```(.*)$/)
     if (fenceMatch) {
@@ -293,13 +333,23 @@ export function renderMarkdown(text) {
     }
 
     // ── plain text: a paragraph line (may be a table header next) ──
-    const raw = line.trim().replace(/\$/, '')
+    // A trailing backslash is a hard break; the join supplies the <br />.
+    const raw = line.trim().replace(/\\$/, '')
     buffer.push({ raw, html: inline(raw) })
   }
 
-  // A stream that ends mid-fence still shows its code so far.
+  // A stream that ends mid-fence still shows its code so far; mid-$$ its
+  // math so far (a stream may be cut inside a formula).
   if (fence != null) {
     out.push(`<pre class="md-pre"><code>${escapeHtml(fence.lines.join('\n'))}</code></pre>`)
+  }
+  if (displayMath != null && displayMath.length > 0) {
+    const tex = displayMath.join('\n')
+    try {
+      out.push(`<div class="md-math-block">${katex.renderToString(tex, { displayMode: true, throwOnError: false })}</div>`)
+    } catch {
+      out.push(`<p>${escapeHtml(tex)}</p>`)
+    }
   }
   flushAll()
   return out.join('')

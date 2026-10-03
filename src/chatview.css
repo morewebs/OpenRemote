@@ -375,6 +375,20 @@
   text-decoration-color: rgba(255, 255, 255, 0.35);
 }
 
+/* ── math: KaTeX's own output, in the room's colors ── */
+
+.cv-agent .md-math-block {
+  margin: 8px 0;
+  overflow-x: auto;
+  color: var(--text-1);
+  font-size: 14px;
+}
+
+.cv-agent .katex {
+  color: var(--text-1);
+  font-size: 1em;
+}
+
 .cv-agent .md-pre {
   /* As wide as the code needs, never the whole column — a three-line
      snippet shouldn't wear a full-width frame. Aligned left like the

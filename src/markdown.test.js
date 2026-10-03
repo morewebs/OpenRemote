@@ -99,3 +99,28 @@ test('javascript: and data: URLs never link, code spans protect their contents',
   const code = renderMarkdown('`**not bold** and https://example.com`')
   assert.match(code, /<code class="md-code">\*\*not bold\*\* and https:\/\/example\.com<\/code>/, 'code spans untouched')
 })
+
+test('math renders through KaTeX — inline, display, and dollars stay prose', () => {
+  // Inline math with real TeX content.
+  const inlineMath = renderMarkdown('The value $e^{i\pi} + 1 = 0$ holds.')
+  assert.ok(inlineMath.includes('katex'), 'inline math renders')
+  assert.ok(!inlineMath.includes('$e^{'), 'the delimiters are consumed')
+
+  // Display math, the real transcript formula's shape.
+  const display = renderMarkdown('$$\n\text{hop}(d) = \arg\max_{p \in \text{table}} |p|\n$$')
+  assert.ok(display.includes('md-math-block'), 'display math gets its block')
+  assert.ok(display.includes('katex-display'), 'KaTeX display mode')
+
+  // Dollar amounts are never math — no TeX-shaped content between them.
+  const price = renderMarkdown('That costs $5 and $10 total.')
+  assert.ok(!price.includes('katex'), 'prices stay prose')
+  assert.ok(price.includes('$5 and $10'), 'the dollars survive')
+
+  // A mid-formula stream cut still shows its math so far.
+  const cut = renderMarkdown('$$\nx = \frac{1}{2}')
+  assert.ok(cut.includes('katex'), 'an unclosed $$ still renders its content')
+
+  // Code spans protect their dollars from the math pass.
+  const code = renderMarkdown('`$not math$`')
+  assert.ok(!code.includes('katex'), 'code spans beat math')
+})
