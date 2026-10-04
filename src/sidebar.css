@@ -182,13 +182,20 @@ button {
 }
 
 .machines-reveal > * {
-  overflow: hidden;
   min-height: 0;
   transition: opacity 0.22s ease;
 }
 
+/* The inner clip row: what actually gets hidden when collapsed - it
+   clips the button's fixed height (a grid row alone would overflow and
+   stay clickable), and visibility: hidden drops it from tab order. */
 .machines-reveal.closed > * {
+  overflow: clip;
   opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.22s ease,
+    visibility 0s 0.22s;
 }
 
 .side-tile:hover,

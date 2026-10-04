@@ -100,13 +100,15 @@ export default function Sidebar({ open, active, mode, onMode, cloudView, onCloud
         {/* Machines is a cloud-mode view - the tile reveals and collapses
             with the mode switch (the grid-rows transition in the CSS). */}
         <div className={`machines-reveal${mode === 'cloud' ? '' : ' closed'}`}>
-          <button
-            className={`side-tile${cloudView === 'machines' ? ' on' : ''}`}
-            onClick={() => onCloudView('machines')}
-          >
-            <Desktop size={17} />
-            Machines
-          </button>
+          <div className="machines-clip">
+            <button
+              className={`side-tile${cloudView === 'machines' ? ' on' : ''}`}
+              onClick={() => onCloudView('machines')}
+            >
+              <Desktop size={17} />
+              Machines
+            </button>
+          </div>
         </div>
       </div>
 
