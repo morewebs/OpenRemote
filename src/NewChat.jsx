@@ -10,7 +10,7 @@ import { canPickFolder, pickFolder } from './pick-folder.js'
 import './newchat.css'
 import './composer.css'
 
-// The harnesses whose own login command the daemon can relay — the
+// The harnesses whose own login command the daemon can relay - the
 // sign-in prompt offers the relay only there; the others say their own
 // honest words.
 const SIGNIN_HARNESSES = new Set(['claude', 'codex', 'grok'])
@@ -49,15 +49,15 @@ export default function NewChat({ onOpen }) {
   const [fast, setFast] = useState(false)
   const [signInFor, setSignInFor] = useState(null)
 
-  // Only what the daemon reports installed — no dead UI.
+  // Only what the daemon reports installed - no dead UI.
   const available = (capabilities?.harnesses ?? []).filter((h) => h.available)
   const currentHarness = available.find((h) => h.id === harness) ?? available[0] ?? null
   // The picked harness's own sign-in fact: a harness that isn't signed in
-  // says so right here — the task is about to run on it.
+  // says so right here - the task is about to run on it.
   const needsSignIn = currentHarness && currentHarness.signed_in === false
 
   // The model slot: filled where the harness advertises, reserved
-  // (not rendered) where it doesn't. Fast mode follows the same rule —
+  // (not rendered) where it doesn't. Fast mode follows the same rule -
   // and both choices are per-harness, so switching resets them. The
   // saved defaults preselect their own harness's slots.
   useEffect(() => {
@@ -88,11 +88,11 @@ export default function NewChat({ onOpen }) {
     && !needsSignIn
   // The harness's own pre-send fact: what its config says a fresh chat
   // runs, in its own words (grok's config.toml, agy's settings, claude's
-  // priority chain) — none where the harness says nothing (the slot stays
+  // priority chain) - none where the harness says nothing (the slot stays
   // reserved).
   const resolvedDefault =
     // The pre-send fact: the harness's own config first, then its own
-    // default-catalog marker (codex's isDefault — the model a fresh
+    // default-catalog marker (codex's isDefault - the model a fresh
     // thread runs, the same fact thread/start echoes at create).
     currentHarness?.default_model ?? models.find((m) => m.is_default)?.model ?? null
   const defaultLabel =
@@ -121,7 +121,7 @@ export default function NewChat({ onOpen }) {
     }
   }
 
-  // The native folder dialog — one click instead of a typed absolute path.
+  // The native folder dialog - one click instead of a typed absolute path.
   const browse = async () => {
     const path = await pickFolder()
     if (!path) return
@@ -142,7 +142,7 @@ export default function NewChat({ onOpen }) {
               </>
             ) : (
               <>
-                {harnessName(currentHarness.id)} isn’t signed in — it signs in through its own
+                {harnessName(currentHarness.id)} isn’t signed in - it signs in through its own
                 setup.
               </>
             )}
@@ -186,7 +186,7 @@ export default function NewChat({ onOpen }) {
                   </button>
                 ) : (
                   // No catalog to pick from, but the harness's own config
-                  // says what a fresh chat runs — its words, shown as the
+                  // says what a fresh chat runs - its words, shown as the
                   // fact it is. The wire's first-turn truth replaces it.
                   <span className="nc-meta nc-static" title="The model this harness runs, from its own config">
                     {defaultLabel}
@@ -252,7 +252,7 @@ export default function NewChat({ onOpen }) {
                 className={`nc-meta nc-fast${fast ? ' on' : ''}`}
                 onClick={() => setFast((v) => !v)}
                 aria-pressed={fast}
-                title="The harness's own fast mode — its speed tier, never a model switch"
+                title="The harness's own fast mode - its speed tier, never a model switch"
               >
                 <Lightning size={13} weight={fast ? 'fill' : 'light'} />
                 Fast
@@ -270,7 +270,7 @@ export default function NewChat({ onOpen }) {
         <div className="nc-below">
           {/* The workspace is picked, never typed: the recents picker
               when there are any, the OS folder dialog beside it. An
-              empty recents list is no dead control — Browse is the
+              empty recents list is no dead control - Browse is the
               affordance. */}
           {recents.length > 0 && (
             <div className="nc-device">

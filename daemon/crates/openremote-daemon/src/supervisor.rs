@@ -1,14 +1,14 @@
 //! The supervisor: one live driver per session, events into the store,
 //! broadcasts to every listener. All session steering funnels through here
 //! so receipts, decisions, and lifecycles stay single-tracked. It knows
-//! nothing about any specific harness — the registry dispatches.
+//! nothing about any specific harness - the registry dispatches.
 //!
 //! Ordering contract: the store is the truth; the broadcast channel is a
 //! live nudge (SSE replays from the store on connect, so a dropped nudge
 //! heals). Per session, an `order` lock serializes event sequences between
 //! the steering paths (prompt / answer / stop) and the pump task; process
-//! death (StdoutClosed) is applied by the pump alone — the single writer
-//! for terminal statuses — so a stop can never race a failure into a lie.
+//! death (StdoutClosed) is applied by the pump alone - the single writer
+//! for terminal statuses - so a stop can never race a failure into a lie.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
@@ -46,11 +46,11 @@ fn current_local_minute() -> (String, String) {
     )
 }
 
-/// `HH:MM` or a clear error — the schedule's own format.
+/// `HH:MM` or a clear error - the schedule's own format.
 fn validate_time(time: Option<&str>) -> Result<String, SupervisorError> {
     let Some(time) = time else {
         return Err(SupervisorError::Conflict(
-            "a schedule needs a time — HH:MM".into(),
+            "a schedule needs a time - HH:MM".into(),
         ));
     };
     if chrono::NaiveTime::parse_from_str(time, "%H:%M").is_ok() {
@@ -116,7 +116,7 @@ struct SessionEntry {
     done: Option<oneshot::Sender<Session>>,
 }
 
-/// The resolved CLI behind a backend — every variant holds one, and the
+/// The resolved CLI behind a backend - every variant holds one, and the
 /// sign-in relay drives it with the same resolution the sessions do.
 fn backend_resolution(backend: &crate::registry::Backend) -> &openremote_harness::Resolution {
     match backend {
@@ -138,7 +138,7 @@ pub struct Supervisor {
     /// Live sign-in relays, one per harness: the console polls their view
     /// and feeds the human's answers through.
     signins: StdMutex<HashMap<String, Arc<crate::signin::SignInRun>>>,
-    /// The daemon's own machine — sessions run here, plugins ride from here.
+    /// The daemon's own machine - sessions run here, plugins ride from here.
     this_machine: MachineId,
 }
 
@@ -190,7 +190,7 @@ impl Supervisor {
         }
     }
 
-    /// A clone of the harness's backend — never a borrowed guard, so
+    /// A clone of the harness's backend - never a borrowed guard, so
     /// nothing holds the registry across an await.
     fn backend(&self, id: &str) -> Option<Backend> {
         self.registry
@@ -200,7 +200,7 @@ impl Supervisor {
             .cloned()
     }
 
-    /// Whether the harness slot is fixture-backed (e2e injection) — its
+    /// Whether the harness slot is fixture-backed (e2e injection) - its
     /// config reads stay with the machine's real harnesses.
     fn is_fixture(&self, id: &str) -> bool {
         self.registry.read().expect("registry lock").is_fixture(id)
@@ -269,7 +269,7 @@ impl Supervisor {
     // ---- machines ----
 
     /// Every machine as the console sees it: what's really on it, what
-    /// runs there, and — for this machine — what could be installed.
+    /// runs there, and - for this machine - what could be installed.
     pub fn machines(&self) -> Vec<MachineView> {
         let harnesses = self.registry.read().expect("registry lock").harnesses();
         self.with_store(|s| {
@@ -286,7 +286,7 @@ impl Supervisor {
             .map_err(store_error)
     }
 
-    /// Add a machine: it lands `waiting` — it comes online when its agent
+    /// Add a machine: it lands `waiting` - it comes online when its agent
     /// checks in (the next machines pass), never from this call.
     pub fn create_machine(&self, name: &str, platform: &str) -> Result<Machine, SupervisorError> {
         self.with_store(|s| s.create_machine(name, platform))
@@ -300,7 +300,7 @@ impl Supervisor {
 
     /// Install a harness on this machine: run its install command, re-probe
     /// with the same overrides, and hand back the machine's refreshed
-    /// view. The receipt carries the long wait — npm runs minutes.
+    /// view. The receipt carries the long wait - npm runs minutes.
     pub async fn install_harness(
         &self,
         machine_id: &MachineId,
@@ -354,7 +354,7 @@ impl Supervisor {
     ) -> Result<crate::signin::SignInView, SupervisorError> {
         if !crate::signin::login_supported(harness_id) {
             return Err(SupervisorError::Harness(format!(
-                "'{harness_id}' signs in through its own setup — no login command to relay"
+                "'{harness_id}' signs in through its own setup - no login command to relay"
             )));
         }
         let resolution = {
@@ -435,7 +435,7 @@ impl Supervisor {
         Ok(run.view())
     }
 
-    /// The current beat of a harness's sign-in relay — `None` when none
+    /// The current beat of a harness's sign-in relay - `None` when none
     /// was ever started for it.
     pub fn sign_in_view(&self, harness_id: &str) -> Option<crate::signin::SignInView> {
         self.signins
@@ -460,7 +460,7 @@ impl Supervisor {
         run.feed(line).map_err(SupervisorError::Harness)
     }
 
-    /// Stop a running sign-in relay — a human who abandoned the browser
+    /// Stop a running sign-in relay - a human who abandoned the browser
     /// flow should not wait out the timeout to try again. Stopping a
     /// relay that already settled is a no-op, not an error.
     pub fn stop_sign_in(&self, harness_id: &str) {
@@ -469,7 +469,7 @@ impl Supervisor {
         }
     }
 
-    /// Fresh facts after the machine changed underneath us — an install
+    /// Fresh facts after the machine changed underneath us - an install
     /// landed, a login finished. The guard is never held across the
     /// await: clone the overrides, probe, then swap the whole registry in.
     async fn swap_in_fresh_registry(&self) {
@@ -542,7 +542,7 @@ impl Supervisor {
             },
             (None, None) => {
                 return Err(SupervisorError::Conflict(
-                    "a plugin comes from the marketplace or by hand — one of the two".into(),
+                    "a plugin comes from the marketplace or by hand - one of the two".into(),
                 ));
             }
         };
@@ -567,7 +567,7 @@ impl Supervisor {
 
     /// The MCP servers a new session on this machine should start: every
     /// enabled plugin whose key (if it needs one) the machine has. A plugin
-    /// still waiting on its key acknowledgment doesn't ride — starting it
+    /// still waiting on its key acknowledgment doesn't ride - starting it
     /// would just fail.
     fn mcp_servers(&self) -> Vec<openremote_harness::McpServer> {
         let machine = self.this_machine;
@@ -594,7 +594,7 @@ impl Supervisor {
         self.with_store(|s| s.rules().into_iter().cloned().collect())
     }
 
-    /// Save a rule (create or edit — the id decides). The workspace must
+    /// Save a rule (create or edit - the id decides). The workspace must
     /// be real (the same bar POST /sessions holds); a webhook gets its
     /// own key generated on create, kept on edit.
     pub fn save_rule(
@@ -628,7 +628,7 @@ impl Supervisor {
             }
             TriggerKind::Webhook => {
                 rule.trigger.time = None;
-                // A webhook keeps the key it was born with — the hook
+                // A webhook keeps the key it was born with - the hook
                 // URLs already in the wild must keep working.
                 rule.trigger.key = Some(
                     rule.trigger
@@ -657,7 +657,7 @@ impl Supervisor {
         self.with_store(|s| s.save_rule(rule)).map_err(store_error)
     }
 
-    /// Run a rule now — the same path the clock and the webhook take: a
+    /// Run a rule now - the same path the clock and the webhook take: a
     /// chat opens on the rule's machine with the rule's task.
     pub async fn run_rule(self: &Arc<Self>, id: &RuleId) -> Result<Session, SupervisorError> {
         let rule = self
@@ -695,7 +695,7 @@ impl Supervisor {
     }
 
     /// The one firing path: create the chat, deliver the task, record the
-    /// run. A spawn that fails lands as the chat's first fact — the rule
+    /// run. A spawn that fails lands as the chat's first fact - the rule
     /// still ran.
     async fn fire_rule(
         self: &Arc<Self>,
@@ -710,7 +710,7 @@ impl Supervisor {
                 .ok()
                 .unwrap_or_else(|| "that machine".to_string());
             return Err(SupervisorError::Conflict(format!(
-                "'{name}' hasn't checked in — the rule waits until its agent is online"
+                "'{name}' hasn't checked in - the rule waits until its agent is online"
             )));
         }
         let session = self
@@ -730,7 +730,7 @@ impl Supervisor {
     }
 
     /// The clock: every enabled schedule rule fires once per day at its
-    /// own HH:MM. In-memory per-minute arming — a daemon restart re-arms;
+    /// own HH:MM. In-memory per-minute arming - a daemon restart re-arms;
     /// the worst case is a second chat in the same minute.
     fn spawn_schedule_engine(self: &Arc<Self>) {
         let supervisor = Arc::clone(self);
@@ -782,7 +782,7 @@ impl Supervisor {
     // ---- session lifecycle ----
 
     /// Create a session and spawn its harness driver. The session exists
-    /// even when the spawn fails — the failure is the session's first fact.
+    /// even when the spawn fails - the failure is the session's first fact.
     pub async fn create_session(
         self: &Arc<Self>,
         harness: &str,
@@ -798,7 +798,7 @@ impl Supervisor {
         };
         // A picked model is the user's; unpicked, the harness's own config
         // says what a fresh chat runs (grok's config.toml, agy's settings,
-        // claude's priority chain) — its words, replaced by the wire's
+        // claude's priority chain) - its words, replaced by the wire's
         // first-turn truth. A fixture-backed backend is not the harness:
         // the machine's real config never leaks into an injected one.
         let (model, effort) = match model {
@@ -897,7 +897,7 @@ impl Supervisor {
 
     /// Change model, effort, or fast on a live chat, in the harness's own
     /// words. A harness that only accepts the change at process start gets
-    /// it on the next resume — the chat must be stopped first, and the
+    /// it on the next resume - the chat must be stopped first, and the
     /// error says so. Codex and Pi apply it on the running thread now.
     pub async fn update_settings(
         &self,
@@ -918,7 +918,7 @@ impl Supervisor {
                 .map_err(SupervisorError::from)?;
         } else if session.status.is_alive() {
             return Err(SupervisorError::Conflict(
-                "the chat is starting — try again in a moment".into(),
+                "the chat is starting - try again in a moment".into(),
             ));
         }
         let updated = self
@@ -967,7 +967,7 @@ impl Supervisor {
             _ => {
                 // The pump never answered: either it already died (the
                 // status is terminal) or the driver has no live process at
-                // all (print-mode harnesses between prompts) — settle an
+                // all (print-mode harnesses between prompts) - settle an
                 // still-alive session here, the single writer rule bent
                 // only because nothing else is writing.
                 if self
@@ -1066,7 +1066,7 @@ impl Supervisor {
         // The order lock is held ACROSS the answer write: the harness's
         // consequence events (tool results, turn completion) arrive on the
         // pump while we emit, and without this the pump can grab the lock
-        // first — recording the consequence before the answer itself. The
+        // first - recording the consequence before the answer itself. The
         // write never needs the pump, so holding across it is deadlock-free.
         let _order = entry.order.lock().await;
         let outcome = entry
@@ -1086,7 +1086,7 @@ impl Supervisor {
                 choice: choice.to_string(),
             }];
             // The harness's own session-scope word granted the tool for the
-            // rest of the chat — record it and let the fresh session ride
+            // rest of the chat - record it and let the fresh session ride
             // out so the console renders "«tool» allowed for this chat".
             if let Some(tool) = &outcome.session_grant {
                 self.with_store(|s| s.note_approved_tool(&session_id, tool))?;
@@ -1156,7 +1156,7 @@ impl Supervisor {
                     s.note_session(id, Some(session_ref), model, permission_mode)
                 })?;
                 // A slow-booting harness may deliver init after a prompt
-                // already moved the session to working — init only settles
+                // already moved the session to working - init only settles
                 // a session that is still starting.
                 if matches!(
                     self.session(id).map(|s| s.status),
@@ -1171,7 +1171,7 @@ impl Supervisor {
                     )?;
                 }
                 // A model the console didn't have (the first init's echo of
-                // a default it now runs) rides as an update — the poll
+                // a default it now runs) rides as an update - the poll
                 // otherwise delays it.
                 if changed {
                     if let Ok(session) = self.session(id) {
@@ -1297,7 +1297,7 @@ impl Supervisor {
                 self.emit_all(id, vec![EventPayload::UsageCost { cost_usd }])?;
             }
             DriverEvent::Compacted => {
-                // The harness compacted its own conversation — the
+                // The harness compacted its own conversation - the
                 // transcript says so where it happened.
                 self.emit_all(
                     id,

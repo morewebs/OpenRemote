@@ -85,7 +85,7 @@
 
 .cv-thread {
   /* bottom padding tracks the floating composer's measured height
-     (--cv-clear, set by ChatView) plus breathing room — the last
+     (--cv-clear, set by ChatView) plus breathing room - the last
      message sits above the box at full scroll, never under it */
   padding: 28px 32px calc(var(--cv-clear, 130px) + 20px);
   display: flex;
@@ -391,7 +391,7 @@
   margin: 0;
 }
 
-/* KaTeX's struts can trip a few px of phantom overflow — the scrollbar
+/* KaTeX's struts can trip a few px of phantom overflow - the scrollbar
    appears as an ugly sliver next to the formula. Keep the scroll (long
    formulas still pan) but the bar invisible until hovered. */
 .cv-agent .md-math-block::-webkit-scrollbar {
@@ -413,7 +413,7 @@
 }
 
 .cv-agent .md-pre {
-  /* As wide as the code needs, never the whole column — a three-line
+  /* As wide as the code needs, never the whole column - a three-line
      snippet shouldn't wear a full-width frame. Aligned left like the
      prose; long lines scroll inside the border. */
   display: block;
@@ -474,7 +474,7 @@
 }
 
 /* bottom shadow: translucent see-through dark, strongest behind the
-   composer and falling off quickly above it — no blur, no solid floor,
+   composer and falling off quickly above it - no blur, no solid floor,
    transcript stays visible through the whole band, just dimmed */
 .cv-composer::before {
   content: '';
@@ -668,7 +668,7 @@
   user-select: none;
 }
 
-/* Phone width: the split stacks — old above new, the same red/green. */
+/* Phone width: the split stacks - old above new, the same red/green. */
 @media (max-width: 640px) {
   .cv-diff-row {
     grid-template-columns: minmax(0, 1fr);

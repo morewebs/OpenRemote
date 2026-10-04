@@ -31,7 +31,7 @@ export default function PluginsView() {
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState(null)
   const installed = plugins ?? []
-  // One machine is the honest local state — the plural, the hostname, and
+  // One machine is the honest local state - the plural, the hostname, and
   // the install picker return by themselves when remote machines check in.
   const oneMachine = (machines ?? []).length <= 1
   const machineWord = oneMachine ? 'machine' : 'machines'

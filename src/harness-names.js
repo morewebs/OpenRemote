@@ -1,6 +1,6 @@
 // The product's names for the harnesses the daemon can drive. Harness
 // ids are stable; display names are the harnesses' own spellings. Each
-// carries its brand mark — the icon its own users know it by (the
+// carries its brand mark - the icon its own users know it by (the
 // prototype's map, keyed to the daemon's real ids).
 import { Asterisk, OpenAiLogo, Pi, Planet, Code } from '@phosphor-icons/react'
 import { siClaudecode, siOpencode } from 'simple-icons'

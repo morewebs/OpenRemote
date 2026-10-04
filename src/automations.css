@@ -1,4 +1,4 @@
-/* automations — compact rule rows: name + one dim line at rest,
+/* automations - compact rule rows: name + one dim line at rest,
    actions revealed on hover, a real switch for enabled state */
 
 .am-section {
@@ -139,7 +139,7 @@
   background: #0a0c0f;
 }
 
-/* starters are templates, not rules — lighter than rule rows, and an
+/* starters are templates, not rules - lighter than rule rows, and an
    added starter quiets down to a dim "Added" */
 .am-starter .am-name {
   font-weight: 500;
@@ -314,7 +314,7 @@ html[data-reduce-motion] .am-row-actions {
   border-color: rgba(255, 255, 255, 0.18);
 }
 
-/* the trigger in one plain sentence — the source of truth the fields edit */
+/* the trigger in one plain sentence - the source of truth the fields edit */
 .af-preview {
   margin: 10px 0 0;
   font-size: 12.5px;
@@ -453,7 +453,7 @@ html[data-reduce-motion] .am-row-actions {
 }
 
 /* The page fills the pane so the pill dock, sticky at its own bottom,
-   parks at the bottom of the screen — not under the last starter.
+   parks at the bottom of the screen - not under the last starter.
    Same gutters as the other views (.panel/.devices) and the same
    scrollbar-gutter, so the centered pill dock stays optically centered
    whether the pane scrolls or not. */
@@ -468,7 +468,7 @@ html[data-reduce-motion] .am-row-actions {
 }
 
 /* The title and its action sit on one row, inside the same column as
-   the rules — a full-width header strands the button at the far edge. */
+   the rules - a full-width header strands the button at the far edge. */
 .automations .dv-head {
   display: flex;
   align-items: flex-start;

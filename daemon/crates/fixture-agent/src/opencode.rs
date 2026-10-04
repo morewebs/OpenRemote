@@ -1,5 +1,5 @@
 //! The fixture's OpenCode serve mode: a real HTTP server speaking the
-//! REST + SSE surface the openremote-opencode driver expects — basic
+//! REST + SSE surface the openremote-opencode driver expects - basic
 //! auth (`opencode:<OPENCODE_SERVER_PASSWORD>`), `POST /api/session`,
 //! `POST …/prompt`, `POST …/interrupt`, permission/question replies,
 //! and `GET /api/event` (the SSE bus every event broadcasts to).
@@ -187,7 +187,7 @@ impl Server {
                     "properties": {"sessionID": session, "finish": "stop"}
                 }));
             }
-            // A provider failure: step.failed ends the turn on its own —
+            // A provider failure: step.failed ends the turn on its own -
             // no step.ended follows (the real CLI's shape, observed live).
             "fail" => {
                 self.broadcast(json!({

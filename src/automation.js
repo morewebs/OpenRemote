@@ -1,6 +1,6 @@
 // Automation vocabulary: the trigger kinds with real event sources, and
 // their plain sentences. The connector-backed kinds of the prototype
-// (pipeline, errors, review, release) appear when their connectors do —
+// (pipeline, errors, review, release) appear when their connectors do -
 // until then the form offers only what can really fire.
 
 export const KINDS = ['schedule', 'webhook']

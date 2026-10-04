@@ -277,7 +277,7 @@ async fn codex_models_endpoint_speaks_codex_words() {
         .collect();
     assert_eq!(efforts, vec!["low", "medium", "high"]);
 
-    // Claude advertises nothing through us — an empty list is a real
+    // Claude advertises nothing through us - an empty list is a real
     // answer (the slot stays reserved).
     let claude_models = call(&daemon, "GET", "/harnesses/claude/models", None).await;
     assert_eq!(claude_models.status, 200, "raw: {}", claude_models.raw);
@@ -401,7 +401,7 @@ async fn accept_for_session_grants_the_tool_for_the_chat() {
         .expect("decision id")
         .to_string();
     // The tool the harness asked about rides the decision in its own
-    // vocabulary — the grant names it back.
+    // vocabulary - the grant names it back.
     assert_eq!(
         decision_event.1["decision"]["tool_name"],
         "commandExecution",
@@ -447,7 +447,7 @@ async fn accept_for_session_grants_the_tool_for_the_chat() {
         dump(&events)
     );
 
-    // And the session endpoint agrees — the facts row renders from this.
+    // And the session endpoint agrees - the facts row renders from this.
     let session = call(&daemon, "GET", &format!("/sessions/{id}"), None).await;
     assert_eq!(
         session.body["approved_tools"],
@@ -491,7 +491,7 @@ async fn a_live_model_change_lands_on_the_running_thread() {
     );
 
     // The live change: the daemon drives thread/settings/update on the
-    // running thread — not a staged turn param.
+    // running thread - not a staged turn param.
     let settings = call(
         &daemon,
         "POST",
@@ -506,7 +506,7 @@ async fn a_live_model_change_lands_on_the_running_thread() {
         settings.raw
     );
 
-    // The next turn answers on the changed model — the fixture echoes the
+    // The next turn answers on the changed model - the fixture echoes the
     // model the settings call carried into its turn answer.
     let second = call(
         &daemon,
@@ -516,7 +516,7 @@ async fn a_live_model_change_lands_on_the_running_thread() {
     )
     .await;
     assert_eq!(second.status, 200, "raw: {}", second.raw);
-    // Both turns' completions — the suffix would match the first turn's
+    // Both turns' completions - the suffix would match the first turn's
     // tail before the second even lands.
     let events = until_count(
         &daemon,
@@ -539,7 +539,7 @@ async fn a_live_model_change_lands_on_the_running_thread() {
         dump(&events)
     );
 
-    // The session record agrees — the facts row renders from this.
+    // The session record agrees - the facts row renders from this.
     let session = call(&daemon, "GET", &format!("/sessions/{id}"), None).await;
     assert_eq!(
         session.body["model"], "gpt-5.1-codex-max",

@@ -1,12 +1,12 @@
 //! What a harness process reports, in vocabulary the supervisor
-//! understands. Nothing here knows about `seq` or the store — the
+//! understands. Nothing here knows about `seq` or the store - the
 //! supervisor translates.
 
 use openremote_core::{DecisionKind, DecisionOption};
 use serde_json::Value;
 
 /// What the harness asked the operator, plus how the console renders it.
-/// `harness_ref` is the harness's own correlation id — the answer routes
+/// `harness_ref` is the harness's own correlation id - the answer routes
 /// back through the driver with it. `request` rides verbatim.
 #[derive(Clone, Debug)]
 pub struct ApprovalRequest {
@@ -25,13 +25,13 @@ pub struct DecisionSpec {
     /// A one-line human summary (the command, the question).
     pub summary: Option<String>,
     /// Choice ids that interrupt the turn instead of continuing it (codex
-    /// `cancel`; claude has none) — the supervisor skips the post-answer
+    /// `cancel`; claude has none) - the supervisor skips the post-answer
     /// working transition for these.
     pub interrupts_turn: Vec<String>,
 }
 
 /// What a harness process told us. The pump turns these into sequenced
-/// events; the turn boundary is always explicit — never guess turn state
+/// events; the turn boundary is always explicit - never guess turn state
 /// from silence.
 #[derive(Debug, Clone)]
 pub enum DriverEvent {
@@ -42,7 +42,7 @@ pub enum DriverEvent {
         model: Option<String>,
         permission_mode: Option<String>,
     },
-    /// The harness named the model mid-conversation — a fact it only
+    /// The harness named the model mid-conversation - a fact it only
     /// reveals when a turn runs (opencode's `session.next.step.started`).
     /// Repeated reports fold idempotently; a None model is never a change.
     ModelReported {
@@ -54,7 +54,7 @@ pub enum DriverEvent {
     TextDelta {
         text: String,
     },
-    /// The harness's own reasoning for the turn, when it shares it —
+    /// The harness's own reasoning for the turn, when it shares it -
     /// claude's `thinking` content blocks and `thinking_delta` stream
     /// events; codex reasoning items on models that emit them. Its words,
     /// never ours; the console shows it dim and collapsible.
@@ -64,7 +64,7 @@ pub enum DriverEvent {
     ReasoningDelta {
         text: String,
     },
-    /// The turn's thinking-token count, verbatim — claude's own
+    /// The turn's thinking-token count, verbatim - claude's own
     /// `usage.output_tokens_details.thinking_tokens`.
     ThinkingTokens {
         tokens: u64,
@@ -93,7 +93,7 @@ pub enum DriverEvent {
         is_error: bool,
         error_message: Option<String>,
     },
-    /// The harness reported the conversation's context size — its own
+    /// The harness reported the conversation's context size - its own
     /// numbers (claude's result usage, codex `thread/tokenUsage/updated`).
     /// `window` is only set where the harness reports it (codex's
     /// `modelContextWindow`; claude's stream-json has no window field).
@@ -101,7 +101,7 @@ pub enum DriverEvent {
         used: u64,
         window: Option<u64>,
     },
-    /// The harness reported the turn's own cost in USD — claude's
+    /// The harness reported the turn's own cost in USD - claude's
     /// `total_cost_usd` on the result frame, verbatim. None where the
     /// harness doesn't report money.
     TurnCost {
@@ -110,7 +110,7 @@ pub enum DriverEvent {
     /// The harness compacted the conversation (claude's own
     /// `compact_boundary` marker, codex `thread/compacted`).
     Compacted,
-    /// Harness stderr, line by line — diagnostics ride with everything.
+    /// Harness stderr, line by line - diagnostics ride with everything.
     Stderr {
         line: String,
     },

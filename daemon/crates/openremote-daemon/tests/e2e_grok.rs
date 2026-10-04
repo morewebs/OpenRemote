@@ -1,6 +1,6 @@
 //! Grok e2e: the real HTTP API + SSE driving the real openremote-grok
 //! driver against the fixture's print mode. Grok is one process per
-//! prompt — the conversation rides `--resume <grok session id>`.
+//! prompt - the conversation rides `--resume <grok session id>`.
 
 mod common;
 
@@ -151,7 +151,7 @@ async fn grok_sessions_stop_between_prompts_and_resume() {
     let (daemon, ws) = grok_daemon(Some("plain")).await;
     let id = create_grok(&daemon, &ws).await;
     // One prompt names the conversation; then stop while no process is
-    // live (between prompts) — no StdoutClosed will ever come, so the
+    // live (between prompts) - no StdoutClosed will ever come, so the
     // supervisor settles it.
     call(
         &daemon,

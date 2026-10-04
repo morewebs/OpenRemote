@@ -174,7 +174,7 @@ test('a chat with embedded events carries its folded seq, and a replay never dou
   assert.equal(chat.foldedSeq, 3)
   assert.equal(railItems(chat).length, 2)
 
-  // The fold itself advances the seq — any path that folds without the
+  // The fold itself advances the seq - any path that folds without the
   // console's guard still cannot double: a replayed seq never regresses.
   const folded = foldEvent(chat, event(3, { type: 'message.added', message: { id: 'm2', turn: 1, role: 'assistant', text: 'done' } }))
   assert.equal(folded.foldedSeq, 3, 'a replayed seq does not regress the fold cursor')
@@ -197,7 +197,7 @@ test('stream deltas grow a live item, and the settled message replaces it whole'
   assert.equal(rail[0].kind, 'stream')
   assert.equal(rail[0].text, 'Let me check that file.')
 
-  // The settled assistant message replaces the stream — never both.
+  // The settled assistant message replaces the stream - never both.
   foldEvent(chat, event(6, {
     type: 'message.added',
     message: { id: 'm2', turn: 1, role: 'assistant', text: 'Let me check that file.' },

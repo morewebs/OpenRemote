@@ -4,7 +4,7 @@
 //!
 //! EOF without a `result` frame means the process died mid-turn: an
 //! interrupt maps to `interrupted`, a stop to `StdoutClosed`, anything
-//! else to a failed turn with the reason — never silence.
+//! else to a failed turn with the reason - never silence.
 
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -26,7 +26,7 @@ enum EofReason {
     Completed,
     /// interrupt() killed the process.
     Interrupted,
-    /// shutdown() killed the process — the session ends.
+    /// shutdown() killed the process - the session ends.
     Stopped,
 }
 
@@ -34,7 +34,7 @@ struct Shared {
     child: Arc<AsyncMutex<Option<Child>>>,
     reason: StdMutex<EofReason>,
     /// Grok's own conversation id, learned from the first prompt's init
-    /// and updated whenever a respawned process reports one — later
+    /// and updated whenever a respawned process reports one - later
     /// prompts resume it.
     session_ref: StdMutex<Option<String>>,
 }
@@ -47,7 +47,7 @@ pub struct Driver {
 }
 
 impl Driver {
-    /// A grok session starts as pure configuration — no process until
+    /// A grok session starts as pure configuration - no process until
     /// the first prompt. `Initialized` rides the first prompt's init
     /// frame, so a fresh session honestly shows `starting` until then.
     pub fn spawn(
@@ -108,7 +108,7 @@ impl Driver {
         }
         let resume = self.shared.session_ref.lock().unwrap().clone();
         if let Some(resume) = resume {
-            // grok's own UUID session id — value form, no flag surface.
+            // grok's own UUID session id - value form, no flag surface.
             command.arg("--resume").arg(resume);
         }
 
@@ -167,7 +167,7 @@ impl Driver {
     }
 
     /// Grok print mode has no remote approval channel (its own
-    /// `--permission-mode` words govern) — this is never called because
+    /// `--permission-mode` words govern) - this is never called because
     /// no `ApprovalRequested` ever fires.
     pub async fn answer(
         &mut self,
@@ -209,7 +209,7 @@ async fn read_prompt(
                 model,
                 permission_mode,
             } => {
-                // The first init names the conversation — that fact rides
+                // The first init names the conversation - that fact rides
                 // to the supervisor. Every init refreshes the resume ref
                 // (a resumed process may mint its own id); repeats do not
                 // re-emit.
@@ -231,7 +231,7 @@ async fn read_prompt(
                         return;
                     }
                 }
-                // Grok shares claude's wire shape — thinking blocks ride
+                // Grok shares claude's wire shape - thinking blocks ride
                 // the same content array when the model shares them.
                 for text in wire::block_thinking(&content) {
                     if tx.send(DriverEvent::ReasoningText { text }).await.is_err() {
@@ -275,7 +275,7 @@ async fn read_prompt(
                 } else {
                     TurnOutcome::Failed
                 };
-                // Grok shares claude's wire — the turn's cost rides the
+                // Grok shares claude's wire - the turn's cost rides the
                 // result frame the same way, when the harness reports it.
                 if let Some(cost) = cost_usd {
                     if tx.send(DriverEvent::TurnCost { cost_usd: cost }).await.is_err() {

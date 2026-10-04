@@ -1,4 +1,4 @@
-//! Claude's own model resolution, read the way claude itself reads it —
+//! Claude's own model resolution, read the way claude itself reads it -
 //! claude's documented priority (its headless docs): the `--model` we pass
 //! → `ANTHROPIC_MODEL` → the `model` key in `~/.claude/settings.json` →
 //! `ANTHROPIC_DEFAULT_MODEL`. The pick is the caller's rung; this reads
@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 
 /// The configured model, claude's own priority order. `None` when every
-/// rung is silent — claude's built-in default then governs, and nothing
+/// rung is silent - claude's built-in default then governs, and nothing
 /// honest can be shown pre-send.
 pub fn configured_model(picked: Option<&str>) -> Option<String> {
     if let Some(model) = picked {
@@ -30,7 +30,7 @@ pub fn configured_model(picked: Option<&str>) -> Option<String> {
     None
 }
 
-/// The top-level `model` key in `~/.claude/settings.json` — one key, never
+/// The top-level `model` key in `~/.claude/settings.json` - one key, never
 /// the whole file.
 fn settings_model() -> Option<String> {
     let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))?;
@@ -50,7 +50,7 @@ mod tests {
 
     #[test]
     fn the_pick_wins_over_every_rung_below() {
-        // The caller's own pick is the first rung — config never overrides it.
+        // The caller's own pick is the first rung - config never overrides it.
         assert_eq!(
             configured_model(Some("opus")),
             Some("opus".to_string())

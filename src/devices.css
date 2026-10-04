@@ -1,5 +1,5 @@
 /* page composition: header pinned to the top-left corner, grid flows
-   below it — the page anchors to the top and just ends, no centering */
+   below it - the page anchors to the top and just ends, no centering */
 .devices {
   flex: 1;
   display: flex;
@@ -113,7 +113,7 @@
   opacity: 0.55;
 }
 
-/* add-device: an empty slot in the grid — same cell size, dashed,
+/* add-device: an empty slot in the grid - same cell size, dashed,
    centered, contrasting with the left-aligned data cards */
 .dv-add {
   display: flex;
@@ -163,7 +163,7 @@
   place-items: center;
   /* definite tracks: an auto track sizes itself to the item, so the
      modal's max-width: 100% resolved against a 560px track and never
-     clamped — every dv-modal spilled at phone width. */
+     clamped - every dv-modal spilled at phone width. */
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   padding: 24px;
@@ -668,7 +668,7 @@
 }
 
 /* phone width: the grid collapses to a single column and the modal fills
-   the sheet — machines are first-class on small screens too. */
+   the sheet - machines are first-class on small screens too. */
 @media (max-width: 639px) {
   .devices {
     padding: 20px 16px 32px;
@@ -692,7 +692,7 @@
 }
 
 /* the Settings reduce-motion switch carries here too: no modal pop, no
-   breathing dots (the uptime band's slices stay — they are data, not motion) */
+   breathing dots (the uptime band's slices stay - they are data, not motion) */
 html[data-reduce-motion] .dv-modal-backdrop,
 html[data-reduce-motion] .dv-modal {
   animation: none;

@@ -2,14 +2,14 @@
 //!
 //! Grok's headless surface (verified live against grok 1.0.46,
 //! 2026-10-01): `grok --single <prompt> --output-format
-//! streaming-messages-json` — NDJSON in the Anthropic Messages wire
+//! streaming-messages-json` - NDJSON in the Anthropic Messages wire
 //! (`system/init` with the session id and model, `assistant` content
-//! blocks, `result` as the turn boundary) — the same wire family Claude
+//! blocks, `result` as the turn boundary) - the same wire family Claude
 //! Code speaks. Print mode: **one process per prompt**; continuation
 //! respawns with `--resume <session id>`.
 //!
 //! Honest limitation (recorded in the map): grok print mode has no remote
-//! approval channel — approvals are governed by its own
+//! approval channel - approvals are governed by its own
 //! `--permission-mode` words (`default acceptEdits auto dontAsk
 //! bypassPermissions plan`), passed through verbatim.
 

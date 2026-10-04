@@ -4,7 +4,7 @@
 //   OR_RELEASE=1 node scripts/sync-daemon.mjs → release daemon
 //
 // Also refreshes the dev sidecar copy under src-tauri/target when one is
-// already there — `cargo tauri dev` only re-copies the sidecar when the
+// already there - `cargo tauri dev` only re-copies the sidecar when the
 // app itself rebuilds, so a daemon-only change would otherwise leave the
 // running dev app on the old binary until that happens.
 import { execSync } from 'node:child_process'
@@ -51,7 +51,7 @@ if (!release && existsSync(devCopy)) {
   } catch {
     // Locked (a dev app is running with it): the staged binaries/ copy is
     // the source of truth for the next app rebuild anyway.
-    console.log(`dev sidecar ${devCopy} is locked — close the app and re-run`)
+    console.log(`dev sidecar ${devCopy} is locked - close the app and re-run`)
   }
 }
 

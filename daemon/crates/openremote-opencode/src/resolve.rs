@@ -1,5 +1,5 @@
 //! OpenCode CLI resolution: `opencode` on PATH (native binary in the
-//! npm layout — verified locally).
+//! npm layout - verified locally).
 
 use std::env;
 use std::path::PathBuf;

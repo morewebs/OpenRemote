@@ -18,7 +18,7 @@ pub struct Event {
 pub enum EventPayload {
     #[serde(rename = "session.created")]
     SessionCreated { session: Session },
-    /// Session facts changed outside the status lifecycle — session-scoped
+    /// Session facts changed outside the status lifecycle - session-scoped
     /// tool grants landing. The whole session rides along; the console
     /// folds the fields it renders.
     #[serde(rename = "session.updated")]
@@ -46,10 +46,10 @@ pub enum EventPayload {
     /// and collapsible in the console; never mixed into the reply.
     #[serde(rename = "reasoning.added")]
     ReasoningAdded { turn: u64, text: String },
-    /// A streaming fragment of the reasoning — the live-thinking shape.
+    /// A streaming fragment of the reasoning - the live-thinking shape.
     #[serde(rename = "reasoning.delta")]
     ReasoningDelta { turn: u64, text: String },
-    /// The turn's thinking-token count — the harness's own number
+    /// The turn's thinking-token count - the harness's own number
     /// (claude's `output_tokens_details.thinking_tokens`).
     #[serde(rename = "thinking.tokens")]
     ThinkingTokens { tokens: u64 },
@@ -66,7 +66,7 @@ pub enum EventPayload {
         output: serde_json::Value,
         is_error: bool,
     },
-    /// The harness reported the conversation's context size — its own
+    /// The harness reported the conversation's context size - its own
     /// numbers, never ours. The window only rides where the harness
     /// reports one.
     #[serde(rename = "context.used")]
@@ -75,11 +75,11 @@ pub enum EventPayload {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         window: Option<u64>,
     },
-    /// The harness reported the turn's cost in USD — its own number,
+    /// The harness reported the turn's cost in USD - its own number,
     /// verbatim. Only where the harness reports money.
     #[serde(rename = "usage.cost")]
     UsageCost { cost_usd: f64 },
-    /// An informational line in the transcript (compaction notices) — the
+    /// An informational line in the transcript (compaction notices) - the
     /// console renders it like its other notes.
     #[serde(rename = "note.added")]
     NoteAdded { text: String },

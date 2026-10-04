@@ -1,5 +1,5 @@
 // Add a machine: pick the OS (its install command), name it (the grid's
-// hostname slug). The machine lands waiting — it comes online when its
+// hostname slug). The machine lands waiting - it comes online when its
 // agent checks in, never from here.
 
 import { useEffect, useState } from 'react'

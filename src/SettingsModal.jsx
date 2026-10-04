@@ -19,7 +19,7 @@ function loadRecentWorkspaces() {
   }
 }
 
-// The harnesses whose own login command the daemon can relay — the
+// The harnesses whose own login command the daemon can relay - the
 // Sign-in action renders only there (no dead UI elsewhere).
 const SIGNIN_HARNESSES = new Set(['claude', 'codex', 'grok'])
 
@@ -38,7 +38,7 @@ export default function SettingsModal({ onReplay, onClose }) {
     ? defaults.workspace
     : recents[0] ?? null
 
-  // The model row only renders where the default harness advertises —
+  // The model row only renders where the default harness advertises -
   // the same rule the composer holds.
   useEffect(() => {
     let cancelled = false
@@ -236,7 +236,7 @@ export default function SettingsModal({ onReplay, onClose }) {
               onClick={() => setConfirmDisconnect(true)}
               disabled={connection.state !== 'connected'}
             >
-              {connection.state === 'connected' ? 'Forget' : '—'}
+              {connection.state === 'connected' ? 'Forget' : '-'}
             </button>
           )}
         </div>
@@ -275,7 +275,7 @@ export default function SettingsModal({ onReplay, onClose }) {
         <div className="pn-row">
           <div>
             <div className="pn-name">OpenRemote 0.1.0</div>
-            <div className="pn-detail">Daemon {capabilities?.daemon ?? '—'} · the parity build</div>
+            <div className="pn-detail">Daemon {capabilities?.daemon ?? '-'} · the parity build</div>
           </div>
           <button type="button" className="pn-btn" onClick={() => setAbout(true)}>About</button>
         </div>

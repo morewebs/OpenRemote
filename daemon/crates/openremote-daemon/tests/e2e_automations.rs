@@ -73,7 +73,7 @@ async fn rules_validate_their_own_shape() {
     .await;
     assert_eq!(bad_time.status, 409, "raw: {}", bad_time.raw);
 
-    // The workspace must be real — the same bar a chat's own create holds.
+    // The workspace must be real - the same bar a chat's own create holds.
     let bad_ws = call(
         &daemon,
         "POST",
@@ -159,7 +159,7 @@ async fn run_now_opens_the_chat_and_records_it() {
         dump(&events)
     );
 
-    // The rule remembers its last chat — the list's jump.
+    // The rule remembers its last chat - the list's jump.
     let rules = call(&daemon, "GET", "/automations", None).await;
     let rule = &rules.body.as_array().expect("rules")[0];
     assert_eq!(rule["last_chat"].as_str(), Some(chat.as_str()));
@@ -232,7 +232,7 @@ async fn webhooks_fire_only_with_their_own_key() {
     .await;
     assert_eq!(wrong_key.status, 409, "raw: {}", wrong_key.raw);
 
-    // The right key fires the rule — a chat opens with the task.
+    // The right key fires the rule - a chat opens with the task.
     let fired = call(
         &daemon,
         "POST",
@@ -267,7 +267,7 @@ async fn webhooks_fire_only_with_their_own_key() {
         dump(&events)
     );
 
-    // A schedule rule has no webhook — an honest refusal.
+    // A schedule rule has no webhook - an honest refusal.
     let schedule = call(
         &daemon,
         "POST",
@@ -306,7 +306,7 @@ async fn rules_wait_for_a_machine_that_hasnt_checked_in() {
     assert_eq!(added.status, 201, "raw: {}", added.raw);
     let waiting = added.body["id"].as_str().expect("machine id").to_string();
 
-    // A rule may name it (the API is the backstop the form fronts) —
+    // A rule may name it (the API is the backstop the form fronts) -
     // but it cannot run there today.
     let saved = call(
         &daemon,
@@ -322,7 +322,7 @@ async fn rules_wait_for_a_machine_that_hasnt_checked_in() {
     assert_eq!(saved.status, 201, "raw: {}", saved.raw);
     let rule_id = saved.body["id"].as_str().expect("rule id").to_string();
 
-    // Run now refuses with the wait named — never a quiet local run.
+    // Run now refuses with the wait named - never a quiet local run.
     let run = call(
         &daemon,
         "POST",
@@ -350,7 +350,7 @@ async fn rules_wait_for_a_machine_that_hasnt_checked_in() {
 #[tokio::test]
 async fn the_clock_fires_schedules_on_the_machines_own_wall_time() {
     // A real daemon process with a fast clock tick and a fixture-backed
-    // claude — the rule fires within the minute it was armed for.
+    // claude - the rule fires within the minute it was armed for.
     let env: Vec<(&str, String)> = vec![
         (
             "OPENREMOTE_CLAUDE_PATH",
@@ -362,7 +362,7 @@ async fn the_clock_fires_schedules_on_the_machines_own_wall_time() {
     let machine = this_machine_id(&daemon).await;
     let ws = workspace(Some("plain"));
 
-    // The machine's own HH:MM — the same clock the engine reads.
+    // The machine's own HH:MM - the same clock the engine reads.
     let now = chrono::Local::now();
     let time = now.format("%H:%M").to_string();
 

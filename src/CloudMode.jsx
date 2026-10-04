@@ -1,13 +1,13 @@
 // Cloud mode's coming-soon state: the main area while the mode switch
-// sits on Cloud. The subject itself is the hero — the cloud with
-// machines checking in around it, in the app's own status palette —
+// sits on Cloud. The subject itself is the hero - the cloud with
+// machines checking in around it, in the app's own status palette -
 // drawn in once, then the words under it: status pill, title, subtext,
 // one action.
 
 import { House } from '@phosphor-icons/react'
 import './cloudmode.css'
 
-// One machine checking in: a small card with its status dot — green for
+// One machine checking in: a small card with its status dot - green for
 // online, hollow for not-yet. The same vocabulary the machine cards use.
 function MachineNode({ x, y, online, delay }) {
   return (
@@ -35,7 +35,7 @@ export default function CloudMode({ onBackToLocal }) {
           <line className="cm-link" style={{ '--cm-delay': '540ms' }} x1="18" y1="132" x2="82" y2="102" />
           <line className="cm-link" style={{ '--cm-delay': '660ms' }} x1="238" y1="126" x2="180" y2="100" />
 
-          {/* the cloud itself — lucide's own cloud path, drawn in */}
+          {/* the cloud itself - lucide's own cloud path, drawn in */}
           <path
             className="cm-cloud"
             d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"
@@ -51,7 +51,7 @@ export default function CloudMode({ onBackToLocal }) {
         <h1 className="cm-title">Cloud is coming</h1>
 
         <p className="cm-body">
-          Cloud mode connects the harnesses on machines you reach over the network — cloud hosts,
+          Cloud mode connects the harnesses on machines you reach over the network - cloud hosts,
           home servers, anything that checks in. Until it lands, everything stays on this computer.
         </p>
 

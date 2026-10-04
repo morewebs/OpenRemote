@@ -45,7 +45,7 @@ export default function Sidebar({ open, active, mode, onMode, onSelect, onOpenSe
   return (
     <aside className={`sidebar${open ? '' : ' collapsed'}`}>
       <div className="sb-actions">
-        {/* The mode switch is real in the UI — Cloud switches the main
+        {/* The mode switch is real in the UI - Cloud switches the main
             area to its coming-soon state until remote check-in lands. */}
         <div className="mode-switch" role="group" aria-label="Connection mode">
           <button
@@ -112,7 +112,7 @@ export default function Sidebar({ open, active, mode, onMode, onSelect, onOpenSe
           <p className="sb-empty">
             {query.trim()
               ? `No chats match “${query.trim()}”.`
-              : 'No chats yet. Start one — it will appear here grouped by folder.'}
+              : 'No chats yet. Start one - it will appear here grouped by folder.'}
           </p>
         )}
         {groups.map((group) => {
@@ -148,7 +148,7 @@ export default function Sidebar({ open, active, mode, onMode, onSelect, onOpenSe
       </nav>
 
       <footer className="sb-foot">
-        {/* Settings is a popup over the current view, not a route — the
+        {/* Settings is a popup over the current view, not a route - the
             gear never navigates away from where you are. */}
         <button className="settings-btn" onClick={onOpenSettings}>
           <GearSix size={15} />

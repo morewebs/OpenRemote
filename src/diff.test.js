@@ -32,7 +32,7 @@ test('a pure insertion has empty-left add rows; a pure deletion empty-right del 
   assert.equal(deleted[1].right.kind, null)
 })
 
-test('a write is all-green — every line an add on the right', () => {
+test('a write is all-green - every line an add on the right', () => {
   const rows = writeRows('# Notes\n\n- first')
   assert.equal(rows.length, 3)
   assert.deepEqual(

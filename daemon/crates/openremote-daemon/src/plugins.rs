@@ -1,5 +1,5 @@
 //! Plugin catalog. The curated marketplace was a prototype list of launch
-//! commands that were never installed for real — it is empty until a catalog
+//! commands that were never installed for real - it is empty until a catalog
 //! is facts. A plugin is written by hand; a key never crosses this API.
 
 use serde::Serialize;

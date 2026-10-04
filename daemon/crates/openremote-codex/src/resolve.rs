@@ -1,6 +1,6 @@
 //! Codex CLI resolution: PATH first (native binary on POSIX), then the
 //! npm layout (`@openai/codex` ships `bin/codex.js`, a node wrapper around
-//! the platform binary — verified locally: `node bin/codex.js --version`
+//! the platform binary - verified locally: `node bin/codex.js --version`
 //! → `codex-cli 0.148.0`).
 
 use std::env;

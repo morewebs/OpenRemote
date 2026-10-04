@@ -2,7 +2,7 @@
 //!
 //! Wire plumbing: client→server calls carry `id` and are answered by
 //! `{id, result|error}`; notifications are `{method, params}`; the server
-//! also makes REQUESTS (`{id, method, params}`) — approvals arrive that
+//! also makes REQUESTS (`{id, method, params}`) - approvals arrive that
 //! way and are answered with `{id, result: {decision}}`. The turn boundary
 //! is the `turn/completed` notification; never guess turn state.
 
@@ -21,7 +21,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::{Mutex as AsyncMutex, mpsc, oneshot};
 use uuid::Uuid;
 
-/// Default approval policy when the session didn't pick one — Codex's own
+/// Default approval policy when the session didn't pick one - Codex's own
 /// word for "ask me before running things".
 const DEFAULT_APPROVAL_POLICY: &str = "on-request";
 const DEFAULT_SANDBOX: &str = "workspace-write";
@@ -46,7 +46,7 @@ pub struct Driver {
 impl Driver {
     /// Spawn `codex app-server`, run the initialize handshake, and start
     /// (or resume) the thread. Returns once the harness conversation is
-    /// named — the session ref rides out as the first `Initialized` event.
+    /// named - the session ref rides out as the first `Initialized` event.
     pub async fn spawn(
         resolution: &Resolution,
         opts: SpawnOptions,
@@ -188,7 +188,7 @@ impl Driver {
 
     /// Apply model, effort, or fast to this thread now. Codex's own wire
     /// is `thread/settings/update` with flat params: a `turn/start`
-    /// override only works before the thread has adopted a model — after
+    /// override only works before the thread has adopted a model - after
     /// that it is silently ignored, so the settings call is the only
     /// honest path for a live change. Verified against the real
     /// app-server (0.160.0): effort and serviceTier ride the same flat
@@ -332,7 +332,7 @@ fn approval_spec(tool: &str, summary: Option<String>) -> DecisionSpec {
 }
 
 /// The `thread/start` (and `thread/resume`) params. Fast mode rides
-/// Codex's own service-tier word on the thread — `serviceTier: "fast"`
+/// Codex's own service-tier word on the thread - `serviceTier: "fast"`
 /// (v0.110.0+; a model that doesn't advertise the tier drops it with a
 /// warning, so it is safe to always pass when asked).
 fn thread_params(opts: &SpawnOptions) -> Value {
@@ -349,7 +349,7 @@ fn thread_params(opts: &SpawnOptions) -> Value {
         params["serviceTier"] = json!("fast");
     }
     if !opts.mcp_servers.is_empty() {
-        // Codex's own wire: the config-override map, dotted keyPaths —
+        // Codex's own wire: the config-override map, dotted keyPaths -
         // `mcp_servers.<id>.command` / `.args` (verified against the real
         // app-server: the injected server shows up connected on the thread).
         let mut config = json!({});
@@ -529,7 +529,7 @@ fn notification(method: &str, params: &Value, shared: &Shared) -> Option<DriverE
                     name: "commandExecution".into(),
                     input: item.clone(),
                 }),
-                // Codex's own reasoning item, on models that emit them —
+                // Codex's own reasoning item, on models that emit them -
                 // its words, surfaced dim, never mixed into the reply.
                 "reasoning" => item
                     .get("text")
@@ -622,7 +622,7 @@ pub async fn models(
                     .and_then(Value::as_str)
                     .map(String::from),
                 reasoning_efforts: efforts,
-                // Its own marker for the entry a fresh thread runs —
+                // Its own marker for the entry a fresh thread runs -
                 // the pre-send fact its config.toml never says.
                 is_default: entry.get("isDefault").and_then(Value::as_bool) == Some(true),
             });

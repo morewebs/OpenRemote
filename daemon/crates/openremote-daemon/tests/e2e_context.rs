@@ -100,7 +100,7 @@ async fn claude_compaction_lands_as_the_transcripts_note() {
         dump(&events)
     );
     // The compacted turn's context: 40 input + 12000 cache-read + 260
-    // cache-write — the SDK's own context math.
+    // cache-write - the SDK's own context math.
     let used = events
         .iter()
         .find(|(_, p)| kind(p) == "context.used")

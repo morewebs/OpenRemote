@@ -27,7 +27,7 @@ pub enum Backend {
     Agy(openremote_agy::Resolution),
 }
 
-/// A live session's driver, dispatch-only — every method reaches the
+/// A live session's driver, dispatch-only - every method reaches the
 /// concrete driver behind the same vocabulary.
 pub enum SessionDriver {
     Claude(openremote_claude::Driver),
@@ -51,14 +51,14 @@ impl SessionDriver {
     }
 
     /// Apply a live model, effort, or fast change in the harness's own
-    /// words. A harness with no wire for a field says so — the console
+    /// words. A harness with no wire for a field says so - the console
     /// does not render that control.
     pub async fn apply_settings(&mut self, settings: &SessionSettings) -> Result<(), DriverError> {
         match self {
             // Claude's own slash commands (`/model`, `/effort`, `/fast`)
             // ride the user-message wire; the fresh init frame confirms.
             SessionDriver::Claude(driver) => driver.apply_settings(settings).await,
-            // Codex's own wire is thread/settings/update — a turn/start
+            // Codex's own wire is thread/settings/update - a turn/start
             // override is ignored once the thread adopted a model.
             SessionDriver::Codex(driver) => driver.apply_settings(settings).await,
             // Grok, OpenCode, and Antigravity take model and effort on the
@@ -66,7 +66,7 @@ impl SessionDriver {
             // for a change; resume is how it lands.
             SessionDriver::Grok(_) | SessionDriver::Opencode(_) | SessionDriver::Agy(_) => {
                 Err(DriverError::Harness(
-                    "this harness applies model and effort when the chat starts — stop it and resume to change them".into(),
+                    "this harness applies model and effort when the chat starts - stop it and resume to change them".into(),
                 ))
             }
             SessionDriver::Pi(driver) => driver.apply_settings(settings).await,
@@ -95,7 +95,7 @@ impl SessionDriver {
             SessionDriver::Claude(driver) => {
                 driver.answer(harness_ref, choice, request).await?;
                 // Claude's control protocol offers allow/deny per request
-                // only — its own session-scoped grants live in its TUI, not
+                // only - its own session-scoped grants live in its TUI, not
                 // on this wire.
                 Ok(AnswerOutcome::default())
             }
@@ -188,21 +188,21 @@ impl Backend {
     pub async fn models(&self) -> Option<Vec<ModelDescriptor>> {
         match self {
             Backend::Claude(resolution) => {
-                // The SDK's initialize handshake — its `models` array is the
+                // The SDK's initialize handshake - its `models` array is the
                 // list the CLI's own /model picker serves.
                 openremote_claude::driver::models(resolution).await.ok()
             }
             Backend::Codex(resolution) => openremote_codex::models(resolution).await.ok(),
-            // Grok's own cache of its models endpoint — its names, its
+            // Grok's own cache of its models endpoint - its names, its
             // effort words. Grok refetches the cache; we read it.
             Backend::Grok(_) => Some(openremote_grok::config::catalog()),
             // Pi's model catalog needs a signed-in provider (`pi
-            // --list-models` answers "No models available" here) — the
+            // --list-models` answers "No models available" here) - the
             // slot stays reserved until that probe is honest.
             Backend::Pi(_) => None,
             // OpenCode's /api/model is a catalog without a current-model
             // marker (observed live: the model only rides step-started
-            // events) — the catalog stays reserved.
+            // events) - the catalog stays reserved.
             Backend::Opencode(_) => None,
             // Antigravity's `agy models` prints its own catalog (TSV).
             Backend::Agy(resolution) => openremote_agy::driver::models(resolution).await.ok(),
@@ -210,7 +210,7 @@ impl Backend {
     }
 
     /// The model a fresh chat on this harness will run, from the harness's
-    /// own config — its words, replaced by the wire's first-turn truth.
+    /// own config - its words, replaced by the wire's first-turn truth.
     /// `None` = nothing honest to say pre-send (the slot stays reserved).
     pub fn default_model(&self) -> Option<(String, Option<String>)> {
         match self {
@@ -225,10 +225,10 @@ impl Backend {
             Backend::Grok(_) => openremote_grok::config::default_model(),
             Backend::Pi(_) => None, // get_state at create is the fact
             // OpenCode's /api/model is a catalog, not a current-model
-            // answer (observed live) — nothing pre-send; the first
+            // answer (observed live) - nothing pre-send; the first
             // step-start reports the model.
             Backend::Opencode(_) => None,
-            // Antigravity's own settings file — the same source its
+            // Antigravity's own settings file - the same source its
             // banner shows, verbatim (the effort rides inside the name).
             Backend::Agy(_) => openremote_agy::config::default_model().map(|m| (m, None)),
         }
@@ -242,7 +242,7 @@ struct RegistryEntry {
 
 pub struct HarnessRegistry {
     entries: Vec<RegistryEntry>,
-    /// The overrides this registry was probed with — an install re-probes
+    /// The overrides this registry was probed with - an install re-probes
     /// with the same ones.
     overrides: HashMap<String, PathBuf>,
 }
@@ -270,7 +270,7 @@ fn harness_from(id: &str, name: &str, resolution: &Resolution, version: Option<&
 impl HarnessRegistry {
     /// Probe every supported harness. `overrides` maps harness ids to
     /// binaries (e2e points them at fixture agents) and is authoritative
-    /// where given. One bounded `--version` per harness runs in parallel —
+    /// where given. One bounded `--version` per harness runs in parallel -
     /// a CLI that doesn't answer just stays unprobed, never a startup
     /// gate.
     pub async fn probe(overrides: &HashMap<String, PathBuf>) -> Self {
@@ -336,7 +336,7 @@ impl HarnessRegistry {
                 // command. Unknown, not a guessed sign-in.
                 _ => None,
             };
-            // The pre-send model fact rides with the harness — the
+            // The pre-send model fact rides with the harness - the
             // harness's own config, its words (a fixture is not the
             // harness; its slots stay silent).
             if !overrides.contains_key(&entry.harness.id) {
@@ -355,7 +355,7 @@ impl HarnessRegistry {
         }
     }
 
-    /// Re-run the probe with the same overrides — after an install
+    /// Re-run the probe with the same overrides - after an install
     /// changed what's on this machine.
     pub async fn reprobe(&self) -> Self {
         Self::probe(&self.overrides).await
@@ -377,7 +377,7 @@ impl HarnessRegistry {
             .and_then(|e| e.backend.as_ref())
     }
 
-    /// Whether this harness slot is fixture-backed — the e2e suite
+    /// Whether this harness slot is fixture-backed - the e2e suite
     /// injects binaries through the override map, and a fixture's login
     /// behavior is not a real sign-in. Production probed with no
     /// overrides; nothing there is a fixture.
@@ -397,7 +397,7 @@ impl HarnessRegistry {
 
 /// Debug/testing escape hatch: `OPENREMOTE_<HARNESS>_PATH` forces a
 /// harness's binary (e.g. a fixture agent) without touching PATH. The
-/// override is authoritative — an injected daemon never leaks to the
+/// override is authoritative - an injected daemon never leaks to the
 /// machine's real CLIs.
 pub fn env_overrides() -> HashMap<String, PathBuf> {
     let mut map = HashMap::new();
@@ -418,7 +418,7 @@ pub fn env_overrides() -> HashMap<String, PathBuf> {
 
 /// Whether the harness's own fast mode is usable at the probed version:
 /// claude's headless `fastMode` needs v2.1.205+, codex's `fast` service
-/// tier v0.110.0+. The other harnesses have no fast mode to offer — their
+/// tier v0.110.0+. The other harnesses have no fast mode to offer - their
 /// chips never render.
 fn fast_supported(id: &str, version: Option<&str>) -> bool {
     match (id, version) {
@@ -455,7 +455,7 @@ fn version_at_least(version: &str, min: (u64, u64, u64)) -> bool {
     (at(0), at(1), at(2)) >= min
 }
 
-/// One bounded `--version` run against the resolved CLI — a catalog fact,
+/// One bounded `--version` run against the resolved CLI - a catalog fact,
 /// never a startup gate.
 async fn probe_version(resolution: &Resolution) -> Option<String> {
     let (program, argv): (PathBuf, Vec<std::ffi::OsString>) = match resolution {
@@ -537,8 +537,8 @@ fn grok_auth_file_present() -> Option<bool> {
     }
 }
 
-/// The harness's own status words. Anything else — a fixture's usage
-/// text, a command the binary does not have — is unknown, not signed out.
+/// The harness's own status words. Anything else - a fixture's usage
+/// text, a command the binary does not have - is unknown, not signed out.
 fn parse_signed_in(text: &str) -> Option<bool> {
     let lower = text.to_ascii_lowercase();
     if let Some(value) = serde_json::from_str::<serde_json::Value>(text.trim())

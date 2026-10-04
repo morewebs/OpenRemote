@@ -1,10 +1,10 @@
-// Markdown for agent messages — the shapes harnesses actually emit:
+// Markdown for agent messages - the shapes harnesses actually emit:
 // headings, fenced code, tables, nested ordered/unordered lists, task
 // lists, blockquotes, strikethrough, inline code/bold/italic, http(s)
 // links (titled and bare), images-as-links, horizontal rules, hard breaks,
-// and math (inline $…$ and display $$…$$) through KaTeX — the same engine
+// and math (inline $…$ and display $$…$$) through KaTeX - the same engine
 // GitHub uses, bundled locally, no network calls. Escaped first so nothing
-// raw ever renders — agent output is untrusted input; we render only
+// raw ever renders - agent output is untrusted input; we render only
 // shapes we built or KaTeX's own output.
 //
 // Deliberately not rendered, by design: raw HTML (stays inert),
@@ -23,7 +23,7 @@ function escapeHtml(text) {
   return String(text ?? '').replace(/[&<>"]/g, (c) => ESCAPE[c])
 }
 
-/// A safe href: http(s) only — javascript:, data:, and everything else
+/// A safe href: http(s) only - javascript:, data:, and everything else
 /// never render as links.
 function safeHref(url) {
   return /^https?:\/\//i.test(url) ? url : null
@@ -31,7 +31,7 @@ function safeHref(url) {
 
 /// Inline: `code`, **bold**, *italic*, ~~strike~~, [text](url "title"),
 /// ![alt](url) (as a link), bare http(s) URLs, $math$. Code spans and
-/// math are extracted first so nothing inside them is touched — KaTeX
+/// math are extracted first so nothing inside them is touched - KaTeX
 /// gets the raw source, everything else gets the escaped form.
 function inline(text) {
   const codes = []
@@ -42,7 +42,7 @@ function inline(text) {
     codes.push(code)
     return `\u0000${codes.length - 1}\u0000`
   })
-  // Inline math: $…$ — only when the content actually looks like TeX (a
+  // Inline math: $…$ - only when the content actually looks like TeX (a
   // backslash, superscript, subscript, or brace). "$5 and $10" is prose,
   // never math. KaTeX renders the raw source; a parse error keeps the
   // original as plain text.
@@ -57,19 +57,19 @@ function inline(text) {
   out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
   out = out.replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, '$1<em>$2</em>')
   out = out.replace(/~~([^~]+)~~/g, '<s>$1</s>')
-  // Images render as their alt text linked — no inline <img>, the source
+  // Images render as their alt text linked - no inline <img>, the source
   // stays the renderer's own shapes. The title is escaped-quote form by now.
   out = out.replace(
     /!\[([^\]]*)\]\((https?:\/\/[^)\s]+)(?:\s+&quot;[^&]*&quot;)?\)/g,
     '<a class="md-link" href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
   )
-  // Links, optional title in the parens — parsed before autolinking so a
+  // Links, optional title in the parens - parsed before autolinking so a
   // titled link's URL isn't autolinked inside its own parens.
   out = out.replace(
     /\[([^\]]+)\]\((https?:\/\/[^)\s]+)(?:\s+&quot;[^&]*&quot;)?\)/g,
     '<a class="md-link" href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
   )
-  // Bare http(s) URLs autolink — trailing sentence punctuation stays out
+  // Bare http(s) URLs autolink - trailing sentence punctuation stays out
   // of the href. Never one already inside a href=".
   out = out.replace(
     /(?<!href=")(https?:\/\/[^\s<]+?)([.,;:!?)\]]*)(?=[\s<]|$)/g,

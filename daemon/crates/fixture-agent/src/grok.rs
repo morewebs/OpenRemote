@@ -5,7 +5,7 @@
 //! streaming-messages-json --cwd <dir> [--resume <id>]`.
 //!
 //! Scenarios: `plain` completes the turn; `die` exits after init with no
-//! result (the process died mid-turn — the daemon maps it to a failed
+//! result (the process died mid-turn - the daemon maps it to a failed
 //! turn with a note).
 
 use std::io::{BufRead, Write};

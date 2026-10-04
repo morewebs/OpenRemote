@@ -53,7 +53,7 @@ test('tables render with alignment and escaped pipes survive', () => {
   assert.match(html, /<th style="text-align:center">Notes<\/th>/)
   assert.match(html, /<th style="text-align:right">Priority<\/th>/)
   assert.ok(html.includes('<code class="md-code">code</code>'), 'inline code in cells')
-  // The escaped pipe stays one cell with a literal | — backslash
+  // The escaped pipe stays one cell with a literal | - backslash
   // consumed, cell not split.
   assert.match(html, /<td[^>]*>a \| b<\/td>/)
   assert.match(html, /<td[^>]*>works\|here<\/td>/)
@@ -100,7 +100,7 @@ test('javascript: and data: URLs never link, code spans protect their contents',
   assert.match(code, /<code class="md-code">\*\*not bold\*\* and https:\/\/example\.com<\/code>/, 'code spans untouched')
 })
 
-test('math renders through KaTeX — inline, display, and dollars stay prose', () => {
+test('math renders through KaTeX - inline, display, and dollars stay prose', () => {
   // Inline math with real TeX content.
   const inlineMath = renderMarkdown('The value $e^{i\pi} + 1 = 0$ holds.')
   assert.ok(inlineMath.includes('katex'), 'inline math renders')
@@ -111,7 +111,7 @@ test('math renders through KaTeX — inline, display, and dollars stay prose', (
   assert.ok(display.includes('md-math-block'), 'display math gets its block')
   assert.ok(display.includes('katex-display'), 'KaTeX display mode')
 
-  // Dollar amounts are never math — no TeX-shaped content between them.
+  // Dollar amounts are never math - no TeX-shaped content between them.
   const price = renderMarkdown('That costs $5 and $10 total.')
   assert.ok(!price.includes('katex'), 'prices stay prose')
   assert.ok(price.includes('$5 and $10'), 'the dollars survive')

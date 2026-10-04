@@ -105,7 +105,7 @@ export class DaemonApi {
   }
 
   // Model, effort, and fast on a live chat. A harness that only accepts the
-  // change when the chat starts answers 409 — the composer says so.
+  // change when the chat starts answers 409 - the composer says so.
   updateSettings(id, { model, effort, fast }) {
     return this.call('POST', `/sessions/${id}/settings`, {
       request_id: newRequestId(),
@@ -119,7 +119,7 @@ export class DaemonApi {
     return this.call('POST', `/sessions/${id}/stop`, { request_id: newRequestId() })
   }
 
-  // Interrupt the running turn — the harness cancels, the session stays
+  // Interrupt the running turn - the harness cancels, the session stays
   // alive for the next message. Unlike stop, nothing dies.
   interrupt(id) {
     return this.call('POST', `/sessions/${id}/interrupt`, { request_id: newRequestId() })
@@ -147,7 +147,7 @@ export class DaemonApi {
     return this.call('DELETE', `/machines/${id}?request_id=${encodeURIComponent(newRequestId())}`)
   }
 
-  // The long one: npm runs minutes — the receipt carries the wait.
+  // The long one: npm runs minutes - the receipt carries the wait.
   installHarness(machineId, harnessId) {
     return this.call('POST', `/machines/${machineId}/harnesses`, {
       request_id: newRequestId(),
@@ -255,7 +255,7 @@ export class DaemonApi {
     })
   }
 
-  // Stop a running sign-in relay — the abandoned-browser-flow answer.
+  // Stop a running sign-in relay - the abandoned-browser-flow answer.
   stopSignIn(harnessId) {
     return this.call('POST', `/harnesses/${harnessId}/signin/stop`, {
       request_id: newRequestId(),

@@ -56,9 +56,9 @@ pub struct SpawnOptions {
     pub resume: Option<String>,
     pub include_deltas: bool,
     /// Run the harness's own fast mode (claude `fastMode`, codex service
-    /// tier `fast`) — the harness's speed tier, never a model switch.
+    /// tier `fast`) - the harness's speed tier, never a model switch.
     pub fast: bool,
-    /// MCP servers an enabled plugin asked to ride along — each harness
+    /// MCP servers an enabled plugin asked to ride along - each harness
     /// maps these onto its own wire (claude `--mcp-config`, codex
     /// `mcp_servers.<id>.*` config overrides). A harness with no wire for
     /// them simply doesn't run plugins.
@@ -76,7 +76,7 @@ pub struct McpServer {
     pub args: Vec<String>,
 }
 
-/// What one decision answer means for the turn and the session — filled
+/// What one decision answer means for the turn and the session - filled
 /// from each harness's own semantics at the dispatch layer.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AnswerOutcome {
@@ -84,13 +84,13 @@ pub struct AnswerOutcome {
     pub interrupts_turn: bool,
     /// The harness's own session-scope choice word was picked, granting
     /// this tool for the rest of the session (codex `acceptForSession`,
-    /// opencode `always`) — named in the harness's own tool vocabulary.
+    /// opencode `always`) - named in the harness's own tool vocabulary.
     pub session_grant: Option<String>,
 }
 
 /// A change to a live chat's model, effort, or fast mode. `None` means
 /// "leave it". A harness that cannot apply a field on a running process
-/// returns an error for that field — the console does not render the
+/// returns an error for that field - the console does not render the
 /// control in that case.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SessionSettings {
@@ -113,7 +113,7 @@ pub struct ModelDescriptor {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reasoning_efforts: Vec<String>,
     /// The harness's own marker for the entry a fresh chat runs (codex's
-    /// `isDefault`) — the pre-send fact where its config says nothing.
+    /// `isDefault`) - the pre-send fact where its config says nothing.
     #[serde(default)]
     pub is_default: bool,
 }

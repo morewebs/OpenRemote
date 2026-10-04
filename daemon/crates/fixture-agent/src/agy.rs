@@ -1,5 +1,5 @@
 //! The fixture's Antigravity print mode: one run per prompt, emitting
-//! agy's own frame family — `{event: "init", conversation_id}`,
+//! agy's own frame family - `{event: "init", conversation_id}`,
 //! `{event: "step_update", …}`, `{event: "result", result: {status,
 //! response}}` where status is Antigravity's own word (`SUCCESS`).
 //! `--conversation <id>` resumes; `models` (the subcommand) prints the

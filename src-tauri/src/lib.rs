@@ -16,7 +16,7 @@ const DAEMON_NAME: &str = "openremote-daemon";
 /// line. The console asks for this once on boot.
 #[derive(Clone, serde::Serialize, Default)]
 pub struct DaemonInfo {
-    /// `http://127.0.0.1:<port>` — ready when Some.
+    /// `http://127.0.0.1:<port>` - ready when Some.
     pub url: Option<String>,
     /// The auth token read from the daemon's data dir on first run.
     pub token: Option<String>,

@@ -4,10 +4,10 @@
 //! by `{type: "response", id, command, success, data|error}`;
 //! notifications carry the stream (`message_update`,
 //! `tool_execution_start|update|end`, `message_end`, `agent_settled`)
-//! and the dialogs (`extension_ui_request` — answered with
+//! and the dialogs (`extension_ui_request` - answered with
 //! `extension_ui_response` carrying `{value}` or `{cancelled}`). The
 //! turn boundary is `message_end` with the assistant message's
-//! `stopReason` — pi's own words (`stop`/`toolUse` → completed,
+//! `stopReason` - pi's own words (`stop`/`toolUse` → completed,
 //! `aborted` → interrupted, `error`/`length` → failed).
 
 use std::collections::HashMap;
@@ -166,7 +166,7 @@ impl Driver {
     }
 
     /// Answer a dialog: the choice id is pi's own value (a select option
-    /// or a confirm boolean) — routed with the dialog's id.
+    /// or a confirm boolean) - routed with the dialog's id.
     pub async fn answer(
         &mut self,
         harness_ref: &str,
@@ -177,7 +177,7 @@ impl Driver {
         let response = match method {
             // Free-text dialogs are not button-answerable tonight; pi gets
             // its own cancelled shape (cloudroom's behavior for all dialogs
-            // — ours only where the console can't answer yet).
+            // - ours only where the console can't answer yet).
             "input" | "editor" => json!({"cancelled": true}),
             "confirm" => json!({"value": choice == "true"}),
             _ => json!({"value": choice}),

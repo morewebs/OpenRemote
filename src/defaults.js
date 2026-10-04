@@ -1,5 +1,5 @@
 // New-task defaults: what the composer starts with. Console-side facts,
-// persisted locally — they preselect, never constrain.
+// persisted locally - they preselect, never constrain.
 
 const KEY = 'openremote-defaults'
 

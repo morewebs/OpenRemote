@@ -11,7 +11,7 @@
   background: var(--bg-app);
 }
 
-/* the pane's scrollbar matches the app's thin ones — the default
+/* the pane's scrollbar matches the app's thin ones - the default
    classic Windows bar is 15px wide and skews the centered dock */
 .panel::-webkit-scrollbar {
   width: 8px;
@@ -321,7 +321,7 @@
   gap: 8px;
 }
 
-/* a picker chip in the Then grid — same anatomy as the prototype's
+/* a picker chip in the Then grid - same anatomy as the prototype's
    af-chip: a quiet bordered button that opens a PickerMenu */
 .af-pick,
 .af-chip {
@@ -346,7 +346,7 @@
   background: var(--bg-hover);
 }
 
-/* hour and minute, not the native clock — its popup cannot be styled */
+/* hour and minute, not the native clock - its popup cannot be styled */
 .af-time {
   display: flex;
   align-items: center;
@@ -379,7 +379,7 @@
 }
 
 /* the workspace field: the chosen folder as a chip, the OS dialog's
-   trigger beside it — picked, never typed */
+   trigger beside it - picked, never typed */
 .af-workspace {
   display: flex;
   flex-direction: column;

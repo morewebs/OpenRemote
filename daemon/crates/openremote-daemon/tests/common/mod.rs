@@ -65,7 +65,7 @@ impl Drop for DaemonChild {
     }
 }
 
-/// Spawn the daemon binary as a real process with `extra_env` — for the
+/// Spawn the daemon binary as a real process with `extra_env` - for the
 /// flows that ride process env (the install command override). The token
 /// is pre-written into a fresh data dir; the address comes from the
 /// binary's own `READY` line.
@@ -126,7 +126,7 @@ pub async fn start_daemon(overrides: &[(&str, PathBuf)]) -> TestDaemon {
     // Every harness slot defaults to the fixture agent, so the registry's
     // probes stay hermetic and cheap (no real CLIs get spawned from a
     // suite); a suite overrides only the harness it drives. The
-    // "no such harness" path is still reachable — an id no slot fills.
+    // "no such harness" path is still reachable - an id no slot fills.
     let fixture = fixture_agent();
     let mut filled: Vec<(&str, PathBuf)> = Vec::new();
     for id in ["claude", "codex", "grok", "pi", "opencode", "agy"] {
@@ -335,7 +335,7 @@ pub async fn until_kinds(daemon: &TestDaemon, path: &str, wanted: &[&str]) -> Ve
     );
 }
 
-/// Wait until the stream holds at least `count` events of one kind — for
+/// Wait until the stream holds at least `count` events of one kind - for
 /// flows where a suffix alone can match an older, identical tail.
 pub async fn until_count(
     daemon: &TestDaemon,

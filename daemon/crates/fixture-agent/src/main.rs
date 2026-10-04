@@ -1,25 +1,25 @@
 //! A scriptable fake harness CLI for daemon e2e tests.
 //!
-//! One binary, many wire protocols — chosen by the argv the real driver
+//! One binary, many wire protocols - chosen by the argv the real driver
 //! builds, so e2e never smuggles fake flags:
 //!
 //! - Claude Code (`--output-format stream-json --input-format
 //!   stream-json …`): user envelopes on stdin, NDJSON frames on stdout,
 //!   `control_request`/`control_response` for approvals and interrupts,
 //!   `result` as the turn boundary.
-//! - Codex (`app-server --listen stdio://`): JSON-lines RPC — calls,
+//! - Codex (`app-server --listen stdio://`): JSON-lines RPC - calls,
 //!   notifications, and server→client approval requests answered with
 //!   `{id, result: {decision}}`.
 //!
 //! The scenario is chosen with `FIXTURE_AGENT_SCENARIO` (or a
 //! `fixture-scenario` file in the cwd).
 //!
-//! One reader owns stdin for the whole run — a turn that waits for an
+//! One reader owns stdin for the whole run - a turn that waits for an
 //! approval parks in `pending_approval` and the main loop keeps reading;
 //! nesting a second `stdin().lock()` deadlocks (Stdin's mutex is not
 //! reentrant), which is exactly how the first e2e run hung.
 //!
-//! Lines are accepted with either `\r\n` or `\n` delimiters — the ICRNL
+//! Lines are accepted with either `\r\n` or `\n` delimiters - the ICRNL
 //! lesson, paid for once in a PTY and never again.
 
 mod agy;
@@ -32,7 +32,7 @@ use std::io::{BufRead, Write};
 
 fn main() {
     // Protocol inference from the real driver's argv. `--version` is the
-    // registry's catalog probe — answered before any protocol dispatch.
+    // registry's catalog probe - answered before any protocol dispatch.
     let argv: Vec<String> = std::env::args().skip(1).collect();
     if argv.iter().any(|a| a == "--version") {
         let version =
@@ -91,7 +91,7 @@ impl FixtureAgent {
             }
         }
         // Scenario resolution: env first, then a `fixture-scenario` file in
-        // the cwd — the per-session channel the e2e suite uses without
+        // the cwd - the per-session channel the e2e suite uses without
         // smuggling fake flags into the argv the daemon builds.
         let scenario = std::env::var("FIXTURE_AGENT_SCENARIO")
             .ok()
@@ -115,7 +115,7 @@ impl FixtureAgent {
     fn run(&mut self) {
         self.emit_init();
         let stdin = std::io::stdin();
-        // ICRNL lesson: split on \n, trim a trailing \r — both delimiters are legal.
+        // ICRNL lesson: split on \n, trim a trailing \r - both delimiters are legal.
         for line in stdin.lock().lines() {
             let line = match line {
                 Ok(l) => l.trim_end_matches('\r').to_string(),

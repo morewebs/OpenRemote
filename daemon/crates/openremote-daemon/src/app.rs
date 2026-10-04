@@ -42,7 +42,7 @@ impl App {
 }
 
 /// Default data dir: `~/.openremote` (where the desktop shell reads the
-/// token from). `OPENREMOTE_DATA_DIR` overrides — the e2e suite and any
+/// token from). `OPENREMOTE_DATA_DIR` overrides - the e2e suite and any
 /// parallel daemon use it.
 pub fn default_data_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("OPENREMOTE_DATA_DIR") {
@@ -91,7 +91,7 @@ pub fn event_stream(
     tokio::spawn(async move {
         let mut live = app.supervisor.subscribe();
         // The cursor: the highest seq the client already holds. `None` is a
-        // fresh connect — replay everything, then accept any live seq.
+        // fresh connect - replay everything, then accept any live seq.
         let mut last: Option<u64> = after;
         let replay = {
             let store = app.store.lock().expect("store lock");

@@ -39,7 +39,7 @@ pub struct Driver {
 }
 
 impl Driver {
-    /// An agy session starts as pure configuration — no process until
+    /// An agy session starts as pure configuration - no process until
     /// the first prompt. `Initialized` rides the first prompt's init
     /// frame.
     pub fn spawn(
@@ -152,7 +152,7 @@ impl Driver {
     }
 
     /// Antigravity's permission prompts (its `ask_permission` tool) have
-    /// no verified remote channel in print mode — nothing ever asks, so
+    /// no verified remote channel in print mode - nothing ever asks, so
     /// this is never called. Its own `--mode` words govern execution.
     pub async fn answer(
         &mut self,
@@ -212,7 +212,7 @@ async fn read_prompt(
             }
             "step_update" => {
                 // Agent text streams as deltas; the result frame carries
-                // the full response — deltas stream for live views.
+                // the full response - deltas stream for live views.
                 if let Some(delta) = frame
                     .pointer("/step_update/text_delta")
                     .and_then(Value::as_str)

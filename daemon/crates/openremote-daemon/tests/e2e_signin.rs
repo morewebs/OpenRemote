@@ -11,7 +11,7 @@ use serde_json::json;
 async fn sign_in_refuses_its_honest_preconditions() {
     let daemon = start_daemon(&[]).await;
 
-    // Every slot is fixture-backed: the registry's own guard refuses — a
+    // Every slot is fixture-backed: the registry's own guard refuses - a
     // fixture's exit code is not a sign-in.
     let fixture = call(
         &daemon,
@@ -79,7 +79,7 @@ async fn sign_in_refuses_its_honest_preconditions() {
 async fn a_second_sign_in_while_one_runs_is_an_honest_conflict() {
     // The real daemon binary as its own process, with claude's slot left
     // empty (no override): claude is honestly missing, so the sign-in
-    // refuses at the availability gate — the same guard a real machine
+    // refuses at the availability gate - the same guard a real machine
     // without the CLI hits.
     let daemon = spawn_daemon_process(&[("OPENREMOTE_CLAUDE_PATH", "Z:/definitely/absent/claude.exe".to_string())]).await;
     let missing = call(
@@ -104,7 +104,7 @@ async fn a_second_sign_in_while_one_runs_is_an_honest_conflict() {
 async fn stopping_a_sign_in_that_never_ran_is_an_honest_no_op() {
     // The stop endpoint's contract: stopping a relay that was never
     // started (or already settled) is a completed receipt, never an
-    // error — the abandoned-flow answer must always be available.
+    // error - the abandoned-flow answer must always be available.
     let daemon = start_daemon(&[]).await;
     let stop = call(
         &daemon,

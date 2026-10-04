@@ -1,7 +1,7 @@
 // Folds daemon events into the chat model the UI renders. Pure: the state
 // layer feeds it events in seq order and tests pin the shapes.
 //
-// The timeline is event order — the transcript is the truth, so every
+// The timeline is event order - the transcript is the truth, so every
 // rendered item (message, tool, decision) lands in the rail exactly when
 // the daemon said it happened.
 
@@ -44,10 +44,10 @@ export function chatFromSession(session) {
     approvedTools: session.approved_tools ?? [],
     // The harness's own context numbers, when it reports them.
     context: null,
-    // The session's running cost in USD — the harness's own numbers,
+    // The session's running cost in USD - the harness's own numbers,
     // summed. Only where the harness reports money.
     costUsd: 0,
-    // The session's running thinking-token count — the harness's own
+    // The session's running thinking-token count - the harness's own
     // number (claude's thinking_tokens), summed across turns.
     thinkingTokens: 0,
     lastError: session.last_error ?? null,
@@ -55,7 +55,7 @@ export function chatFromSession(session) {
     title: null,
     timeline: [],
     pendingDecisionId: null,
-    // The highest event seq already folded into the timeline — reopening
+    // The highest event seq already folded into the timeline - reopening
     // a chat replays only from here, so the transcript never doubles.
     foldedSeq: null,
   }
@@ -67,12 +67,12 @@ export function chatFromSession(session) {
 }
 
 /// Fold one event into the chat. Events arrive in seq order; the timeline
-/// preserves that order verbatim. `foldedSeq` advances with each fold —
+/// preserves that order verbatim. `foldedSeq` advances with each fold -
 /// the seq the timeline has already accounted for, so a replay (a chat
 /// reopened) never doubles the transcript.
 export function foldEvent(chat, event) {
   const payload = event
-  // A replayed event — one at or below the fold cursor — is a duplicate:
+  // A replayed event - one at or below the fold cursor - is a duplicate:
   // the timeline already accounts for it. Folding is idempotent, so no
   // caller (a reopened chat, a reconnect) can double the transcript.
   if (event.seq != null) {
@@ -94,7 +94,7 @@ export function foldEvent(chat, event) {
       break
     }
     case 'session.updated': {
-      // Session facts outside the status lifecycle — a session-scoped tool
+      // Session facts outside the status lifecycle - a session-scoped tool
       // grant landing. The whole session rides along; fold the fields the
       // facts row renders.
       const session = payload.session
@@ -109,7 +109,7 @@ export function foldEvent(chat, event) {
     }
     case 'message.added': {
       const message = payload.message
-      // The settled agent message replaces the stream item it settles —
+      // The settled agent message replaces the stream item it settles -
       // the stream was its preview, never a second transcript entry.
       if (message.role === 'assistant') {
         for (let i = chat.timeline.length - 1; i >= 0; i--) {
@@ -165,7 +165,7 @@ export function foldEvent(chat, event) {
       break
     }
     case 'reasoning.added': {
-      // The harness's own reasoning, settled — its own block, dim and
+      // The harness's own reasoning, settled - its own block, dim and
       // collapsible, never mixed into the reply text. Replaces the live
       // reasoning stream of the same turn.
       for (let i = chat.timeline.length - 1; i >= 0; i--) {
@@ -184,7 +184,7 @@ export function foldEvent(chat, event) {
       break
     }
     case 'reasoning.delta': {
-      // A streaming fragment of the reasoning — grows the live item of
+      // A streaming fragment of the reasoning - grows the live item of
       // that turn; reasoning.added for the same turn replaces it whole.
       let last = chat.timeline[chat.timeline.length - 1]
       if (!last || last.kind !== 'reasoning-stream' || last.turn !== payload.turn) {
@@ -196,7 +196,7 @@ export function foldEvent(chat, event) {
       break
     }
     case 'thinking.tokens': {
-      // The turn's thinking-token count, the harness's own number —
+      // The turn's thinking-token count, the harness's own number -
       // the facts row shows the session's running total.
       chat.thinkingTokens = (chat.thinkingTokens ?? 0) + payload.tokens
       break
@@ -268,7 +268,7 @@ export function foldEvent(chat, event) {
   return chat
 }
 
-/// The rail the ChatView renders — the timeline itself, in event order.
+/// The rail the ChatView renders - the timeline itself, in event order.
 export function railItems(chat) {
   return chat.timeline
 }

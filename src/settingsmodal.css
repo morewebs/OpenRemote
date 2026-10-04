@@ -1,5 +1,5 @@
 /* Settings as a popup: the dv-modal anatomy, sized for the settings
-   rows. The inner column scrolls — the harness list can be long — and
+   rows. The inner column scrolls - the harness list can be long - and
    the modal sits wide enough that the pn-rows don't stack. */
 
 .stg-modal {
@@ -10,7 +10,7 @@
 }
 
 /* the settings rows live in their own scroll column, clear of the
-   fixed head — pickers and nested modals still escape it fine */
+   fixed head - pickers and nested modals still escape it fine */
 .stg-modal .panel {
   flex: 1;
   min-height: 0;
@@ -36,7 +36,7 @@
   background: rgba(255, 255, 255, 0.14);
 }
 
-/* the rows go full-width inside the modal — the 640px pane gutter
+/* the rows go full-width inside the modal - the 640px pane gutter
    was for a full view, not a popup */
 .stg-modal .pn-list,
 .stg-modal .pn-list--wide {

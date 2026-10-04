@@ -5,11 +5,11 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
-/// Millis in half an hour — the uptime band's slice size.
+/// Millis in half an hour - the uptime band's slice size.
 const HALF_HOUR_MS: i64 = 1_800_000;
 
 /// The grid's hostname slug: lowercase, alphanumerics and single dashes
-/// (runs of separators collapse — `Build  BOX` and `build-box` are the
+/// (runs of separators collapse - `Build  BOX` and `build-box` are the
 /// same machine).
 fn slug(name: &str) -> String {
     let mut out = String::new();
@@ -45,12 +45,12 @@ pub enum StoreError {
     BadState(String),
 }
 
-/// Sessions, decisions, receipts — the durable daemon state.
+/// Sessions, decisions, receipts - the durable daemon state.
 ///
 /// Persistence: per-session append-only `events.jsonl` plus an atomically
 /// rewritten `state.json`. No database in slice 1. On open, sessions that
 /// were alive when the daemon died go to `failed` with reason
-/// `daemon restart`, and their pending decisions retire silently — the
+/// `daemon restart`, and their pending decisions retire silently - the
 /// console treats unresolved `decision.requested` on non-alive sessions as
 /// history.
 #[derive(Default, serde::Serialize, serde::Deserialize)]
@@ -106,7 +106,7 @@ impl Store {
                 session.last_error = Some("daemon restart".to_string());
                 session.updated_at = now;
             }
-            // Retire silently — no event is ever invented for this.
+            // Retire silently - no event is ever invented for this.
             for decision in state.decisions.values_mut() {
                 if decision.session_id == *id && decision.state == DecisionState::Pending {
                     decision.state = DecisionState::Retired;
@@ -116,7 +116,7 @@ impl Store {
         let mut store = Self { dir, state };
         let had_this_machine = store.machines().iter().any(|m| m.this_machine);
         let this_id = store.ensure_this_machine();
-        // Opening the store means the daemon is running — present now.
+        // Opening the store means the daemon is running - present now.
         store.mark_present(&this_id).ok();
         if !crashed.is_empty() || !had_this_machine {
             store.persist()?;
@@ -221,7 +221,7 @@ impl Store {
             .ok_or_else(|| StoreError::NotFound(format!("machine {id}")))
     }
 
-    /// Add a machine: it lands `waiting` — it comes online when its agent
+    /// Add a machine: it lands `waiting` - it comes online when its agent
     /// checks in (the next machines pass), never from this call. Duplicate
     /// hostnames are rejected.
     pub fn create_machine(&mut self, name: &str, platform: &str) -> Result<Machine, StoreError> {
@@ -264,7 +264,7 @@ impl Store {
     }
 
     /// Record the current half-hour as present for a machine. Metadata,
-    /// not history — nothing renders from the raw list; `presence` folds
+    /// not history - nothing renders from the raw list; `presence` folds
     /// it into the 24-hour band. Returns true when a new slice landed (it
     /// persists then and only then).
     pub fn mark_present(&mut self, id: &MachineId) -> Result<bool, StoreError> {
@@ -314,7 +314,7 @@ impl Store {
 
     /// Install a plugin on a machine. Marketplace installs dedup by
     /// `catalog@machine`; custom ones by name per machine. The state
-    /// change only — machine reachability is the caller's ruling.
+    /// change only - machine reachability is the caller's ruling.
     pub fn install_plugin(&mut self, mut plugin: Plugin) -> Result<Plugin, StoreError> {
         let dup = match &plugin.catalog_id {
             Some(_) => self.state.plugins.contains_key(&plugin.id),
@@ -355,7 +355,7 @@ impl Store {
         Ok(out)
     }
 
-    /// Record that the machine has the key this plugin needs — the key
+    /// Record that the machine has the key this plugin needs - the key
     /// itself never crosses this API.
     pub fn acknowledge_plugin_key(&mut self, id: &str) -> Result<Plugin, StoreError> {
         let plugin = self
@@ -421,7 +421,7 @@ impl Store {
     // ---- receipts ----
 
     /// Record a receipt. An `accepted` receipt may progress to a terminal
-    /// state (the same request completing); a terminal receipt is final —
+    /// state (the same request completing); a terminal receipt is final -
     /// a duplicate never re-executes, the stored outcome stands.
     pub fn record_receipt(&mut self, receipt: Receipt) -> Result<bool, StoreError> {
         if let Some(existing) = self.state.receipts.get(&receipt.request_id) {
@@ -437,7 +437,7 @@ impl Store {
         Ok(true)
     }
 
-    /// Mark all pending decisions of a session retired — silently, by contract.
+    /// Mark all pending decisions of a session retired - silently, by contract.
     pub fn retire_pending(&mut self, session_id: &SessionId) -> Result<usize, StoreError> {
         let mut retired = 0;
         for decision in self.state.decisions.values_mut() {
@@ -452,7 +452,7 @@ impl Store {
         Ok(retired)
     }
 
-    /// Record the harness's own session id (metadata, not history — resume
+    /// Record the harness's own session id (metadata, not history - resume
     /// reads it; the console never renders it).
     pub fn set_harness_ref(
         &mut self,
@@ -485,7 +485,7 @@ impl Store {
 
     /// Session metadata from the harness (`init` frame): its conversation
     /// id for resume, and the model / permission mode it actually runs.
-    /// Metadata, not history — nothing here is an event. Returns whether
+    /// Metadata, not history - nothing here is an event. Returns whether
     /// anything the console renders actually changed (a same-model repeat
     /// init is not a change).
     pub fn note_session(
@@ -527,7 +527,7 @@ impl Store {
     }
 
     /// Record a tool the harness granted for the rest of the session (its
-    /// own session-scope answer word). Facts, not history — the
+    /// own session-scope answer word). Facts, not history - the
     /// `session.updated` event that follows carries them to the console.
     pub fn note_approved_tool(
         &mut self,
@@ -553,7 +553,7 @@ impl Store {
         session_id: SessionId,
         payload: EventPayload,
     ) -> Result<Event, StoreError> {
-        // Only session.created may name a session the state doesn't know —
+        // Only session.created may name a session the state doesn't know -
         // it is the event that inserts it.
         let creating = matches!(payload, EventPayload::SessionCreated { .. });
         if !creating && !self.state.sessions.contains_key(&session_id) {
@@ -583,7 +583,7 @@ impl Store {
     }
 
     /// Events after a cursor. `None` replays from the beginning (a fresh
-    /// SSE connect); `Some(seq)` returns strictly later events (a resume —
+    /// SSE connect); `Some(seq)` returns strictly later events (a resume -
     /// the client already has `seq`).
     pub fn events_after(
         &self,

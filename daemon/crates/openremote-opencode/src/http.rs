@@ -1,6 +1,6 @@
 //! A minimal localhost HTTP/1.1 client for the opencode surface: JSON
 //! GET/POST with basic auth, plus one long-lived SSE reader. Loopback
-//! only — no TLS, no redirects, no cookies.
+//! only - no TLS, no redirects, no cookies.
 
 use openremote_harness::DriverError;
 use serde_json::Value;
@@ -49,7 +49,7 @@ impl HttpClient {
         let _ = stream.set_nodelay(true);
         stream.write_all(request.as_bytes()).await?;
         // A harness must never hang the daemon: every read is bounded.
-        // Read the header block, then exactly Content-Length body bytes —
+        // Read the header block, then exactly Content-Length body bytes -
         // the server keeps the connection alive, so read_to_end would hang.
         let (rx, mut tx) = stream.split();
         let mut lines = BufReader::new(rx);
@@ -154,7 +154,7 @@ impl HttpClient {
     }
 }
 
-// Minimal base64 (standard alphabet, padded) — avoids a crate for one
+// Minimal base64 (standard alphabet, padded) - avoids a crate for one
 // header. Self-checked against a known vector at compile time.
 const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 

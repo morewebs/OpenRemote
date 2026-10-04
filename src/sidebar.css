@@ -77,7 +77,7 @@ button {
     visibility 0s;
 }
 
-/* collapse: the whole sidebar slides out as one unit — contents
+/* collapse: the whole sidebar slides out as one unit - contents
    travel with it instead of being clipped mid-element by a width
    collapse (which sheared the labels), and the main area grows in
    behind it. Contents become unfocusable once the motion ends
@@ -99,7 +99,7 @@ button {
 /* widen only while the search field itself holds focus; any other
    focus inside the sidebar must not trigger it. the matching negative
    margin keeps the flex layout slot at 264px so the main area never
-   reflows — the extra 56px paints over it as an overlay */
+   reflows - the extra 56px paints over it as an overlay */
 .sidebar:has(.search:focus-within) {
   width: 320px;
   margin-right: -56px;
@@ -502,7 +502,7 @@ button:focus-visible {
   }
 }
 
-/* the Machines nav tile — a chat-row in shape, a view switch in kind */
+/* the Machines nav tile - a chat-row in shape, a view switch in kind */
 .nav-tile {
   margin: 0 0 10px;
   font-size: 13px;

@@ -1,10 +1,10 @@
-//! Grok's own model facts, read from its own files — never a process.
+//! Grok's own model facts, read from its own files - never a process.
 //!
-//! - Catalog: `~/.grok/models_cache.json` — grok's cache of its models
+//! - Catalog: `~/.grok/models_cache.json` - grok's cache of its models
 //!   endpoint (it refetches; we read). Only `hidden: false` entries that
-//!   are `supported_in_api` — the same set its own UI lists.
+//!   are `supported_in_api` - the same set its own UI lists.
 //! - Current default: `~/.grok/config.toml` `[models]` (`default`,
-//!   `default_reasoning_effort`) — grok's own words for what a fresh chat
+//!   `default_reasoning_effort`) - grok's own words for what a fresh chat
 //!   runs. The wire's first-turn `system/init` replaces it with the truth.
 
 use std::path::PathBuf;
@@ -82,7 +82,7 @@ pub fn catalog() -> Vec<ModelDescriptor> {
 pub fn default_model() -> Option<(String, Option<String>)> {
     let home = grok_home()?;
     let text = std::fs::read_to_string(home.join("config.toml")).ok()?;
-    // A hand-rolled read of the `[models]` table only — no toml dependency
+    // A hand-rolled read of the `[models]` table only - no toml dependency
     // for two keys.
     let mut in_models = false;
     let mut default = None;
@@ -121,7 +121,7 @@ mod tests {
         assert!(models
             .iter()
             .any(|m| m.model == "grok-4.7" && m.display_name.as_deref() == Some("Grok 4.7")));
-        // The effort words ride along — grok's own.
+        // The effort words ride along - grok's own.
         let grok47 = models.iter().find(|m| m.model == "grok-4.7").unwrap();
         assert!(grok47.reasoning_efforts.contains(&"xhigh".to_string()));
     }
@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn toml_models_table_parse_pins_the_two_keys() {
-        // The [models] table only — a same-named key in another table never
+        // The [models] table only - a same-named key in another table never
         // leaks in, and an absent table stays silent.
         let text = "[marketplace]\ndefault = \"wrong\"\n\n[models]\ndefault = \"grok-4.7\"\ndefault_reasoning_effort = \"xhigh\"\n";
         let mut in_models = false;

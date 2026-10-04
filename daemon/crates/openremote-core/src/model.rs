@@ -21,12 +21,12 @@ pub struct Harness {
     #[serde(default)]
     pub fast_supported: bool,
     /// Whether this CLI is signed in, in its own words. `None` means this
-    /// harness has no status command we can ask — the row stays Ready or
+    /// harness has no status command we can ask - the row stays Ready or
     /// Missing, never a guessed sign-in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signed_in: Option<bool>,
     /// The model a fresh chat on this harness will run, from the harness's
-    /// own config — its words. The wire's first-turn truth replaces it.
+    /// own config - its words. The wire's first-turn truth replaces it.
     /// `None` when the harness says nothing pre-send (slot reserved).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_model: Option<String>,
@@ -49,7 +49,7 @@ pub enum SessionStatus {
 
 impl SessionStatus {
     /// True while a harness process is attached to the session. `idle` is
-    /// alive — the process persists between turns; only `stopped`/`failed`
+    /// alive - the process persists between turns; only `stopped`/`failed`
     /// end it (resume spawns a new one).
     pub fn is_alive(self) -> bool {
         matches!(
@@ -76,7 +76,7 @@ pub struct Session {
     pub effort: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permission_mode: Option<String>,
-    /// The harness's own conversation id (`session_id` on the wire) — data, never identity.
+    /// The harness's own conversation id (`session_id` on the wire) - data, never identity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub harness_session_ref: Option<String>,
     pub created_at: i64,
@@ -87,7 +87,7 @@ pub struct Session {
     #[serde(default)]
     pub next_turn: u64,
     /// The chat runs the harness's own fast mode (claude `fastMode`, codex
-    /// service tier `fast`) — its speed tier, not a model.
+    /// service tier `fast`) - its speed tier, not a model.
     #[serde(default)]
     pub fast: bool,
     /// Tools the harness granted for the rest of this session, in its own
@@ -107,17 +107,17 @@ pub enum MachineStatus {
     Waiting,
 }
 
-/// One computer you own — the console's *machine*.
+/// One computer you own - the console's *machine*.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Machine {
     pub id: MachineId,
     /// Hostname slug, as it shows in the grid.
     pub name: String,
-    /// `windows` / `macos` / `linux` — the daemon's own OS for this
+    /// `windows` / `macos` / `linux` - the daemon's own OS for this
     /// machine; the OS picked at add time for a waiting one.
     pub platform: String,
     pub status: MachineStatus,
-    /// The daemon's own machine — always online, never removable.
+    /// The daemon's own machine - always online, never removable.
     #[serde(default)]
     pub this_machine: bool,
     /// Enrollment credential for the future check-in (waiting machines).
@@ -129,7 +129,7 @@ pub struct Machine {
     pub last_seen: Option<i64>,
 }
 
-/// A harness whose install on this machine is a plain npm package — the
+/// A harness whose install on this machine is a plain npm package - the
 /// command is shown verbatim and run as-is. Harnesses that install through
 /// their own roots (Grok, Antigravity) have no row: nothing honest to run.
 #[derive(Clone, Serialize, Debug)]
@@ -142,7 +142,7 @@ pub struct InstallSpec {
 
 /// One MCP server a session can call, installed on a machine from the
 /// marketplace or written by hand. The launch command is what that machine
-/// would start; a key, if the plugin needs one, never leaves the machine —
+/// would start; a key, if the plugin needs one, never leaves the machine -
 /// `has_key` only records that the machine has one.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Plugin {
@@ -169,7 +169,7 @@ fn default_true() -> bool {
     true
 }
 
-/// What makes a rule fire. The kinds with real event sources — the clock
+/// What makes a rule fire. The kinds with real event sources - the clock
 /// and an arriving webhook. The connector-backed kinds of the prototype
 /// (pipeline, errors, review, release) appear when their connectors do.
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
@@ -186,7 +186,7 @@ pub struct Trigger {
     /// `HH:MM` local, for schedules.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub time: Option<String>,
-    /// The webhook's own key — every hook URL carries one; a request
+    /// The webhook's own key - every hook URL carries one; a request
     /// without the matching key does not fire the rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
@@ -202,7 +202,7 @@ pub struct AutomationRule {
     pub harness: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
-    /// The chat's workspace — absolute, validated at save time.
+    /// The chat's workspace - absolute, validated at save time.
     pub workspace: PathBuf,
     pub machine: MachineId,
     pub task: String,
@@ -219,7 +219,7 @@ pub struct AutomationRule {
 impl Plugin {
     /// The console's state word, derived like the prototype ruled: a
     /// disabled plugin is off; one still waiting on its key acknowledgment
-    /// is `needs-key`; otherwise it rides sessions — running.
+    /// is `needs-key`; otherwise it rides sessions - running.
     pub fn state(&self) -> &'static str {
         if !self.enabled {
             "off"
@@ -239,7 +239,7 @@ impl Plugin {
 }
 
 /// One machine as the console sees it: the machine plus what is really on
-/// it — the harness inventory (the daemon's own probe), the chats running
+/// it - the harness inventory (the daemon's own probe), the chats running
 /// there, the agent's presence over the last 24 hours, and the harnesses
 /// that could be installed.
 #[derive(Clone, Serialize, Debug)]
@@ -251,7 +251,7 @@ pub struct MachineView {
     /// agent was present (the daemon runs, or the check-in arrived).
     pub presence: Vec<bool>,
     pub installable: Vec<InstallSpec>,
-    /// The waiting machine's install command, per its OS — the enrollment
+    /// The waiting machine's install command, per its OS - the enrollment
     /// credential rides beside it (the check-in consumes both).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub install_command: Option<String>,
@@ -296,7 +296,7 @@ pub enum DecisionState {
     Pending,
     Answered,
     /// The turn or session died with it unanswered. Nothing is emitted when a
-    /// decision retires — the console treats unresolved `decision.requested`
+    /// decision retires - the console treats unresolved `decision.requested`
     /// on non-alive sessions as history.
     Retired,
 }
@@ -319,7 +319,7 @@ pub struct Decision {
     /// The harness-native request, verbatim (e.g. claude `can_use_tool` params).
     pub harness_request: serde_json::Value,
     /// The harness's own correlation id for the request (claude control
-    /// `request_id`) — what an answer is routed with.
+    /// `request_id`) - what an answer is routed with.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub harness_ref: Option<String>,
     /// The tool the harness asked about, in its own vocabulary
@@ -345,7 +345,7 @@ pub struct DecisionAnswer {
 #[serde(rename_all = "snake_case")]
 pub enum ReceiptStatus {
     /// Accepted and queued; the outcome isn't known yet (a crash in this
-    /// window surfaces as `unknown` — uncertain work is never resent).
+    /// window surfaces as `unknown` - uncertain work is never resent).
     Accepted,
     Completed,
     Failed,

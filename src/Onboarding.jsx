@@ -3,7 +3,7 @@ import { useConsole } from './state/console.jsx'
 import { harnessName } from './harness-names.js'
 import './onboarding.css'
 
-// The happy path is two steps — welcome, ready — and the user never sees
+// The happy path is two steps - welcome, ready - and the user never sees
 // connection plumbing: the daemon comes up with the app. A quiet setup
 // beat shows only while it boots (a moment), and the manual connect form
 // is a fallback for when auto-connection genuinely fails (browser mode,
@@ -106,7 +106,7 @@ export default function Onboarding({ onDone }) {
             <p className="ob-sub">
               {available.length > 0
                 ? 'These harnesses are installed and ready. Describe the work and pick the folder it runs in.'
-                : 'No harness CLI was found on this machine — install Claude Code or Codex, then start a task.'}
+                : 'No harness CLI was found on this machine - install Claude Code or Codex, then start a task.'}
             </p>
             <div className="ob-harnesses">
               {available.map((h) => (

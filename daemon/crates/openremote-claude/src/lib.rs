@@ -4,7 +4,7 @@
 //! one persistent `claude` process per session speaking
 //! `--input-format stream-json --output-format stream-json --verbose`,
 //! with `--permission-prompt-tool stdio` so approvals surface as
-//! `can_use_tool` control requests — the daemon answers them as the SDK
+//! `can_use_tool` control requests - the daemon answers them as the SDK
 //! host would. The turn boundary is the `result` message; never guess
 //! turn state from absence of output.
 

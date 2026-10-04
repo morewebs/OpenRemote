@@ -1,7 +1,7 @@
 //! Executable resolution, ported from the Python SDK's `_find_cli`:
 //! prefer a native binary, refuse Windows `.cmd` shims (CreateProcess
 //! cannot run them), and fall back to the npm global `cli.js` driven by
-//! `node` — the layout the 0.1.x TS SDK itself spawned.
+//! `node` - the layout the 0.1.x TS SDK itself spawned.
 
 use std::env;
 use std::path::{Path, PathBuf};
@@ -88,7 +88,7 @@ fn which_claude() -> Option<PathBuf> {
     if cfg!(windows) {
         // Only a native exe: the extensionless `claude` file in the npm dir
         // is a POSIX sh script and `claude.cmd` is unspawnable via
-        // CreateProcess — both are refused on purpose.
+        // CreateProcess - both are refused on purpose.
         which_exact("claude.exe")
     } else {
         which_exact("claude")

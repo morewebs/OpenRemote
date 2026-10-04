@@ -1,4 +1,4 @@
-//! Harness sign-in on this machine — the harness's own login command,
+//! Harness sign-in on this machine - the harness's own login command,
 //! relayed. The CLI keeps its own flow: it opens the browser itself (or
 //! prints a device URL and code) and asks for a pasted code on stdin;
 //! the daemon runs it with piped stdio, streams its words to the console
@@ -6,8 +6,8 @@
 //! exits, the supervisor re-asks the harness's own status words.
 //!
 //! The catalog is the harnesses whose login runs without a terminal:
-//! claude (`auth login` — browser + pasted code), codex (`login` —
-//! browser), grok (`login` — printed device URL and code). OpenCode's
+//! claude (`auth login` - browser + pasted code), codex (`login` -
+//! browser), grok (`login` - printed device URL and code). OpenCode's
 //! `auth login` is an interactive TUI the console cannot relay, and Pi
 //! signs in through a provider of its own; Antigravity has no login
 //! command. No row, nothing honest to run.
@@ -16,14 +16,14 @@ use std::time::Duration;
 
 use openremote_harness::Resolution;
 
-/// (harness id, login argv) — the harness's own words, verbatim.
+/// (harness id, login argv) - the harness's own words, verbatim.
 const LOGINS: &[(&str, &[&str])] = &[
     ("claude", &["auth", "login"]),
     ("codex", &["login"]),
     ("grok", &["login"]),
 ];
 
-/// Whether this harness's own login command can be run at all — the
+/// Whether this harness's own login command can be run at all - the
 /// console only offers sign-in where the daemon can honestly drive it.
 pub fn login_supported(harness_id: &str) -> bool {
     LOGINS.iter().any(|(id, _)| *id == harness_id)
@@ -55,7 +55,7 @@ pub struct SignInDone {
     pub text: String,
 }
 
-/// Ten minutes, then the run is failed — the install contract: the
+/// Ten minutes, then the run is failed - the install contract: the
 /// human is present, not walked away.
 const TIMEOUT: Duration = Duration::from_secs(600);
 
@@ -68,7 +68,7 @@ pub struct SignInRun {
     /// Feeds a line to the CLI's stdin (claude's pasted code). `None`
     /// once the CLI closed its side or the run settled.
     pub stdin: tokio::sync::mpsc::Sender<String>,
-    /// Stop signal — the reaper kills the login child when it fires. A
+    /// Stop signal - the reaper kills the login child when it fires. A
     /// permit is stored, so a stop that lands before the reaper reaches
     /// its wait still takes effect.
     stop: tokio::sync::Notify,
@@ -94,7 +94,7 @@ impl SignInRun {
         self.stop.notify_one();
     }
 
-    /// Resolves when a stop was asked — the reaper races it against the
+    /// Resolves when a stop was asked - the reaper races it against the
     /// child's own exit. (Notify::notified borrows the Notify, so the
     /// future rides inside the reaper's select; the guard is dropped
     /// before it.)
@@ -104,7 +104,7 @@ impl SignInRun {
 }
 
 /// Spawn the harness's own login command with piped stdio. The returned
-/// run relays its words; the caller keeps the child's reaper — exit
+/// run relays its words; the caller keeps the child's reaper - exit
 /// status lands through `on_exit`, after which the registry is re-probed.
 pub async fn spawn_login(
     harness_id: &str,
@@ -112,7 +112,7 @@ pub async fn spawn_login(
 ) -> Result<(std::sync::Arc<SignInRun>, tokio::process::Child), String> {
     let Some(argv) = login_argv(harness_id) else {
         return Err(format!(
-            "'{harness_id}' signs in through its own setup — no login command to relay"
+            "'{harness_id}' signs in through its own setup - no login command to relay"
         ));
     };
     let (program, mut full): (std::path::PathBuf, Vec<std::ffi::OsString>) = match resolution {
@@ -148,7 +148,7 @@ pub async fn spawn_login(
     });
 
     // The CLI's own words, line by line, from both pipes. ANSI escapes
-    // are stripped — the console renders the words, not the terminal
+    // are stripped - the console renders the words, not the terminal
     // dressing the CLI assumed it had.
     let readers: Vec<Box<dyn tokio::io::AsyncRead + Send + Unpin>> =
         vec![Box::new(stdout), Box::new(stderr)];
@@ -163,7 +163,7 @@ pub async fn spawn_login(
                     continue;
                 }
                 let mut state = run.state.lock().expect("signin state lock");
-                // The transcript is bounded — a login that chatters
+                // The transcript is bounded - a login that chatters
                 // cannot grow the daemon's memory.
                 if state.lines.len() < 200 {
                     state.lines.push(clean);
@@ -182,7 +182,7 @@ pub async fn spawn_login(
             }
             let _ = stdin.flush().await;
         }
-        // Dropping closes the pipe — a CLI that reads stdin to the end
+        // Dropping closes the pipe - a CLI that reads stdin to the end
         // (an abandoned prompt) sees EOF, not a hang.
         stdin_rx.close();
     });
@@ -222,7 +222,7 @@ pub fn fail(run: &SignInRun, text: &str) -> SignInDone {
     done
 }
 
-/// Strip ANSI escape sequences and OSC commands — the words stay, the
+/// Strip ANSI escape sequences and OSC commands - the words stay, the
 /// terminal dressing goes.
 fn strip_ansi(line: &str) -> String {
     let mut out = String::with_capacity(line.len());

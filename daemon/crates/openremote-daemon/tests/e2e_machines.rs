@@ -1,6 +1,6 @@
 //! Machines e2e: this machine is real from the first boot (its inventory,
 //! its sessions, its presence), added machines wait honestly, and the
-//! install chain actually materializes a harness — the registry swap is
+//! install chain actually materializes a harness - the registry swap is
 //! the product's install enforcement.
 
 mod common;
@@ -47,7 +47,7 @@ async fn this_machine_is_real_from_the_first_boot() {
     // The inventory is the daemon's own probe: every slot fixture-backed.
     let harnesses = view["harnesses"].as_array().expect("harnesses");
     assert!(harnesses.iter().all(|h| h["available"] == json!(true)));
-    // Nothing is installable — everything is already installed.
+    // Nothing is installable - everything is already installed.
     assert_eq!(
         view["installable"].as_array().map(Vec::len),
         Some(0),
@@ -88,7 +88,7 @@ async fn added_machines_wait_and_carry_their_install_command() {
     );
 
     // The waiting machine's view carries the install command for its OS
-    // (the enrollment token rides beside it — the check-in consumes both).
+    // (the enrollment token rides beside it - the check-in consumes both).
     let machines = call(&daemon, "GET", "/machines", None).await;
     let waiting = machines
         .body
@@ -113,7 +113,7 @@ async fn added_machines_wait_and_carry_their_install_command() {
             .all(|up| *up == json!(false))
     );
 
-    // Duplicate hostnames are rejected — whatever they were typed as.
+    // Duplicate hostnames are rejected - whatever they were typed as.
     let dup = call(
         &daemon,
         "POST",
@@ -189,7 +189,7 @@ async fn installs_reject_their_honest_preconditions() {
         installed.raw
     );
 
-    // A waiting machine can't install anything — it hasn't checked in.
+    // A waiting machine can't install anything - it hasn't checked in.
     let added = call(
         &daemon,
         "POST",
@@ -231,7 +231,7 @@ async fn an_install_materializes_the_harness_on_this_machine() {
     // The real daemon binary as its own process: codex's override points
     // at a path that doesn't exist yet (authoritative, so codex starts
     // honestly missing) and the install command is a script that
-    // materializes the harness at that path — exactly what a real npm
+    // materializes the harness at that path - exactly what a real npm
     // install does to the resolver's layout.
     let dir = tempfile::tempdir().expect("temp dir");
     let staged = dir.path().join("codex.exe");

@@ -1,5 +1,5 @@
 //! The fixture's Codex app-server: JSON-lines RPC exactly as the
-//! openremote-codex driver expects it — `initialize`/`initialized`,
+//! openremote-codex driver expects it - `initialize`/`initialized`,
 //! `thread/start`|`thread/resume`, `turn/start` with text items,
 //! `turn/interrupt`, paginated `model/list`, and approvals as
 //! server→client `commandExecution/requestApproval` requests answered
@@ -27,7 +27,7 @@ struct CodexFixture {
     turn_count: u64,
     thread_id: Option<String>,
     active_turn: Option<String>,
-    /// The model the host last applied through thread/settings/update —
+    /// The model the host last applied through thread/settings/update -
     /// echoed into turn answers so e2e can see it land.
     applied_model: Option<String>,
     /// A turn parked on the host's approval answer.
@@ -204,7 +204,7 @@ impl CodexFixture {
                             "item": {"type": "agentMessage", "id": item_id,
                                      "text": format!("done: {prompt} on {model}")}
                         }));
-                        // The thread's own context numbers — the harness
+                        // The thread's own context numbers - the harness
                         // reports both the used tokens and the window.
                         self.notify(
                             "thread/tokenUsage/updated",
@@ -283,7 +283,7 @@ impl CodexFixture {
             }
             ("thread/settings/update", Some(id)) => {
                 // The host's live settings change: record the model and
-                // echo it back — the real app-server answers the thread's
+                // echo it back - the real app-server answers the thread's
                 // settings and notifies; the e2e asserts the call carried
                 // the right words.
                 if let Some(model) = params.get("model").and_then(Value::as_str) {

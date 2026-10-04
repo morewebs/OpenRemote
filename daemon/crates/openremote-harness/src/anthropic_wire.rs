@@ -1,7 +1,7 @@
-//! Wire frames of the Anthropic-Messages stream-json family — spoken by
+//! Wire frames of the Anthropic-Messages stream-json family - spoken by
 //! Claude Code (`--output-format stream-json`), Grok Build
 //! (`--output-format streaming-messages-json`, verified live 2026-10-01),
-//! and Antigravity (same flags). Everything unknown stays as raw JSON —
+//! and Antigravity (same flags). Everything unknown stays as raw JSON -
 //! the driver forwards what it recognizes and drops what it doesn't, the
 //! way the SDK swallows `keep_alive` and hidden lifecycle frames.
 
@@ -10,13 +10,13 @@ use serde_json::Value;
 /// A parsed stdout frame, recognized or not.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Frame {
-    /// `system` with `subtype: "init"` — carries the harness session id.
+    /// `system` with `subtype: "init"` - carries the harness session id.
     Init {
         session_id: String,
         model: Option<String>,
         permission_mode: Option<String>,
     },
-    /// `assistant` message — content blocks (text / tool_use).
+    /// `assistant` message - content blocks (text / tool_use).
     Assistant {
         content: Vec<Value>,
         model: Option<String>,
@@ -27,10 +27,10 @@ pub enum Frame {
     /// `stream_event` with a text delta (only with
     /// `--include-partial-messages`).
     TextDelta { text: String },
-    /// `stream_event` with a thinking delta (same flag) — the model's own
+    /// `stream_event` with a thinking delta (same flag) - the model's own
     /// reasoning streaming, `delta.type: "thinking_delta"`.
     ThinkingDelta { text: String },
-    /// `result` — the turn boundary. Never guess turn state before it.
+    /// `result` - the turn boundary. Never guess turn state before it.
     /// `usage` rides verbatim (the SDK's own fields: input_tokens,
     /// cache_read_input_tokens, cache_creation_input_tokens, …).
     /// `cost_usd` is the SDK's own `total_cost_usd`, a sibling of `usage`.
@@ -41,7 +41,7 @@ pub enum Frame {
         usage: Option<Value>,
         cost_usd: Option<f64>,
     },
-    /// `system` with `subtype: "compact_boundary"` — the conversation was
+    /// `system` with `subtype: "compact_boundary"` - the conversation was
     /// compacted here (the SDK's own marker).
     CompactBoundary,
     /// CLI → host control request, e.g. `can_use_tool`.
@@ -62,7 +62,7 @@ pub fn block_texts(content: &[Value]) -> Vec<String> {
         .collect()
 }
 
-/// The thinking blocks of an assistant message — claude's own reasoning,
+/// The thinking blocks of an assistant message - claude's own reasoning,
 /// `type: "thinking"` (or `redacted_thinking`, which carries no text).
 pub fn block_thinking(content: &[Value]) -> Vec<String> {
     content
@@ -118,7 +118,7 @@ pub fn tool_result_blocks(content: &[Value]) -> Vec<(String, String, bool)> {
 }
 
 /// Parse one stdout NDJSON line into a Frame. Tolerant: unknown shapes
-/// become `Other` rather than errors — the wire grows between versions.
+/// become `Other` rather than errors - the wire grows between versions.
 pub fn parse_frame(line: &str) -> Option<Frame> {
     let raw: Value = serde_json::from_str(line).ok()?;
     let kind = raw.get("type").and_then(|t| t.as_str())?.to_string();
@@ -233,7 +233,7 @@ pub fn interrupt_envelope(request_id: &str) -> String {
     serde_json::to_string(&envelope).expect("envelope serializes")
 }
 
-/// The `initialize` control request (host → CLI) — the SDK's own startup
+/// The `initialize` control request (host → CLI) - the SDK's own startup
 /// handshake. Its response carries the session's model catalog: the same
 /// list the CLI's `/model` picker serves, pick words and effort levels.
 pub fn initialize_envelope(request_id: &str) -> String {

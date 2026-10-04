@@ -35,7 +35,7 @@
   font-size: 11px;
 }
 
-/* The model slot while its catalog is still on the wire — a slow sweep
+/* The model slot while its catalog is still on the wire - a slow sweep
    standing in for the chip that fills it. */
 .nc-skeleton {
   width: 58px;
@@ -61,7 +61,7 @@
 }
 
 /* The harness's own fast mode, toggled on per chat. Off sits with the other
-   chips; on goes green — the running/ok language, never decorative. */
+   chips; on goes green - the running/ok language, never decorative. */
 .nc-fast {
   cursor: default;
 }

@@ -1,5 +1,5 @@
 /* the everywhere-pill: pinned to the bottom of its tab, short with
-   fully rounded ends — the compact sibling of the New Chat composer */
+   fully rounded ends - the compact sibling of the New Chat composer */
 
 /* the dock carries the sticky/center/stacking duties for the thread
    and the pill together: parked near the pane's bottom, above modal
@@ -8,8 +8,8 @@
    in the root context.
    The dock is one solid rounded sheet: an opaque backing so content
    scrolling behind the thread can't show through it, and over an
-   open popup it floats as an intentional panel — rounded, bordered,
-   shadowed — instead of a raw rectangle */
+   open popup it floats as an intentional panel - rounded, bordered,
+   shadowed - instead of a raw rectangle */
 .pill-dock {
   position: sticky;
   bottom: 0;
@@ -30,7 +30,7 @@
 }
 
 /* inside the opaque sheet the pill doesn't need its own heavy backing
-   — it reads as an input field on the surface */
+   - it reads as an input field on the surface */
 .pill-dock .pill {
   background: rgba(255, 255, 255, 0.045);
 }
@@ -119,7 +119,7 @@ html[data-reduce-motion] .pill {
   padding-right: 2px;
   overflow-y: auto;
   /* the thread scrolls internally once past 42vh, but never shows a
-     scrollbar — the wheel still scrolls it */
+     scrollbar - the wheel still scrolls it */
   scrollbar-width: none;
 }
 
@@ -167,7 +167,7 @@ html[data-reduce-motion] .pill {
   line-height: 1.5;
 }
 
-/* the action card: the pill's answer when you described an action —
+/* the action card: the pill's answer when you described an action -
    same surface family as the modal panels */
 .pt-card {
   border: 1px solid rgba(255, 255, 255, 0.09);

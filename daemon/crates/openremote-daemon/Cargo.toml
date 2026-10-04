@@ -23,7 +23,7 @@ openremote-grok = { path = "../openremote-grok" }
 openremote-pi = { path = "../openremote-pi" }
 openremote-opencode = { path = "../openremote-opencode" }
 openremote-agy = { path = "../openremote-agy" }
-# local wall-clock time — the schedule engine fires at the machine's HH:MM
+# local wall-clock time - the schedule engine fires at the machine's HH:MM
 chrono = "0.4"
 serde = { workspace = true }
 serde_json = { workspace = true }

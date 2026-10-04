@@ -1,5 +1,5 @@
 //! The fixture's Pi rpc mode: flat JSON lines exactly as the
-//! openremote-pi driver expects — `{id, type, …}` calls, `{type:
+//! openremote-pi driver expects - `{id, type, …}` calls, `{type:
 //! "response", id, command, success, data}` answers, `message_update` /
 //! `tool_execution_*` / `message_end` notifications, and
 //! `extension_ui_request` dialogs answered with

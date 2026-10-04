@@ -39,7 +39,7 @@ impl Driver {
             Resolution::Executable(path) => path.clone(),
             Resolution::NodeScript { node, script } => {
                 // opencode's npm layout is a native binary; the node form
-                // would need the script as argv — not seen in the wild.
+                // would need the script as argv - not seen in the wild.
                 let mut command = Command::new(node);
                 command.arg(script);
                 return spawn_serve(command, opts).await;
@@ -134,7 +134,7 @@ async fn spawn_serve(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        // A dropped driver never orphans a serve child — the daemon's
+        // A dropped driver never orphans a serve child - the daemon's
         // crash takes its harnesses with it.
         .kill_on_drop(true);
     let mut child = command
@@ -200,7 +200,7 @@ async fn spawn_serve(
     let client = crate::http::HttpClient::new(port, &password);
     // Create (or resume) the session; the id is OpenCode's own. A pinned
     // model takes `{"id", "providerID"}` (verified live against the
-    // installed opencode's own 400s — `modelID` is its old shape).
+    // installed opencode's own 400s - `modelID` is its old shape).
     let mut body = json!({});
     if let Some(model) = &opts.model {
         let provider = model.split('/').next().unwrap_or("");
@@ -266,7 +266,7 @@ async fn spawn_serve(
 /// Map one bus event for our session onto a driver event.
 fn map_event(event: &Value, session_id: &str) -> Option<DriverEvent> {
     // The real serve speaks `data`; the fixture (and older serves) spoke
-    // `properties` — accept either (observed live against both).
+    // `properties` - accept either (observed live against both).
     let properties = event
         .get("data")
         .or_else(|| event.get("properties"))?;
@@ -275,7 +275,7 @@ fn map_event(event: &Value, session_id: &str) -> Option<DriverEvent> {
     }
     let kind = event.get("type").and_then(Value::as_str)?;
     match kind {
-        // OpenCode only names its model when a turn runs — the step-start
+        // OpenCode only names its model when a turn runs - the step-start
         // carries it (`model: {id, providerID}`, observed live). The
         // first one lights the chat's model chip before the reply lands.
         "session.next.step.started" => properties
@@ -333,8 +333,8 @@ fn map_event(event: &Value, session_id: &str) -> Option<DriverEvent> {
                 is_error: failed,
             })
         }
-        // A failed step ends the turn on its own — no `step.ended`
-        // follows (observed live) — with OpenCode's own error words.
+        // A failed step ends the turn on its own - no `step.ended`
+        // follows (observed live) - with OpenCode's own error words.
         "session.next.step.failed" => {
             let error = properties
                 .pointer("/error/message")

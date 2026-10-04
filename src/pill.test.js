@@ -11,7 +11,7 @@ const ctx = {
   defaults: { harness: 'claude', machineId: 'm-this' },
 }
 
-test('a sentence without a when is not a rule — guidance, not a draft', () => {
+test('a sentence without a when is not a rule - guidance, not a draft', () => {
   const out = parsePill('what can you do?', ctx)
   assert.equal(out.reply != null, true)
   assert.equal(out.draft, undefined)

@@ -50,7 +50,7 @@ export function ConsoleProvider({ children }) {
     setOpenChatId(null)
   }, [])
 
-  // Fresh capabilities — the harness rows carry the harness's own status
+  // Fresh capabilities - the harness rows carry the harness's own status
   // words; a sign-in that settled re-reads them.
   const refreshCapabilities = useCallback(async () => {
     try {
@@ -75,7 +75,7 @@ export function ConsoleProvider({ children }) {
           connect(info.url, info.token)
         } else if (attempt < 150) {
           // The sidecar is still booting (a freshly built exe can take a
-          // slow first run) — keep asking for a long while yet.
+          // slow first run) - keep asking for a long while yet.
           attempt += 1
           setTimeout(ask, 600)
         } else if (!api.ready) {
@@ -93,7 +93,7 @@ export function ConsoleProvider({ children }) {
   }, [])
 
   // The desktop shell owns the sidecar: while the connection holds an
-  // error, keep asking the shell for the daemon's address — a sidecar
+  // error, keep asking the shell for the daemon's address - a sidecar
   // that came back on a new port is followed without a reload. The
   // browser has only the address it was given; its error copy says so.
   useEffect(() => {
@@ -106,7 +106,7 @@ export function ConsoleProvider({ children }) {
         if (cancelled) return
         if (info?.url && info?.token) connect(info.url, info.token)
       } catch {
-        /* still gone — the next tick asks again */
+        /* still gone - the next tick asks again */
       }
     }
     const retry = setInterval(ask, 2500)
@@ -140,14 +140,14 @@ export function ConsoleProvider({ children }) {
       setConnection({ state: 'connected', error: null })
     } catch (err) {
         if (cancelled) return
-        // A fetch that never answered is the daemon being unreachable —
+        // A fetch that never answered is the daemon being unreachable -
         // say that, not the browser's own "Failed to fetch". Anything the
         // daemon answered with (a refused token, a status) is its words.
         const unreachable = err instanceof TypeError
         setConnection({
           state: 'error',
           error: unreachable
-            ? "The daemon didn't answer — check that it's running, or reconnect from Settings."
+            ? "The daemon didn't answer - check that it's running, or reconnect from Settings."
             : err.message ?? String(err),
         })
       }
@@ -160,7 +160,7 @@ export function ConsoleProvider({ children }) {
 
   // Poll the live lists while a daemon is configured (the sidebar's
   // truth; machines, plugins, and rules ride the same beat). A single
-  // dropped call is nothing — but three beats with no answer at all
+  // dropped call is nothing - but three beats with no answer at all
   // means the daemon is gone, and the connection says so instead of
   // freezing quietly on stale data. The poll keeps watching: the first
   // answering beat heals it, and no screen has to be reloaded.
@@ -189,7 +189,7 @@ export function ConsoleProvider({ children }) {
         if (misses >= 3 && connection.state === 'connected') {
           setConnection({
             state: 'error',
-            error: 'The daemon stopped answering — it may have exited. Restart the app, or reconnect from Settings.',
+            error: 'The daemon stopped answering - it may have exited. Restart the app, or reconnect from Settings.',
           })
         }
       }
@@ -200,7 +200,7 @@ export function ConsoleProvider({ children }) {
   // Keep chat records in step with the polled session list: merge
   // identities (status/workspace) without disturbing folded transcripts.
   // Event-folded facts the session payload doesn't carry (the context
-  // numbers, the decisions list) survive the merge — the stream owns them.
+  // numbers, the decisions list) survive the merge - the stream owns them.
   useEffect(() => {
     setChats((current) => {
       const next = { ...current }
@@ -253,7 +253,7 @@ export function ConsoleProvider({ children }) {
         return { ...current, [openChatId]: folded }
       })
     }
-    // Replay only what this chat hasn't folded yet — a chat reopened
+    // Replay only what this chat hasn't folded yet - a chat reopened
     // after a switch already holds its timeline; `after: null` would
     // fold the whole history in a second time.
     const after = chats[openChatId]?.foldedSeq ?? null
@@ -287,7 +287,7 @@ export function ConsoleProvider({ children }) {
 
   const ensureChat = useCallback(
     (session) => {
-      // Merge into the map — the record never replaces it. Idempotent, so
+      // Merge into the map - the record never replaces it. Idempotent, so
       // the shell can ensure the chat for a hash-reached view too.
       setChats((current) =>
         current[session.id]
@@ -310,7 +310,7 @@ export function ConsoleProvider({ children }) {
   )
 
   // The model catalog for a harness, cached per connection. Empty means
-  // the harness advertises nothing — the picker stays hidden.
+  // the harness advertises nothing - the picker stays hidden.
   const modelsFor = useCallback(
     async (harnessId) => {
       if (!api.ready || modelsByHarness[harnessId]) return modelsByHarness[harnessId] ?? []
@@ -354,7 +354,7 @@ export function ConsoleProvider({ children }) {
     [api],
   )
 
-  // Interrupt the running turn — the agent stops what it's doing but the
+  // Interrupt the running turn - the agent stops what it's doing but the
   // session stays alive (stop kills the process; interrupt cancels the turn).
   const interruptChat = useCallback(
     async (chatId) => {
@@ -390,7 +390,7 @@ export function ConsoleProvider({ children }) {
     [api, refreshMachines],
   )
 
-  // The long one — npm runs minutes. The receipt contract carries the
+  // The long one - npm runs minutes. The receipt contract carries the
   // wait; a resolved promise means the harness landed on the machine.
   const installHarness = useCallback(
     async (machineId, harnessId) => {
@@ -414,7 +414,7 @@ export function ConsoleProvider({ children }) {
         start = await api.startSignIn(harnessId)
       } catch (err) {
         // A relay already running is one the human abandoned (or a modal
-        // reopened): stop the stale attempt, then start fresh — the new
+        // reopened): stop the stale attempt, then start fresh - the new
         // CLI's own login server is the one that must answer the browser.
         if (err?.status !== 409) throw err
         await api.stopSignIn(harnessId)
@@ -539,7 +539,7 @@ export function ConsoleProvider({ children }) {
     [api, refreshAutomations],
   )
 
-  // Run now — resolves with the chat the rule opened (the jump target).
+  // Run now - resolves with the chat the rule opened (the jump target).
   const runAutomation = useCallback(
     async (ruleId) => {
       const session = await api.runRule(ruleId)

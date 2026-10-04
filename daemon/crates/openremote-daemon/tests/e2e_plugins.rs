@@ -1,5 +1,5 @@
 //! Plugins e2e: installs written by hand on this machine (dedup, the
-//! needs-key lifecycle), and the ride-along — a session with plugins
+//! needs-key lifecycle), and the ride-along - a session with plugins
 //! enabled still spawns and turns through the real fixture path.
 
 mod common;
@@ -21,7 +21,7 @@ async fn this_machine_id(daemon: &TestDaemon) -> String {
         .to_string()
 }
 
-// Every install mints its own request_id — the receipt contract dedups by
+// Every install mints its own request_id - the receipt contract dedups by
 // it, so a reused id answers with the recorded outcome instead of running.
 fn install_body(machine: &str, over: serde_json::Value) -> serde_json::Value {
     let mut body = json!({"request_id": uuid::Uuid::new_v4().to_string(), "machine": machine});
@@ -124,7 +124,7 @@ async fn a_hand_written_plugin_lives_its_lifecycle() {
     assert_eq!(key.status, 200, "raw: {}", key.raw);
     assert_eq!(key.body["has_key"], true);
 
-    // GitHub doesn't need a key — an explicit error, not a silent ok.
+    // GitHub doesn't need a key - an explicit error, not a silent ok.
     let no_key = call(
         &daemon,
         "POST",
@@ -209,7 +209,7 @@ async fn custom_plugins_carry_their_own_command_and_dedup() {
     .await;
     assert_eq!(bare.status, 422, "raw: {}", bare.raw);
 
-    // A catalog id names nothing — there is no curated catalog.
+    // A catalog id names nothing - there is no curated catalog.
     let unknown = call(
         &daemon,
         "POST",
@@ -229,7 +229,7 @@ async fn plugins_ride_sessions_without_breaking_their_spawns() {
     let machine = this_machine_id(&daemon).await;
     let ws = workspace(Some("plain"));
 
-    // One plugin that rides immediately, and one that needs a key — it does
+    // One plugin that rides immediately, and one that needs a key - it does
     // NOT ride until its key is acknowledged.
     let github = call(
         &daemon,
@@ -261,7 +261,7 @@ async fn plugins_ride_sessions_without_breaking_their_spawns() {
 
     // The session spawns through the real driver argv with the plugins in
     // SpawnOptions (the fixture takes the flags in stride) and the turn
-    // completes — plugins never break a chat.
+    // completes - plugins never break a chat.
     let created = call(
         &daemon,
         "POST",

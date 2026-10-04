@@ -6,7 +6,7 @@ import './signin.css'
 // The harness's own sign-in, relayed. The daemon runs the CLI's own
 // login command on the machine; the CLI's words stream in here (the
 // browser URL it opened, the code it wants pasted), and the human's
-// answers ride back through the same relay. The words are the CLI's —
+// answers ride back through the same relay. The words are the CLI's -
 // never ours.
 export default function SignInModal({ harnessId, onDone }) {
   const { signIn, feedSignIn, stopSignIn } = useConsole()
@@ -19,7 +19,7 @@ export default function SignInModal({ harnessId, onDone }) {
 
   // One relay per modal: it starts the login and polls the beats until
   // the CLI exits. The modal closing does not stop a login the human may
-  // still be finishing in the browser — the daemon's run continues.
+  // still be finishing in the browser - the daemon's run continues.
   useEffect(() => {
     let cancelled = false
     signIn(harnessId, { onBeat: (beat) => !cancelled && setView(beat) }).catch((err) => {
@@ -31,7 +31,7 @@ export default function SignInModal({ harnessId, onDone }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [harnessId])
 
-  // The transcript follows its own tail — the newest word is on screen.
+  // The transcript follows its own tail - the newest word is on screen.
   useEffect(() => {
     transcriptRef.current?.scrollTo({ top: transcriptRef.current.scrollHeight })
   }, [view?.lines?.length])
@@ -51,7 +51,7 @@ export default function SignInModal({ harnessId, onDone }) {
 
   const close = () => {
     setClosing(true)
-    // Closing a running relay stops it — an abandoned browser flow
+    // Closing a running relay stops it - an abandoned browser flow
     // should not block the next attempt.
     if (running && !stopping) {
       setStopping(true)
@@ -95,7 +95,7 @@ export default function SignInModal({ harnessId, onDone }) {
                 ? settled.ok
                   ? 'The harness answered with its own sign-in words.'
                   : `The login command finished on its own: ${settled.text}`
-                : 'The harness’s own login command is running — its words appear below. Finish in the browser it opened.'}
+                : 'The harness’s own login command is running - its words appear below. Finish in the browser it opened.'}
             </p>
             <div className="si-transcript" ref={transcriptRef}>
               {(view?.lines ?? []).map((line, i) => (

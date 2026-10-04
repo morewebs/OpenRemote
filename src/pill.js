@@ -1,5 +1,5 @@
 // The pill's brain (prototype edition, ported): turn a sentence into
-// either a rule draft (action card) or a plain reply. Deliberately dumb —
+// either a rule draft (action card) or a plain reply. Deliberately dumb -
 // keyword shapes, not NLP. The real product routes this through an agent
 // behind the same card; the interaction is what we're testing.
 //
@@ -34,7 +34,7 @@ export function parsePill(text, ctx) {
   if (!wantsRule) {
     return {
       reply:
-        'Describe when it should fire and what the chat should do — e.g. "When the api pipeline on main fails, open a chat to bisect the flaky test."',
+        'Describe when it should fire and what the chat should do - e.g. "When the api pipeline on main fails, open a chat to bisect the flaky test."',
     }
   }
 
@@ -85,7 +85,7 @@ export function parsePill(text, ctx) {
   }
 
   let task = raw
-  // "open a chat [with codex] [on the server] to …" — lazy match to the
+  // "open a chat [with codex] [on the server] to …" - lazy match to the
   // first to/that/which so routing fragments stay out of the task
   const taskMatch = raw.match(/open (?:a |an )?chat\b.*?\b(?:to|that|which)\b\s*(.+)$/i)
   if (taskMatch) task = taskMatch[1]

@@ -1,4 +1,4 @@
-// The rule editor: name, when (a schedule or a webhook — the kinds with
+// The rule editor: name, when (a schedule or a webhook - the kinds with
 // real sources), the chat it opens (harness, model, machine), and the
 // task it starts with. The workspace is the chat's own working folder.
 
@@ -44,7 +44,7 @@ export default function AutomationForm({ rule, onClose }) {
   const [time, setTime] = useState(rule?.trigger?.time ?? '09:00')
   const [harness, setHarness] = useState(rule?.harness ?? available[0]?.id ?? null)
   const [model, setModel] = useState(rule?.model ?? null)
-  // A draft or saved rule may name a machine that isn't online — the
+  // A draft or saved rule may name a machine that isn't online - the
   // form preselects one that can actually run the rule.
   const [machineId, setMachineId] = useState(
     online.some((m) => m.machine.id === rule?.machine)
@@ -85,7 +85,7 @@ export default function AutomationForm({ rule, onClose }) {
 
   const currentHarness = available.find((h) => h.id === harness)
   const currentMachine = online.find((m) => m.machine.id === machineId)
-  // One online machine cannot be chosen — the field still saves its id.
+  // One online machine cannot be chosen - the field still saves its id.
   const oneMachine = online.length <= 1
   const ready = name.trim() && task.trim() && workspace.trim() && harness && machineId && (kind !== 'schedule' || time.trim())
 
@@ -200,7 +200,7 @@ export default function AutomationForm({ rule, onClose }) {
           {kind === 'webhook' && (
             <p className="af-when-note">
               {hookUrl
-                ? 'Any request to this hook fires the rule — the key in the URL is its credential.'
+                ? 'Any request to this hook fires the rule - the key in the URL is its credential.'
                 : 'The hook URL appears on the rule once it is saved.'}
             </p>
           )}

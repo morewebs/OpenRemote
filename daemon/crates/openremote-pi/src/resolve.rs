@@ -1,5 +1,5 @@
 //! Pi CLI resolution: PATH first, then the npm layout (dist/cli.js is a
-//! node script — verified locally: `node dist/cli.js --version` → 0.87.1).
+//! node script - verified locally: `node dist/cli.js --version` → 0.87.1).
 
 use std::env;
 use std::path::{Path, PathBuf};

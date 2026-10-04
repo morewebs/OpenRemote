@@ -53,7 +53,7 @@ pub fn router(app: Arc<App>) -> Router {
         .layer(middleware::from_fn_with_state(Arc::clone(&app), auth));
     Router::new()
         .route("/healthz", get(healthz))
-        // Webhooks arrive from outside the console's trust — the rule's
+        // Webhooks arrive from outside the console's trust - the rule's
         // own key is the credential, not the daemon token. (The loopback
         // binding still keeps the surface local.)
         .route("/hooks/{id}", post(incoming_webhook))
@@ -65,7 +65,7 @@ pub fn router(app: Arc<App>) -> Router {
 /// The console is a webview on a different origin than the daemon
 /// (vite dev `http://localhost:5173`, Tauri production
 /// `http://tauri.localhost` / `tauri://localhost`), and webviews enforce
-/// same-origin on fetch — without these headers the console can never
+/// same-origin on fetch - without these headers the console can never
 /// reach the daemon. Loopback-only console origins; everything else
 /// stays blocked (the bearer token still guards every real route).
 fn console_cors() -> CorsLayer {
@@ -131,7 +131,7 @@ struct SignInBody {
 
 /// Start the harness's own login command, relayed. The CLI's words arrive
 /// through the view; a human's answers ride `/signin/input`. The receipt
-/// contract dedups the start itself — the relay continues after it.
+/// contract dedups the start itself - the relay continues after it.
 async fn start_sign_in(
     State(app): State<Arc<App>>,
     AxumPath(id): AxumPath<String>,
@@ -168,7 +168,7 @@ async fn start_sign_in(
     }
 }
 
-/// The current beat of a harness's sign-in relay — the console polls it.
+/// The current beat of a harness's sign-in relay - the console polls it.
 async fn sign_in_view(
     State(app): State<Arc<App>>,
     AxumPath(id): AxumPath<String>,
@@ -212,7 +212,7 @@ async fn sign_in_input(
     }
 }
 
-/// Stop a running sign-in relay — the abandoned-browser-flow answer. The
+/// Stop a running sign-in relay - the abandoned-browser-flow answer. The
 /// settled view (`done: stopped`) arrives through the poll.
 async fn stop_sign_in(
     State(app): State<Arc<App>>,
@@ -255,7 +255,7 @@ async fn get_machine(State(app): State<Arc<App>>, AxumPath(id): AxumPath<String>
 struct CreateMachineBody {
     request_id: String,
     name: String,
-    /// `windows` / `macos` / `linux` — picks the install command shown.
+    /// `windows` / `macos` / `linux` - picks the install command shown.
     platform: String,
 }
 
@@ -294,7 +294,7 @@ async fn create_machine(
     }
 }
 
-// DELETE carries no body — the request_id rides as a query param.
+// DELETE carries no body - the request_id rides as a query param.
 #[derive(Deserialize)]
 struct MachineActionQuery {
     request_id: String,
@@ -751,7 +751,7 @@ async fn run_rule(
     }
 }
 
-/// A webhook arriving for a rule — open route, the rule's key is the
+/// A webhook arriving for a rule - open route, the rule's key is the
 /// credential: `/hooks/{rule-id}?key=…`.
 async fn incoming_webhook(
     State(app): State<Arc<App>>,
@@ -792,7 +792,7 @@ async fn install_harness(
     let Some(machine_id) = MachineId::parse(&id) else {
         return error(StatusCode::BAD_REQUEST, "bad machine id");
     };
-    // npm runs minutes, not milliseconds — accepted first, terminal state
+    // npm runs minutes, not milliseconds - accepted first, terminal state
     // when the install settles (a crash between surfaces as unknown work).
     let accepted = Receipt {
         request_id: body.request_id.clone(),
@@ -1012,7 +1012,7 @@ async fn post_prompt(
         updated_at: openremote_core::now_ms(),
     };
     // Crash after this line, before the terminal write, leaves `accepted`
-    // — surfaced to the console as unknown work, never resent.
+    // - surfaced to the console as unknown work, never resent.
     app.supervisor.record_receipt(accepted);
     match app.supervisor.prompt(&session_id, &body.text).await {
         Ok(()) => {
@@ -1170,7 +1170,7 @@ async fn get_receipt(
 ) -> Response {
     match app.supervisor.receipt(&request_id) {
         Some(receipt) => receipt_response(&receipt),
-        // A request the daemon has no record of is unknown — that is the
+        // A request the daemon has no record of is unknown - that is the
         // crash window, and it is a legitimate answer, not an error.
         None => Json(json!({"request_id": request_id, "status": "unknown"})).into_response(),
     }
@@ -1205,7 +1205,7 @@ fn error(status: StatusCode, message: &str) -> Response {
 
 // ---- SSE ----
 
-/// `GET /sessions/:id/events?after=<seq>` — replay from the store, then
+/// `GET /sessions/:id/events?after=<seq>` - replay from the store, then
 /// live. SSE frames carry the event's `seq` as the id and its JSON as data.
 async fn session_events(
     State(app): State<Arc<App>>,

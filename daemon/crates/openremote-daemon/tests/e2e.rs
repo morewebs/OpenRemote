@@ -1,5 +1,5 @@
 //! Claude Code e2e: the real HTTP API + SSE driving the real driver
-//! against the fixture agent process. No mocks in between — these tests
+//! against the fixture agent process. No mocks in between - these tests
 //! are the contract the console leans on.
 //!
 //! Diagnostics ship with the tests (the standing lesson): every failure
@@ -327,7 +327,7 @@ async fn receipts_dedup_mutations() {
         dump(&events)
     );
 
-    // A receipt nobody recorded is unknown — that's the crash window.
+    // A receipt nobody recorded is unknown - that's the crash window.
     let unknown = call(&daemon, "GET", "/receipts/never-sent", None).await;
     assert_eq!(unknown.status, 200, "raw: {}", unknown.raw);
     assert_eq!(unknown.body["status"], "unknown");
@@ -577,7 +577,7 @@ async fn sse_resume_after_seq_gets_only_the_tail() {
 async fn an_unavailable_harness_creates_a_failed_session_not_an_error() {
     // A harness the registry knows nothing about: the same path a probe
     // that found nothing takes (backend lookup fails → explicit error, no
-    // phantom session). The registry's slots don't matter — an id no slot
+    // phantom session). The registry's slots don't matter - an id no slot
     // fills is unavailable everywhere.
     let daemon = start_daemon(&[]).await;
     let ws = workspace(None);
@@ -605,7 +605,7 @@ async fn an_unavailable_harness_creates_a_failed_session_not_an_error() {
 async fn console_origins_can_fetch_the_daemon_and_foreign_origins_cannot() {
     // The console is a webview on another origin (vite dev on
     // http://localhost:5173; Tauri production on http://tauri.localhost /
-    // tauri://localhost) — without CORS headers its fetches are blocked
+    // tauri://localhost) - without CORS headers its fetches are blocked
     // by the webview. This is the test that would have caught the
     // first-run "connect to the daemon" dead end.
     let daemon = start_daemon(&[("claude", fixture_agent())]).await;
@@ -668,7 +668,7 @@ async fn console_origins_can_fetch_the_daemon_and_foreign_origins_cannot() {
         );
     }
 
-    // A foreign website gets no CORS grant — its reads stay blocked.
+    // A foreign website gets no CORS grant - its reads stay blocked.
     let foreign = raw_http(
         &daemon,
         "GET",
@@ -687,7 +687,7 @@ async fn console_origins_can_fetch_the_daemon_and_foreign_origins_cannot() {
         foreign.raw
     );
 
-    // Removing a machine rides DELETE — the preflight must allow it or the
+    // Removing a machine rides DELETE - the preflight must allow it or the
     // webview's fetch dies (the webview-only failure raw TCP can't see).
     let preflight = raw_http(
         &daemon,

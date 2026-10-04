@@ -1,5 +1,5 @@
 //! Harness installs on this machine. The catalog is the harnesses whose
-//! install is a plain npm package — the layouts each crate's resolver
+//! install is a plain npm package - the layouts each crate's resolver
 //! verified (`%APPDATA%\npm\node_modules\@anthropic-ai\claude-code`, …).
 //! Grok and Antigravity install through their own roots (`~/.grok/bin`,
 //! `~/.local/bin/agy`), so they carry no install row: nothing honest to
@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use openremote_core::InstallSpec;
 
-/// (harness id, display name, npm package) — the harness's own names.
+/// (harness id, display name, npm package) - the harness's own names.
 const SPECS: &[(&str, &str, &str)] = &[
     ("claude", "Claude Code", "@anthropic-ai/claude-code"),
     ("codex", "Codex", "@openai/codex"),
@@ -42,13 +42,13 @@ pub fn installable(installed: &[String]) -> Vec<InstallSpec> {
 /// Run the install for one harness. `OPENREMOTE_INSTALL_NPM_CMD` replaces
 /// the whole command (e2e points it at a script that materializes the
 /// harness binary); production runs npm itself. Ten minutes, then it's
-/// failed — npm hangs, not us.
+/// failed - npm hangs, not us.
 pub async fn install(harness_id: &str) -> Result<String, String> {
     let custom = std::env::var("OPENREMOTE_INSTALL_NPM_CMD").ok();
     install_with(harness_id, custom.as_deref()).await
 }
 
-/// The install runner itself — the command override rides in as a
+/// The install runner itself - the command override rides in as a
 /// parameter so tests never mutate process env.
 pub async fn install_with(harness_id: &str, command: Option<&str>) -> Result<String, String> {
     let Some(package) = SPECS
@@ -78,7 +78,7 @@ pub async fn install_with(harness_id: &str, command: Option<&str>) -> Result<Str
 
 async fn run_npm(package: &str) -> Result<String, String> {
     let output = if cfg!(windows) {
-        // npm is a `npm.cmd` shim on Windows — CreateProcess can't run
+        // npm is a `npm.cmd` shim on Windows - CreateProcess can't run
         // shims, so route through cmd. No stdin rides with it.
         tokio::process::Command::new("cmd")
             .args(["/c", "npm", "install", "-g", package])
@@ -144,7 +144,7 @@ mod tests {
             command_for("opencode").as_deref(),
             Some("npm install -g opencode-ai")
         );
-        // Grok and Antigravity install through their own roots — no row.
+        // Grok and Antigravity install through their own roots - no row.
         assert_eq!(command_for("grok"), None);
         assert_eq!(command_for("agy"), None);
     }

@@ -1,5 +1,5 @@
 //! Antigravity e2e: the real HTTP API + SSE driving the real
-//! openremote-agy driver against the fixture's print mode — plus the
+//! openremote-agy driver against the fixture's print mode - plus the
 //! real TSV model catalog backing the console's model slot.
 
 mod common;

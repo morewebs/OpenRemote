@@ -1,5 +1,5 @@
 //! Pi e2e: the real HTTP API + SSE driving the real openremote-pi driver
-//! against the fixture's rpc mode — including a real dialog answer,
+//! against the fixture's rpc mode - including a real dialog answer,
 //! the thing cloudroom cancels and OpenRemote does.
 
 mod common;

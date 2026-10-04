@@ -12,7 +12,7 @@ import { ConsoleProvider, useConsole } from './state/console.jsx'
 
 const OB_KEY = 'openremote-onboarded'
 const STORE_KEY = 'openremote-view-state'
-// 'machines' and 'settings' are deliberately absent — machines returns
+// 'machines' and 'settings' are deliberately absent - machines returns
 // with remote check-in, settings is now a popup, not a route; a stale
 // hash or stored history referencing either falls back to New chat.
 const STATIC_VIEWS = ['new', 'plugins', 'automations']
@@ -46,8 +46,8 @@ function loadViewState(sessions) {
 function Shell() {
   const { sessions, chats, connection, ensureChat } = useConsole()
   // The sidebar's docked-vs-overlay shape is the viewport's, not a mount-time
-  // guess: crossing 640px live swaps the layout (the alternative — reading
-  // innerWidth once at mount — left the sidebar overlaid after narrowing).
+  // guess: crossing 640px live swaps the layout (the alternative - reading
+  // innerWidth once at mount - left the sidebar overlaid after narrowing).
   const [sidebarOpen, setSidebarOpen] = useState(() =>
     typeof window === 'undefined' ? true : window.matchMedia('(min-width: 640px)').matches,
   )
@@ -66,9 +66,9 @@ function Shell() {
       return true
     }
   })
-  // Settings is a popup over whatever view is open — not a route.
+  // Settings is a popup over whatever view is open - not a route.
   const [settingsOpen, setSettingsOpen] = useState(false)
-  // Local vs Cloud — Cloud swaps the whole main area for its coming-soon
+  // Local vs Cloud - Cloud swaps the whole main area for its coming-soon
   // state; the session history stays untouched underneath, so switching
   // back returns to the exact view.
   const [mode, setMode] = useState('local')
@@ -78,7 +78,7 @@ function Shell() {
 
   // Reconcile navigation with the live session list (a chat in the history
   // that no longer exists falls back to New chat). A chat reached by hash
-  // still needs its record — ensure it, the same as a sidebar open.
+  // still needs its record - ensure it, the same as a sidebar open.
   useEffect(() => {
     const state = loadViewState(sessions)
     setNav(state)
@@ -142,7 +142,7 @@ function Shell() {
 
   const body = () => (
     <>
-      {/* The frameless window has no OS chrome — the titlebar (drag,
+      {/* The frameless window has no OS chrome - the titlebar (drag,
           minimize, maximize, close) renders on every screen, onboarding
           included. */}
       <TitleBar

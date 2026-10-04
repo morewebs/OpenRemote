@@ -1,5 +1,5 @@
 //! OpenCode e2e: the real HTTP API + SSE driving the real
-//! openremote-opencode driver against the fixture's serve mode — a real
+//! openremote-opencode driver against the fixture's serve mode - a real
 //! HTTP server with basic auth and the SSE bus, so the driver's entire
 //! HTTP surface is exercised (spawn, listening-line discovery, auth,
 //! session create, prompt, the event bus, permission and question
@@ -321,8 +321,8 @@ async fn opencode_interrupts_and_resumes() {
 
 #[tokio::test]
 async fn a_failed_step_ends_the_turn_with_opencodes_own_error() {
-    // A provider failure: step.failed is the only boundary — no
-    // step.ended follows (the real CLI's shape, observed live) — and the
+    // A provider failure: step.failed is the only boundary - no
+    // step.ended follows (the real CLI's shape, observed live) - and the
     // turn must still complete with OpenCode's own error words.
     let (daemon, ws) = opencode_daemon(Some("fail")).await;
     let id = create_opencode(&daemon, &ws).await;
@@ -337,7 +337,7 @@ async fn a_failed_step_ends_the_turn_with_opencodes_own_error() {
     let events = until_kinds(
         &daemon,
         &format!("/sessions/{id}/events"),
-        // daemon.error rides after the status change — collect past it so
+        // daemon.error rides after the status change - collect past it so
         // the harness's own error words are in the batch.
         &["turn.completed", "session.status_changed", "daemon.error"],
     )

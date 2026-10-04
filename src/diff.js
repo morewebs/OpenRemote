@@ -1,12 +1,12 @@
-// Diff shapes for the tool cards: a file edit renders as a split diff —
-// old left, new right, red removals, green additions — never a JSON dump
+// Diff shapes for the tool cards: a file edit renders as a split diff -
+// old left, new right, red removals, green additions - never a JSON dump
 // of the tool input. Pure functions; the card just renders the rows.
 
 /// The kind of one side of a row: 'del' (red), 'add' (green), 'same'
 /// (context, dim), or null (that side has nothing at this row).
 ///
 /// `editRows` pairs the old and new strings line by line. The pairing is
-/// a single walk from both ends — the common prefix and suffix match, and
+/// a single walk from both ends - the common prefix and suffix match, and
 /// the middle (where lines actually differ) pairs old→left, new→right.
 /// Typical harness edits replace a contiguous block, so the walk is the
 /// honest shape without a diff library.

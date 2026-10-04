@@ -174,7 +174,7 @@
 }
 
 
-/* the native folder dialog's trigger — quiet chrome; the OS dialog
+/* the native folder dialog's trigger - quiet chrome; the OS dialog
    does the actual picking */
 .nc-browse {
   display: flex;

@@ -4,7 +4,7 @@
 //! set, inherited `CLAUDECODE` stripped (so the child doesn't think it
 //! lives inside a Claude Code parent), `PWD` pinned to the workspace,
 //! approvals enabled through `--permission-prompt-tool stdio`. Stdout
-//! lines accept both `\r\n` and `\n` — the ICRNL lesson.
+//! lines accept both `\r\n` and `\n` - the ICRNL lesson.
 
 use std::process::Stdio;
 use std::sync::Arc;
@@ -94,11 +94,11 @@ impl Driver {
     /// field after spawn. Those ride argv and `--settings` at process start
     /// (`--resume` keeps them). But the CLI's own slash commands speak the
     /// same user-message wire (`/model <id>`, `/effort <level>`, `/fast`)
-    /// and answer with a synthetic confirmation — the daemon sends those
+    /// and answer with a synthetic confirmation - the daemon sends those
     /// as one-off turns; the fresh init frame that follows carries the new
     /// model, which the pump folds into the session.
     pub async fn apply_settings(&mut self, settings: &SessionSettings) -> Result<(), DriverError> {
-        // One slash command per user envelope — the wire takes a single
+        // One slash command per user envelope - the wire takes a single
         // command per turn, so each field rides its own prompt.
         if let Some(model) = &settings.model {
             self.send_prompt(&format!("/model {model}")).await?;
@@ -107,7 +107,7 @@ impl Driver {
             self.send_prompt(&format!("/effort {effort}")).await?;
         }
         if let Some(fast) = &settings.fast {
-            // `/fast` toggles; an explicit off has no word — skip and let
+            // `/fast` toggles; an explicit off has no word - skip and let
             // the console's fast control stay start-time only.
             if *fast {
                 self.send_prompt("/fast").await?;
@@ -170,7 +170,7 @@ fn coarse_outcome(subtype: &str, terminal_reason: Option<&str>) -> TurnOutcome {
     }
 }
 
-/// The SDK's own context math: what the model read this turn — its input
+/// The SDK's own context math: what the model read this turn - its input
 /// tokens plus both cache fields. `None` when the frame carried no usage.
 fn context_used(usage: Option<&Value>) -> Option<u64> {
     let usage = usage?;
@@ -267,7 +267,7 @@ async fn kill_and_reap(
 }
 
 /// The model catalog for `/harnesses/claude/models`: a short-lived CLI
-/// process, the SDK's `initialize` handshake in, its `models` array out —
+/// process, the SDK's `initialize` handshake in, its `models` array out -
 /// the same list the CLI's own `/model` picker serves (pick words, display
 /// names, effort levels). No prompt is ever sent; the process is killed
 /// once the catalog lands.
@@ -327,7 +327,7 @@ pub async fn models(
                 continue;
             };
             let Frame::ControlResponse { response } = frame else {
-                continue; // init banner, hook frames, keep_alive — not ours
+                continue; // init banner, hook frames, keep_alive - not ours
             };
             if response.get("request_id").and_then(|r| r.as_str()) != Some(request_id) {
                 continue;
@@ -376,7 +376,7 @@ pub async fn models(
     Ok(models)
 }
 
-/// The argv after the executable — the SDK's documented order, plus
+/// The argv after the executable - the SDK's documented order, plus
 /// `--permission-prompt-tool stdio` so approvals reach us.
 fn build_argv(opts: &SpawnOptions) -> Vec<std::ffi::OsString> {
     let mut argv: Vec<std::ffi::OsString> = vec![
@@ -398,7 +398,7 @@ fn build_argv(opts: &SpawnOptions) -> Vec<std::ffi::OsString> {
     }
     if opts.fast {
         // Claude's own headless fast-mode form: `--settings '{"fastMode":
-        // true}'` (v2.1.205+). Not a model switch — the CLI keeps Opus and
+        // true}'` (v2.1.205+). Not a model switch - the CLI keeps Opus and
         // only swaps the speed configuration.
         argv.push("--settings".into());
         argv.push(r#"{"fastMode":true}"#.into());
@@ -406,7 +406,7 @@ fn build_argv(opts: &SpawnOptions) -> Vec<std::ffi::OsString> {
     if !opts.mcp_servers.is_empty() {
         // Claude's own wire: `--mcp-config` takes a JSON string, wrapper
         // key camelCase `mcpServers`, stdio entries (CLI reference +
-        // MCP docs). Passed verbatim in argv — no shell, no quoting.
+        // MCP docs). Passed verbatim in argv - no shell, no quoting.
         let mut servers = serde_json::Map::new();
         for server in &opts.mcp_servers {
             servers.insert(
@@ -478,7 +478,7 @@ async fn read_stdout(
                         return;
                     }
                 }
-                // The model's own thinking blocks, when it shares them —
+                // The model's own thinking blocks, when it shares them -
                 // dim and collapsible in the console, never mixed into the
                 // reply text.
                 for text in frames::block_thinking(&content) {
@@ -531,7 +531,7 @@ async fn read_stdout(
                 cost_usd,
             } => {
                 // The turn's own usage is the conversation's context: the
-                // SDK's input fields together (its own semantics — the
+                // SDK's input fields together (its own semantics - the
                 // context the model saw). No window rides this wire.
                 if let Some(used) = context_used(usage.as_ref()) {
                     if tx
@@ -548,7 +548,7 @@ async fn read_stdout(
                         return;
                     }
                 }
-                // The turn's thinking tokens, verbatim — the SDK's own
+                // The turn's thinking tokens, verbatim - the SDK's own
                 // `usage.output_tokens_details.thinking_tokens`.
                 if let Some(thinking) = usage
                     .as_ref()

@@ -1,5 +1,5 @@
 //! Antigravity's own current-model fact: the `model` key in
-//! `~/.gemini/antigravity-cli/settings.json` — the same source its own
+//! `~/.gemini/antigravity-cli/settings.json` - the same source its own
 //! banner shows (observed live, agy 1.2.14: `"Gemini 3.8 Flash (High)"`).
 //! The display name carries the effort inside it; it rides verbatim, never
 //! decomposed.
@@ -29,7 +29,7 @@ pub fn default_model() -> Option<String> {
 mod tests {
     #[test]
     fn agy_settings_carry_the_banner_words_or_nothing() {
-        // Machine-dependent; the pin is shape-only: a value, or None — never
+        // Machine-dependent; the pin is shape-only: a value, or None - never
         // an error, never a guess.
         if let Some(model) = super::default_model() {
             assert!(!model.is_empty());

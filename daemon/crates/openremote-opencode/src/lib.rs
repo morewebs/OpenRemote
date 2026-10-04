@@ -2,10 +2,10 @@
 //!
 //! OpenCode is an HTTP service, not a stdio protocol: the driver spawns
 //! `opencode serve --port 0` per session (basic auth via
-//! `OPENCODE_SERVER_PASSWORD`, username `opencode` — verified live
+//! `OPENCODE_SERVER_PASSWORD`, username `opencode` - verified live
 //! against opencode 1.18.21 and its OpenAPI 3.1 at `/doc`), creates the
 //! session with `POST /api/session`, prompts with `POST …/prompt`
-//! (async — `SessionInputAdmitted`), and consumes `GET /api/event` (the
+//! (async - `SessionInputAdmitted`), and consumes `GET /api/event` (the
 //! global SSE bus, filtered by `properties.sessionID`). Permissions and
 //! questions arrive as events and are answered with OpenCode's own
 //! words (`once | always | reject`; question answers as selected

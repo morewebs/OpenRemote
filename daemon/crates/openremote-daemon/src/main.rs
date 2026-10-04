@@ -1,5 +1,5 @@
 //! The daemon binary. Prints `READY 127.0.0.1:<port>` on stdout when it is
-//! listening; all logs go to stderr. Exits when stdin closes — the desktop
+//! listening; all logs go to stderr. Exits when stdin closes - the desktop
 //! shell owns its lifetime.
 
 use std::sync::Arc;

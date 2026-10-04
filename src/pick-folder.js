@@ -1,5 +1,5 @@
 // The workspace picker: the native OS folder dialog under Tauri, nothing
-// in browser mode (no dead buttons — the caller hides Browse there).
+// in browser mode (no dead buttons - the caller hides Browse there).
 // Cloud machines get their own picker when remote check-in lands.
 
 const hasTauri = typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__

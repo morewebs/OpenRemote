@@ -2,7 +2,7 @@
 // real sessions (jump straight into the chat), its real harness
 // inventory, its uptime over the last day, and the harnesses that could
 // be installed. A waiting machine carries its install command and its
-// enrollment token — the check-in consumes both.
+// enrollment token - the check-in consumes both.
 
 import { useEffect, useState } from 'react'
 import { Check, Copy, Desktop, Trash, X } from '@phosphor-icons/react'
@@ -11,7 +11,7 @@ import { harnessName } from './harness-names.js'
 
 const SLICES = 48
 const PLATFORM_LABEL = { windows: 'Windows', macos: 'macOS', linux: 'Linux' }
-// The session-status words the machine rows carry — the daemon's own.
+// The session-status words the machine rows carry - the daemon's own.
 const STATUS_LABEL = {
   starting: 'Starting',
   working: 'Running',

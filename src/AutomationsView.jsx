@@ -1,6 +1,6 @@
 // Automations: rules that open a chat when their trigger fires. The
 // clock and a webhook are the real sources today; Run now is the same
-// path by hand. The pill at the bottom drafts rules from a sentence —
+// path by hand. The pill at the bottom drafts rules from a sentence -
 // the prototype's keyword brain behind the same action card.
 
 import { useMemo, useState } from 'react'
@@ -46,10 +46,10 @@ export default function AutomationsView({ onOpenChat }) {
     (capabilities?.harnesses ?? []).filter((h) => h.available).map((h) => h.id),
   )
   const machineName = (id) => (machines ?? []).find((m) => m.machine.id === id)?.machine.name ?? id
-  // One online machine is the honest local state — hostname chips and the
+  // One online machine is the honest local state - hostname chips and the
   // check-in note return when a second machine is actually online.
   const oneMachine = (machines ?? []).filter((m) => m.machine.status === 'online').length <= 1
-  // Rules run where the agent is online — a waiting machine can host a
+  // Rules run where the agent is online - a waiting machine can host a
   // draft, but the draft has to say so instead of firing on this one.
   const machineOnline = (id) =>
     (machines ?? []).some((m) => m.machine.id === id && m.machine.status === 'online')
@@ -118,7 +118,7 @@ export default function AutomationsView({ onOpenChat }) {
     if (!path) {
       setThread((t) => [
         ...t,
-        { role: 'note', text: 'No workspace yet — name one in the form first.' },
+        { role: 'note', text: 'No workspace yet - name one in the form first.' },
       ])
       return
     }
@@ -302,13 +302,13 @@ export default function AutomationsView({ onOpenChat }) {
                 <div className="pt-card-task">“{draft.task}”</div>
                 {connectorKind && (
                   <p className="pt-card-note">
-                    That trigger needs a connector that isn’t built yet — a schedule or a webhook
+                    That trigger needs a connector that isn’t built yet - a schedule or a webhook
                     fires today.
                   </p>
                 )}
                 {!oneMachine && offlineMachine && (
                   <p className="pt-card-note">
-                    {machineName(draft.machineId)} hasn’t checked in — rules run where the agent
+                    {machineName(draft.machineId)} hasn’t checked in - rules run where the agent
                     is online.
                   </p>
                 )}

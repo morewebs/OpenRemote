@@ -47,7 +47,7 @@ function ReasoningBlock({ text, live }) {
 // (claude's own /model and /effort slash commands, codex thread/settings,
 // pi's wire). Fast stays start-time on claude (its /fast is a toggle with
 // no explicit-off form). The others take settings when the process starts,
-// so a stopped chat can still change them — resume is what lands the change.
+// so a stopped chat can still change them - resume is what lands the change.
 const LIVE_SETTINGS = {
   claude: { model: true, effort: true, fast: false },
   codex: { model: true, effort: true, fast: true },
@@ -67,7 +67,7 @@ export default function ChatView({ chat, onBack }) {
   const composerRef = useRef(null)
   const rail = railItems(chat)
   const pendingDecision = rail.find((item) => item.kind === 'decision' && item.pending)
-  // The daemon takes a prompt on any session whose driver is alive — an
+  // The daemon takes a prompt on any session whose driver is alive - an
   // idle chat (its last turn finished) is sendable; only stopped/failed
   // need Resume first. Gating on `running` dead-locked the composer
   // after the first turn completed.
@@ -199,7 +199,7 @@ export default function ChatView({ chat, onBack }) {
           <span className="cv-fact">{STATUS_LABEL[chat.status] ?? chat.status}</span>
           {chat.running && (
             <>
-              <button className="cv-fact-btn" onClick={() => control(() => interruptChat(chat.id))} title="Interrupt the running turn — the session stays alive">
+              <button className="cv-fact-btn" onClick={() => control(() => interruptChat(chat.id))} title="Interrupt the running turn - the session stays alive">
                 <HandPalm size={11} weight="fill" />
                 Interrupt
               </button>
@@ -223,7 +223,7 @@ export default function ChatView({ chat, onBack }) {
           {rail.length === 0 && <p className="cv-node cv-note">The transcript will appear here.</p>}
           {rail.map((item) => {
             if (item.kind === 'reasoning' || item.kind === 'reasoning-stream') {
-              // The harness's own thinking, dim and collapsible — never
+              // The harness's own thinking, dim and collapsible - never
               // mixed into the reply. Collapsed by default; the live
               // stream shows its tail growing while it runs.
               return (
@@ -231,7 +231,7 @@ export default function ChatView({ chat, onBack }) {
               )
             }
             if (item.kind === 'stream') {
-              // The live reply — markdown as it arrives, with a breathing
+              // The live reply - markdown as it arrives, with a breathing
               // caret riding the end. The settled message.added replaces
               // this item whole.
               return (
@@ -245,8 +245,8 @@ export default function ChatView({ chat, onBack }) {
             if (item.kind === 'message') {
               if (item.role === 'user') return <div key={item.id} className="cv-user">{item.text}</div>
               if (item.role === 'note') return <p key={item.id} className="cv-node cv-note">{item.text}</p>
-              // Agent messages are markdown — the harness's own output
-              // shape — rendered through the escape-first mini renderer.
+              // Agent messages are markdown - the harness's own output
+              // shape - rendered through the escape-first mini renderer.
               return (
                 <p
                   key={item.id}
@@ -256,7 +256,7 @@ export default function ChatView({ chat, onBack }) {
               )
             }
             if (item.kind === 'tool') {
-              // A file edit renders as a split diff — the tool card's
+              // A file edit renders as a split diff - the tool card's
               // honest shape, never a JSON dump of its input.
               const edit = isFileEdit(item.input)
                 ? item.input.old_string != null
@@ -318,7 +318,7 @@ export default function ChatView({ chat, onBack }) {
                 )}
                 {item.pending && item.options.length === 0 && (
                   <p className="cv-tool-state">
-                    No choices were offered — stop the session to end this turn.
+                    No choices were offered - stop the session to end this turn.
                   </p>
                 )}
                 {item.pending && item.options.length > 0 && (
@@ -372,7 +372,7 @@ export default function ChatView({ chat, onBack }) {
                   onClick={openPicker('model')}
                   aria-haspopup="listbox"
                   aria-expanded={picker?.kind === 'model'}
-                  title="Model — applies to the next turn"
+                  title="Model - applies to the next turn"
                 >
                   {chat.model ?? 'Model'}
                 </button>

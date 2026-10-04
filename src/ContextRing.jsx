@@ -1,6 +1,6 @@
 // The context-window donut: the harness's own numbers, never ours. The
 // ring renders only where the harness reports its window (codex does;
-// claude's stream-json carries usage but no window — its ring stays
+// claude's stream-json carries usage but no window - its ring stays
 // hidden until a wire fact exists).
 
 import './contextring.css'
