@@ -198,10 +198,17 @@ async fn spawn_serve(
     tokio::spawn(drain_stderr(BufReader::new(stderr), tx.clone()));
 
     let client = crate::http::HttpClient::new(port, &password);
-    // Create (or resume) the session; the id is OpenCode's own.
+    // Create (or resume) the session; the id is OpenCode's own. A pinned
+    // model takes `{"id", "providerID"}` (verified live against the
+    // installed opencode's own 400s — `modelID` is its old shape).
     let mut body = json!({});
     if let Some(model) = &opts.model {
-        body["model"] = json!({"modelID": model});
+        let provider = model.split('/').next().unwrap_or("");
+        body["model"] = if model.contains('/') {
+            json!({"id": model.split('/').nth(1).unwrap_or(model), "providerID": provider})
+        } else {
+            json!({"id": model, "providerID": "opencode"})
+        };
     }
     if let Some(resume) = &opts.resume {
         body["id"] = json!(resume);
