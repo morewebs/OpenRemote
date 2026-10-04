@@ -25,6 +25,15 @@ pub struct Harness {
     /// Missing, never a guessed sign-in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signed_in: Option<bool>,
+    /// The model a fresh chat on this harness will run, from the harness's
+    /// own config — its words. The wire's first-turn truth replaces it.
+    /// `None` when the harness says nothing pre-send (slot reserved).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_model: Option<String>,
+    /// The harness's own effort word that rides with `default_model`
+    /// (grok's `default_reasoning_effort`), when one was read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_effort: Option<String>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]

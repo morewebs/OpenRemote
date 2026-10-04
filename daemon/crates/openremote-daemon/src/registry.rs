@@ -256,6 +256,8 @@ fn harness_from(id: &str, name: &str, resolution: &Resolution, version: Option<&
         available: resolution.is_available(),
         fast_supported: fast_supported(id, version),
         signed_in: None,
+        default_model: None,
+        default_effort: None,
     }
 }
 
@@ -328,6 +330,17 @@ impl HarnessRegistry {
                 // command. Unknown, not a guessed sign-in.
                 _ => None,
             };
+            // The pre-send model fact rides with the harness — the
+            // harness's own config, its words (a fixture is not the
+            // harness; its slots stay silent).
+            if !overrides.contains_key(&entry.harness.id) {
+                if let Some(backend) = entry.backend.as_ref() {
+                    if let Some((model, effort)) = backend.default_model() {
+                        entry.harness.default_model = Some(model);
+                        entry.harness.default_effort = effort;
+                    }
+                }
+            }
         }
 
         Self {
