@@ -44,9 +44,19 @@ function loadViewState(sessions) {
 
 function Shell() {
   const { sessions, chats, connection, ensureChat } = useConsole()
+  // The sidebar's docked-vs-overlay shape is the viewport's, not a mount-time
+  // guess: crossing 640px live swaps the layout (the alternative — reading
+  // innerWidth once at mount — left the sidebar overlaid after narrowing).
   const [sidebarOpen, setSidebarOpen] = useState(() =>
-    typeof window === 'undefined' ? true : window.innerWidth >= 640,
+    typeof window === 'undefined' ? true : window.matchMedia('(min-width: 640px)').matches,
   )
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia('(min-width: 640px)')
+    const onChange = (e) => setSidebarOpen(e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
   const [{ history, hIndex }, setNav] = useState(() => loadViewState([]))
   const [onboarded, setOnboarded] = useState(() => {
     try {
@@ -103,7 +113,8 @@ function Shell() {
     const session = (sessions ?? []).find((s) => s.id === id)
     if (session) ensureChat(session)
     navigate(id)
-    if (typeof window !== 'undefined' && window.innerWidth < 640) setSidebarOpen(false)
+    if (typeof window !== 'undefined' && !window.matchMedia('(min-width: 640px)').matches)
+      setSidebarOpen(false)
   }
 
   const finishOnboarding = () => {
