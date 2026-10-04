@@ -4,17 +4,17 @@ import TitleBar from './TitleBar.jsx'
 import NewChat from './NewChat.jsx'
 import ChatView from './ChatView.jsx'
 import Onboarding from './Onboarding.jsx'
-import Panels from './Panels.jsx'
+import SettingsModal from './SettingsModal.jsx'
 import PluginsView from './PluginsView.jsx'
 import AutomationsView from './AutomationsView.jsx'
 import { ConsoleProvider, useConsole } from './state/console.jsx'
 
 const OB_KEY = 'openremote-onboarded'
 const STORE_KEY = 'openremote-view-state'
-// 'machines' is deliberately absent — the view returns with remote
-// check-in; until then a stale hash or stored history referencing it
-// falls back to New chat.
-const STATIC_VIEWS = ['new', 'plugins', 'automations', 'settings']
+// 'machines' and 'settings' are deliberately absent — machines returns
+// with remote check-in, settings is now a popup, not a route; a stale
+// hash or stored history referencing either falls back to New chat.
+const STATIC_VIEWS = ['new', 'plugins', 'automations']
 
 function loadViewState(sessions) {
   let saved = null
@@ -55,6 +55,8 @@ function Shell() {
       return true
     }
   })
+  // Settings is a popup over whatever view is open — not a route.
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const view = history[hIndex]
   const chat = STATIC_VIEWS.includes(view) ? null : chats[view] ?? null
@@ -142,18 +144,25 @@ function Shell() {
       ) : (
         <div className="app-body">
           {sidebarOpen && <div className="sb-backdrop" onClick={() => setSidebarOpen(false)} />}
-          <Sidebar open={sidebarOpen} active={view === 'new' ? null : view} onSelect={openSession} />
+          <Sidebar
+            open={sidebarOpen}
+            active={view === 'new' ? null : view}
+            onSelect={openSession}
+            onOpenSettings={() => setSettingsOpen(true)}
+          />
           <main className="main">
             {view === 'new' && <NewChat onOpen={openSession} />}
             {view === 'plugins' && <PluginsView />}
             {view === 'automations' && <AutomationsView onOpenChat={openSession} />}
-            {view === 'settings' && <Panels onReplay={replayOnboarding} />}
             {!STATIC_VIEWS.includes(view) &&
               (chat ? (
                 <ChatView key={chat.id} chat={chat} />
               ) : (
                 <div className="cv-none">That chat is no longer in this workspace.</div>
               ))}
+            {settingsOpen && (
+              <SettingsModal onReplay={replayOnboarding} onClose={() => setSettingsOpen(false)} />
+            )}
           </main>
         </div>
       )}

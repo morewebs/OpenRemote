@@ -5,8 +5,10 @@ import PickerMenu from './PickerMenu.jsx'
 import { useConsole } from './state/console.jsx'
 import { harnessName } from './harness-names.js'
 import { loadDefaults, saveDefaults } from './defaults.js'
+import { X } from '@phosphor-icons/react'
 import './devices.css'
 import './panels.css'
+import './settingsmodal.css'
 
 function loadRecentWorkspaces() {
   try {
@@ -21,7 +23,7 @@ function loadRecentWorkspaces() {
 // Sign-in action renders only there (no dead UI elsewhere).
 const SIGNIN_HARNESSES = new Set(['claude', 'codex', 'grok'])
 
-export default function Panels({ onReplay }) {
+export default function SettingsModal({ onReplay, onClose }) {
   const { connection, capabilities, sessions, disconnect, modelsFor } = useConsole()
   const harnessList = capabilities?.harnesses ?? []
   const available = (harnessList ?? []).filter((h) => h.available)
@@ -70,6 +72,14 @@ export default function Panels({ onReplay }) {
   })
   const [confirmDisconnect, setConfirmDisconnect] = useState(false)
 
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   const setReduce = (value) => {
     setReduceMotion(value)
     try {
@@ -81,11 +91,21 @@ export default function Panels({ onReplay }) {
   }
 
   return (
-    <div className="panel">
-      <header className="dv-head">
-        <h1 className="dv-title">Settings</h1>
-        <p className="dv-meta">The daemon connection, the harness it drives, and this install.</p>
-      </header>
+    <div
+      className="dv-modal-backdrop stg-backdrop"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div className="dv-modal stg-modal" role="dialog" aria-modal="true" aria-label="Settings">
+        <div className="dv-modal-head">
+          <h2 className="dv-modal-title">Settings</h2>
+          <button className="dv-modal-close" onClick={onClose} title="Close">
+            <X size={14} weight="bold" />
+          </button>
+        </div>
+        <p className="dv-modal-hint">The daemon connection, the harness it drives, and this install.</p>
+        <div className="panel stg-body">
 
       <h2 className="pn-section">New tasks</h2>
       <p className="pn-lead">What a new chat starts with. The composers still change their minds.</p>
@@ -281,8 +301,10 @@ export default function Panels({ onReplay }) {
         </div>
       </div>
 
-      {about && <AboutModal onClose={() => setAbout(false)} daemonVersion={capabilities?.daemon ?? null} />}
-      {signInFor && <SignInModal harnessId={signInFor} onDone={() => setSignInFor(null)} />}
+        </div>
+        {about && <AboutModal onClose={() => setAbout(false)} daemonVersion={capabilities?.daemon ?? null} />}
+        {signInFor && <SignInModal harnessId={signInFor} onDone={() => setSignInFor(null)} />}
+      </div>
     </div>
   )
 }

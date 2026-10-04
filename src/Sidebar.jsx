@@ -4,7 +4,7 @@ import { useConsole } from './state/console.jsx'
 import { workspaceName } from './state/reducer.js'
 import './sidebar.css'
 
-export default function Sidebar({ open, active, onSelect, onReplayOnboarding }) {
+export default function Sidebar({ open, active, onSelect, onOpenSettings }) {
   const { connection, sessions, chats } = useConsole()
   const [query, setQuery] = useState('')
   const [collapsed, setCollapsed] = useState({})
@@ -137,7 +137,9 @@ export default function Sidebar({ open, active, onSelect, onReplayOnboarding }) 
       </nav>
 
       <footer className="sb-foot">
-        <button className={`settings-btn${active === 'settings' ? ' on' : ''}`} onClick={() => onSelect('settings')}>
+        {/* Settings is a popup over the current view, not a route — the
+            gear never navigates away from where you are. */}
+        <button className="settings-btn" onClick={onOpenSettings}>
           <GearSix size={15} />
           Settings
         </button>
