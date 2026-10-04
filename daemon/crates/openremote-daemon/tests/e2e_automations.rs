@@ -136,6 +136,8 @@ async fn run_now_opens_the_chat_and_records_it() {
         &[
             "turn.started",
             "message.added",
+            // the init's model echo rides as session.updated
+            "session.updated",
             "message.added",
             "context.used",
             "usage.cost",
@@ -247,6 +249,8 @@ async fn webhooks_fire_only_with_their_own_key() {
         &[
             "turn.started",
             "message.added",
+            // the init's model echo rides as session.updated
+            "session.updated",
             "message.added",
             "context.used",
             "usage.cost",
@@ -400,6 +404,8 @@ async fn the_clock_fires_schedules_on_the_machines_own_wall_time() {
         &[
             "turn.started",
             "message.added",
+            // the init's model echo rides as session.updated
+            "session.updated",
             "message.added",
             "context.used",
             "usage.cost",

@@ -437,6 +437,7 @@ async fn accept_for_session_grants_the_tool_for_the_chat() {
     .await;
     let updated = events
         .iter()
+        .rev()
         .find(|(_, p)| kind(p) == "session.updated")
         .expect("session.updated after the grant");
     assert_eq!(

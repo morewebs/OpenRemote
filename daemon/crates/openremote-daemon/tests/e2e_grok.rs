@@ -58,6 +58,8 @@ async fn a_grok_prompt_runs_a_real_turn_and_names_the_conversation() {
         &format!("/sessions/{id}/events"),
         &[
             "message.added",
+            // the init's model echo rides as session.updated
+            "session.updated",
             "message.added",
             "turn.completed",
             "session.status_changed",

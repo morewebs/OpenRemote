@@ -12,6 +12,7 @@
 //! The antigravity-cli repository carries no license file — its docs and
 //! wire shapes are used as facts only; no code is ported from it.
 
+pub mod config;
 pub mod driver;
 pub mod resolve;
 

@@ -187,17 +187,44 @@ impl Backend {
         match self {
             Backend::Claude(_) => None,
             Backend::Codex(resolution) => openremote_codex::models(resolution).await.ok(),
-            Backend::Grok(_) => None,
+            // Grok's own cache of its models endpoint — its names, its
+            // effort words. Grok refetches the cache; we read it.
+            Backend::Grok(_) => Some(openremote_grok::config::catalog()),
             // Pi's model catalog needs a signed-in provider (`pi
             // --list-models` answers "No models available" here) — the
             // slot stays reserved until that probe is honest.
             Backend::Pi(_) => None,
-            // OpenCode's /api/model is per-project (it needs a serve in
-            // the workspace) — a per-session model query lands with the
-            // model slot ticket; the catalog stays reserved for now.
+            // OpenCode's /api/model is a catalog without a current-model
+            // marker (observed live: the model only rides step-started
+            // events) — the catalog stays reserved.
             Backend::Opencode(_) => None,
             // Antigravity's `agy models` prints its own catalog (TSV).
             Backend::Agy(resolution) => openremote_agy::driver::models(resolution).await.ok(),
+        }
+    }
+
+    /// The model a fresh chat on this harness will run, from the harness's
+    /// own config — its words, replaced by the wire's first-turn truth.
+    /// `None` = nothing honest to say pre-send (the slot stays reserved).
+    pub fn default_model(&self) -> Option<(String, Option<String>)> {
+        match self {
+            // Claude's own priority chain (pick → env → settings.json →
+            // default env), verified against its docs; a probe process
+            // emits nothing before a turn (observed) so config is the only
+            // pre-send fact.
+            Backend::Claude(_) => openremote_claude::config::configured_model(None)
+                .map(|model| (model, None)),
+            Backend::Codex(_) => None, // the thread/start echo at create is the fact
+            // Grok's config.toml [models] table: default + its own effort.
+            Backend::Grok(_) => openremote_grok::config::default_model(),
+            Backend::Pi(_) => None, // get_state at create is the fact
+            // OpenCode's /api/model is a catalog, not a current-model
+            // answer (observed live) — nothing pre-send; the first
+            // step-start reports the model.
+            Backend::Opencode(_) => None,
+            // Antigravity's own settings file — the same source its
+            // banner shows, verbatim (the effort rides inside the name).
+            Backend::Agy(_) => openremote_agy::config::default_model().map(|m| (m, None)),
         }
     }
 }

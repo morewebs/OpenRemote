@@ -485,30 +485,45 @@ impl Store {
 
     /// Session metadata from the harness (`init` frame): its conversation
     /// id for resume, and the model / permission mode it actually runs.
-    /// Metadata, not history — nothing here is an event.
+    /// Metadata, not history — nothing here is an event. Returns whether
+    /// anything the console renders actually changed (a same-model repeat
+    /// init is not a change).
     pub fn note_session(
         &mut self,
         session_id: &SessionId,
         harness_ref: Option<String>,
         model: Option<String>,
         permission_mode: Option<String>,
-    ) -> Result<(), StoreError> {
+    ) -> Result<bool, StoreError> {
         let session = self
             .state
             .sessions
             .get_mut(session_id)
             .ok_or_else(|| StoreError::NotFound(format!("session {session_id}")))?;
+        let mut changed = false;
         if let Some(r) = harness_ref {
-            session.harness_session_ref = Some(r);
+            if session.harness_session_ref.as_deref() != Some(r.as_str()) {
+                session.harness_session_ref = Some(r);
+                changed = true;
+            }
         }
-        if model.is_some() {
-            session.model = model;
+        if let Some(m) = model {
+            if session.model.as_deref() != Some(m.as_str()) {
+                session.model = Some(m);
+                changed = true;
+            }
         }
-        if permission_mode.is_some() {
-            session.permission_mode = permission_mode;
+        if let Some(p) = permission_mode {
+            if session.permission_mode.as_deref() != Some(p.as_str()) {
+                session.permission_mode = Some(p);
+                changed = true;
+            }
         }
-        session.updated_at = crate::now_ms();
-        self.persist()
+        if changed {
+            session.updated_at = crate::now_ms();
+            self.persist()?;
+        }
+        Ok(changed)
     }
 
     /// Record a tool the harness granted for the rest of the session (its

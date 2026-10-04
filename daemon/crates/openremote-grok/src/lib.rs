@@ -13,6 +13,7 @@
 //! `--permission-mode` words (`default acceptEdits auto dontAsk
 //! bypassPermissions plan`), passed through verbatim.
 
+pub mod config;
 pub mod driver;
 pub mod resolve;
 

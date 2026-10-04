@@ -264,6 +264,15 @@ fn map_event(event: &Value, session_id: &str) -> Option<DriverEvent> {
     }
     let kind = event.get("type").and_then(Value::as_str)?;
     match kind {
+        // OpenCode only names its model when a turn runs — the step-start
+        // carries it (`model: {id, providerID}`, observed live). The
+        // first one lights the chat's model chip before the reply lands.
+        "session.next.step.started" => properties
+            .pointer("/model/id")
+            .and_then(Value::as_str)
+            .map(|model| DriverEvent::ModelReported {
+                model: model.to_string(),
+            }),
         "session.next.text.delta" => {
             properties
                 .get("delta")

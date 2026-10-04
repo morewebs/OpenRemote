@@ -200,6 +200,12 @@ impl Supervisor {
             .cloned()
     }
 
+    /// Whether the harness slot is fixture-backed (e2e injection) — its
+    /// config reads stay with the machine's real harnesses.
+    fn is_fixture(&self, id: &str) -> bool {
+        self.registry.read().expect("registry lock").is_fixture(id)
+    }
+
     /// Subscribe to the live event stream (serialized event JSON).
     pub fn subscribe(&self) -> broadcast::Receiver<String> {
         self.events.subscribe()
@@ -790,13 +796,26 @@ impl Supervisor {
                 "harness '{harness}' is not available"
             )));
         };
+        // A picked model is the user's; unpicked, the harness's own config
+        // says what a fresh chat runs (grok's config.toml, agy's settings,
+        // claude's priority chain) — its words, replaced by the wire's
+        // first-turn truth. A fixture-backed backend is not the harness:
+        // the machine's real config never leaks into an injected one.
+        let (model, effort) = match model {
+            Some(picked) => (Some(picked), None),
+            None if !self.is_fixture(harness) => backend
+                .default_model()
+                .map(|(m, e)| (Some(m), e))
+                .unwrap_or((None, None)),
+            None => (None, None),
+        };
         let session = Session {
             id: SessionId::new(),
             harness: harness.to_string(),
             workspace,
             status: SessionStatus::Starting,
             model,
-            effort: None,
+            effort,
             permission_mode,
             harness_session_ref: None,
             created_at: now_ms(),
@@ -1133,7 +1152,9 @@ impl Supervisor {
                 model,
                 permission_mode,
             } => {
-                self.with_store(|s| s.note_session(id, Some(session_ref), model, permission_mode))?;
+                let changed = self.with_store(|s| {
+                    s.note_session(id, Some(session_ref), model, permission_mode)
+                })?;
                 // A slow-booting harness may deliver init after a prompt
                 // already moved the session to working — init only settles
                 // a session that is still starting.
@@ -1148,6 +1169,24 @@ impl Supervisor {
                             reason: None,
                         }],
                     )?;
+                }
+                // A model the console didn't have (the first init's echo of
+                // a default it now runs) rides as an update — the poll
+                // otherwise delays it.
+                if changed {
+                    if let Ok(session) = self.session(id) {
+                        self.emit_all(id, vec![EventPayload::SessionUpdated { session }])?;
+                    }
+                }
+            }
+            DriverEvent::ModelReported { model } => {
+                // A mid-conversation model fact (opencode's step-start):
+                // fold it into the session and tell the console. A repeat
+                // of what the session already says is not an event.
+                if self.with_store(|s| s.note_session(id, None, Some(model), None))? {
+                    if let Ok(session) = self.session(id) {
+                        self.emit_all(id, vec![EventPayload::SessionUpdated { session }])?;
+                    }
                 }
             }
             DriverEvent::AssistantText { text } => {
