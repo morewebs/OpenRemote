@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useConsole } from './state/console.jsx'
 import { harnessName } from './harness-names.js'
+import { HarnessMark } from './brand-marks.jsx'
 import './onboarding.css'
 
 // The happy path is two steps - welcome, ready - and the user never sees
@@ -111,6 +112,7 @@ export default function Onboarding({ onDone }) {
             <div className="ob-harnesses">
               {available.map((h) => (
                 <div className="ob-harness signed" key={h.id}>
+                  <HarnessMark harness={h.id} size={13} />
                   <span className="ob-harness-name">{harnessName(h.id)}</span>
                   <span className="ob-harness-state">Ready</span>
                 </div>

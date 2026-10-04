@@ -30,6 +30,23 @@
   color: var(--text-2);
 }
 
+/* A harness's brand mark: the real logo, verbatim geometry, sitting in
+   a font-sized box next to the name. Monochrome via currentColor so it
+   follows the text it identifies (pi's is the exception - its colors
+   are the mark). */
+.brand-mark-box {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.brand-mark {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 .nc-via {
   color: rgba(153, 163, 174, 0.55);
   font-size: 11px;

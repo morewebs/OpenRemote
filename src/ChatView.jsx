@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowUp, Lightning, Stop, Play, HandPalm, Brain } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { railItems } from './state/reducer.js'
-import { harnessName, harnessIcon } from './harness-names.js'
-import { HarnessIcon } from './BrandIcon.jsx'
+import { harnessName } from './harness-names.js'
+import { HarnessMark } from './brand-marks.jsx'
 import { editRows, isFileEdit, writeRows } from './diff.js'
 import { renderMarkdown } from './markdown.js'
 import ContextRing from './ContextRing.jsx'
@@ -383,7 +383,7 @@ export default function ChatView({ chat, onBack }) {
                 <span className="nc-via">via</span>
               )}
               <span className="nc-meta nc-static">
-                <HarnessIcon harness={{ icon: harnessIcon(chat.harness)?.icon, brand: harnessIcon(chat.harness)?.brand }} size={13} />
+                <HarnessMark harness={chat.harness} size={13} />
                 {harnessName(chat.harness)}
               </span>
               {picker?.kind === 'model' && (
