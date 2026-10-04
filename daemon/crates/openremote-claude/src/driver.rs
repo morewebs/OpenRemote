@@ -8,6 +8,7 @@
 
 use std::process::Stdio;
 use std::sync::Arc;
+use std::time::Duration;
 
 use openremote_core::{DecisionKind, DecisionOption, TurnOutcome};
 use openremote_harness::{DriverError, DriverEvent, Resolution, SessionSettings, SpawnOptions};
@@ -247,6 +248,115 @@ async fn kill_and_reap(
             Ok(status.code())
         }
     }
+}
+
+/// The model catalog for `/harnesses/claude/models`: a short-lived CLI
+/// process, the SDK's `initialize` handshake in, its `models` array out —
+/// the same list the CLI's own `/model` picker serves (pick words, display
+/// names, effort levels). No prompt is ever sent; the process is killed
+/// once the catalog lands.
+pub async fn models(
+    resolution: &Resolution,
+) -> Result<Vec<openremote_harness::ModelDescriptor>, DriverError> {
+    let (program, argv): (std::path::PathBuf, Vec<std::ffi::OsString>) = match resolution {
+        Resolution::Executable(path) => (path.clone(), Vec::new()),
+        Resolution::NodeScript { node, script } => {
+            (node.clone(), vec![script.as_os_str().to_os_string()])
+        }
+        Resolution::Unavailable => {
+            return Err(DriverError::Spawn("claude CLI not found".to_string()));
+        }
+    };
+    let mut command = Command::new(&program);
+    command
+        .args(&argv)
+        .args([
+            "--output-format",
+            "stream-json",
+            "--verbose",
+            "--input-format",
+            "stream-json",
+            "--permission-prompt-tool",
+            "stdio",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    let mut child = command
+        .spawn()
+        .map_err(|e| DriverError::Spawn(format!("claude models: {e}")))?;
+    let mut stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| DriverError::Spawn("stdin not piped".into()))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| DriverError::Spawn("stdout not piped".into()))?;
+
+    // Write the handshake, then read lines until our response id comes back.
+    let request_id = "or-models";
+    let envelope = frames::initialize_envelope(request_id);
+    let catalog = async {
+        use tokio::io::AsyncWriteExt;
+        stdin.write_all(envelope.as_bytes()).await?;
+        stdin.write_all(b"\n").await?;
+        stdin.flush().await?;
+        drop(stdin);
+
+        let mut models = Vec::new();
+        let mut lines = BufReader::new(stdout).lines();
+        while let Some(line) = lines.next_line().await? {
+            let Some(frame) = frames::parse_frame(&line) else {
+                continue;
+            };
+            let Frame::ControlResponse { response } = frame else {
+                continue; // init banner, hook frames, keep_alive — not ours
+            };
+            if response.get("request_id").and_then(|r| r.as_str()) != Some(request_id) {
+                continue;
+            }
+            let Some(list) = response.get("models").and_then(Value::as_array) else {
+                break; // a shape we don't speak; empty beats a guess
+            };
+            for entry in list {
+                let Some(value) = entry.get("value").and_then(Value::as_str) else {
+                    continue;
+                };
+                let efforts = entry
+                    .get("supportedEffortLevels")
+                    .and_then(Value::as_array)
+                    .map(|levels| {
+                        levels
+                            .iter()
+                            .filter_map(|l| l.as_str())
+                            .map(String::from)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                models.push(openremote_harness::ModelDescriptor {
+                    model: value.to_string(),
+                    display_name: entry
+                        .get("displayName")
+                        .and_then(Value::as_str)
+                        .map(String::from),
+                    reasoning_efforts: efforts,
+                });
+            }
+            break;
+        }
+        Ok::<_, std::io::Error>(models)
+    };
+    let (models, read_err) = match tokio::time::timeout(Duration::from_secs(30), catalog).await {
+        Ok(Ok(models)) => (models, None),
+        Ok(Err(e)) => (Vec::new(), Some(e)),
+        Err(_) => (Vec::new(), None), // a CLI that never answers is no catalog, not a failure
+    };
+    let _ = child.start_kill();
+    if let Some(e) = read_err {
+        return Err(DriverError::Spawn(format!("claude models: {e}")));
+    }
+    Ok(models)
 }
 
 /// The argv after the executable — the SDK's documented order, plus

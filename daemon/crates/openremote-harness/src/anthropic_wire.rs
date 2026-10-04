@@ -233,6 +233,18 @@ pub fn interrupt_envelope(request_id: &str) -> String {
     serde_json::to_string(&envelope).expect("envelope serializes")
 }
 
+/// The `initialize` control request (host → CLI) — the SDK's own startup
+/// handshake. Its response carries the session's model catalog: the same
+/// list the CLI's `/model` picker serves, pick words and effort levels.
+pub fn initialize_envelope(request_id: &str) -> String {
+    let envelope = serde_json::json!({
+        "type": "control_request",
+        "request_id": request_id,
+        "request": {"subtype": "initialize", "protocol_version": 1}
+    });
+    serde_json::to_string(&envelope).expect("envelope serializes")
+}
+
 /// The host's answer to a `can_use_tool` request: `allow` or `deny`, with
 /// `updatedInput` defaulting to the original input on allow (pre-2.1.207
 /// CLIs reject an allow without it).

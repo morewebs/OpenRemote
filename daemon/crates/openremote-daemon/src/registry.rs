@@ -185,7 +185,11 @@ impl Backend {
     /// reserved).
     pub async fn models(&self) -> Option<Vec<ModelDescriptor>> {
         match self {
-            Backend::Claude(_) => None,
+            Backend::Claude(resolution) => {
+                // The SDK's initialize handshake — its `models` array is the
+                // list the CLI's own /model picker serves.
+                openremote_claude::driver::models(resolution).await.ok()
+            }
             Backend::Codex(resolution) => openremote_codex::models(resolution).await.ok(),
             // Grok's own cache of its models endpoint — its names, its
             // effort words. Grok refetches the cache; we read it.
