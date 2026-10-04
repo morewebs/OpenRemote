@@ -59,6 +59,7 @@ export default function ChatView({ chat, onBack }) {
   const [error, setError] = useState(null)
   const [picker, setPicker] = useState(null)
   const [models, setModels] = useState([])
+  const [modelsPending, setModelsPending] = useState(true)
   const scrollRef = useRef(null)
   const composerRef = useRef(null)
   const rail = railItems(chat)
@@ -79,9 +80,16 @@ export default function ChatView({ chat, onBack }) {
 
   useEffect(() => {
     let cancelled = false
-    if (!canChange.model && !canChange.effort) return
+    if (!canChange.model && !canChange.effort) {
+      setModelsPending(false)
+      return
+    }
+    setModelsPending(true)
     modelsFor(chat.harness).then((list) => {
-      if (!cancelled) setModels(list ?? [])
+      if (!cancelled) {
+        setModels(list ?? [])
+        setModelsPending(false)
+      }
     })
     return () => {
       cancelled = true
@@ -352,7 +360,9 @@ export default function ChatView({ chat, onBack }) {
           />
           <div className="cv-foot">
             <div className="nc-pickers">
-              {canChange.model && models.length > 0 ? (
+              {modelsPending && !chat.model ? (
+                <span className="nc-skeleton" aria-hidden="true" />
+              ) : canChange.model && models.length > 0 ? (
                 <button
                   type="button"
                   className="nc-meta"

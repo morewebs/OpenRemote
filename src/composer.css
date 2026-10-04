@@ -35,6 +35,31 @@
   font-size: 11px;
 }
 
+/* The model slot while its catalog is still on the wire — a slow sweep
+   standing in for the chip that fills it. */
+.nc-skeleton {
+  width: 58px;
+  height: 13px;
+  border-radius: 5px;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.05) 40%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.05) 60%
+  );
+  background-size: 200% 100%;
+  animation: nc-shimmer 2.4s ease-in-out infinite;
+}
+
+@keyframes nc-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
 /* The harness's own fast mode, toggled on per chat. Off sits with the other
    chips; on goes green — the running/ok language, never decorative. */
 .nc-fast {

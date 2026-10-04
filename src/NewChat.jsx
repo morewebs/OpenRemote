@@ -45,6 +45,7 @@ export default function NewChat({ onOpen }) {
   const [harness, setHarness] = useState(() => loadDefaults().harness)
   const [model, setModel] = useState(null)
   const [models, setModels] = useState([])
+  const [modelsPending, setModelsPending] = useState(true)
   const [fast, setFast] = useState(false)
   const [signInFor, setSignInFor] = useState(null)
 
@@ -66,10 +67,15 @@ export default function NewChat({ onOpen }) {
     setFast(false)
     if (!currentHarness) {
       setModels([])
+      setModelsPending(false)
       return
     }
+    setModelsPending(true)
     modelsFor(currentHarness.id).then((list) => {
-      if (!cancelled) setModels(list ?? [])
+      if (!cancelled) {
+        setModels(list ?? [])
+        setModelsPending(false)
+      }
     })
     return () => {
       cancelled = true
@@ -160,7 +166,9 @@ export default function NewChat({ onOpen }) {
         />
         <div className="nc-foot">
           <div className="nc-pickers">
-            {(models.length > 0 || resolvedDefault) && (
+            {modelsPending ? (
+              <span className="nc-skeleton" aria-hidden="true" />
+            ) : (models.length > 0 || resolvedDefault) && (
               <>
                 {models.length > 0 ? (
                   <button
