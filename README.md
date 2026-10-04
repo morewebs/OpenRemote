@@ -8,6 +8,13 @@ Status: rebuilding from the owner's UI prototype as the design baseline
 (second true-zero, 2026-10-01). The design system is contracted in
 [DESIGN.md](DESIGN.md) - the console transcribes it, never improvises past it.
 
+## Install
+
+Grab the latest installer from
+[Releases](https://github.com/morewebs/OpenRemote/releases) (Windows 10+,
+MSI or the NSIS setup exe). The installers are unsigned - SmartScreen
+will ask; choose More info > Run anyway.
+
 ## Layout
 
 - `src/` + `src-tauri/` - the console (Vite + React 19), frameless Tauri 2 shell
