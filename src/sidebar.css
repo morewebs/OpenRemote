@@ -167,6 +167,30 @@ button {
   color: var(--text-2);
 }
 
+/* The Machines tile, which belongs to cloud mode only: reveals and
+   collapses with the mode switch. grid-template-rows animates the
+   height in both directions (max-height never shrinks); the inner row
+   clips, the button fades a touch as it goes. */
+.machines-reveal {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.machines-reveal.closed {
+  grid-template-rows: 0fr;
+}
+
+.machines-reveal > * {
+  overflow: hidden;
+  min-height: 0;
+  transition: opacity 0.22s ease;
+}
+
+.machines-reveal.closed > * {
+  opacity: 0;
+}
+
 .side-tile:hover,
 .side-tile.on {
   background: rgba(255, 255, 255, 0.08);
@@ -412,7 +436,9 @@ html[data-reduce-motion] .dot--running {
 }
 
 html[data-reduce-motion] .sidebar,
-html[data-reduce-motion] .sidebar.collapsed {
+html[data-reduce-motion] .sidebar.collapsed,
+html[data-reduce-motion] .machines-reveal,
+html[data-reduce-motion] .machines-reveal > * {
   transition: none;
 }
 
@@ -428,6 +454,11 @@ button:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .dot--running {
     animation: none;
+  }
+
+  .machines-reveal,
+  .machines-reveal > * {
+    transition: none;
   }
 }
 
