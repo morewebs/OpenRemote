@@ -15,6 +15,15 @@ const TRIGGERS = [
   { id: 'webhook', name: 'A webhook' },
 ]
 
+const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0'))
+const MINUTES = ['00', '15', '30', '45']
+
+// A saved time is "HH:MM". Anything else falls back to 09:00.
+function splitTime(value) {
+  const match = /^(\d{2}):(\d{2})$/.exec(value ?? '')
+  return match ? [match[1], match[2]] : ['09', '00']
+}
+
 export default function AutomationForm({ rule, onClose }) {
   const {
     capabilities,
@@ -76,6 +85,8 @@ export default function AutomationForm({ rule, onClose }) {
 
   const currentHarness = available.find((h) => h.id === harness)
   const currentMachine = online.find((m) => m.machine.id === machineId)
+  // One online machine cannot be chosen — the field still saves its id.
+  const oneMachine = online.length <= 1
   const ready = name.trim() && task.trim() && workspace.trim() && harness && machineId && (kind !== 'schedule' || time.trim())
 
   const openPicker = (kind_) => (e) => setPicker({ kind: kind_, x: e.clientX, y: e.clientY })
@@ -163,13 +174,27 @@ export default function AutomationForm({ rule, onClose }) {
               ))}
             </div>
             {kind === 'schedule' && (
-              <input
-                className="af-time"
-                type="time"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-                aria-label="Time of day"
-              />
+              <span className="af-time">
+                <select
+                  value={splitTime(time)[0]}
+                  aria-label="Hour"
+                  onChange={(e) => setTime(`${e.target.value}:${splitTime(time)[1]}`)}
+                >
+                  {HOURS.map((h) => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
+                <span className="af-time-colon" aria-hidden="true">:</span>
+                <select
+                  value={MINUTES.includes(splitTime(time)[1]) ? splitTime(time)[1] : '00'}
+                  aria-label="Minute"
+                  onChange={(e) => setTime(`${splitTime(time)[0]}:${e.target.value}`)}
+                >
+                  {MINUTES.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </span>
             )}
           </div>
           {kind === 'webhook' && (
@@ -236,31 +261,33 @@ export default function AutomationForm({ rule, onClose }) {
                 )}
               </div>
             )}
-            <div className="af-then-cell">
-              <button
-                className="af-pick"
-                onClick={openPicker('machine')}
-                aria-haspopup="listbox"
-                aria-expanded={picker?.kind === 'machine'}
-              >
-                {currentMachine?.machine.name ?? 'No machine online'}
-              </button>
-              {picker?.kind === 'machine' && (
-                <PickerMenu
-                  label="Machine"
-                  searchPlaceholder="Search machines"
-                  items={online.map((m) => ({ id: m.machine.id, name: m.machine.name }))}
-                  groups={null}
-                  selectedId={machineId ?? ''}
-                  onChoose={(id) => {
-                    setMachineId(id)
-                    setPicker(null)
-                  }}
-                  onClose={() => setPicker(null)}
-                  anchor={{ left: picker.x, top: picker.y }}
-                />
-              )}
-            </div>
+            {!oneMachine && (
+              <div className="af-then-cell">
+                <button
+                  className="af-pick"
+                  onClick={openPicker('machine')}
+                  aria-haspopup="listbox"
+                  aria-expanded={picker?.kind === 'machine'}
+                >
+                  {currentMachine?.machine.name ?? 'No machine online'}
+                </button>
+                {picker?.kind === 'machine' && (
+                  <PickerMenu
+                    label="Machine"
+                    searchPlaceholder="Search machines"
+                    items={online.map((m) => ({ id: m.machine.id, name: m.machine.name }))}
+                    groups={null}
+                    selectedId={machineId ?? ''}
+                    onChoose={(id) => {
+                      setMachineId(id)
+                      setPicker(null)
+                    }}
+                    onClose={() => setPicker(null)}
+                    anchor={{ left: picker.x, top: picker.y }}
+                  />
+                )}
+              </div>
+            )}
           </div>
           <div className="af-workspace">
             <span className="af-label">Workspace</span>

@@ -4,7 +4,7 @@
 // the prototype's keyword brain behind the same action card.
 
 import { useMemo, useState } from 'react'
-import { ArrowUpRight, Check, Lightning, PencilSimple, Play, Plus, TrashSimple } from '@phosphor-icons/react'
+import { ArrowUpRight, Check, Lightning, PencilSimple, Play, TrashSimple } from '@phosphor-icons/react'
 import AutomationForm from './AutomationForm.jsx'
 import PillComposer from './PillComposer.jsx'
 import { useConsole } from './state/console.jsx'
@@ -15,15 +15,6 @@ import { parsePill } from './pill.js'
 import './devices.css'
 import './automations.css'
 import './pill.css'
-
-const STARTERS = [
-  {
-    id: 'deps',
-    name: 'Nightly dependency audit',
-    time: '09:00',
-    task: 'Check outdated dependencies and list the ones that are safe to bump.',
-  },
-]
 
 const RAN = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 
@@ -55,6 +46,9 @@ export default function AutomationsView({ onOpenChat }) {
     (capabilities?.harnesses ?? []).filter((h) => h.available).map((h) => h.id),
   )
   const machineName = (id) => (machines ?? []).find((m) => m.machine.id === id)?.machine.name ?? id
+  // One online machine is the honest local state — hostname chips and the
+  // check-in note return when a second machine is actually online.
+  const oneMachine = (machines ?? []).filter((m) => m.machine.status === 'online').length <= 1
   // Rules run where the agent is online — a waiting machine can host a
   // draft, but the draft has to say so instead of firing on this one.
   const machineOnline = (id) =>
@@ -92,31 +86,6 @@ export default function AutomationsView({ onOpenChat }) {
   const runNow = async (rule) => {
     const session = await run(() => runAutomation(rule.id), rule.id)
     if (session) onOpenChat?.(session.id)
-  }
-
-  const addStarter = async (starter) => {
-    const [, path] = workspaces[0] ?? [null, null]
-    if (!path) {
-      // No workspace to run it in — the form is the honest next step.
-      setEditing({
-        name: starter.name,
-        trigger: { kind: 'schedule', time: starter.time },
-        task: starter.task,
-      })
-      return
-    }
-    await run(
-      () =>
-        saveAutomation({
-          name: starter.name,
-          trigger: { kind: 'schedule', time: starter.time },
-          harness: 'claude',
-          workspace: path,
-          machine: thisMachine?.machine.id,
-          task: starter.task,
-        }),
-      starter.id,
-    )
   }
 
   // ---- the pill ----
@@ -212,7 +181,7 @@ export default function AutomationsView({ onOpenChat }) {
 
       <div className="am-list">
         {rules.length === 0 && (
-          <p className="am-empty">No rules yet. Write one, or add a starter below.</p>
+          <p className="am-empty">No rules yet. Write one.</p>
         )}
         {rules.map((rule) => {
           const missing = !availableIds.has(rule.harness)
@@ -222,8 +191,8 @@ export default function AutomationsView({ onOpenChat }) {
                 <div className="am-rule-body">
                   <div className="am-name">{rule.name}</div>
                   <div className="am-line">
-                    {whenSentence(rule.trigger)} · {harnessName(rule.harness)} on{' '}
-                    {machineName(rule.machine)} · {ranLabel(rule)}
+                    {whenSentence(rule.trigger)} · {harnessName(rule.harness)}
+                    {oneMachine ? '' : ` on ${machineName(rule.machine)}`} · {ranLabel(rule)}
                   </div>
                   {rule.trigger.kind === 'webhook' && api?.url && (
                     <code className="am-hook">
@@ -270,40 +239,9 @@ export default function AutomationsView({ onOpenChat }) {
               </div>
               {rule.enabled && missing && (
                 <p className="am-note">
-                  {harnessName(rule.harness)} is not installed on{' '}
-                  {machineName(rule.machine)}.
+                  {harnessName(rule.harness)} is not installed
+                  {oneMachine ? '.' : ` on ${machineName(rule.machine)}.`}
                 </p>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      <div className="am-starters">
-        <div className="am-starters-title">Starters</div>
-        {STARTERS.map((starter) => {
-          const added = rules.some((r) => r.name === starter.name)
-          return (
-            <div key={starter.id} className="am-starter">
-              <div>
-                <div className="am-name">{starter.name}</div>
-                <div className="am-line">
-                  Every day at {starter.time} · {harnessName('claude')}
-                </div>
-              </div>
-              {added ? (
-                <span className="am-added">
-                  <Check size={12} /> Added
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  className="am-add"
-                  disabled={busyId != null}
-                  onClick={() => addStarter(starter)}
-                >
-                  <Plus size={12} /> Add
-                </button>
               )}
             </div>
           )
@@ -356,7 +294,7 @@ export default function AutomationsView({ onOpenChat }) {
                 <div className="pt-card-name">{draft.name}</div>
                 <div className="pt-card-chips">
                   <span className="pt-chip">{harnessName(draft.harness)}</span>
-                  <span className="pt-chip">{machineName(draft.machineId)}</span>
+                  {!oneMachine && <span className="pt-chip">{machineName(draft.machineId)}</span>}
                   <span className="pt-chip">
                     {hookKind ? 'webhook' : `every day at ${draft.trigger.time}`}
                   </span>
@@ -368,7 +306,7 @@ export default function AutomationsView({ onOpenChat }) {
                     fires today.
                   </p>
                 )}
-                {offlineMachine && (
+                {!oneMachine && offlineMachine && (
                   <p className="pt-card-note">
                     {machineName(draft.machineId)} hasn’t checked in — rules run where the agent
                     is online.

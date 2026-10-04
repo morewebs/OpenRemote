@@ -1,9 +1,7 @@
-// Plugins: tools a session can call. Each one is installed on a machine,
-// and a key never leaves that machine. Installs ride the daemon — the
-// marketplace is facts, the installed list is real state.
+// Plugins: tools a session can call. Each one is written by hand and
+// installed on this computer; a key never leaves it.
 
 import { useState } from 'react'
-import { Desktop } from '@phosphor-icons/react'
 import AddPluginModal from './AddPluginModal.jsx'
 import { useConsole } from './state/console.jsx'
 import './devices.css'
@@ -26,23 +24,17 @@ export default function PluginsView() {
   const {
     machines,
     plugins,
-    marketplace,
-    installPlugin,
     removePlugin,
     setPluginEnabled,
     acknowledgePluginKey,
   } = useConsole()
-  const [query, setQuery] = useState('')
-  const [picking, setPicking] = useState(null)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState(null)
-  const q = query.trim().toLowerCase()
   const installed = plugins ?? []
-  const catalog = (marketplace ?? []).filter((p) => !q || p.name.toLowerCase().includes(q))
-  const onlineMachines = (machines ?? []).filter((m) => m.machine.status === 'online')
-  // One machine is the honest local state — the plural returns by itself
-  // when remote machines check in.
-  const machineWord = (machines ?? []).length === 1 ? 'machine' : 'machines'
+  // One machine is the honest local state — the plural, the hostname, and
+  // the install picker return by themselves when remote machines check in.
+  const oneMachine = (machines ?? []).length <= 1
+  const machineWord = oneMachine ? 'machine' : 'machines'
 
   const run = async (action, ...args) => {
     setError(null)
@@ -59,8 +51,9 @@ export default function PluginsView() {
         <div>
           <h1 className="dv-title">Plugins</h1>
           <p className="dv-meta">
-            Tools a session can call. Each one is installed on a machine, and a key never leaves
-            that machine.
+            {oneMachine
+              ? 'Tools a session can call. Each one is installed on this computer, and a key never leaves it.'
+              : 'Tools a session can call. Each one is installed on a machine, and a key never leaves that machine.'}
           </p>
         </div>
         <button type="button" className="dv-act" onClick={() => setAdding(true)}>
@@ -70,7 +63,7 @@ export default function PluginsView() {
 
       <h2 className="pn-section">On your {machineWord}</h2>
       {installed.length === 0 && (
-        <p className="pn-empty">Nothing on your {machineWord} yet. Install one below, or add your own.</p>
+        <p className="pn-empty">Nothing on your {machineWord} yet. Add one.</p>
       )}
       <div className="pn-list pn-list--wide">
         {installed.map((p) => {
@@ -82,7 +75,8 @@ export default function PluginsView() {
                 <div>
                   <div className="pn-name">{p.name}</div>
                   <div className="pn-detail">
-                    {p.detail} · {host}
+                    {p.detail}
+                    {oneMachine ? '' : ` · ${host}`}
                   </div>
                 </div>
                 <div className="pn-actions">
@@ -115,83 +109,8 @@ export default function PluginsView() {
               <code className="pn-command">{p.command}</code>
               {state === 'needs-key' && (
                 <p className="pn-note">
-                  The key stays on {host}. Adding it here only records that the machine has one.
+                  The key stays on {oneMachine ? 'this computer' : host}. Adding it here only records that {oneMachine ? 'it has' : 'the machine has'} one.
                 </p>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      <h2 className="pn-section">Marketplace</h2>
-      <label className="pn-search">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search the marketplace"
-          spellCheck={false}
-          aria-label="Search the marketplace"
-        />
-      </label>
-      {catalog.length === 0 && <p className="pn-empty">Nothing in the marketplace matches that.</p>}
-      <div className="pn-list pn-list--wide">
-        {catalog.map((entry) => {
-          const hosts = installed
-            .filter((p) => p.catalog_id === entry.id)
-            .map((p) => machineName(machines, p.machine))
-          return (
-            <div key={entry.id} className="pn-row pn-row--stack">
-              <div className="pn-row-main">
-                <div>
-                  <div className="pn-name">{entry.name}</div>
-                  <div className="pn-detail">
-                    {entry.detail}
-                    {entry.needs_key ? ' · Needs a key' : ''}
-                    {hosts.length > 0 ? ` · On ${hosts.join(', ')}` : ''}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="pn-btn"
-                  onClick={() => setPicking(picking === entry.id ? null : entry.id)}
-                >
-                  {picking === entry.id ? 'Cancel' : 'Install'}
-                </button>
-              </div>
-              <code className="pn-command">{entry.command}</code>
-              {picking === entry.id && (
-                <div className="pn-pick">
-                  {(machines ?? []).map((m) => {
-                    const machine = m.machine
-                    const ready = machine.status === 'online'
-                    const already = installed.some((p) => p.catalog_id === entry.id && p.machine === machine.id)
-                    return (
-                      <button
-                        key={machine.id}
-                        type="button"
-                        disabled={!ready || already}
-                        onClick={() => {
-                          run(() => installPlugin(machine.id, { catalogId: entry.id }))
-                          setPicking(null)
-                        }}
-                      >
-                        <span className="pn-pick-name">
-                          <Desktop size={14} weight="light" />
-                          {machine.name}
-                        </span>
-                        <span>
-                          {already
-                            ? 'Installed'
-                            : ready
-                              ? 'Install here'
-                              : machine.status === 'waiting'
-                                ? 'Has not checked in'
-                                : 'Offline'}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
               )}
             </div>
           )

@@ -35,9 +35,12 @@ export default function AddPluginModal({ onClose }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  const oneMachine = (machines ?? []).filter((m) => m.machine.status === 'online').length <= 1
   const hint = duplicate
-    ? `${name.trim()} is already on ${machine.name}.`
-    : 'The command is what that machine would start. A key, if it needs one, stays there.'
+    ? `${name.trim()} is already on ${oneMachine ? 'this computer' : machine.name}.`
+    : oneMachine
+      ? 'The command is what this computer starts. A key, if it needs one, stays here.'
+      : 'The command is what that machine would start. A key, if it needs one, stays there.'
 
   const add = async () => {
     if (!ready || duplicate || busy) return
@@ -102,30 +105,32 @@ export default function AddPluginModal({ onClose }) {
             autoComplete="off"
           />
         </label>
-        <div className="dv-host">
-          Machine
-          <div className="pn-pick">
-            {(machines ?? []).map((m) => (
-              <button
-                key={m.machine.id}
-                type="button"
-                disabled={m.machine.status !== 'online'}
-                className={m.machine.id === machineId ? 'on' : ''}
-                onClick={() => setMachineId(m.machine.id)}
-              >
-                <span className="pn-pick-name">{m.machine.name}</span>
-                <span>{STATUS[m.machine.status] ?? m.machine.status}</span>
-              </button>
-            ))}
+        {!oneMachine && (
+          <div className="dv-host">
+            Machine
+            <div className="pn-pick">
+              {(machines ?? []).map((m) => (
+                <button
+                  key={m.machine.id}
+                  type="button"
+                  disabled={m.machine.status !== 'online'}
+                  className={m.machine.id === machineId ? 'on' : ''}
+                  onClick={() => setMachineId(m.machine.id)}
+                >
+                  <span className="pn-pick-name">{m.machine.name}</span>
+                  <span>{STATUS[m.machine.status] ?? m.machine.status}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
         <button
           type="button"
           className={`dv-check${needsKey ? ' on' : ''}`}
           aria-pressed={needsKey}
           onClick={() => setNeedsKey((v) => !v)}
         >
-          It needs a key on that machine
+          {oneMachine ? 'It needs a key' : 'It needs a key on that machine'}
         </button>
         <p className="dv-host-hint">{hint}</p>
         {error && <p className="pn-error">{error}</p>}
