@@ -22,6 +22,7 @@ function MachineNode({ x, y, online, delay }) {
 export default function CloudMode({ onBackToLocal }) {
   return (
     <div className="cloudmode">
+      <div className="cm-horizon" aria-hidden="true" />
       <div className="cm-panel">
         <svg
           className="cm-hero"

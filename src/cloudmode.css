@@ -1,20 +1,82 @@
-/* Cloud mode's coming-soon state - the hero treatment the onboarding
-   screen already owns (radial washes over the dark base) with the
-   subject drawn as the centerpiece: the cloud drawing itself in, the
-   machines checking in around it, one orchestrated entrance then quiet.
-   Under it, the Claude-app stack: status pill, big title, quiet
-   subtext, one action. */
+/* Cloud mode's coming-soon state - its own atmosphere, distinct from the
+   onboarding's violet washes: a deep azure breath rising from the bottom
+   behind the hero, a cool sky band at the top edge, and a hairline of
+   light on the horizon under the cloud. One very slow drift, then it
+   just is. The subject stays the centerpiece: the cloud drawing itself
+   in, the machines checking in around it. */
 
 .cloudmode {
+  position: relative;
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   background:
-    radial-gradient(620px 420px at 78% 8%, rgba(122, 92, 255, 0.17), transparent 70%),
-    radial-gradient(520px 400px at 8% 92%, rgba(88, 56, 220, 0.11), transparent 70%),
-    radial-gradient(900px 520px at 50% 125%, rgba(64, 34, 170, 0.09), transparent 75%),
+    /* the breath: azure rising behind the hero, off-center so the light
+       feels like it comes from somewhere */
+    radial-gradient(
+      1100px 700px at 50% 88%,
+      rgba(64, 120, 220, 0.16),
+      transparent 72%
+    ),
+    /* a warmer core inside the breath, the light the cloud sits in */
+    radial-gradient(
+      520px 360px at 50% 76%,
+      rgba(110, 160, 230, 0.1),
+      transparent 70%
+    ),
+    /* the upper sky: cool and nearly gone by mid-screen */
+    radial-gradient(
+      900px 480px at 50% -12%,
+      rgba(38, 70, 140, 0.12),
+      transparent 70%
+    ),
     var(--bg-app);
+}
+
+/* the horizon: a single hairline of light under the hero, the way a
+   cloud field reads against sky at altitude - a line, not a glow */
+.cm-horizon {
+  position: absolute;
+  left: 50%;
+  bottom: 17%;
+  width: min(420px, 72vw);
+  height: 1px;
+  transform: translateX(-50%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(140, 180, 235, 0.28) 20%,
+    rgba(140, 180, 235, 0.38) 50%,
+    rgba(140, 180, 235, 0.28) 80%,
+    transparent
+  );
+}
+
+/* the drift: the whole sky breathes at the slowest pace - 26s out,
+   26s back, barely. Nothing pulses; the room just has air in it. */
+.cloudmode::before {
+  content: '';
+  position: absolute;
+  inset: -20%;
+  background: radial-gradient(
+    60% 46% at 50% 82%,
+    rgba(88, 140, 215, 0.05),
+    transparent 70%
+  );
+  animation: cm-drift 52s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes cm-drift {
+  from {
+    transform: translate3d(-1.5%, 0, 0) scale(1);
+  }
+
+  to {
+    transform: translate3d(1.5%, -1%, 0) scale(1.04);
+  }
 }
 
 .cm-panel {
@@ -152,7 +214,8 @@
   .cm-cloud,
   .cm-node,
   .cm-link,
-  .cm-ndot.on {
+  .cm-ndot.on,
+  .cloudmode::before {
     animation: none;
   }
 
@@ -169,7 +232,8 @@
 html[data-reduce-motion] .cm-cloud,
 html[data-reduce-motion] .cm-node,
 html[data-reduce-motion] .cm-link,
-html[data-reduce-motion] .cm-ndot.on {
+html[data-reduce-motion] .cm-ndot.on,
+html[data-reduce-motion] .cloudmode::before {
   animation: none;
 }
 
