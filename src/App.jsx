@@ -3,6 +3,7 @@ import Sidebar from './Sidebar.jsx'
 import TitleBar from './TitleBar.jsx'
 import NewChat from './NewChat.jsx'
 import ChatView from './ChatView.jsx'
+import CloudMode from './CloudMode.jsx'
 import Onboarding from './Onboarding.jsx'
 import SettingsModal from './SettingsModal.jsx'
 import PluginsView from './PluginsView.jsx'
@@ -67,6 +68,10 @@ function Shell() {
   })
   // Settings is a popup over whatever view is open — not a route.
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // Local vs Cloud — Cloud swaps the whole main area for its coming-soon
+  // state; the session history stays untouched underneath, so switching
+  // back returns to the exact view.
+  const [mode, setMode] = useState('local')
 
   const view = history[hIndex]
   const chat = STATIC_VIEWS.includes(view) ? null : chats[view] ?? null
@@ -158,19 +163,27 @@ function Shell() {
           <Sidebar
             open={sidebarOpen}
             active={view === 'new' ? null : view}
+            mode={mode}
+            onMode={setMode}
             onSelect={openSession}
             onOpenSettings={() => setSettingsOpen(true)}
           />
           <main className="main">
-            {view === 'new' && <NewChat onOpen={openSession} />}
+            {mode === 'cloud' ? (
+              <CloudMode onBackToLocal={() => setMode('local')} />
+            ) : (
+              <>
+                {view === 'new' && <NewChat onOpen={openSession} />}
             {view === 'plugins' && <PluginsView />}
             {view === 'automations' && <AutomationsView onOpenChat={openSession} />}
-            {!STATIC_VIEWS.includes(view) &&
-              (chat ? (
-                <ChatView key={chat.id} chat={chat} />
-              ) : (
-                <div className="cv-none">That chat is no longer in this workspace.</div>
-              ))}
+                {!STATIC_VIEWS.includes(view) &&
+                  (chat ? (
+                    <ChatView key={chat.id} chat={chat} />
+                  ) : (
+                    <div className="cv-none">That chat is no longer in this workspace.</div>
+                  ))}
+              </>
+            )}
             {settingsOpen && (
               <SettingsModal onReplay={replayOnboarding} onClose={() => setSettingsOpen(false)} />
             )}

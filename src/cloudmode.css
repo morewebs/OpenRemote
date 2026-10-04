@@ -1,0 +1,119 @@
+/* Cloud mode's coming-soon state — the app's own page shape (a quiet
+   left-anchored header like MachinesView's, then the fact, then one
+   action), with the one animated element being the accent dot the app
+   already uses for "waiting". */
+
+.cloudmode {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 44px 48px 32px;
+  overflow-y: auto;
+  background: var(--bg-app);
+}
+
+.cm-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.cm-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+}
+
+/* The breathing accent dot — the same "waiting" treatment the machine
+   cards use (dv-dot--waiting), so the placeholder reads as a status the
+   app itself reports, not decoration. */
+.cm-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.cm-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: cm-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes cm-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.cm-body {
+  max-width: 46ch;
+  margin: 18px 0 0;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+
+/* The app's vocabulary stays plain — "this computer" is never a styled
+   fragment, just the words the rest of the UI uses. */
+.cm-plain {
+  color: var(--text-1);
+}
+
+.cm-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  margin-top: 26px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: default;
+}
+
+.cm-back:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.cm-back svg {
+  color: var(--text-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cm-dot {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion] .cm-dot {
+  animation: none;
+}
+
+/* phone width: the same padding collapse the other pages use */
+@media (max-width: 639px) {
+  .cloudmode {
+    padding: 20px 16px 32px;
+  }
+}

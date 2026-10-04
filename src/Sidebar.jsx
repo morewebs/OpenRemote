@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
-import { CaretDown, Cloud, GearSix, House, Lightning, MagnifyingGlass, Plus, PuzzlePiece, X } from '@phosphor-icons/react'
+import { CaretDown, Cloud, Desktop, GearSix, House, Lightning, MagnifyingGlass, Plus, PuzzlePiece, X } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { workspaceName } from './state/reducer.js'
 import './sidebar.css'
 
-export default function Sidebar({ open, active, onSelect, onOpenSettings }) {
+export default function Sidebar({ open, active, mode, onMode, onSelect, onOpenSettings }) {
   const { connection, sessions, chats } = useConsole()
   const [query, setQuery] = useState('')
   const [collapsed, setCollapsed] = useState({})
@@ -45,15 +45,22 @@ export default function Sidebar({ open, active, onSelect, onOpenSettings }) {
   return (
     <aside className={`sidebar${open ? '' : ' collapsed'}`}>
       <div className="sb-actions">
-        {/* The mode switch keeps the prototype's shape with Local
-            pressed; Cloud arrives with remote check-in and stays quiet
-            until then. */}
+        {/* The mode switch is real in the UI — Cloud switches the main
+            area to its coming-soon state until remote check-in lands. */}
         <div className="mode-switch" role="group" aria-label="Connection mode">
-          <button className="on" aria-pressed="true">
+          <button
+            className={mode === 'local' ? 'on' : ''}
+            aria-pressed={mode === 'local'}
+            onClick={() => onMode('local')}
+          >
             <House size={13} />
             Local
           </button>
-          <button disabled title="Cloud arrives with remote machine check-in">
+          <button
+            className={mode === 'cloud' ? 'on' : ''}
+            aria-pressed={mode === 'cloud'}
+            onClick={() => onMode('cloud')}
+          >
             <Cloud size={13} />
             Cloud
           </button>
@@ -90,9 +97,13 @@ export default function Sidebar({ open, active, onSelect, onOpenSettings }) {
           <Lightning size={17} />
           Automations
         </button>
-        {/* The Machines tile returns with remote check-in — until then its
-            Add-a-machine flow would point at an install command that
-            doesn't exist, and no dead UI is the rule. */}
+        <button
+          className={`side-tile${active === 'machines' ? ' on' : ''}`}
+          onClick={() => onSelect('machines')}
+        >
+          <Desktop size={17} />
+          Machines
+        </button>
       </div>
 
       <nav className="sb-list" aria-label="Projects">
