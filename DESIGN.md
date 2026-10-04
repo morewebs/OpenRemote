@@ -163,14 +163,12 @@ Every screen the prototype promises, backed by the real daemon:
   inventory, sessions with jumps, 24h presence band), the local
   harness install chain (claude/codex/pi/opencode — their own npm
   packages; grok/agy install through their own roots, no row).
-- **Plugins** — per-machine MCP installs from the marketplace (the
-  prototype's seven servers, launch commands verified on npm/PyPI) or by
-  hand; the needs-key lifecycle (keys never cross the API); the
-  ride-along through each harness's own MCP wire (claude `--mcp-config`
+- **Plugins** — MCP installs written by hand; the needs-key lifecycle
+  (keys never cross the API); the ride-along through each harness's own MCP wire (claude `--mcp-config`
   JSON string, codex `thread/start` config keyPaths).
 - **Automations** — rules with real sources only (a schedule on the
   machine's own clock, a webhook with its own key), Run now, the form,
-  the starter, and the everywhere-pill (the prototype's keyword parser,
+  and the everywhere-pill (the prototype's keyword parser,
   the rule-draft action card, honest refusals for connector-only kinds).
 - **Settings** — new-task defaults (harness/model/workspace), the daemon
   connection, the harness list, reduce-motion (carried into every

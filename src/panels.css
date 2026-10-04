@@ -346,6 +346,38 @@
   background: var(--bg-hover);
 }
 
+/* hour and minute, not the native clock — its popup cannot be styled */
+.af-time {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text-1);
+  color-scheme: dark;
+}
+
+.af-time select {
+  height: 28px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: default;
+}
+
+.af-time select:focus {
+  outline: none;
+}
+
+.af-time-colon {
+  color: var(--text-3);
+}
+
 /* the workspace field: the chosen folder as a chip, the OS dialog's
    trigger beside it — picked, never typed */
 .af-workspace {

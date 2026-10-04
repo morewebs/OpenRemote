@@ -467,10 +467,25 @@ html[data-reduce-motion] .am-row-actions {
   scrollbar-gutter: stable both-edges;
 }
 
-/* Rules and starters stay in the prototype's column. A row that spans
-   the whole window strands its action at the far edge. */
+/* The title and its action sit on one row, inside the same column as
+   the rules — a full-width header strands the button at the far edge. */
+.automations .dv-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  width: min(640px, 100%);
+}
+
+.automations .dv-head .dv-act {
+  flex: none;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+/* Rules stay in the prototype's column. A row that spans the whole
+   window strands its action at the far edge. */
 .am-list,
-.am-starters,
 .am-empty {
   width: min(640px, 100%);
 }
@@ -507,7 +522,12 @@ html[data-reduce-motion] .am-row-actions {
     padding: 28px 20px 28px;
   }
 
-  .dv-head .dv-act {
+  .automations .dv-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .automations .dv-head .dv-act {
     margin-top: 16px;
   }
 
