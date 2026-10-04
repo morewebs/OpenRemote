@@ -1,7 +1,7 @@
 // Automations: rules that open a chat when their trigger fires. The
 // clock and a webhook are the real sources today; Run now is the same
 // path by hand. The pill at the bottom drafts rules from a sentence -
-// the prototype's keyword brain behind the same action card.
+// a keyword brain behind the same action card.
 
 import { useMemo, useState } from 'react'
 import { ArrowUpRight, Check, Lightning, PencilSimple, Play, TrashSimple } from '@phosphor-icons/react'

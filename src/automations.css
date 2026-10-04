@@ -483,7 +483,7 @@ html[data-reduce-motion] .am-row-actions {
   white-space: nowrap;
 }
 
-/* Rules stay in the prototype's column. A row that spans the whole
+/* Rules stay in their column. A row that spans the whole
    window strands its action at the far edge. */
 .am-list,
 .am-empty {

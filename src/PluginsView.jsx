@@ -7,7 +7,7 @@ import { useConsole } from './state/console.jsx'
 import './devices.css'
 import './panels.css'
 
-// The state word the prototype ruled: derived, never stored.
+// The state word the design rules: derived, never stored.
 function pluginState(p) {
   if (!p.enabled) return 'off'
   if (p.needs_key && !p.has_key) return 'needs-key'

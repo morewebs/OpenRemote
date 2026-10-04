@@ -1,4 +1,4 @@
-// The pill's brain (prototype edition, ported): turn a sentence into
+// The pill's brain: turn a sentence into
 // either a rule draft (action card) or a plain reply. Deliberately dumb -
 // keyword shapes, not NLP. The real product routes this through an agent
 // behind the same card; the interaction is what we're testing.

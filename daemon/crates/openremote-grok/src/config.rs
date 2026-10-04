@@ -118,9 +118,11 @@ mod tests {
         let models = catalog();
         // This machine's cache: grok-4.7 et al., all visible.
         assert!(!models.is_empty());
-        assert!(models
-            .iter()
-            .any(|m| m.model == "grok-4.7" && m.display_name.as_deref() == Some("Grok 4.7")));
+        assert!(
+            models
+                .iter()
+                .any(|m| m.model == "grok-4.7" && m.display_name.as_deref() == Some("Grok 4.7"))
+        );
         // The effort words ride along - grok's own.
         let grok47 = models.iter().find(|m| m.model == "grok-4.7").unwrap();
         assert!(grok47.reasoning_efforts.contains(&"xhigh".to_string()));

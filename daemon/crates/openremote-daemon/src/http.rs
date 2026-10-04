@@ -24,7 +24,10 @@ pub fn router(app: Arc<App>) -> Router {
     let authed = Router::new()
         .route("/capabilities", get(capabilities))
         .route("/harnesses/{id}/models", get(harness_models))
-        .route("/harnesses/{id}/signin", post(start_sign_in).get(sign_in_view))
+        .route(
+            "/harnesses/{id}/signin",
+            post(start_sign_in).get(sign_in_view),
+        )
         .route("/harnesses/{id}/signin/input", post(sign_in_input))
         .route("/harnesses/{id}/signin/stop", post(stop_sign_in))
         .route("/machines", get(list_machines).post(create_machine))
@@ -169,10 +172,7 @@ async fn start_sign_in(
 }
 
 /// The current beat of a harness's sign-in relay - the console polls it.
-async fn sign_in_view(
-    State(app): State<Arc<App>>,
-    AxumPath(id): AxumPath<String>,
-) -> Response {
+async fn sign_in_view(State(app): State<Arc<App>>, AxumPath(id): AxumPath<String>) -> Response {
     match app.supervisor.sign_in_view(&id) {
         Some(view) => Json(view).into_response(),
         None => error(StatusCode::NOT_FOUND, "no sign-in has been started"),

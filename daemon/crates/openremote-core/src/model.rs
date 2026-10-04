@@ -170,8 +170,8 @@ fn default_true() -> bool {
 }
 
 /// What makes a rule fire. The kinds with real event sources - the clock
-/// and an arriving webhook. The connector-backed kinds of the prototype
-/// (pipeline, errors, review, release) appear when their connectors do.
+/// and an arriving webhook. The connector-backed kinds (pipeline, errors,
+/// review, release) appear when their connectors do.
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum TriggerKind {
@@ -217,7 +217,7 @@ pub struct AutomationRule {
 }
 
 impl Plugin {
-    /// The console's state word, derived like the prototype ruled: a
+    /// The console's state word, derived like the design rules: a
     /// disabled plugin is off; one still waiting on its key acknowledgment
     /// is `needs-key`; otherwise it rides sessions - running.
     pub fn state(&self) -> &'static str {

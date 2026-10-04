@@ -240,8 +240,7 @@ async fn claude_shares_its_reasoning_and_thinking_tokens() {
         .find(|(_, p)| kind(p) == "reasoning.added")
         .expect("the thinking block lands as reasoning.added");
     assert_eq!(
-        settled.1["text"],
-        "Let me compute 17*23 step by step.",
+        settled.1["text"], "Let me compute 17*23 step by step.",
         "the harness's own thinking, verbatim"
     );
     // The reply itself stays unmixed.

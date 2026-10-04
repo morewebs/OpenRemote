@@ -34,8 +34,8 @@ pub fn configured_model(picked: Option<&str>) -> Option<String> {
 /// the whole file.
 fn settings_model() -> Option<String> {
     let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))?;
-    let text = std::fs::read_to_string(PathBuf::from(home).join(".claude").join("settings.json"))
-        .ok()?;
+    let text =
+        std::fs::read_to_string(PathBuf::from(home).join(".claude").join("settings.json")).ok()?;
     let value = serde_json::from_str::<serde_json::Value>(&text).ok()?;
     value
         .get("model")
@@ -51,10 +51,7 @@ mod tests {
     #[test]
     fn the_pick_wins_over_every_rung_below() {
         // The caller's own pick is the first rung - config never overrides it.
-        assert_eq!(
-            configured_model(Some("opus")),
-            Some("opus".to_string())
-        );
+        assert_eq!(configured_model(Some("opus")), Some("opus".to_string()));
     }
 
     #[test]

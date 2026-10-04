@@ -121,7 +121,7 @@ pub async fn spawn_login(
             (node.clone(), vec![script.as_os_str().to_os_string()])
         }
         Resolution::Unavailable => {
-            return Err(format!("'{harness_id}' is not installed on this machine"))
+            return Err(format!("'{harness_id}' is not installed on this machine"));
         }
     };
     full.extend(argv.iter().map(|arg| (*arg).into()));

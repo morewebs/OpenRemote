@@ -81,7 +81,11 @@ async fn a_second_sign_in_while_one_runs_is_an_honest_conflict() {
     // empty (no override): claude is honestly missing, so the sign-in
     // refuses at the availability gate - the same guard a real machine
     // without the CLI hits.
-    let daemon = spawn_daemon_process(&[("OPENREMOTE_CLAUDE_PATH", "Z:/definitely/absent/claude.exe".to_string())]).await;
+    let daemon = spawn_daemon_process(&[(
+        "OPENREMOTE_CLAUDE_PATH",
+        "Z:/definitely/absent/claude.exe".to_string(),
+    )])
+    .await;
     let missing = call(
         &daemon,
         "POST",

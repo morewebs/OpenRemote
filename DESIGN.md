@@ -1,9 +1,7 @@
-# OpenRemote design contract - the prototype design
+# OpenRemote design contract
 
-The design system for the OpenRemote console, transcribed from the owner's
-prototype (the former `frontend-prototype/`, now the repo's `src/`). The
-prototype is the reference of record; this file is its durable index. The
-console transcribes it, never improvises past it.
+The design system for the OpenRemote console. This file is the reference of
+record; the console transcribes it, never improvises past it.
 
 ---
 
@@ -115,7 +113,7 @@ spacing.
 
 ---
 
-## OpenRemote standing adaptations (owner directives)
+## OpenRemote standing adaptations
 
 - **Many-agent power tool:** the console supervises many concurrent harnesses;
   a chat view is a zoom-in, not the whole product.
@@ -129,8 +127,8 @@ spacing.
   per step.
 - **Mobile is first-class:** the same visual language adapts to phone width,
   not a squeezed desktop.
-- **Process:** build slowly; overthink single elements; the owner reviews at
-  real milestones only.
+- **Process:** build slowly; overthink single elements; review at real
+  milestones only.
 - **Vocabulary (2026-10-01):** *chat* is the UI word for a conversation with a
   harness (the daemon domain says *session*; the console boundary translates).
   *machine* is a computer you own (the Devices view renames to Machines).
@@ -140,7 +138,7 @@ spacing.
 
 ## Shipped - the parity build (2026-10-02)
 
-Every screen the prototype promises, backed by the real daemon:
+Every screen the design specifies, backed by the real daemon:
 
 - **New chat** - the greeting + composer; harness picker (installed only),
   model picker where the harness advertises (its own catalog, efforts as
@@ -168,7 +166,7 @@ Every screen the prototype promises, backed by the real daemon:
   JSON string, codex `thread/start` config keyPaths).
 - **Automations** - rules with real sources only (a schedule on the
   machine's own clock, a webhook with its own key), Run now, the form,
-  and the everywhere-pill (the prototype's keyword parser,
+  and the everywhere-pill (the keyword parser,
   the rule-draft action card, honest refusals for connector-only kinds).
 - **Settings** - new-task defaults (harness/model/workspace), the daemon
   connection, the harness list, reduce-motion (carried into every

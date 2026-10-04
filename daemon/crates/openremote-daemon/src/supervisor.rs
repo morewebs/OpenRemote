@@ -376,11 +376,9 @@ impl Supervisor {
                     "'{harness_id}' has no login command to relay"
                 )));
             }
-            let backend = registry
-                .backend(harness_id)
-                .ok_or_else(|| {
-                    SupervisorError::Harness(format!("'{harness_id}' is not available to the daemon"))
-                })?;
+            let backend = registry.backend(harness_id).ok_or_else(|| {
+                SupervisorError::Harness(format!("'{harness_id}' is not available to the daemon"))
+            })?;
             backend_resolution(backend).clone()
         };
         // A settled relay makes room for the fresh one: the old run's view

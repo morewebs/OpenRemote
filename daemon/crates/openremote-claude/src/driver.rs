@@ -544,7 +544,11 @@ async fn read_stdout(
                 }
                 // The turn's cost in USD, verbatim from the result frame.
                 if let Some(cost) = cost_usd {
-                    if tx.send(DriverEvent::TurnCost { cost_usd: cost }).await.is_err() {
+                    if tx
+                        .send(DriverEvent::TurnCost { cost_usd: cost })
+                        .await
+                        .is_err()
+                    {
                         return;
                     }
                 }

@@ -267,9 +267,7 @@ async fn spawn_serve(
 fn map_event(event: &Value, session_id: &str) -> Option<DriverEvent> {
     // The real serve speaks `data`; the fixture (and older serves) spoke
     // `properties` - accept either (observed live against both).
-    let properties = event
-        .get("data")
-        .or_else(|| event.get("properties"))?;
+    let properties = event.get("data").or_else(|| event.get("properties"))?;
     if properties.get("sessionID").and_then(Value::as_str) != Some(session_id) {
         return None;
     }
@@ -278,12 +276,14 @@ fn map_event(event: &Value, session_id: &str) -> Option<DriverEvent> {
         // OpenCode only names its model when a turn runs - the step-start
         // carries it (`model: {id, providerID}`, observed live). The
         // first one lights the chat's model chip before the reply lands.
-        "session.next.step.started" => properties
-            .pointer("/model/id")
-            .and_then(Value::as_str)
-            .map(|model| DriverEvent::ModelReported {
-                model: model.to_string(),
-            }),
+        "session.next.step.started" => {
+            properties
+                .pointer("/model/id")
+                .and_then(Value::as_str)
+                .map(|model| DriverEvent::ModelReported {
+                    model: model.to_string(),
+                })
+        }
         "session.next.text.delta" => {
             properties
                 .get("delta")

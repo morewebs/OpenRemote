@@ -197,13 +197,16 @@ impl CodexFixture {
                     _ => {
                         let item_id = format!("msg-{}", self.turn_count);
                         let model = self.applied_model.as_deref().unwrap_or("gpt-5.1-codex");
-                        self.notify("item/completed", json!({
-                            "threadId": self.thread(),
-                            "turnId": turn,
-                            "itemId": item_id,
-                            "item": {"type": "agentMessage", "id": item_id,
-                                     "text": format!("done: {prompt} on {model}")}
-                        }));
+                        self.notify(
+                            "item/completed",
+                            json!({
+                                "threadId": self.thread(),
+                                "turnId": turn,
+                                "itemId": item_id,
+                                "item": {"type": "agentMessage", "id": item_id,
+                                         "text": format!("done: {prompt} on {model}")}
+                            }),
+                        );
                         // The thread's own context numbers - the harness
                         // reports both the used tokens and the window.
                         self.notify(

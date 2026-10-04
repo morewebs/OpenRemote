@@ -527,8 +527,7 @@ async fn a_live_model_change_lands_on_the_running_thread() {
     .await;
     let agent = events
         .iter()
-        .filter(|(_, p)| kind(p) == "message.added" && p["message"]["role"] == "assistant")
-        .last()
+        .rfind(|(_, p)| kind(p) == "message.added" && p["message"]["role"] == "assistant")
         .expect("second agent message");
     assert!(
         agent.1["message"]["text"]

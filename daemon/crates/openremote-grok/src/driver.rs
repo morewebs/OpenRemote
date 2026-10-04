@@ -278,7 +278,11 @@ async fn read_prompt(
                 // Grok shares claude's wire - the turn's cost rides the
                 // result frame the same way, when the harness reports it.
                 if let Some(cost) = cost_usd {
-                    if tx.send(DriverEvent::TurnCost { cost_usd: cost }).await.is_err() {
+                    if tx
+                        .send(DriverEvent::TurnCost { cost_usd: cost })
+                        .await
+                        .is_err()
+                    {
                         return;
                     }
                 }

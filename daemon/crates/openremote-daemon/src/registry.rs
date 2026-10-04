@@ -218,8 +218,9 @@ impl Backend {
             // default env), verified against its docs; a probe process
             // emits nothing before a turn (observed) so config is the only
             // pre-send fact.
-            Backend::Claude(_) => openremote_claude::config::configured_model(None)
-                .map(|model| (model, None)),
+            Backend::Claude(_) => {
+                openremote_claude::config::configured_model(None).map(|model| (model, None))
+            }
             Backend::Codex(_) => None, // the thread/start echo at create is the fact
             // Grok's config.toml [models] table: default + its own effort.
             Backend::Grok(_) => openremote_grok::config::default_model(),

@@ -321,7 +321,7 @@
   gap: 8px;
 }
 
-/* a picker chip in the Then grid - same anatomy as the prototype's
+/* a picker chip in the Then grid - same anatomy as the
    af-chip: a quiet bordered button that opens a PickerMenu */
 .af-pick,
 .af-chip {

@@ -485,7 +485,7 @@ button:focus-visible {
   }
 }
 
-/* real daemon statuses beyond the mock three */
+/* statuses beyond the three core ones */
 .dot--starting {
   background: var(--accent);
 }
