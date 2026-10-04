@@ -187,6 +187,15 @@ impl Server {
                     "properties": {"sessionID": session, "finish": "stop"}
                 }));
             }
+            // A provider failure: step.failed ends the turn on its own —
+            // no step.ended follows (the real CLI's shape, observed live).
+            "fail" => {
+                self.broadcast(json!({
+                    "id": evt(), "type": "session.next.step.failed",
+                    "properties": {"sessionID": session,
+                        "error": {"type": "unknown", "message": "Provider request failed with HTTP 403"}}
+                }));
+            }
             _ => {
                 self.broadcast(json!({
                     "id": evt(), "type": "session.next.text.ended",

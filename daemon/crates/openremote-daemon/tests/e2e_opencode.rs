@@ -318,3 +318,47 @@ async fn opencode_interrupts_and_resumes() {
         "resume rides the same opencode session"
     );
 }
+
+#[tokio::test]
+async fn a_failed_step_ends_the_turn_with_opencodes_own_error() {
+    // A provider failure: step.failed is the only boundary — no
+    // step.ended follows (the real CLI's shape, observed live) — and the
+    // turn must still complete with OpenCode's own error words.
+    let (daemon, ws) = opencode_daemon(Some("fail")).await;
+    let id = create_opencode(&daemon, &ws).await;
+    call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "oc-fail", "text": "ship the notes"})),
+    )
+    .await;
+
+    let events = until_kinds(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        // daemon.error rides after the status change — collect past it so
+        // the harness's own error words are in the batch.
+        &["turn.completed", "session.status_changed", "daemon.error"],
+    )
+    .await;
+    let completed = events
+        .iter()
+        .find(|(_, p)| kind(p) == "turn.completed")
+        .expect("completed");
+    assert_eq!(completed.1["outcome"], "error");
+    assert_eq!(completed.1["coarse"], "failed");
+    let error = events
+        .iter()
+        .find(|(_, p)| kind(p) == "daemon.error")
+        .expect("the harness's own error as a note");
+    assert_eq!(
+        error.1["message"].as_str().expect("message"),
+        "Provider request failed with HTTP 403",
+        "opencode's own error words"
+    );
+
+    // The session lands idle, not working-forever.
+    let session = call(&daemon, "GET", &format!("/sessions/{id}"), None).await;
+    assert_eq!(session.body["status"], "idle", "raw: {}", session.raw);
+}

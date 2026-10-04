@@ -329,6 +329,20 @@ fn map_event(event: &Value, session_id: &str) -> Option<DriverEvent> {
                 is_error: failed,
             })
         }
+        // A failed step ends the turn on its own — no `step.ended`
+        // follows (observed live) — with OpenCode's own error words.
+        "session.next.step.failed" => {
+            let error = properties
+                .pointer("/error/message")
+                .and_then(Value::as_str)
+                .unwrap_or("step failed");
+            Some(DriverEvent::TurnCompleted {
+                subtype: "error".to_string(),
+                coarse: TurnOutcome::Failed,
+                is_error: true,
+                error_message: Some(error.to_string()),
+            })
+        }
         "session.next.step.ended" => {
             let finish = properties
                 .get("finish")
