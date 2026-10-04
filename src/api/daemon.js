@@ -277,6 +277,7 @@ export class DaemonApi {
     const controller = new AbortController()
     const run = async () => {
       let cursor = after
+      let lastId = after
       try {
         const query = cursor == null ? '' : `?after=${cursor}`
         const response = await fetch(`${this.url}/sessions/${id}/events${query}`, {
@@ -287,7 +288,6 @@ export class DaemonApi {
         const reader = response.body.getReader()
         const decoder = new TextDecoder()
         let buffer = ''
-        let lastId = cursor
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
