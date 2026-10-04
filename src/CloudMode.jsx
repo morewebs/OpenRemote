@@ -48,12 +48,7 @@ export default function CloudMode({ onBackToLocal }) {
           <MachineNode x={226} y={118} delay={660} />
         </svg>
 
-        <p className="cm-status">
-          <span className="cm-dot" aria-hidden="true" />
-          Coming soon
-        </p>
-
-        <h1 className="cm-title">Every machine, one console</h1>
+        <h1 className="cm-title">Cloud is coming</h1>
 
         <p className="cm-body">
           Cloud mode connects the harnesses on machines you reach over the network — cloud hosts,

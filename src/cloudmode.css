@@ -106,29 +106,8 @@
   }
 }
 
-/* the status pill — the app's waiting vocabulary */
-.cm-status {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 22px 0 0;
-  padding: 4px 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  font-size: 11.5px;
-  color: var(--text-2);
-}
-
-.cm-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: cm-breathe 2.4s ease-in-out infinite;
-}
-
 .cm-title {
-  margin: 18px 0 0;
+  margin: 26px 0 0;
   font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -173,8 +152,7 @@
   .cm-cloud,
   .cm-node,
   .cm-link,
-  .cm-ndot.on,
-  .cm-dot {
+  .cm-ndot.on {
     animation: none;
   }
 
@@ -191,8 +169,7 @@
 html[data-reduce-motion] .cm-cloud,
 html[data-reduce-motion] .cm-node,
 html[data-reduce-motion] .cm-link,
-html[data-reduce-motion] .cm-ndot.on,
-html[data-reduce-motion] .cm-dot {
+html[data-reduce-motion] .cm-ndot.on {
   animation: none;
 }
 
