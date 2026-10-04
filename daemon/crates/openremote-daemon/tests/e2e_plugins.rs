@@ -1,4 +1,4 @@
-//! Plugins e2e: the marketplace, installs on this machine (dedup, custom,
+//! Plugins e2e: installs written by hand on this machine (dedup, the
 //! needs-key lifecycle), and the ride-along — a session with plugins
 //! enabled still spawns and turns through the real fixture path.
 
@@ -33,61 +33,75 @@ fn install_body(machine: &str, over: serde_json::Value) -> serde_json::Value {
 }
 
 #[tokio::test]
-async fn the_marketplace_installs_and_lives_its_lifecycle() {
+async fn a_hand_written_plugin_lives_its_lifecycle() {
     let daemon = start_daemon(&[]).await;
     let machine = this_machine_id(&daemon).await;
 
-    // The catalog is facts: ids, launch commands, key needs.
+    // No curated catalog. The route stays so a client can ask; it answers empty.
     let market = call(&daemon, "GET", "/plugins/marketplace", None).await;
     assert_eq!(market.status, 200, "raw: {}", market.raw);
-    let entries = market.body.as_array().expect("entries");
-    assert_eq!(entries.len(), 7);
-    let github = entries
-        .iter()
-        .find(|e| e["id"] == "github")
-        .expect("github");
-    assert_eq!(
-        github["command"].as_str().expect("command"),
-        "npx -y @modelcontextprotocol/server-github"
-    );
-    assert_eq!(github["needs_key"], false);
+    assert_eq!(market.body.as_array().map(Vec::len), Some(0));
 
-    // Install github: it rides immediately (no key needed).
+    // A plugin that needs no key rides immediately.
     let installed = call(
         &daemon,
         "POST",
         "/plugins",
-        Some(install_body(&machine, json!({"catalog_id": "github"}))),
+        Some(install_body(
+            &machine,
+            json!({
+                "name": "GitHub",
+                "detail": "Issues, pull requests, and checks.",
+                "command": "npx -y @modelcontextprotocol/server-github",
+                "needs_key": false
+            }),
+        )),
     )
     .await;
     assert_eq!(installed.status, 201, "raw: {}", installed.raw);
-    assert_eq!(installed.body["id"], format!("github@{machine}"));
     assert_eq!(installed.body["enabled"], true);
     assert_eq!(installed.body["needs_key"], false);
     assert_eq!(installed.body["has_key"], false);
+    let github_id = installed.body["id"].as_str().expect("id").to_string();
 
-    // Install gitlab: it waits on its key.
+    // One that needs a key waits on it.
     let needs_key = call(
         &daemon,
         "POST",
         "/plugins",
-        Some(install_body(&machine, json!({"catalog_id": "gitlab"}))),
+        Some(install_body(
+            &machine,
+            json!({
+                "name": "GitLab",
+                "detail": "Merge requests and pipelines.",
+                "command": "npx -y @modelcontextprotocol/server-gitlab",
+                "needs_key": true
+            }),
+        )),
     )
     .await;
     assert_eq!(needs_key.status, 201, "raw: {}", needs_key.raw);
+    let gitlab_id = needs_key.body["id"].as_str().expect("id").to_string();
 
     // Duplicates never install twice.
     let dup = call(
         &daemon,
         "POST",
         "/plugins",
-        Some(install_body(&machine, json!({"catalog_id": "github"}))),
+        Some(install_body(
+            &machine,
+            json!({
+                "name": "GitHub",
+                "detail": "again",
+                "command": "npx -y other",
+                "needs_key": false
+            }),
+        )),
     )
     .await;
     assert_eq!(dup.status, 409, "raw: {}", dup.raw);
 
     // Disable: github goes off.
-    let github_id = format!("github@{machine}");
     let off = call(
         &daemon,
         "POST",
@@ -100,7 +114,6 @@ async fn the_marketplace_installs_and_lives_its_lifecycle() {
 
     // The key acknowledgment: gitlab has one after this (the key itself
     // never crosses the API).
-    let gitlab_id = format!("gitlab@{machine}");
     let key = call(
         &daemon,
         "POST",
@@ -196,7 +209,7 @@ async fn custom_plugins_carry_their_own_command_and_dedup() {
     .await;
     assert_eq!(bare.status, 422, "raw: {}", bare.raw);
 
-    // The marketplace only sells what it has.
+    // A catalog id names nothing — there is no curated catalog.
     let unknown = call(
         &daemon,
         "POST",
@@ -216,13 +229,21 @@ async fn plugins_ride_sessions_without_breaking_their_spawns() {
     let machine = this_machine_id(&daemon).await;
     let ws = workspace(Some("plain"));
 
-    // One marketplace plugin (running) and one custom plugin (needs-key —
-    // it does NOT ride until its key is acknowledged).
+    // One plugin that rides immediately, and one that needs a key — it does
+    // NOT ride until its key is acknowledged.
     let github = call(
         &daemon,
         "POST",
         "/plugins",
-        Some(install_body(&machine, json!({"catalog_id": "github"}))),
+        Some(install_body(
+            &machine,
+            json!({
+                "name": "GitHub",
+                "detail": "Issues, pull requests, and checks.",
+                "command": "npx -y @modelcontextprotocol/server-github",
+                "needs_key": false
+            }),
+        )),
     )
     .await;
     assert_eq!(github.status, 201, "raw: {}", github.raw);
