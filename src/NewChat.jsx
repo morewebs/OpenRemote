@@ -80,6 +80,15 @@ export default function NewChat({ onOpen }) {
   const canSend =
     text.trim().length > 0 && workspace && !busy && currentHarness && connection.state === 'connected'
     && !needsSignIn
+  // The harness's own pre-send fact: what its config says a fresh chat
+  // runs, in its own words (grok's config.toml, agy's settings, claude's
+  // priority chain) — none where the harness says nothing (the slot stays
+  // reserved).
+  const resolvedDefault = currentHarness?.default_model ?? null
+  const defaultLabel =
+    resolvedDefault && currentHarness?.default_effort
+      ? `${resolvedDefault} · ${currentHarness.default_effort}`
+      : resolvedDefault
   const recents = loadRecents()
   const active = workspace ?? ''
   const inProgress = (sessions ?? []).filter((s) => ['starting', 'working', 'waiting'].includes(s.status))
@@ -151,17 +160,26 @@ export default function NewChat({ onOpen }) {
         />
         <div className="nc-foot">
           <div className="nc-pickers">
-            {models.length > 0 && (
+            {(models.length > 0 || resolvedDefault) && (
               <>
-                <button
-                  className="nc-meta"
-                  onClick={openPicker('model')}
-                  aria-haspopup="listbox"
-                  aria-expanded={picker?.kind === 'model'}
-                  title="Model"
-                >
-                  {model ?? `${currentHarness?.name} default`}
-                </button>
+                {models.length > 0 ? (
+                  <button
+                    className="nc-meta"
+                    onClick={openPicker('model')}
+                    aria-haspopup="listbox"
+                    aria-expanded={picker?.kind === 'model'}
+                    title="Model"
+                  >
+                    {model ?? defaultLabel}
+                  </button>
+                ) : (
+                  // No catalog to pick from, but the harness's own config
+                  // says what a fresh chat runs — its words, shown as the
+                  // fact it is. The wire's first-turn truth replaces it.
+                  <span className="nc-meta nc-static" title="The model this harness runs, from its own config">
+                    {defaultLabel}
+                  </span>
+                )}
                 {picker?.kind === 'model' && (
                   <PickerMenu
                     label="Model"
