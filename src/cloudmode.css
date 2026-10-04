@@ -1,53 +1,98 @@
-/* Cloud mode's coming-soon state — the app's own page shape (a quiet
-   left-anchored header like MachinesView's, then the fact, then one
-   action), with the one animated element being the accent dot the app
-   already uses for "waiting". */
+/* Cloud mode's coming-soon state — the hero treatment the onboarding
+   screen already owns (radial washes over the dark base) with the
+   subject drawn as the centerpiece: the cloud drawing itself in, the
+   machines checking in around it, one orchestrated entrance then quiet.
+   Under it, the Claude-app stack: status pill, big title, quiet
+   subtext, one action. */
 
 .cloudmode {
   flex: 1;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(620px 420px at 78% 8%, rgba(122, 92, 255, 0.17), transparent 70%),
+    radial-gradient(520px 400px at 8% 92%, rgba(88, 56, 220, 0.11), transparent 70%),
+    radial-gradient(900px 520px at 50% 125%, rgba(64, 34, 170, 0.09), transparent 75%),
+    var(--bg-app);
+}
+
+.cm-panel {
+  display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  padding: 44px 48px 32px;
-  overflow-y: auto;
-  background: var(--bg-app);
-}
-
-.cm-head {
-  display: flex;
   align-items: center;
-  gap: 14px;
+  max-width: 460px;
+  padding: 0 24px 24px;
+  text-align: center;
 }
 
-.cm-title {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--text-1);
+.cm-hero {
+  width: min(260px, 60vw);
+  height: auto;
+  overflow: visible;
 }
 
-/* The breathing accent dot — the same "waiting" treatment the machine
-   cards use (dv-dot--waiting), so the placeholder reads as a status the
-   app itself reports, not decoration. */
-.cm-status {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 0;
-  padding: 3px 10px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  font-size: 12px;
-  color: var(--text-2);
+/* the cloud: stroke-draws once, then settles to a faint fill */
+.cm-cloud {
+  fill: none;
+  stroke: var(--text-1);
+  stroke-width: 0.55;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-dasharray: 120;
+  stroke-dashoffset: 120;
+  animation: cm-draw 1.6s cubic-bezier(0.4, 0, 0.2, 1) 80ms forwards;
 }
 
-.cm-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
+/* the machines: small cards in the app's line treatment, fading in as
+   they check in */
+.cm-node rect {
+  fill: rgba(255, 255, 255, 0.035);
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 1.2;
+}
+
+.cm-node line {
+  stroke: var(--text-3);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.cm-ndot {
+  fill: none;
+  stroke: var(--dot-idle);
+  stroke-width: 1.4;
+}
+
+.cm-ndot.on {
+  fill: var(--green);
+  stroke: none;
   animation: cm-breathe 2.4s ease-in-out infinite;
+}
+
+.cm-node {
+  opacity: 0;
+  animation: cm-appear 0.5s ease-out var(--cm-delay) forwards;
+}
+
+.cm-link {
+  stroke: rgba(255, 255, 255, 0.14);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 4;
+  opacity: 0;
+  animation: cm-appear 0.5s ease-out var(--cm-delay) forwards;
+}
+
+@keyframes cm-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes cm-appear {
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes cm-breathe {
@@ -61,33 +106,56 @@
   }
 }
 
-.cm-body {
-  max-width: 46ch;
-  margin: 18px 0 0;
-  font-size: 14px;
-  line-height: 1.65;
+/* the status pill — the app's waiting vocabulary */
+.cm-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 22px 0 0;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11.5px;
   color: var(--text-2);
 }
 
-/* The app's vocabulary stays plain — "this computer" is never a styled
-   fragment, just the words the rest of the UI uses. */
-.cm-plain {
+.cm-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: cm-breathe 2.4s ease-in-out infinite;
+}
+
+.cm-title {
+  margin: 18px 0 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--text-1);
+}
+
+.cm-body {
+  max-width: 40ch;
+  margin: 12px 0 0;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--text-2);
 }
 
 .cm-back {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 32px;
-  margin-top: 26px;
-  padding: 0 14px;
+  height: 34px;
+  margin-top: 24px;
+  padding: 0 16px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 9px;
   background: transparent;
   color: var(--text-2);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   cursor: default;
 }
@@ -102,18 +170,49 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .cm-cloud,
+  .cm-node,
+  .cm-link,
+  .cm-ndot.on,
   .cm-dot {
     animation: none;
   }
+
+  .cm-cloud {
+    stroke-dashoffset: 0;
+  }
+
+  .cm-node,
+  .cm-link {
+    opacity: 1;
+  }
 }
 
+html[data-reduce-motion] .cm-cloud,
+html[data-reduce-motion] .cm-node,
+html[data-reduce-motion] .cm-link,
+html[data-reduce-motion] .cm-ndot.on,
 html[data-reduce-motion] .cm-dot {
   animation: none;
 }
 
-/* phone width: the same padding collapse the other pages use */
+html[data-reduce-motion] .cm-cloud {
+  stroke-dashoffset: 0;
+}
+
+html[data-reduce-motion] .cm-node,
+html[data-reduce-motion] .cm-link {
+  opacity: 1;
+}
+
+/* phone width: the hero shrinks, the panel keeps breathing room */
 @media (max-width: 639px) {
   .cloudmode {
-    padding: 20px 16px 32px;
+    align-items: flex-start;
+    padding-top: 10vh;
+  }
+
+  .cm-panel {
+    padding: 0 16px 32px;
   }
 }
