@@ -8,6 +8,7 @@ import Onboarding from './Onboarding.jsx'
 import SettingsModal from './SettingsModal.jsx'
 import PluginsView from './PluginsView.jsx'
 import AutomationsView from './AutomationsView.jsx'
+import MachinesView from './MachinesView.jsx'
 import { ConsoleProvider, useConsole } from './state/console.jsx'
 
 const OB_KEY = 'openremote-onboarded'
@@ -70,8 +71,10 @@ function Shell() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   // Local vs Cloud - Cloud swaps the whole main area for its coming-soon
   // state; the session history stays untouched underneath, so switching
-  // back returns to the exact view.
+  // back returns to the exact view. Within cloud, Machines is a real
+  // view of its own ('hero' is the coming-soon pane).
   const [mode, setMode] = useState('local')
+  const [cloudView, setCloudView] = useState('hero')
 
   const view = history[hIndex]
   const chat = STATIC_VIEWS.includes(view) ? null : chats[view] ?? null
@@ -164,13 +167,22 @@ function Shell() {
             open={sidebarOpen}
             active={view === 'new' ? null : view}
             mode={mode}
-            onMode={setMode}
+            cloudView={cloudView}
+            onCloudView={setCloudView}
+            onMode={(m) => {
+              setMode(m)
+              setCloudView('hero')
+            }}
             onSelect={openSession}
             onOpenSettings={() => setSettingsOpen(true)}
           />
           <main className="main">
             {mode === 'cloud' ? (
-              <CloudMode onBackToLocal={() => setMode('local')} />
+              cloudView === 'machines' ? (
+                <MachinesView onOpenChat={openSession} />
+              ) : (
+                <CloudMode onBackToLocal={() => setMode('local')} />
+              )
             ) : (
               <>
                 {view === 'new' && <NewChat onOpen={openSession} />}

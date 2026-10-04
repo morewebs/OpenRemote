@@ -4,7 +4,7 @@ import { useConsole } from './state/console.jsx'
 import { workspaceName } from './state/reducer.js'
 import './sidebar.css'
 
-export default function Sidebar({ open, active, mode, onMode, onSelect, onOpenSettings }) {
+export default function Sidebar({ open, active, mode, onMode, cloudView, onCloudView, onSelect, onOpenSettings }) {
   const { connection, sessions, chats } = useConsole()
   const [query, setQuery] = useState('')
   const [collapsed, setCollapsed] = useState({})
@@ -97,13 +97,17 @@ export default function Sidebar({ open, active, mode, onMode, onSelect, onOpenSe
           <Lightning size={17} />
           Automations
         </button>
-        <button
-          className={`side-tile${active === 'machines' ? ' on' : ''}`}
-          onClick={() => onSelect('machines')}
-        >
-          <Desktop size={17} />
-          Machines
-        </button>
+        {/* Machines is a cloud-mode view - the tile shows while Cloud is
+            the active mode. */}
+        {mode === 'cloud' && (
+          <button
+            className={`side-tile${cloudView === 'machines' ? ' on' : ''}`}
+            onClick={() => onCloudView('machines')}
+          >
+            <Desktop size={17} />
+            Machines
+          </button>
+        )}
       </div>
 
       <nav className="sb-list" aria-label="Projects">
