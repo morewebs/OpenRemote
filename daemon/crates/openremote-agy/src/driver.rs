@@ -352,6 +352,7 @@ pub async fn models(
             model: id.to_string(),
             display_name: (!name.is_empty()).then(|| name.to_string()),
             reasoning_efforts: Vec::new(),
+            is_default: false,
         });
     }
     Ok(models)

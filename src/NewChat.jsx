@@ -90,7 +90,11 @@ export default function NewChat({ onOpen }) {
   // runs, in its own words (grok's config.toml, agy's settings, claude's
   // priority chain) — none where the harness says nothing (the slot stays
   // reserved).
-  const resolvedDefault = currentHarness?.default_model ?? null
+  const resolvedDefault =
+    // The pre-send fact: the harness's own config first, then its own
+    // default-catalog marker (codex's isDefault — the model a fresh
+    // thread runs, the same fact thread/start echoes at create).
+    currentHarness?.default_model ?? models.find((m) => m.is_default)?.model ?? null
   const defaultLabel =
     resolvedDefault && currentHarness?.default_effort
       ? `${resolvedDefault} · ${currentHarness.default_effort}`

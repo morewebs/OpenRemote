@@ -55,7 +55,9 @@ impl SessionDriver {
     /// does not render that control.
     pub async fn apply_settings(&mut self, settings: &SessionSettings) -> Result<(), DriverError> {
         match self {
-            SessionDriver::Claude(driver) => driver.stage_settings(settings),
+            // Claude's own slash commands (`/model`, `/effort`, `/fast`)
+            // ride the user-message wire; the fresh init frame confirms.
+            SessionDriver::Claude(driver) => driver.apply_settings(settings).await,
             // Codex's own wire is thread/settings/update — a turn/start
             // override is ignored once the thread adopted a model.
             SessionDriver::Codex(driver) => driver.apply_settings(settings).await,

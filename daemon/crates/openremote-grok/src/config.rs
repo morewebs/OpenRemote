@@ -71,6 +71,7 @@ pub fn catalog() -> Vec<ModelDescriptor> {
                 model: id.clone(),
                 display_name: Some(name.to_string()),
                 reasoning_efforts: efforts,
+                is_default: false,
             })
         })
         .collect()

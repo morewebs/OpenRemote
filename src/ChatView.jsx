@@ -43,10 +43,13 @@ function ReasoningBlock({ text, live }) {
   )
 }
 
-// Codex and Pi apply model, effort, and fast on the running thread now.
-// The others take them when the process starts, so a stopped chat can
-// still change them — resume is what lands the change.
+// Claude, Codex, and Pi apply model and effort on the running thread now
+// (claude's own /model and /effort slash commands, codex thread/settings,
+// pi's wire). Fast stays start-time on claude (its /fast is a toggle with
+// no explicit-off form). The others take settings when the process starts,
+// so a stopped chat can still change them — resume is what lands the change.
 const LIVE_SETTINGS = {
+  claude: { model: true, effort: true, fast: false },
   codex: { model: true, effort: true, fast: true },
   pi: { model: true, effort: true, fast: false },
 }

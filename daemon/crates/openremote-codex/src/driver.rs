@@ -616,8 +616,15 @@ pub async fn models(
                 .unwrap_or_default();
             models.push(openremote_harness::ModelDescriptor {
                 model: model.to_string(),
-                display_name: None,
+                // Codex's own display name rides its catalog entry.
+                display_name: entry
+                    .get("displayName")
+                    .and_then(Value::as_str)
+                    .map(String::from),
                 reasoning_efforts: efforts,
+                // Its own marker for the entry a fresh thread runs —
+                // the pre-send fact its config.toml never says.
+                is_default: entry.get("isDefault").and_then(Value::as_bool) == Some(true),
             });
         }
         let next = page.get("nextCursor").cloned().unwrap_or(Value::Null);

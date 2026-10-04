@@ -92,12 +92,28 @@ impl Driver {
 
     /// Claude's stream-json control protocol has no model, effort, or fast
     /// field after spawn. Those ride argv and `--settings` at process start
-    /// (`--resume` keeps them). Changing one means the chat is stopped and
-    /// resumed — the console does that; this process cannot.
-    pub fn stage_settings(&mut self, _settings: &SessionSettings) -> Result<(), DriverError> {
-        Err(DriverError::Harness(
-            "Claude Code applies model, effort, and fast mode when the chat starts — stop it and resume to change them".into(),
-        ))
+    /// (`--resume` keeps them). But the CLI's own slash commands speak the
+    /// same user-message wire (`/model <id>`, `/effort <level>`, `/fast`)
+    /// and answer with a synthetic confirmation — the daemon sends those
+    /// as one-off turns; the fresh init frame that follows carries the new
+    /// model, which the pump folds into the session.
+    pub async fn apply_settings(&mut self, settings: &SessionSettings) -> Result<(), DriverError> {
+        // One slash command per user envelope — the wire takes a single
+        // command per turn, so each field rides its own prompt.
+        if let Some(model) = &settings.model {
+            self.send_prompt(&format!("/model {model}")).await?;
+        }
+        if let Some(effort) = &settings.effort {
+            self.send_prompt(&format!("/effort {effort}")).await?;
+        }
+        if let Some(fast) = &settings.fast {
+            // `/fast` toggles; an explicit off has no word — skip and let
+            // the console's fast control stay start-time only.
+            if *fast {
+                self.send_prompt("/fast").await?;
+            }
+        }
+        Ok(())
     }
 
     /// Ask the CLI to cancel the running turn.
@@ -341,6 +357,7 @@ pub async fn models(
                         .and_then(Value::as_str)
                         .map(String::from),
                     reasoning_efforts: efforts,
+                    is_default: false,
                 });
             }
             break;

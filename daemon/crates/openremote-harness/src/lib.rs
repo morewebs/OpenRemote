@@ -112,4 +112,8 @@ pub struct ModelDescriptor {
     /// The harness's own reasoning-effort words for this model.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reasoning_efforts: Vec<String>,
+    /// The harness's own marker for the entry a fresh chat runs (codex's
+    /// `isDefault`) — the pre-send fact where its config says nothing.
+    #[serde(default)]
+    pub is_default: bool,
 }
