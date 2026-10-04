@@ -41,11 +41,18 @@ test('schedule words and times shape the draft', () => {
   assert.equal(d.harness, 'claude')
 })
 
-test('a named machine rides the draft when it is mentioned', () => {
+test('a waiting machine named in the sentence does not ride the draft', () => {
   const out = parsePill('when a webhook arrives, open a chat on build-box to deploy', ctx)
   const d = out.draft
   assert.equal(d.trigger.kind, 'webhook')
-  assert.equal(d.machineId, 'm-box')
+  assert.equal(d.machineId, 'm-this')
+  assert.equal(d.task, 'deploy')
+})
+
+test('an online machine rides the draft when it is mentioned', () => {
+  const out = parsePill('when a webhook arrives, open a chat on morewebdev to deploy', ctx)
+  const d = out.draft
+  assert.equal(d.machineId, 'm-this')
   assert.equal(d.task, 'deploy')
 })
 

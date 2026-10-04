@@ -46,7 +46,7 @@ export default function Onboarding({ onDone }) {
       <div className="ob-panel">
         {step === 'welcome' && (
           <>
-            <h1 className="ob-title">One window for the agents on your machines</h1>
+            <h1 className="ob-title">One window for the agents on this computer</h1>
             <p className="ob-sub">
               Claude Code stays installed where it is. OpenRemote is where you start a
               task, read the session, and approve what it runs.

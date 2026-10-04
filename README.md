@@ -1,8 +1,8 @@
 # OpenRemote
 
-Fine-grained remote management for AI coding agents — run Claude Code, Codex,
-and the other harnesses side by side, from anywhere. A Rust daemon where the
-agents live; a desktop console (Tauri 2 + React 19) for everything else.
+One window for the harnesses on this computer — run Claude Code, Codex,
+and the other harnesses side by side. A Rust daemon on this machine; a
+desktop console (Tauri 2 + React 19) for everything else.
 
 Status: rebuilding from the owner's UI prototype as the design baseline
 (second true-zero, 2026-10-01). The design system is contracted in

@@ -53,8 +53,11 @@ export function parsePill(text, ctx) {
     }
   }
 
+  // A waiting machine is not a place a rule can run. Naming one in local
+  // mode falls through to this computer instead of drafting a check-in.
   let machineId = null
   for (const m of machines) {
+    if (m.status !== 'online') continue
     if (t.includes(m.name.toLowerCase()) || t.includes(m.id.toLowerCase())) {
       machineId = m.id
       break
