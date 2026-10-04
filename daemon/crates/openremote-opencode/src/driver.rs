@@ -265,7 +265,11 @@ async fn spawn_serve(
 
 /// Map one bus event for our session onto a driver event.
 fn map_event(event: &Value, session_id: &str) -> Option<DriverEvent> {
-    let properties = event.get("properties")?;
+    // The real serve speaks `data`; the fixture (and older serves) spoke
+    // `properties` — accept either (observed live against both).
+    let properties = event
+        .get("data")
+        .or_else(|| event.get("properties"))?;
     if properties.get("sessionID").and_then(Value::as_str) != Some(session_id) {
         return None;
     }
