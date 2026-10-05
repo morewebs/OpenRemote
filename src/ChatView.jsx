@@ -28,7 +28,7 @@ function ReasoningBlock({ text, live }) {
   const [open, setOpen] = useState(false)
   const label = live ? 'Thinking…' : 'Thought process'
   return (
-    <div className="cv-reasoning">
+    <div className="cv-node cv-reasoning">
       <button type="button" className="cv-reasoning-head" onClick={() => setOpen(!open)} aria-expanded={open}>
         <Brain size={12} />
         {label}
@@ -383,7 +383,7 @@ export default function ChatView({ chat, onBack }) {
                 <span className="nc-via">via</span>
               )}
               <span className="nc-meta nc-static">
-                <HarnessMark harness={chat.harness} size={13} />
+                <HarnessMark harness={chat.harness} size={16} />
                 {harnessName(chat.harness)}
               </span>
               {picker?.kind === 'model' && (

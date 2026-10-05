@@ -229,7 +229,7 @@ export default function NewChat({ onOpen }) {
               aria-expanded={picker?.kind === 'harness'}
               title="Harness"
             >
-              <HarnessMark harness={currentHarness?.id} size={13} />
+              <HarnessMark harness={currentHarness?.id} size={16} />
               {currentHarness?.name ?? 'No harness installed'}
             </button>
             {picker?.kind === 'harness' && (
@@ -237,7 +237,7 @@ export default function NewChat({ onOpen }) {
                 label="Harness"
                 searchPlaceholder="Search harnesses"
                 items={available.map((h) => ({ id: h.id, name: h.name }))}
-                renderIcon={(h) => <HarnessMark harness={h.id} size={13} />}
+                renderIcon={(h) => <HarnessMark harness={h.id} size={16} />}
                 groups={null}
                 selectedId={currentHarness?.id ?? ''}
                 onChoose={(id) => {

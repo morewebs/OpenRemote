@@ -30,10 +30,10 @@
   color: var(--text-2);
 }
 
-/* A harness's brand mark: the real logo, verbatim geometry, sitting in
-   a font-sized box next to the name. Monochrome via currentColor so it
-   follows the text it identifies (pi's is the exception - its colors
-   are the mark). */
+/* A harness's brand mark: the real logo, verbatim geometry in its own
+   official color (set by the mark component), sitting in a box next to
+   the name. The colors are fixed brand values, not currentColor - a
+   mark in the UI's grey stops being that mark. */
 .brand-mark-box {
   display: inline-flex;
   flex: none;

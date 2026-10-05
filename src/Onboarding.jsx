@@ -112,7 +112,7 @@ export default function Onboarding({ onDone }) {
             <div className="ob-harnesses">
               {available.map((h) => (
                 <div className="ob-harness signed" key={h.id}>
-                  <HarnessMark harness={h.id} size={13} />
+                  <HarnessMark harness={h.id} size={16} />
                   <span className="ob-harness-name">{harnessName(h.id)}</span>
                   <span className="ob-harness-state">Ready</span>
                 </div>
