@@ -5,7 +5,7 @@ import NewChat from './NewChat.jsx'
 import ChatView from './ChatView.jsx'
 import CloudMode from './CloudMode.jsx'
 import Onboarding from './Onboarding.jsx'
-import SettingsModal from './SettingsModal.jsx'
+import SettingsView from './SettingsView.jsx'
 import PluginsView from './PluginsView.jsx'
 import AutomationsView from './AutomationsView.jsx'
 import MachinesView from './MachinesView.jsx'
@@ -13,10 +13,9 @@ import { ConsoleProvider, useConsole } from './state/console.jsx'
 
 const OB_KEY = 'openremote-onboarded'
 const STORE_KEY = 'openremote-view-state'
-// 'machines' and 'settings' are deliberately absent - machines returns
-// with remote check-in, settings is now a popup, not a route; a stale
-// hash or stored history referencing either falls back to New chat.
-const STATIC_VIEWS = ['new', 'plugins', 'automations']
+// 'machines' is deliberately absent - it returns with remote check-in;
+// a stale hash or stored history referencing it falls back to New chat.
+const STATIC_VIEWS = ['new', 'plugins', 'automations', 'settings']
 
 function loadViewState(sessions) {
   let saved = null
@@ -67,8 +66,7 @@ function Shell() {
       return true
     }
   })
-  // Settings is a popup over whatever view is open - not a route.
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  // Settings is a view like the others - the gear navigates to it.
   // Local vs Cloud - Cloud swaps the whole main area for its coming-soon
   // state; the session history stays untouched underneath, so switching
   // back returns to the exact view. Within cloud, Machines is a real
@@ -101,7 +99,17 @@ function Shell() {
 
   useEffect(() => {
     window.history.replaceState(null, '', `#${view}`)
-  }, [view])
+    // The last view the user was on, for the startup preference's
+    // restore path. Written only once onboarding is done - the tour's
+    // own views are not the user's last view.
+    if (onboarded) {
+      try {
+        localStorage.setItem('openremote-last-view', view)
+      } catch {
+        /* storage unavailable */
+      }
+    }
+  }, [view, onboarded])
 
   const navigate = (id) => {
     if (id === view) return
@@ -174,10 +182,11 @@ function Shell() {
               setCloudView('hero')
             }}
             onSelect={openSession}
-            onOpenSettings={() => setSettingsOpen(true)}
           />
           <main className="main">
-            {mode === 'cloud' ? (
+            {view === 'settings' ? (
+              <SettingsView onReplay={replayOnboarding} />
+            ) : mode === 'cloud' ? (
               cloudView === 'machines' ? (
                 <MachinesView onOpenChat={openSession} />
               ) : (
@@ -195,9 +204,6 @@ function Shell() {
                     <div className="cv-none">That chat is no longer in this workspace.</div>
                   ))}
               </>
-            )}
-            {settingsOpen && (
-              <SettingsModal onReplay={replayOnboarding} onClose={() => setSettingsOpen(false)} />
             )}
           </main>
         </div>

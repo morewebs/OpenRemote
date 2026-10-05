@@ -9,21 +9,33 @@ import {
   loadPrefs,
   savePrefs,
   applyReduceMotion,
+  applyDensity,
   loadRecentWorkspaces,
   pushRecentWorkspace,
 } from './settings.js'
 import { canPickFolder, pickFolder } from './pick-folder.js'
 import { version } from '../package.json'
-import { X } from '@phosphor-icons/react'
 import './devices.css'
 import './panels.css'
-import './settingsmodal.css'
+import './settings.css'
 
 // The harnesses whose own login command the daemon can relay - the
 // Sign-in action renders only there (no dead UI elsewhere).
 const SIGNIN_HARNESSES = new Set(['claude', 'codex', 'grok'])
 
-export default function SettingsModal({ onReplay, onClose }) {
+// The rail's contract: one anchor per section, in panel order. The ids
+// match the section elements, so the rail stays honest as sections
+// change - add a section, add its anchor here.
+const SECTIONS = [
+  { id: 'new-tasks', label: 'New tasks' },
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'startup', label: 'Startup' },
+  { id: 'daemon', label: 'Daemon' },
+  { id: 'harnesses', label: 'Harnesses' },
+  { id: 'this-install', label: 'This install' },
+]
+
+export default function SettingsView({ onReplay }) {
   const { connection, capabilities, sessions, disconnect, modelsFor } = useConsole()
   const harnessList = capabilities?.harnesses ?? []
   const available = (harnessList ?? []).filter((h) => h.available)
@@ -32,6 +44,8 @@ export default function SettingsModal({ onReplay, onClose }) {
   const [picker, setPicker] = useState(null)
   const [about, setAbout] = useState(false)
   const [signInFor, setSignInFor] = useState(null)
+  const [prefs, setPrefs] = useState(() => loadPrefs())
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false)
   const recents = loadRecentWorkspaces()
   const defaultHarness = available.find((h) => h.id === defaults.harness) ?? available[0] ?? null
   const defaultWorkspace = defaults.workspace && recents.includes(defaults.workspace)
@@ -61,6 +75,11 @@ export default function SettingsModal({ onReplay, onClose }) {
     setPicker(null)
   }
 
+  const setPref = (partial) => {
+    savePrefs(partial)
+    setPrefs(loadPrefs())
+  }
+
   const openPicker = (kind) => (e) => setPicker({ kind, x: e.clientX, y: e.clientY })
 
   // A fresh folder is one dialog away even when recents are empty -
@@ -72,41 +91,24 @@ export default function SettingsModal({ onReplay, onClose }) {
     set({ workspace: path })
   }
 
-  const [reduceMotion, setReduceMotion] = useState(() => loadPrefs().reduce_motion)
-  const [confirmDisconnect, setConfirmDisconnect] = useState(false)
-
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
-  const setReduce = (value) => {
-    setReduceMotion(value)
-    savePrefs({ reduce_motion: value })
+  const toggleReduce = () => {
+    const value = !prefs.reduce_motion
+    setPref({ reduce_motion: value })
     applyReduceMotion(document, value)
   }
 
   return (
-    <div
-      className="dv-modal-backdrop stg-backdrop"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-    >
-      <div className="dv-modal stg-modal" role="dialog" aria-modal="true" aria-label="Settings">
-        <div className="dv-modal-head">
-          <h2 className="dv-modal-title">Settings</h2>
-          <button className="dv-modal-close" onClick={onClose} title="Close">
-            <X size={14} weight="bold" />
-          </button>
-        </div>
-        <p className="dv-modal-hint">The daemon connection, the harness it drives, and this install.</p>
-        <div className="panel stg-body">
+    <div className="settings">
+      <nav className="stg-nav" aria-label="Settings sections">
+        {SECTIONS.map((s) => (
+          <a key={s.id} href={`#stg-${s.id}`} className="stg-nav-btn">
+            {s.label}
+          </a>
+        ))}
+      </nav>
+      <div className="panel stg-panel">
 
-      <h2 className="pn-section">New tasks</h2>
+      <h2 className="pn-section" id="stg-new-tasks">New tasks</h2>
       <p className="pn-lead">What a new chat starts with. The composers still change their minds.</p>
       <div className="pn-list pn-list--tight">
         <div className="pn-row">
@@ -221,7 +223,77 @@ export default function SettingsModal({ onReplay, onClose }) {
         </div>
       </div>
 
-      <h2 className="pn-section">Daemon</h2>
+      <h2 className="pn-section" id="stg-appearance">Appearance</h2>
+      <p className="pn-lead">Space, not themes - the dark theme is the contract.</p>
+      <div className="pn-list pn-list--tight">
+        <div className="pn-row">
+          <div>
+            <div className="pn-name">Density</div>
+            <div className="pn-detail">Compact pulls the rows and gutters in.</div>
+          </div>
+          <button
+            type="button"
+            className={prefs.density === 'compact' ? 'pn-btn on' : 'pn-btn'}
+            onClick={() => {
+              const value = prefs.density === 'compact' ? 'comfortable' : 'compact'
+              setPref({ density: value })
+              applyDensity(document, value)
+            }}
+          >
+            {prefs.density === 'compact' ? 'Compact' : 'Comfortable'}
+          </button>
+        </div>
+        <div className="pn-row">
+          <div>
+            <div className="pn-name">Reduce motion</div>
+            <div className="pn-detail">Stops the running-dot breathe and picker transitions.</div>
+          </div>
+          <button
+            type="button"
+            className={prefs.reduce_motion ? 'pn-btn on' : 'pn-btn'}
+            onClick={toggleReduce}
+          >
+            {prefs.reduce_motion ? 'On' : 'Off'}
+          </button>
+        </div>
+      </div>
+
+      <h2 className="pn-section" id="stg-startup">Startup</h2>
+      <p className="pn-lead">What the app does when it opens.</p>
+      <div className="pn-list pn-list--tight">
+        <div className="pn-row">
+          <div>
+            <div className="pn-name">Reopen</div>
+            <div className="pn-detail">The view you left, or always New chat.</div>
+          </div>
+          <button
+            type="button"
+            className="pn-btn"
+            onClick={openPicker('startup')}
+            aria-haspopup="listbox"
+            aria-expanded={picker?.kind === 'startup'}
+          >
+            {prefs.startup_view === 'last' ? 'Last view' : 'New chat'}
+          </button>
+          {picker?.kind === 'startup' && (
+            <PickerMenu
+              label="Reopen"
+              searchPlaceholder="Search"
+              items={[
+                { id: 'new', name: 'New chat' },
+                { id: 'last', name: 'Last view' },
+              ]}
+              groups={null}
+              selectedId={prefs.startup_view}
+              onChoose={(id) => setPref({ startup_view: id })}
+              onClose={() => setPicker(null)}
+              anchor={{ left: picker.x, top: picker.y }}
+            />
+          )}
+        </div>
+      </div>
+
+      <h2 className="pn-section" id="stg-daemon">Daemon</h2>
       <p className="pn-lead">The local process the chats run through.</p>
       <div className="pn-list pn-list--tight">
         <div className="pn-row">
@@ -253,7 +325,7 @@ export default function SettingsModal({ onReplay, onClose }) {
         </div>
       </div>
 
-      <h2 className="pn-section">Harnesses</h2>
+      <h2 className="pn-section" id="stg-harnesses">Harnesses</h2>
       <p className="pn-lead">What the daemon can drive on this machine. Install a harness's own CLI and it appears here.</p>
       <div className="pn-list pn-list--tight">
         {(harnessList ?? []).map((h) => (
@@ -275,7 +347,7 @@ export default function SettingsModal({ onReplay, onClose }) {
         ))}
       </div>
 
-      <h2 className="pn-section">This install</h2>
+      <h2 className="pn-section" id="stg-this-install">This install</h2>
       <div className="pn-list pn-list--tight">
         <div className="pn-row">
           <div>
@@ -286,19 +358,6 @@ export default function SettingsModal({ onReplay, onClose }) {
         </div>
         <div className="pn-row">
           <div>
-            <div className="pn-name">Reduce motion</div>
-            <div className="pn-detail">Stops the running-dot breathe and picker transitions.</div>
-          </div>
-          <button
-            type="button"
-            className={reduceMotion ? 'pn-btn on' : 'pn-btn'}
-            onClick={() => setReduce(!reduceMotion)}
-          >
-            {reduceMotion ? 'On' : 'Off'}
-          </button>
-        </div>
-        <div className="pn-row">
-          <div>
             <div className="pn-name">First-run steps</div>
             <div className="pn-detail">Shows them again. The chats stay.</div>
           </div>
@@ -306,10 +365,9 @@ export default function SettingsModal({ onReplay, onClose }) {
         </div>
       </div>
 
-        </div>
-        {about && <AboutModal onClose={() => setAbout(false)} daemonVersion={capabilities?.daemon ?? null} />}
-        {signInFor && <SignInModal harnessId={signInFor} onDone={() => setSignInFor(null)} />}
       </div>
+      {about && <AboutModal onClose={() => setAbout(false)} daemonVersion={capabilities?.daemon ?? null} />}
+      {signInFor && <SignInModal harnessId={signInFor} onDone={() => setSignInFor(null)} />}
     </div>
   )
 }

@@ -108,40 +108,54 @@
   margin-top: -6px;
 }
 
-.cv-rail {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin: 4px 0 4px 3px;
-  padding-left: 22px;
-}
-
-.cv-rail::before {
-  content: '';
-  position: absolute;
-  left: 3px;
-  top: 8px;
-  bottom: 8px;
-  width: 1px;
-  background: rgba(255, 255, 255, 0.12);
-}
-
 .cv-node {
+  /* The timeline rail: content sits 34px right of the thread's content
+     edge; the dot and the connecting line are absolutely positioned onto
+     a shared axis at 21px - inside the user card's horizontal span,
+     never left of it. A 7px dot centered on the axis leaves a 9.5px gap
+     to the text. Every node shares this one axis; nothing shifts it. */
   position: relative;
-  margin: 0;
+  margin: 0 0 0 34px;
 }
 
 .cv-node::before {
   content: '';
   position: absolute;
-  left: -22px;
+  left: -16.5px;
   top: 0.45em;
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: var(--text-3);
   box-shadow: 0 0 0 3px var(--bg-app);
+  z-index: 1;
+}
+
+/* The connecting rail: a 1px line centered on the same axis. Each node
+   draws its own segment, stretched half a thread-gap (14px, from
+   .cv-thread) into each neighbor, so consecutive segments read as one
+   continuous line dropping from under the user card above. The dot's
+   bg-colored halo (on ::before, z-index 1) punches the line out around
+   itself, so the rail passes behind every dot. */
+.cv-node::after {
+  content: '';
+  position: absolute;
+  left: -13.5px;
+  top: -14px;
+  bottom: -14px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* The rail starts at its first dot when nothing precedes it, and ends
+   at the last event of a turn - never inside the next user card. */
+.cv-node:first-child::after {
+  top: 0.45em;
+}
+
+.cv-node:last-child::after,
+.cv-node:has(+ .cv-user)::after {
+  bottom: 0;
 }
 
 .cv-node--ok::before {
@@ -166,11 +180,11 @@
 
 /* ── the harness's own reasoning: dim, collapsible, never in the way ── */
 
-.cv-reasoning {
-  margin-left: -4px;
-}
-
 .cv-reasoning-head {
+  /* The pill carries 8px of its own left padding - pull it back so the
+     label text lands on the shared text column (the dot stays on the
+     rail axis; only the label shifts). */
+  margin-left: -8px;
   display: inline-flex;
   align-items: center;
   gap: 5px;

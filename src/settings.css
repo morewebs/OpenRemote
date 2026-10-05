@@ -1,0 +1,129 @@
+/* Settings as a view: a slim section rail on the left, the rows on the
+   right. The rail links to in-panel anchors - the panel scrolls, the
+   rail stays. */
+
+.settings {
+  display: flex;
+  gap: 28px;
+  width: 100%;
+  height: 100%;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 26px 28px 40px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.stg-nav {
+  flex: 0 0 152px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 6px;
+}
+
+.stg-nav-btn {
+  display: block;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.stg-nav-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.stg-nav-btn:target {
+  background: var(--bg-active);
+  color: var(--text-1);
+}
+
+/* The panel: the only scrolling pane in the view. */
+.stg-panel {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.stg-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.stg-panel::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.stg-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.stg-panel .pn-list,
+.stg-panel .pn-list--wide {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.stg-panel .pn-section {
+  margin-top: 22px;
+  scroll-margin-top: 8px;
+}
+
+.stg-panel .pn-section:first-child {
+  margin-top: 6px;
+}
+
+/* Compact density: the rows and gutters pull in, type stays put. */
+html[data-density='compact'] .pn-row {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+html[data-density='compact'] .pn-list {
+  gap: 0;
+}
+
+html[data-density='compact'] .stg-panel .pn-section {
+  margin-top: 16px;
+}
+
+/* phone width: the rail becomes a top scroller above the panel */
+@media (max-width: 700px) {
+  .settings {
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px 16px 32px;
+    overflow-y: auto;
+  }
+
+  .stg-nav {
+    flex: none;
+    flex-direction: row;
+    gap: 4px;
+    overflow-x: auto;
+    padding-top: 0;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .stg-nav-btn {
+    flex: none;
+  }
+
+  .stg-panel {
+    overflow-y: visible;
+  }
+}
+
+html[data-reduce-motion] .stg-nav-btn,
+html[data-reduce-motion] .stg-nav-btn:hover {
+  transition: none;
+}
