@@ -108,10 +108,40 @@ export default function SettingsView({ onReplay }) {
     applyReduceMotion(document, value)
   }
 
-  // The shell restart: this side is a single invoke; the console heals
-  // on its own (the error state's 2.5s daemon_info follow picks up the
-  // new port). Busy copy says what restart costs - running chats stop.
-  const [restarting, setRestarting] = useState(false)
+  // The Windows startup toggle: the shell's autostart plugin writes the
+  // Run key. The fact is asked once on open; toggling flips it through
+  // the plugin and re-reads. Browser dev has no shell - the row never
+  // renders there.
+  const [autoStart, setAutoStart] = useState(null)
+  useEffect(() => {
+    if (!hasTauri) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { isEnabled } = await import('@tauri-apps/plugin-autostart')
+        const enabled = await isEnabled()
+        if (!cancelled) setAutoStart(enabled)
+      } catch {
+        /* the row stays absent */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  const toggleAutoStart = async () => {
+    if (autoStart == null) return
+    try {
+      const { isEnabled, enable, disable } = await import('@tauri-apps/plugin-autostart')
+      if (autoStart) await disable()
+      else await enable()
+      setAutoStart(await isEnabled())
+    } catch {
+      /* the fact stays what it was */
+    }
+  }
+
+  // The shell restart: this side is a single invoke; the console heals; the console heals
   const restartDaemon = async () => {
     if (!hasTauri || restarting) return
     setRestarting(true)
@@ -370,6 +400,21 @@ export default function SettingsView({ onReplay }) {
             />
           )}
         </div>
+        {autoStart != null && (
+          <div className="pn-row">
+            <div>
+              <div className="pn-name">Launch at login</div>
+              <div className="pn-detail">Adds OpenRemote to Windows startup.</div>
+            </div>
+            <button
+              type="button"
+              className={autoStart ? 'pn-btn on' : 'pn-btn'}
+              onClick={toggleAutoStart}
+            >
+              {autoStart ? 'On' : 'Off'}
+            </button>
+          </div>
+        )}
       </div>
 
       <h2 className="pn-section" id="stg-daemon">Daemon</h2>
