@@ -717,6 +717,7 @@ impl Supervisor {
                 rule.workspace.clone(),
                 rule.model.clone(),
                 None,
+                None,
                 false,
             )
             .await?;
@@ -781,11 +782,13 @@ impl Supervisor {
 
     /// Create a session and spawn its harness driver. The session exists
     /// even when the spawn fails - the failure is the session's first fact.
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_session(
         self: &Arc<Self>,
         harness: &str,
         workspace: std::path::PathBuf,
         model: Option<String>,
+        effort: Option<String>,
         permission_mode: Option<String>,
         fast: bool,
     ) -> Result<Session, SupervisorError> {
@@ -799,13 +802,20 @@ impl Supervisor {
         // claude's priority chain) - its words, replaced by the wire's
         // first-turn truth. A fixture-backed backend is not the harness:
         // the machine's real config never leaks into an injected one.
-        let (model, effort) = match model {
-            Some(picked) => (Some(picked), None),
-            None if !self.is_fixture(harness) => backend
-                .default_model()
-                .map(|(m, e)| (Some(m), e))
-                .unwrap_or((None, None)),
-            None => (None, None),
+        // An effort default rides along the same way - the user's word
+        // when given, the harness's own pairing otherwise.
+        let (model, effort) = match (model, effort) {
+            (Some(picked), user_effort) => (Some(picked), user_effort),
+            (None, user_effort) if !self.is_fixture(harness) => {
+                // The harness's own default pairing - a real backend's
+                // default_model() names its model, a fixture's absence
+                // leaves both unpicked.
+                match backend.default_model() {
+                    Some((dm, de)) => (Some(dm), user_effort.or(de)),
+                    None => (None, user_effort),
+                }
+            }
+            (None, user_effort) => (None, user_effort),
         };
         let session = Session {
             id: SessionId::new(),

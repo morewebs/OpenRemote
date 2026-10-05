@@ -84,6 +84,14 @@ export default function NewChat({ onOpen }) {
   const recents = loadRecentWorkspaces()
   const active = workspace ?? ''
   const inProgress = (sessions ?? []).filter((s) => ['starting', 'working', 'waiting'].includes(s.status))
+  // The effort slot follows the model slot's rule: only where the active
+  // model advertises tiers. A saved default that the active model doesn't
+  // offer is dropped, not rendered - never a dead selection.
+  const activeModel = model ? models.find((m) => m.model === model) : null
+  const effortTiers = activeModel?.reasoning_efforts ?? []
+  const [effort, setEffort] = useState(null)
+  const savedEffort = effort ?? defaults.efforts?.[currentHarness?.id] ?? null
+  const chosenEffort = effortTiers.includes(savedEffort) ? savedEffort : null
 
   const openPicker = (kind) => (e) => setPicker({ kind, x: e.clientX, y: e.clientY })
 
@@ -92,7 +100,7 @@ export default function NewChat({ onOpen }) {
     setBusy(true)
     setError(null)
     try {
-      const id = await createChat(text.trim(), workspace, currentHarness.id, model ?? undefined, fast || undefined)
+      const id = await createChat(text.trim(), workspace, currentHarness.id, model ?? undefined, fast || undefined, chosenEffort ?? undefined)
       pushRecentWorkspace(workspace)
       setText('')
       onOpen(id)
@@ -188,6 +196,7 @@ export default function NewChat({ onOpen }) {
                     selectedId={model ?? ''}
                     onChoose={(id) => {
                       setModel(id)
+                      setEffort(null)
                       setPicker(null)
                     }}
                     onClose={() => setPicker(null)}
@@ -199,6 +208,33 @@ export default function NewChat({ onOpen }) {
                         </span>
                       ) : null
                     }
+                  />
+                )}
+                {effortTiers.length > 0 && (
+                  <button
+                    type="button"
+                    className="nc-meta"
+                    onClick={openPicker('effort')}
+                    aria-haspopup="listbox"
+                    aria-expanded={picker?.kind === 'effort'}
+                    title="The harness's own effort tier"
+                  >
+                    {chosenEffort ?? 'Effort'}
+                  </button>
+                )}
+                {picker?.kind === 'effort' && (
+                  <PickerMenu
+                    label="Effort"
+                    searchPlaceholder="Search efforts"
+                    items={effortTiers.map((t) => ({ id: t, name: t }))}
+                    groups={null}
+                    selectedId={chosenEffort ?? ''}
+                    onChoose={(id) => {
+                      setEffort(id)
+                      setPicker(null)
+                    }}
+                    onClose={() => setPicker(null)}
+                    anchor={{ left: picker.x, top: picker.y }}
                   />
                 )}
                 <span className="nc-via">via</span>
@@ -224,6 +260,9 @@ export default function NewChat({ onOpen }) {
                 selectedId={currentHarness?.id ?? ''}
                 onChoose={(id) => {
                   setHarness(id)
+                  // Effort words belong to the harness's own catalog - a
+                  // switch resets the choice to the new harness's default.
+                  setEffort(null)
                   setPicker(null)
                 }}
                 onClose={() => setPicker(null)}

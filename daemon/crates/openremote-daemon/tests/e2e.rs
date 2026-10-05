@@ -770,3 +770,44 @@ async fn fast_mode_rides_the_session_and_the_capability_gates_on_the_cli() {
     assert_eq!(plain.status, 201, "raw: {}", plain.raw);
     assert_eq!(plain.body["fast"], false, "raw: {}", plain.raw);
 }
+
+#[tokio::test]
+async fn an_effort_default_rides_the_session_record_verbatim() {
+    let daemon = start_daemon(&[("claude", fixture_agent())]).await;
+    let ws = workspace(Some("plain"));
+
+    // The console's new-task default: the harness's own tier word, set
+    // on the session exactly as given (a word the harness doesn't know
+    // is the harness's own spawn error, never ours to rename).
+    let created = call(
+        &daemon,
+        "POST",
+        "/sessions",
+        Some(json!({
+            "request_id": "r-effort",
+            "harness": "claude",
+            "workspace": ws.path(),
+            "effort": "high"
+        })),
+    )
+    .await;
+    assert_eq!(created.status, 201, "raw: {}", created.raw);
+    assert_eq!(created.body["effort"], "high", "raw: {}", created.raw);
+
+    // Without a default, the session carries none - the harness's own
+    // config pairing stays the harness's business.
+    let plain = call(
+        &daemon,
+        "POST",
+        "/sessions",
+        Some(json!({"request_id": "r-none", "harness": "claude", "workspace": ws.path()})),
+    )
+    .await;
+    assert_eq!(plain.status, 201, "raw: {}", plain.raw);
+    assert_eq!(
+        plain.body["effort"].is_null(),
+        true,
+        "no effort imposed; raw: {}",
+        plain.raw
+    );
+}

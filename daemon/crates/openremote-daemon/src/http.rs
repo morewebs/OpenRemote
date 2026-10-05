@@ -842,6 +842,11 @@ struct CreateSessionBody {
     workspace: String,
     #[serde(default)]
     model: Option<String>,
+    /// The harness's own effort tier word (claude/codex high, grok's
+    /// answer effort), verbatim - an unknown word surfaces as the
+    /// harness's own spawn error, not ours.
+    #[serde(default)]
+    effort: Option<String>,
     #[serde(default)]
     permission_mode: Option<String>,
     /// Run the harness's own fast mode (claude `fastMode`, codex service
@@ -871,6 +876,7 @@ async fn create_session(
             &body.harness,
             workspace,
             body.model,
+            body.effort,
             body.permission_mode,
             body.fast,
         )

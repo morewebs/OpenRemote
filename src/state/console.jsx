@@ -300,8 +300,8 @@ export function ConsoleProvider({ children }) {
   )
 
   const createChat = useCallback(
-    async (text, workspace, harness, model, fast) => {
-      const session = await api.createSession({ harness, workspace, model, fast })
+    async (text, workspace, harness, model, fast, effort) => {
+      const session = await api.createSession({ harness, workspace, model, effort, fast })
       ensureChat(session)
       if (text.trim()) await api.prompt(session.id, text.trim())
       return session.id

@@ -75,6 +75,17 @@ export default function SettingsView({ onReplay }) {
     setPicker(null)
   }
 
+  // The effort row offers only the default model's own tiers - the same
+  // rule the composer holds. A default model without tiers, or a saved
+  // tier the model doesn't offer, means no row: never a dead selection.
+  const defaultModel =
+    models.find((m) => m.model === defaults.model) ??
+    models.find((m) => m.is_default) ??
+    null
+  const effortTiers = defaultModel?.reasoning_efforts ?? []
+  const savedEffort = defaults.efforts?.[defaultHarness?.id] ?? null
+  const chosenEffort = effortTiers.includes(savedEffort) ? savedEffort : null
+
   const setPref = (partial) => {
     savePrefs(partial)
     setPrefs(loadPrefs())
@@ -175,6 +186,37 @@ export default function SettingsView({ onReplay }) {
                     <span className="nc-item-sub">{m.reasoning_efforts.join(' · ')}</span>
                   ) : null
                 }
+              />
+            )}
+          </div>
+        )}
+        {effortTiers.length > 0 && (
+          <div className="pn-row">
+            <div>
+              <div className="pn-name">Effort</div>
+              <div className="pn-detail">{defaultHarness?.name}'s own tier words for {defaultModel?.display_name ?? defaultModel?.model}.</div>
+            </div>
+            <button
+              type="button"
+              className="pn-btn"
+              onClick={openPicker('effort')}
+              aria-haspopup="listbox"
+              aria-expanded={picker?.kind === 'effort'}
+            >
+              {chosenEffort ?? `${defaultHarness?.name} default`}
+            </button>
+            {picker?.kind === 'effort' && (
+              <PickerMenu
+                label="Effort"
+                searchPlaceholder="Search efforts"
+                items={effortTiers.map((t) => ({ id: t, name: t }))}
+                groups={null}
+                selectedId={chosenEffort ?? ''}
+                onChoose={(id) =>
+                  set({ efforts: { ...defaults.efforts, [defaultHarness.id]: id } })
+                }
+                onClose={() => setPicker(null)}
+                anchor={{ left: picker.x, top: picker.y }}
               />
             )}
           </div>

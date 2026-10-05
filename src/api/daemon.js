@@ -89,12 +89,13 @@ export class DaemonApi {
     return this.call('GET', `/sessions/${id}`)
   }
 
-  createSession({ harness, workspace, model, permissionMode, fast }) {
+  createSession({ harness, workspace, model, effort, permissionMode, fast }) {
     return this.call('POST', '/sessions', {
       request_id: newRequestId(),
       harness,
       workspace,
       ...(model ? { model } : {}),
+      ...(effort ? { effort } : {}),
       ...(permissionMode ? { permission_mode: permissionMode } : {}),
       ...(fast ? { fast: true } : {}),
     })
