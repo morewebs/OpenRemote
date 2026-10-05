@@ -2,7 +2,7 @@
 // in browser mode (no dead buttons - the caller hides Browse there).
 // Cloud machines get their own picker when remote check-in lands.
 
-const hasTauri = typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__
+export const hasTauri = typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__
 
 /// Open the OS folder dialog; resolves to the chosen path or null.
 export async function pickFolder() {

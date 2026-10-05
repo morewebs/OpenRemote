@@ -25,11 +25,30 @@ pub struct DaemonInfo {
 }
 
 #[derive(Default)]
-struct DaemonState(Mutex<DaemonInfo>);
+struct DaemonState {
+    info: Mutex<DaemonInfo>,
+    /// The live sidecar child. Held so a requested restart can stop the
+    /// old daemon before spawning the new one; the stdin watchdog (the
+    /// daemon exits when stdin closes) still owns the app-exit path.
+    child: Mutex<Option<tauri_plugin_shell::process::CommandChild>>,
+}
 
 #[tauri::command]
 fn daemon_info(state: State<'_, DaemonState>) -> DaemonInfo {
-    state.0.lock().expect("daemon state lock").clone()
+    state.info.lock().expect("daemon state lock").clone()
+}
+
+/// Restart the daemon sidecar: kill the old child, drop what the shell
+/// knew about it, spawn fresh. The console heals on its own - on
+/// connection error it re-polls daemon_info every 2.5s and follows a
+/// new port - so this returns before the new daemon is ready.
+#[tauri::command]
+fn daemon_restart(app: tauri::AppHandle, state: State<'_, DaemonState>) {
+    if let Some(child) = state.child.lock().expect("daemon state lock").take() {
+        let _ = child.kill();
+    }
+    *state.info.lock().expect("daemon state lock") = DaemonInfo::default();
+    spawn_daemon(app);
 }
 
 pub fn run() {
@@ -37,7 +56,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .manage(DaemonState::default())
-        .invoke_handler(tauri::generate_handler![daemon_info])
+        .invoke_handler(tauri::generate_handler![daemon_info, daemon_restart])
         .setup(|app| {
             spawn_daemon(app.handle().clone());
             Ok(())
@@ -55,7 +74,12 @@ fn spawn_daemon(app: tauri::AppHandle) {
             .shell()
             .sidecar(DAEMON_NAME)
             .expect("daemon sidecar registered in tauri.conf.json");
-        let (mut rx, _child) = sidecar.spawn().expect("daemon sidecar spawns");
+        let (mut rx, child) = sidecar.spawn().expect("daemon sidecar spawns");
+        app.state::<DaemonState>()
+            .child
+            .lock()
+            .expect("daemon state lock")
+            .replace(child);
 
         let mut info = DaemonInfo::default();
         let mut published = false;
@@ -88,7 +112,7 @@ fn publish(app: &tauri::AppHandle, info: &mut DaemonInfo) {
         .and_then(read_daemon_token_at)
         .or_else(read_daemon_token_default);
     let state = app.state::<DaemonState>();
-    *state.0.lock().expect("daemon state lock") = info.clone();
+    *state.info.lock().expect("daemon state lock") = info.clone();
 }
 
 /// The daemon's default data dir is `~/.openremote`; its `token` file holds

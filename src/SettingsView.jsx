@@ -13,7 +13,7 @@ import {
   loadRecentWorkspaces,
   pushRecentWorkspace,
 } from './settings.js'
-import { canPickFolder, pickFolder } from './pick-folder.js'
+import { canPickFolder, hasTauri, pickFolder } from './pick-folder.js'
 import { version } from '../package.json'
 import './devices.css'
 import './panels.css'
@@ -107,6 +107,43 @@ export default function SettingsView({ onReplay }) {
     setPref({ reduce_motion: value })
     applyReduceMotion(document, value)
   }
+
+  // The shell restart: this side is a single invoke; the console heals
+  // on its own (the error state's 2.5s daemon_info follow picks up the
+  // new port). Busy copy says what restart costs - running chats stop.
+  const [restarting, setRestarting] = useState(false)
+  const restartDaemon = async () => {
+    if (!hasTauri || restarting) return
+    setRestarting(true)
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('daemon_restart')
+    } catch {
+      /* the poll reports the outcome either way */
+    }
+    setTimeout(() => setRestarting(false), 4000)
+  }
+
+  // The daemon's port and data dir, straight from the shell's own
+  // record of the sidecar. Browser dev has no sidecar - no dead rows.
+  const [daemonDetail, setDaemonDetail] = useState(null)
+  useEffect(() => {
+    if (!hasTauri) return
+    let cancelled = false
+    const ask = async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core')
+        const info = await invoke('daemon_info')
+        if (!cancelled && info?.url) setDaemonDetail(info)
+      } catch {
+        /* the row simply stays absent */
+      }
+    }
+    ask()
+    return () => {
+      cancelled = true
+    }
+  }, [connection.state])
 
   return (
     <div className="settings">
@@ -365,6 +402,34 @@ export default function SettingsView({ onReplay }) {
             <div className="pn-detail">Sessions survive daemon restarts; stopped ones can resume.</div>
           </div>
         </div>
+        {daemonDetail?.url && (
+          <div className="pn-row">
+            <div>
+              <div className="pn-name">{daemonDetail.url.replace(/^https?:\/\//, '')}</div>
+              <div className="pn-detail">{daemonDetail.data_dir ?? 'The local address the console talks to.'}</div>
+            </div>
+          </div>
+        )}
+        {hasTauri && (
+          <div className="pn-row">
+            <div>
+              <div className="pn-name">Restart</div>
+              <div className="pn-detail">
+                {restarting
+                  ? 'The daemon is coming back; the console reconnects on its own.'
+                  : 'Stops running chats (stopped ones can resume) and starts a fresh daemon.'}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="pn-btn"
+              onClick={restartDaemon}
+              disabled={restarting}
+            >
+              {restarting ? 'Restarting' : 'Restart'}
+            </button>
+          </div>
+        )}
       </div>
 
       <h2 className="pn-section" id="stg-harnesses">Harnesses</h2>
