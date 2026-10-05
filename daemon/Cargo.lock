@@ -482,6 +482,7 @@ dependencies = [
  "openremote-harness",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
 ]
 

@@ -28,6 +28,12 @@ pub fn catalog() -> Vec<ModelDescriptor> {
     let Some(home) = grok_home() else {
         return Vec::new();
     };
+    catalog_in(&home)
+}
+
+/// The same read against a given grok home - the hermetic core the
+/// tests drive (a temp home, not this machine's own cache).
+pub fn catalog_in(home: &std::path::Path) -> Vec<ModelDescriptor> {
     let Ok(text) = std::fs::read_to_string(home.join("models_cache.json")) else {
         return Vec::new();
     };
@@ -81,6 +87,11 @@ pub fn catalog() -> Vec<ModelDescriptor> {
 /// own config. `None` when grok hasn't said.
 pub fn default_model() -> Option<(String, Option<String>)> {
     let home = grok_home()?;
+    default_model_in(&home)
+}
+
+/// The same read against a given grok home.
+fn default_model_in(home: &std::path::Path) -> Option<(String, Option<String>)> {
     let text = std::fs::read_to_string(home.join("config.toml")).ok()?;
     // A hand-rolled read of the `[models]` table only - no toml dependency
     // for two keys.
@@ -113,28 +124,63 @@ pub fn default_model() -> Option<(String, Option<String>)> {
 mod tests {
     use super::*;
 
+    /// A temp grok home carrying a cache shaped like grok's own: visible,
+    /// supported entries with their own effort words, plus hidden and
+    /// unsupported ones that must never list.
+    fn grok_home_with_cache() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().expect("temp grok home");
+        std::fs::write(
+            dir.path().join("models_cache.json"),
+            r#"{"models":{
+                "grok-4.7":{"info":{"id":"grok-4.7","name":"Grok 4.7","hidden":false,
+                    "supported_in_api":true,
+                    "reasoning_efforts":[{"value":"answer"},{"value":"xhigh"}]}},
+                "grok-hidden":{"info":{"id":"grok-hidden","name":"Hidden","hidden":true,
+                    "supported_in_api":true}},
+                "grok-unsupported":{"info":{"id":"grok-unsupported","name":"Unsupported",
+                    "hidden":false,"supported_in_api":false}}
+            }}"#,
+        )
+        .expect("write cache");
+        std::fs::write(
+            dir.path().join("config.toml"),
+            "[models]\ndefault = \"grok-4.7\"\ndefault_reasoning_effort = \"xhigh\"\n",
+        )
+        .expect("write config");
+        dir
+    }
+
     #[test]
     fn catalog_takes_groks_own_words_only() {
-        let models = catalog();
-        // This machine's cache: grok-4.7 et al., all visible.
-        assert!(!models.is_empty());
-        assert!(
-            models
-                .iter()
-                .any(|m| m.model == "grok-4.7" && m.display_name.as_deref() == Some("Grok 4.7"))
-        );
-        // The effort words ride along - grok's own.
-        let grok47 = models.iter().find(|m| m.model == "grok-4.7").unwrap();
+        let home = grok_home_with_cache();
+        let models = catalog_in(home.path());
+        // grok's own names, its own effort words - and only the visible,
+        // supported entries.
+        assert_eq!(models.len(), 1, "hidden and unsupported never list");
+        let grok47 = &models[0];
+        assert_eq!(grok47.model, "grok-4.7");
+        assert_eq!(grok47.display_name.as_deref(), Some("Grok 4.7"));
         assert!(grok47.reasoning_efforts.contains(&"xhigh".to_string()));
     }
 
     #[test]
+    fn an_absent_cache_lists_nothing() {
+        let dir = tempfile::tempdir().expect("empty grok home");
+        assert!(catalog_in(dir.path()).is_empty());
+    }
+
+    #[test]
     fn default_model_comes_from_the_models_table() {
-        // Machine-dependent; the parse itself is pinned below.
-        if let Some((model, effort)) = default_model() {
-            assert!(!model.is_empty());
-            assert!(effort.is_none() || !effort.unwrap().is_empty());
-        }
+        let home = grok_home_with_cache();
+        let (model, effort) = default_model_in(home.path()).expect("default");
+        assert_eq!(model, "grok-4.7");
+        assert_eq!(effort.as_deref(), Some("xhigh"));
+    }
+
+    #[test]
+    fn an_absent_config_says_nothing() {
+        let dir = tempfile::tempdir().expect("empty grok home");
+        assert!(default_model_in(dir.path()).is_none());
     }
 
     #[test]
