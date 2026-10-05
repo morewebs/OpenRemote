@@ -75,9 +75,16 @@ export function GrokMark() {
 
 export function PiMark() {
   // pi.dev's own block glyph - the three colors are the mark, so this
-  // one keeps them.
+  // one keeps them. The viewBox is cropped to the glyph's own bounds:
+  // pi.dev's 800x800 canvas centers it with wide margins, which left
+  // the mark smaller than its neighbors.
   return (
-    <svg className="brand-mark" viewBox="0 0 800 800" role="img" aria-label="Pi Agent">
+    <svg
+      className="brand-mark"
+      viewBox="165.29 165.29 469.43 469.43"
+      role="img"
+      aria-label="Pi Agent"
+    >
       <path fill="#F09082" d="M165.29 165.29H517.36V400H400V282.65H165.29Z" />
       <path fill="#4D9ABF" d="M165.29 282.65H282.65V400H400V517.36H282.65V634.72H165.29Z" />
       <path fill="#F1BE58" d="M517.36 400H634.72V634.72H517.36Z" />
