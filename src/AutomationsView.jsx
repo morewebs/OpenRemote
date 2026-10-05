@@ -12,6 +12,7 @@ import { harnessName } from './harness-names.js'
 import { workspaceName } from './state/reducer.js'
 import { whenSentence, CONNECTOR_KINDS } from './automation.js'
 import { parsePill } from './pill.js'
+import { loadRecentWorkspaces } from './settings.js'
 import './devices.css'
 import './automations.css'
 import './pill.css'
@@ -59,12 +60,7 @@ export default function AutomationsView({ onOpenChat }) {
   const workspaces = useMemo(() => {
     const seen = new Map()
     for (const s of sessions ?? []) seen.set(workspaceName(s.workspace), s.workspace)
-    try {
-      const recents = JSON.parse(localStorage.getItem('openremote-recent-workspaces') ?? '[]')
-      for (const path of recents) seen.set(workspaceName(path), path)
-    } catch {
-      /* storage unavailable */
-    }
+    for (const path of loadRecentWorkspaces()) seen.set(workspaceName(path), path)
     return [...seen.entries()] // [name, path]
   }, [sessions])
   const thisMachine = (machines ?? []).find((m) => m.machine.this_machine)

@@ -7,6 +7,7 @@ import { X } from '@phosphor-icons/react'
 import PickerMenu from './PickerMenu.jsx'
 import { useConsole } from './state/console.jsx'
 import { canPickFolder, pickFolder } from './pick-folder.js'
+import { loadRecentWorkspaces } from './settings.js'
 import './devices.css'
 import './automations.css'
 
@@ -339,10 +340,5 @@ export default function AutomationForm({ rule, onClose }) {
 }
 
 function defaultWorkspace() {
-  try {
-    const recents = JSON.parse(localStorage.getItem('openremote-recent-workspaces') ?? '[]')
-    return Array.isArray(recents) && recents[0] ? recents[0] : ''
-  } catch {
-    return ''
-  }
+  return loadRecentWorkspaces()[0] ?? ''
 }

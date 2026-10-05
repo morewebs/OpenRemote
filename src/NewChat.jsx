@@ -6,6 +6,7 @@ import SignInModal from './SignInModal.jsx'
 import { useConsole } from './state/console.jsx'
 import { harnessName } from './harness-names.js'
 import { loadDefaults } from './defaults.js'
+import { loadRecentWorkspaces, pushRecentWorkspace } from './settings.js'
 import { canPickFolder, pickFolder } from './pick-folder.js'
 import './newchat.css'
 import './composer.css'
@@ -15,30 +16,11 @@ import './composer.css'
 // honest words.
 const SIGNIN_HARNESSES = new Set(['claude', 'codex', 'grok'])
 
-const RECENTS_KEY = 'openremote-recent-workspaces'
-
-function loadRecents() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(RECENTS_KEY) ?? '[]')
-    return Array.isArray(raw) ? raw.filter((p) => typeof p === 'string').slice(0, 8) : []
-  } catch {
-    return []
-  }
-}
-
-function saveRecents(list) {
-  try {
-    localStorage.setItem(RECENTS_KEY, JSON.stringify(list.slice(0, 8)))
-  } catch {
-    /* storage unavailable */
-  }
-}
-
 export default function NewChat({ onOpen }) {
   const { connection, capabilities, sessions, chats, createChat, modelsFor } = useConsole()
   const [defaults] = useState(() => loadDefaults())
   const [text, setText] = useState('')
-  const [workspace, setWorkspace] = useState(() => defaults.workspace ?? loadRecents()[0] ?? null)
+  const [workspace, setWorkspace] = useState(() => defaults.workspace ?? loadRecentWorkspaces()[0] ?? null)
   const [picker, setPicker] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -99,7 +81,7 @@ export default function NewChat({ onOpen }) {
     resolvedDefault && currentHarness?.default_effort
       ? `${resolvedDefault} · ${currentHarness.default_effort}`
       : resolvedDefault
-  const recents = loadRecents()
+  const recents = loadRecentWorkspaces()
   const active = workspace ?? ''
   const inProgress = (sessions ?? []).filter((s) => ['starting', 'working', 'waiting'].includes(s.status))
 
@@ -111,7 +93,7 @@ export default function NewChat({ onOpen }) {
     setError(null)
     try {
       const id = await createChat(text.trim(), workspace, currentHarness.id, model ?? undefined, fast || undefined)
-      saveRecents([workspace, ...recents.filter((p) => p !== workspace)])
+      pushRecentWorkspace(workspace)
       setText('')
       onOpen(id)
     } catch (err) {
@@ -126,7 +108,7 @@ export default function NewChat({ onOpen }) {
     const path = await pickFolder()
     if (!path) return
     setWorkspace(path)
-    saveRecents([path, ...recents.filter((p) => p !== path)])
+    pushRecentWorkspace(path)
   }
 
   return (

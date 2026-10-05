@@ -5,19 +5,19 @@ import PickerMenu from './PickerMenu.jsx'
 import { useConsole } from './state/console.jsx'
 import { harnessName } from './harness-names.js'
 import { loadDefaults, saveDefaults } from './defaults.js'
+import {
+  loadPrefs,
+  savePrefs,
+  applyReduceMotion,
+  loadRecentWorkspaces,
+  pushRecentWorkspace,
+} from './settings.js'
+import { canPickFolder, pickFolder } from './pick-folder.js'
+import { version } from '../package.json'
 import { X } from '@phosphor-icons/react'
 import './devices.css'
 import './panels.css'
 import './settingsmodal.css'
-
-function loadRecentWorkspaces() {
-  try {
-    const raw = JSON.parse(localStorage.getItem('openremote-recent-workspaces') ?? '[]')
-    return Array.isArray(raw) ? raw.filter((p) => typeof p === 'string') : []
-  } catch {
-    return []
-  }
-}
 
 // The harnesses whose own login command the daemon can relay - the
 // Sign-in action renders only there (no dead UI elsewhere).
@@ -63,13 +63,16 @@ export default function SettingsModal({ onReplay, onClose }) {
 
   const openPicker = (kind) => (e) => setPicker({ kind, x: e.clientX, y: e.clientY })
 
-  const [reduceMotion, setReduceMotion] = useState(() => {
-    try {
-      return localStorage.getItem('openremote-reduce-motion') === '1'
-    } catch {
-      return false
-    }
-  })
+  // A fresh folder is one dialog away even when recents are empty -
+  // the row never hides.
+  const browse = async () => {
+    const path = await pickFolder()
+    if (!path) return
+    pushRecentWorkspace(path)
+    set({ workspace: path })
+  }
+
+  const [reduceMotion, setReduceMotion] = useState(() => loadPrefs().reduce_motion)
   const [confirmDisconnect, setConfirmDisconnect] = useState(false)
 
   useEffect(() => {
@@ -82,12 +85,8 @@ export default function SettingsModal({ onReplay, onClose }) {
 
   const setReduce = (value) => {
     setReduceMotion(value)
-    try {
-      localStorage.setItem('openremote-reduce-motion', value ? '1' : '0')
-    } catch {
-      /* storage unavailable */
-    }
-    document.documentElement.toggleAttribute('data-reduce-motion', value)
+    savePrefs({ reduce_motion: value })
+    applyReduceMotion(document, value)
   }
 
   return (
@@ -178,16 +177,22 @@ export default function SettingsModal({ onReplay, onClose }) {
             )}
           </div>
         )}
-        {recents.length > 0 && (
-          <div className="pn-row">
-            <div>
-              <div className="pn-name">Workspace</div>
-              <div className="pn-detail">The folder a new task works in.</div>
-            </div>
+        <div className="pn-row">
+          <div>
+            <div className="pn-name">Workspace</div>
+            <div className="pn-detail">The folder a new task works in.</div>
+          </div>
+          <div className="pn-actions">
+            {canPickFolder && (
+              <button type="button" className="pn-btn" onClick={browse}>
+                Browse
+              </button>
+            )}
             <button
               type="button"
               className="pn-btn"
-              onClick={openPicker('workspace')}
+              onClick={recents.length ? openPicker('workspace') : canPickFolder ? browse : undefined}
+              disabled={!recents.length && !canPickFolder}
               aria-haspopup="listbox"
               aria-expanded={picker?.kind === 'workspace'}
             >
@@ -213,7 +218,7 @@ export default function SettingsModal({ onReplay, onClose }) {
               />
             )}
           </div>
-        )}
+        </div>
       </div>
 
       <h2 className="pn-section">Daemon</h2>
@@ -274,7 +279,7 @@ export default function SettingsModal({ onReplay, onClose }) {
       <div className="pn-list pn-list--tight">
         <div className="pn-row">
           <div>
-            <div className="pn-name">OpenRemote 0.1.0</div>
+            <div className="pn-name">OpenRemote {version}</div>
             <div className="pn-detail">Daemon {capabilities?.daemon ?? '-'} · the parity build</div>
           </div>
           <button type="button" className="pn-btn" onClick={() => setAbout(true)}>About</button>
