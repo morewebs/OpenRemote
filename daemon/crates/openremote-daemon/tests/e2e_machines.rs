@@ -8,6 +8,23 @@ mod common;
 use common::*;
 use serde_json::json;
 
+/// The store's slug, mirrored: lowercase alphanumeric, runs of other
+/// characters as single dashes, trimmed at both ends.
+fn slugify(name: &str) -> String {
+    let mut out = String::new();
+    let mut dash = false;
+    for c in name.trim().chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+            dash = false;
+        } else if !dash && !out.is_empty() {
+            out.push('-');
+            dash = true;
+        }
+    }
+    out.trim_end_matches('-').to_string()
+}
+
 fn this_machine(machines: &serde_json::Value) -> serde_json::Value {
     machines
         .as_array()
@@ -35,13 +52,17 @@ async fn this_machine_is_real_from_the_first_boot() {
     let machine = &view["machine"];
     assert_eq!(machine["status"], "online");
     assert_eq!(machine["platform"], std::env::consts::OS);
+    // The name is the hostname, derived the daemon's way: COMPUTERNAME,
+    // then HOSTNAME, then the fallback - slugified. The test env differs
+    // per OS (CI runners set HOSTNAME, not COMPUTERNAME), so mirror the
+    // chain instead of assuming one variable.
+    let raw_name = std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "this-computer".to_string());
     assert_eq!(
         machine["name"],
-        json!(
-            std::env::var("COMPUTERNAME")
-                .unwrap_or_default()
-                .to_lowercase()
-        )
+        json!(slugify(&raw_name)),
+        "raw name: {raw_name}"
     );
 
     // The inventory is the daemon's own probe: every slot fixture-backed.
@@ -232,7 +253,11 @@ async fn an_install_materializes_the_harness_on_this_machine() {
     // at a path that doesn't exist yet (authoritative, so codex starts
     // honestly missing) and the install command is a script that
     // materializes the harness at that path - exactly what a real npm
-    // install does to the resolver's layout.
+    // install does to the resolver's layout. Every other harness slot
+    // points at the fixture, so the machine starts honestly "installed"
+    // everywhere but codex - the installable list is then codex alone on
+    // any machine, not just one where the other harnesses happen to be
+    // installed.
     let dir = tempfile::tempdir().expect("temp dir");
     let staged = dir.path().join("codex.exe");
     let fixture = fixture_agent();
@@ -242,8 +267,14 @@ async fn an_install_materializes_the_harness_on_this_machine() {
         "import { copyFileSync } from 'node:fs'; copyFileSync(process.argv[2], process.argv[3]);",
     )
     .expect("write copy script");
+    let fixture_str = fixture.display().to_string();
     let daemon = spawn_daemon_process(&[
         ("OPENREMOTE_CODEX_PATH", staged.display().to_string()),
+        ("OPENREMOTE_CLAUDE_PATH", fixture_str.clone()),
+        ("OPENREMOTE_GROK_PATH", fixture_str.clone()),
+        ("OPENREMOTE_PI_PATH", fixture_str.clone()),
+        ("OPENREMOTE_OPENCODE_PATH", fixture_str.clone()),
+        ("OPENREMOTE_AGY_PATH", fixture_str.clone()),
         (
             "OPENREMOTE_INSTALL_NPM_CMD",
             format!(
