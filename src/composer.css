@@ -45,6 +45,9 @@
   width: 100%;
   height: 100%;
   display: block;
+  /* optical balancing: solid-ink marks scale down, airy marks scale up,
+     so the ink reads equal across the set */
+  transform: scale(var(--mark-scale, 1));
 }
 
 .nc-via {

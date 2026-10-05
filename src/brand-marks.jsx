@@ -116,25 +116,32 @@ export function AntigravityMark() {
   )
 }
 
-// The registry: harness id -> its real mark. This is the one map the
-// whole console uses; there are no fallback glyphs anymore.
+// The registry: harness id -> its real mark, plus an optical size
+// factor. The boxes are equal; the ink is not - solid-ink marks (pi's
+// blocks, the hexapod) read bigger than airy ones (Antigravity's wave,
+// the asterisk's strokes) at the same box. The factor scales the mark
+// inside its box so the ink lands visually equal across the set; it is
+// optical balancing only, never a redraw.
 const MARKS = {
-  claude: ClaudeMark,
-  codex: CodexMark,
-  grok: GrokMark,
-  pi: PiMark,
-  opencode: OpencodeMark,
-  agy: AntigravityMark,
+  claude: { M: ClaudeMark, optical: 1 },
+  codex: { M: CodexMark, optical: 0.94 },
+  grok: { M: GrokMark, optical: 1 },
+  pi: { M: PiMark, optical: 0.9 },
+  opencode: { M: OpencodeMark, optical: 1 },
+  agy: { M: AntigravityMark, optical: 1.08 },
 }
 
 // Renders a harness's brand mark at the given size, or null for an
 // unknown id.
 export function HarnessMark({ harness, size = 14 }) {
-  const M = MARKS[harness]
-  if (!M) return null
+  const mark = MARKS[harness]
+  if (!mark) return null
   return (
-    <span className="brand-mark-box" style={{ width: size, height: size }}>
-      <M />
+    <span
+      className="brand-mark-box"
+      style={{ width: size, height: size, '--mark-scale': mark.optical }}
+    >
+      <mark.M />
     </span>
   )
 }
