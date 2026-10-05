@@ -74,6 +74,9 @@ spacing.
 - **Sidebar (264px, collapsible):** mode switch (Local/Cloud), New chat tile,
   search, then nav tiles; chats grouped by project with collapse carets and
   status dots; Settings pinned in the footer.
+- **Settings is a view, not a popup:** a slim section rail on the left
+  (New tasks, Appearance, Startup, Daemon, Harnesses, This install), the
+  panel on the right. Phone width stacks the rail into a top scroller.
 - **Main canvas:** one view at a time; views are flat lists/cards, not
   dashboards.
 
@@ -94,7 +97,8 @@ spacing.
 - **Context ring:** a 20px SVG donut of context-window usage, hover card with
   used/remaining/auto-compact rows.
 - **Reduce motion:** a first-class setting (`data-reduce-motion` attr) kills
-  the breathe and update animations.
+  the breathe and update animations; the preference is applied before
+  first paint at boot, not just carried within a session.
 
 ## Motion
 
@@ -168,11 +172,15 @@ Every screen the design specifies, backed by the real daemon:
   machine's own clock, a webhook with its own key), Run now, the form,
   and the everywhere-pill (the keyword parser,
   the rule-draft action card, honest refusals for connector-only kinds).
-- **Settings** - new-task defaults (harness/model/workspace), the daemon
-  connection, the harness list, reduce-motion (carried into every
-  restored view), first-run replay.
+- **Settings** - a view (section rail), not a popup: new-task defaults
+  (harness/model/workspace, per-harness effort tier in the harness's own
+  words), appearance (compact density; the dark theme is contract), startup
+  (launch at login, reopen last view vs New chat), the daemon connection
+  (port, version, data dir, restart, two-step Forget), the harness list,
+  reduce-motion (restored before first paint), first-run replay.
 
 Deferred with the map's tickets: remote-machine check-in + relay + cloud
 placement, the connector triggers (pipeline/errors/review/release), the
 agent behind the pill, the updater, per-chat model/effort switching,
-claude's context window (no wire fact yet), grok/pi/opencode/agy MCP wires.
+claude's context window (no wire fact yet), grok/pi/opencode/agy MCP wires,
+per-harness approval-mode defaults (no daemon-side vocabulary surface yet).
