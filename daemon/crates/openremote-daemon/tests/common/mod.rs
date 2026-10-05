@@ -307,6 +307,14 @@ pub fn dump(events: &[(u64, Value)]) -> String {
 
 /// Collect until the event kinds match the expected suffix, then return
 /// everything seen (diagnostics keep the full trace).
+///
+/// The match steps over incidental `session.updated` events: the
+/// harness's model echo and settings fold ride as session.updated
+/// whenever the driver reports them (mid-turn, timing loose from the
+/// message stream), so an exact-suffix match races them on a loaded
+/// runner. Positional expectations (codex's tool grant) list their own
+/// session.updated and still hold - a match is always preferred over
+/// stepping over one.
 pub async fn until_kinds(daemon: &TestDaemon, path: &str, wanted: &[&str]) -> Vec<(u64, Value)> {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
     let mut seen: Vec<(u64, Value)> = Vec::new();
@@ -314,7 +322,7 @@ pub async fn until_kinds(daemon: &TestDaemon, path: &str, wanted: &[&str]) -> Ve
         let need = seen.len() + 1;
         let batch = sse_collect(daemon, path, need).await;
         let kinds: Vec<String> = batch.iter().map(|(_, p)| kind(p)).collect();
-        if kinds.ends_with(&wanted.iter().map(|s| s.to_string()).collect::<Vec<_>>()) {
+        if suffix_with_slack(&kinds, wanted) {
             return batch;
         }
         if batch.len() == seen.len() {
@@ -333,6 +341,29 @@ pub async fn until_kinds(daemon: &TestDaemon, path: &str, wanted: &[&str]) -> Ve
         "timed out waiting for {wanted:?}; last seen:\n{}",
         dump(&seen)
     );
+}
+
+/// Whether `kinds` ends with `wanted`, stepping over any incidental
+/// `session.updated` in the matched window.
+fn suffix_with_slack(kinds: &[String], wanted: &[&str]) -> bool {
+    // Walk both ends, matching from the tail; an unmatched
+    // session.updated in `kinds` is stepped over, everything else fails.
+    let mut ki = kinds.len();
+    let mut wi = wanted.len();
+    while wi > 0 {
+        if ki == 0 {
+            return false;
+        }
+        if kinds[ki - 1] == wanted[wi - 1] {
+            ki -= 1;
+            wi -= 1;
+        } else if kinds[ki - 1] == "session.updated" {
+            ki -= 1;
+        } else {
+            return false;
+        }
+    }
+    true
 }
 
 /// Wait until the stream holds at least `count` events of one kind - for
