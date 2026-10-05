@@ -804,9 +804,8 @@ async fn an_effort_default_rides_the_session_record_verbatim() {
     )
     .await;
     assert_eq!(plain.status, 201, "raw: {}", plain.raw);
-    assert_eq!(
+    assert!(
         plain.body["effort"].is_null(),
-        true,
         "no effort imposed; raw: {}",
         plain.raw
     );
