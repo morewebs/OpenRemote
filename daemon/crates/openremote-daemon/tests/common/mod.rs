@@ -103,13 +103,25 @@ pub async fn spawn_daemon_process(extra_env: &[(&str, String)]) -> TestDaemon {
     let stdout = child.stdout.take().expect("daemon stdout piped");
     let stdin = child.stdin.take();
 
-    // The binary announces itself: `READY 127.0.0.1:<port>`.
+    // The binary announces itself: `READY 127.0.0.1:<port>`, then
+    // `DATA_DIR <path>`. Read the second line too - dropping the stdout
+    // reader with the pipe still holding unread output is what kills the
+    // daemon (the next println! hits EPIPE and panics the process), the
+    // ConnectionReset the spawn tests intermittently died of.
     use std::io::BufRead;
     let mut addr = None;
-    for line in std::io::BufReader::new(stdout).lines() {
+    let mut lines = std::io::BufReader::new(stdout).lines();
+    for line in lines.by_ref() {
         let line = line.expect("daemon stdout");
         if let Some(rest) = line.strip_prefix("READY ") {
             addr = rest.parse::<std::net::SocketAddr>().ok();
+            break;
+        }
+    }
+    for _ in 0..2 {
+        // Drain the DATA_DIR line (and the eprintln's token note if it
+        // ever moves to stdout): empty the pipe before the reader drops.
+        if lines.next().is_none() {
             break;
         }
     }
