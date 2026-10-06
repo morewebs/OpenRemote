@@ -157,3 +157,39 @@
   font-size: 12.5px;
   text-align: center;
 }
+
+/* The pinned footer row: stays visible while the item list scrolls,
+   and in the empty state it is the one affordance left. */
+.nc-footer {
+  flex: none;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.nc-footer button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: default;
+  text-align: left;
+}
+
+.nc-footer button:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-1);
+}
+
+.nc-footer button:focus-visible {
+  outline: 1px solid var(--accent);
+  color: var(--text-1);
+}

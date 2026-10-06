@@ -20,6 +20,7 @@ export default function PickerMenu({
   renderTrailing,
   renderSubline, // a muted second line inside the item (efforts, paths)
   wide, // room for sublines without cramped trailing text
+  footer, // a pinned action row under the list; renders in the empty state too
 }) {
   const [query, setQuery] = useState('')
   const [cursor, setCursor] = useState(0)
@@ -73,12 +74,18 @@ export default function PickerMenu({
     ref.current?.querySelector('.nc-item.cursor')?.scrollIntoView({ block: 'nearest' })
   }, [cursor])
 
+  // Keys are handled at the menu root, not on the search input: Tab can
+  // move focus to the footer row, and Escape / arrows / Enter keep
+  // working from wherever focus sits inside the menu. Enter on a
+  // focused footer button is its own native click - the item Enter
+  // here only fires when the input still holds focus.
   const onKeyDown = (e) => {
     if (e.key === 'Escape') {
       e.stopPropagation()
       onClose()
       return
     }
+    if (e.target !== searchRef.current) return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       setCursor((c) => Math.min(filtered.length - 1, c + 1))
@@ -106,6 +113,15 @@ export default function PickerMenu({
 
   let flatIndex = -1
 
+  // The empty state reads differently by cause: a search that found
+  // nothing names the query; a list with nothing in it yet says so
+  // plainly ("no harnesses yet" is the moment the footer row carries
+  // the action).
+  const plural = (word) => word.toLowerCase() + (word.endsWith('s') ? 'es' : 's')
+  const emptyLine = query.trim()
+    ? `No ${plural(label)} match "${query}"`
+    : `No ${plural(label)} yet`
+
   return (
     <div
       ref={ref}
@@ -113,6 +129,7 @@ export default function PickerMenu({
       role="listbox"
       aria-label={label}
       style={anchor}
+      onKeyDown={onKeyDown}
     >
       <label className="nc-search">
         <MagnifyingGlass size={13} />
@@ -123,7 +140,6 @@ export default function PickerMenu({
             setQuery(e.target.value)
             setCursor(0)
           }}
-          onKeyDown={onKeyDown}
           placeholder={searchPlaceholder}
           spellCheck={false}
         />
@@ -163,10 +179,9 @@ export default function PickerMenu({
             })}
           </div>
         ))}
-        {filtered.length === 0 && (
-          <div className="nc-empty">No {label.toLowerCase()}s match "{query}"</div>
-        )}
+        {filtered.length === 0 && <div className="nc-empty">{emptyLine}</div>}
       </div>
+      {footer && <div className="nc-footer">{footer}</div>}
     </div>
   )
 }
