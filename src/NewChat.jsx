@@ -3,6 +3,7 @@ import { ArrowUp, House, FolderOpen, Lightning } from '@phosphor-icons/react'
 import PickerMenu from './PickerMenu.jsx'
 import { HarnessMark } from './brand-marks.jsx'
 import SignInModal from './SignInModal.jsx'
+import HarnessManagerModal from './HarnessManagerModal.jsx'
 import { useConsole } from './state/console.jsx'
 import { harnessName } from './harness-names.js'
 import { loadDefaults } from './defaults.js'
@@ -30,6 +31,7 @@ export default function NewChat({ onOpen }) {
   const [modelsPending, setModelsPending] = useState(true)
   const [fast, setFast] = useState(false)
   const [signInFor, setSignInFor] = useState(null)
+  const [managingHarnesses, setManagingHarnesses] = useState(false)
 
   // Only what the daemon reports installed - no dead UI.
   const available = (capabilities?.harnesses ?? []).filter((h) => h.available)
@@ -267,6 +269,20 @@ export default function NewChat({ onOpen }) {
                 }}
                 onClose={() => setPicker(null)}
                 anchor={{ left: picker.x, top: picker.y }}
+                footer={
+                  // The way in to the harness manager - the only row in
+                  // the empty state, and the honest answer when the list
+                  // is missing something.
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPicker(null)
+                      setManagingHarnesses(true)
+                    }}
+                  >
+                    Manage harnesses…
+                  </button>
+                }
               />
             )}
             {currentHarness?.fast_supported && (
@@ -347,6 +363,7 @@ export default function NewChat({ onOpen }) {
             onDone={() => setSignInFor(null)}
           />
         )}
+        {managingHarnesses && <HarnessManagerModal onClose={() => setManagingHarnesses(false)} />}
         {inProgress.length > 0 && (
           <div className="nc-resume">
             <div className="nc-resume-label">In progress</div>
