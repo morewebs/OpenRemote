@@ -175,7 +175,8 @@ export default function SettingsView({ onReplay }) {
     }
   }
 
-  // The shell restart: this side is a single invoke; the console heals; the console heals
+  // The shell restart: this side is a single invoke; the console heals
+  const [restarting, setRestarting] = useState(false)
   const restartDaemon = async () => {
     if (!hasTauri || restarting) return
     setRestarting(true)
