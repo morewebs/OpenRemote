@@ -1,0 +1,58 @@
+/* Cloud's notices: thin rows across the top of the main area - a 1px line,
+   no fill, no shadow, the same quiet language as the facts rows. */
+
+.cn-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 24px 0;
+}
+
+.cn-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.cn-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.cn-btn {
+  flex: none;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: default;
+}
+
+.cn-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+/* amber marks the primary interaction (DESIGN.md) - no fill, no shadow */
+.cn-btn.primary {
+  border-color: rgba(220, 162, 75, 0.45);
+  color: var(--accent);
+}
+
+@media (max-width: 639px) {
+  .cn-stack {
+    padding: 10px 16px 0;
+  }
+
+  .cn-row {
+    flex-wrap: wrap;
+  }
+}

@@ -61,3 +61,24 @@ export function machinePickerItems(devices, thisDevice) {
     ...machines.map((d) => ({ id: d.id, name: d.name, online: Boolean(d.online), platform: d.platform })),
   ]
 }
+
+/**
+ * Devices that joined the account since this computer last looked. With
+ * zero-touch sign-in any login adds a device, so every new one is shown
+ * once with a "Not you?" - the user's check on their own account. The
+ * first look records a baseline instead of flagging everything.
+ */
+export function newDevices(devices, known, thisDevice) {
+  if (!known) return []
+  const seen = new Set(known)
+  return (devices ?? []).filter((d) => d.id !== thisDevice && !seen.has(d.id))
+}
+
+/**
+ * Whether this computer just became a machine from another device: it was
+ * a desktop when last seen here, it's a machine now, and the change wasn't
+ * made from this console.
+ */
+export function madeMachineElsewhere(kind, lastKind, setHere) {
+  return kind === 'machine' && lastKind === 'desktop' && setHere !== 'machine'
+}

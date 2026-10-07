@@ -11,6 +11,7 @@ import AutomationsView from './AutomationsView.jsx'
 import MachinesView from './MachinesView.jsx'
 import { ConsoleProvider, useConsole } from './state/console.jsx'
 import { needsSignIn } from './cloud.js'
+import CloudNotices from './CloudNotices.jsx'
 
 const OB_KEY = 'openremote-onboarded'
 const STORE_KEY = 'openremote-view-state'
@@ -196,6 +197,7 @@ function Shell() {
             onSelect={openSession}
           />
           <main className="main">
+            <CloudNotices />
             {view === 'settings' ? (
               <SettingsView onReplay={replayOnboarding} />
             ) : mode === 'cloud' && needsSignIn(cloud) ? (

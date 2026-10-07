@@ -386,9 +386,17 @@ export function ConsoleProvider({ children }) {
   const setDeviceKind = useCallback(
     async (id, kind) => {
       await api.setDeviceKind(id, kind)
+      // A change made from here isn't news here (the notices skip it).
+      if (id === cloud?.device?.id) {
+        try {
+          localStorage.setItem(`openremote-kind-set-here:${id}`, JSON.stringify(kind))
+        } catch {
+          /* storage unavailable */
+        }
+      }
       await refreshCloud()
     },
-    [api, refreshCloud],
+    [api, refreshCloud, cloud],
   )
 
   const removeDevice = useCallback(

@@ -816,7 +816,9 @@ html[data-reduce-motion] .dv-agent-dot {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 18px;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 24px;
   padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius);

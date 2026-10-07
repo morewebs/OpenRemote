@@ -58,6 +58,8 @@ button {
   flex: 1;
   min-width: 0;
   display: flex;
+  /* a column, so Cloud's notices sit above whichever view is open */
+  flex-direction: column;
   background: var(--bg-app);
 }
 

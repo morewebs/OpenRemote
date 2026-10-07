@@ -40,3 +40,16 @@ test('new Cloud chats can run here or on a machine, online machines first', () =
   assert.equal(items[2].online, false)
   assert.deepEqual(machinePickerItems([], me).map((i) => i.name), ['This computer'])
 })
+
+test('new devices are flagged once, after a baseline', async () => {
+  const { newDevices, madeMachineElsewhere } = await import('./cloud.js')
+  assert.deepEqual(newDevices(devices, null, me), [], 'no baseline yet: nothing flagged')
+  const known = devices.map((d) => d.id)
+  assert.deepEqual(newDevices(devices, known, me), [])
+  const joined = [...devices, { id: 'dev-new', name: 'stranger', kind: 'desktop', online: true }]
+  assert.deepEqual(newDevices(joined, known, me).map((d) => d.name), ['stranger'])
+  assert.equal(madeMachineElsewhere('machine', 'desktop', null), true)
+  assert.equal(madeMachineElsewhere('machine', 'desktop', 'machine'), false, 'made a machine here')
+  assert.equal(madeMachineElsewhere('machine', 'machine', null), false)
+  assert.equal(madeMachineElsewhere('desktop', 'desktop', null), false)
+})
