@@ -148,11 +148,14 @@ export class DaemonApi {
     return this.call('DELETE', `/machines/${id}?request_id=${encodeURIComponent(newRequestId())}`)
   }
 
-  // The long one: npm runs minutes - the receipt carries the wait.
-  installHarness(machineId, harnessId) {
+  // The long one: an installer runs minutes - the receipt carries the
+  // wait. `withRuntime` is the human's go-ahead to set up a runtime the
+  // harness needs (pi's Node.js); the daemon never assumes it.
+  installHarness(machineId, harnessId, { withRuntime = false } = {}) {
     return this.call('POST', `/machines/${machineId}/harnesses`, {
       request_id: newRequestId(),
       harness: harnessId,
+      with_runtime: withRuntime,
     })
   }
 

@@ -742,6 +742,43 @@
   white-space: normal;
 }
 
+/* an installer's own last words, scrollable - they are its output, mono */
+.dv-hm-error pre {
+  overflow: auto;
+  max-height: 160px;
+  margin: 0;
+  font-family: var(--font-mono, 'Geist Mono', ui-monospace, Consolas, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* the runtime go-ahead stacks over the manager: one dim is enough */
+.dv-hm-stack {
+  z-index: 101;
+  background: transparent;
+}
+
+.dv-hm-confirm {
+  width: 380px;
+}
+
+.dv-hm-confirm .dv-hm-detail {
+  margin-top: 10px;
+}
+
+/* amber marks the primary interaction (DESIGN.md) - no fill, no shadow */
+.dv-act.primary {
+  border-color: rgba(220, 162, 75, 0.45);
+  color: var(--accent);
+}
+
+.dv-act.primary:hover {
+  background: rgba(220, 162, 75, 0.08);
+  color: var(--accent);
+}
+
 /* phone width: the grid collapses to a single column and the modal fills
    the sheet - machines are first-class on small screens too. */
 @media (max-width: 639px) {

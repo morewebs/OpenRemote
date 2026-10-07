@@ -1,8 +1,8 @@
 // The harness manager: the inventory of all six harnesses on this
-// machine, installed or not. The installed rows carry the daemon's own
-// probe words (version, path, sign-in status); the missing ones either
-// install through npm right here or say the honest truth about their
-// own installer. Opened from the harness picker's footer row.
+// machine, installed or not. Installed rows carry the daemon's own probe
+// words (version, path, sign-in status); missing ones install right here
+// through their owner's own installer, shown verbatim. Opened from the
+// harness picker's footer row.
 
 import { useEffect, useState } from 'react'
 import { X } from '@phosphor-icons/react'
@@ -11,38 +11,47 @@ import { HarnessMark } from './brand-marks.jsx'
 import { harnessRows } from './harness-manager.js'
 import './devices.css'
 
-export default function HarnessManagerModal({ onClose }) {
+export default function HarnessManagerModal({ onClose, onSignIn }) {
   const { capabilities, machines, installHarness } = useConsole()
   const [busy, setBusy] = useState(null)
   const [error, setError] = useState(null)
+  // The harness waiting on the runtime go-ahead (pi and its Node.js).
+  const [confirming, setConfirming] = useState(null)
 
   // The install specs live on this machine's own view - the daemon's
-  // probe of where npm can land a CLI. Null while the machines list
-  // hasn't answered; the rows stay quiet about missing harnesses then.
+  // probe of what each owner's installer can land here. Null while the
+  // machines list hasn't answered; missing rows stay quiet then.
   const thisMachine = machines?.find((view) => view.machine?.this_machine) ?? null
   const rows = harnessRows(capabilities, thisMachine ? thisMachine.installable : null)
   const machineId = thisMachine?.machine?.id ?? null
 
+  // Esc closes the topmost layer only: the go-ahead first, then the
+  // manager.
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key !== 'Escape') return
+      if (confirming) setConfirming(null)
+      else onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, confirming])
 
-  const install = async (harnessId) => {
+  const install = async (harnessId, options) => {
     if (busy || !machineId) return
+    setConfirming(null)
     setBusy(harnessId)
     setError(null)
     try {
-      await installHarness(machineId, harnessId)
+      await installHarness(machineId, harnessId, options)
     } catch (err) {
-      setError(err.message ?? String(err))
+      setError({ harnessId, message: err.message ?? String(err) })
     } finally {
       setBusy(null)
     }
   }
+
+  const confirmRow = confirming && rows.find((row) => row.id === confirming)
 
   return (
     <div
@@ -59,8 +68,8 @@ export default function HarnessManagerModal({ onClose }) {
           </button>
         </div>
         <p className="dv-modal-hint">
-          What the daemon can drive on this machine. Install a harness&apos;s own CLI and it
-          appears here.
+          What the daemon can drive on this machine. Install runs each harness&apos;s own
+          installer, the command shown.
         </p>
         <div className="dv-hm-list">
           {rows.map((row) => (
@@ -72,33 +81,91 @@ export default function HarnessManagerModal({ onClose }) {
                 <div className="dv-hm-top">
                   <span className="dv-hm-name">{row.name}</span>
                   <span className={`dv-hm-status${row.ready ? ' ready' : ''}`}>
-                    {row.statusLabel}
+                    {busy === row.id ? 'Installing…' : row.statusLabel}
                   </span>
                 </div>
                 {row.detail &&
                   // Mono is for technical content (DESIGN.md): the
-                  // daemon's probe words and npm commands are mono, the
-                  // prose notes are plain text.
+                  // daemon's probe words and install commands are mono,
+                  // the prose notes are plain text.
                   (row.detailKind === 'mono' ? (
-                    <code className="dv-hm-detail">{row.detail}</code>
+                    <code className="dv-hm-detail" title={row.detail}>
+                      {row.detail}
+                    </code>
                   ) : (
                     <span className="dv-hm-detail dv-hm-note">{row.detail}</span>
                   ))}
+                {row.note && <span className="dv-hm-detail dv-hm-note">{row.note}</span>}
+                {error?.harnessId === row.id && (
+                  <div className="dv-error dv-hm-error">
+                    <pre>{error.message}</pre>
+                  </div>
+                )}
               </div>
-              {row.action === 'install' && (
+              {(row.action === 'install' || row.action === 'install-runtime') && (
                 <button
                   type="button"
                   className="dv-act"
                   disabled={busy != null}
-                  onClick={() => install(row.id)}
+                  onClick={() =>
+                    row.action === 'install-runtime' ? setConfirming(row.id) : install(row.id)
+                  }
                 >
                   {busy === row.id ? 'Installing…' : 'Install'}
+                </button>
+              )}
+              {row.action === 'signin' && onSignIn && (
+                <button type="button" className="dv-act" onClick={() => onSignIn(row.id)}>
+                  Sign in
                 </button>
               )}
             </div>
           ))}
         </div>
-        {error && <p className="dv-error">{error}</p>}
+      </div>
+
+      {confirmRow && (
+        <RuntimeConfirm
+          name={confirmRow.name}
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => install(confirmRow.id, { withRuntime: true })}
+        />
+      )}
+    </div>
+  )
+}
+
+// The go-ahead for pi's runtime. Matter-of-fact on purpose: setting up
+// Node.js is a normal part of installing pi (its own installer offers
+// the same step in a terminal), not a problem to warn about.
+function RuntimeConfirm({ name, onCancel, onConfirm }) {
+  return (
+    <div
+      className="dv-modal-backdrop dv-hm-stack"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onCancel()
+      }}
+    >
+      <div className="dv-modal dv-hm-confirm" role="dialog" aria-modal="true" aria-label={`Install ${name}`}>
+        <div className="dv-modal-head">
+          <h2 className="dv-modal-title">One more piece for {name}</h2>
+          <button className="dv-modal-close" onClick={onCancel} title="Close">
+            <X size={14} weight="bold" />
+          </button>
+        </div>
+        <p className="dv-modal-hint">
+          {name} runs on Node.js. OpenRemote will set up the official Node.js 22 for it, in{' '}
+          {name}&apos;s own folder - the same place {name}&apos;s installer puts it.
+        </p>
+        <code className="dv-hm-detail">nodejs.org/dist/latest-v22.x</code>
+        <div className="dv-actions">
+          <button type="button" className="dv-act primary" autoFocus onClick={onConfirm}>
+            Install {name}
+          </button>
+          <button type="button" className="dv-act" onClick={onCancel}>
+            Not now
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -6,6 +6,7 @@ import SignInModal from './SignInModal.jsx'
 import HarnessManagerModal from './HarnessManagerModal.jsx'
 import { useConsole } from './state/console.jsx'
 import { harnessName } from './harness-names.js'
+import { SIGNIN_HARNESSES } from './harness-manager.js'
 import { loadDefaults } from './defaults.js'
 import { loadRecentWorkspaces, pushRecentWorkspace } from './settings.js'
 import { canPickFolder, pickFolder } from './pick-folder.js'
@@ -15,7 +16,6 @@ import './composer.css'
 // The harnesses whose own login command the daemon can relay - the
 // sign-in prompt offers the relay only there; the others say their own
 // honest words.
-const SIGNIN_HARNESSES = new Set(['claude', 'codex', 'grok'])
 
 export default function NewChat({ onOpen }) {
   const { connection, capabilities, sessions, chats, createChat, modelsFor } = useConsole()
@@ -363,7 +363,15 @@ export default function NewChat({ onOpen }) {
             onDone={() => setSignInFor(null)}
           />
         )}
-        {managingHarnesses && <HarnessManagerModal onClose={() => setManagingHarnesses(false)} />}
+        {managingHarnesses && (
+          <HarnessManagerModal
+            onClose={() => setManagingHarnesses(false)}
+            onSignIn={(id) => {
+              setManagingHarnesses(false)
+              setSignInFor(id)
+            }}
+          />
+        )}
         {inProgress.length > 0 && (
           <div className="nc-resume">
             <div className="nc-resume-label">In progress</div>

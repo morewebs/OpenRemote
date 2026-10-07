@@ -4,6 +4,7 @@ import SignInModal from './SignInModal.jsx'
 import PickerMenu from './PickerMenu.jsx'
 import { useConsole } from './state/console.jsx'
 import { harnessName } from './harness-names.js'
+import { SIGNIN_HARNESSES } from './harness-manager.js'
 import { loadDefaults, saveDefaults } from './defaults.js'
 import {
   loadPrefs,
@@ -21,7 +22,6 @@ import './settings.css'
 
 // The harnesses whose own login command the daemon can relay - the
 // Sign-in action renders only there (no dead UI elsewhere).
-const SIGNIN_HARNESSES = new Set(['claude', 'codex', 'grok'])
 
 // The rail's contract: one anchor per section, in panel order. The ids
 // match the section elements, so the rail stays honest as sections

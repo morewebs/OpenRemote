@@ -390,13 +390,13 @@ export function ConsoleProvider({ children }) {
     [api, refreshMachines],
   )
 
-  // The long one - npm runs minutes. The receipt contract carries the
+  // The long one - an installer runs minutes. The receipt contract carries the
   // wait; a resolved promise means the harness landed on the machine.
   // Capabilities are re-read too: the picker, the settings list, and the
   // harness manager all read availability from there, not from machines.
   const installHarness = useCallback(
-    async (machineId, harnessId) => {
-      await api.installHarness(machineId, harnessId)
+    async (machineId, harnessId, options) => {
+      await api.installHarness(machineId, harnessId, options)
       await refreshMachines()
       await refreshCapabilities()
     },
