@@ -39,6 +39,9 @@ pub trait CloudHost: Send + Sync + 'static {
     fn note(&self, peer: PeerContext, note: Value);
     /// A link to `peer` just came up.
     fn linked(&self, peer: DeviceId);
+    /// `peer` is online (it just came online, or was when this device
+    /// connected).
+    fn online(&self, peer: DeviceId);
     /// This device was removed from the account.
     fn revoked(&self);
 }
@@ -771,10 +774,17 @@ async fn relay_session(
                                 mesh.set_online(&online);
                                 cloud.set_phase(Phase::Online, None);
                                 mesh.refresh.notify_one();
+                                for peer in online {
+                                    mesh.host.online(peer);
+                                }
                             }
                             Some("presence") => {
                                 if let Some(id) = control["device_id"].as_str().and_then(DeviceId::parse) {
-                                    mesh.presence(id, control["online"].as_bool().unwrap_or(false));
+                                    let online = control["online"].as_bool().unwrap_or(false);
+                                    mesh.presence(id, online);
+                                    if online {
+                                        mesh.host.online(id);
+                                    }
                                 }
                             }
                             Some("devices_changed") => mesh.refresh.notify_one(),

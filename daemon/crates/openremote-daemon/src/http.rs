@@ -45,6 +45,10 @@ pub fn router(app: Arc<App>) -> Router {
                 axum::extract::DefaultBodyLimit::max(openremote_cloud::rpc::MAX_REQUEST),
             ),
         )
+        .route_layer(middleware::from_fn_with_state(
+            Arc::clone(&app),
+            crate::cloud_http::forward_remote,
+        ))
         .layer(middleware::from_fn_with_state(Arc::clone(&app), auth));
     Router::new()
         .route("/healthz", get(healthz))
@@ -69,19 +73,37 @@ pub fn peer_router(app: Arc<App>) -> Router {
         .with_state(app)
 }
 
-/// What another of the user's devices may ask of this one, and only when
-/// this one is a machine. Plugins, automations, webhooks, receipts and
-/// Cloud itself never answer a peer.
-const PEER_ROUTES: &[(&str, &str)] = &[
-    ("GET", "/capabilities"),
-    ("GET", "/machines"),
-    ("GET", "/harnesses/{id}/models"),
-    ("GET", "/fs/dirs"),
-    ("POST", "/harnesses/{id}/signin"),
-    ("GET", "/harnesses/{id}/signin"),
-    ("POST", "/harnesses/{id}/signin/input"),
-    ("POST", "/harnesses/{id}/signin/stop"),
-    ("POST", "/machines/{id}/harnesses"),
+#[derive(Clone, Copy, PartialEq)]
+enum Tier {
+    /// Copying synced chats: any of the account's devices.
+    Sync,
+    /// Driving this computer: only when it is a machine.
+    Machine,
+    /// Acting on one chat: a machine, and the chat is synced and runs here.
+    Chat,
+}
+
+/// What another of the user's devices may ask of this one. Plugins,
+/// automations, webhooks, receipts and Cloud itself never answer a peer.
+const PEER_ROUTES: &[(&str, &str, Tier)] = &[
+    ("GET", "/sync/summary", Tier::Sync),
+    ("GET", "/sync/sessions/{id}/events", Tier::Sync),
+    ("GET", "/capabilities", Tier::Machine),
+    ("GET", "/machines", Tier::Machine),
+    ("GET", "/harnesses/{id}/models", Tier::Machine),
+    ("GET", "/fs/dirs", Tier::Machine),
+    ("POST", "/harnesses/{id}/signin", Tier::Machine),
+    ("GET", "/harnesses/{id}/signin", Tier::Machine),
+    ("POST", "/harnesses/{id}/signin/input", Tier::Machine),
+    ("POST", "/harnesses/{id}/signin/stop", Tier::Machine),
+    ("POST", "/machines/{id}/harnesses", Tier::Machine),
+    ("POST", "/sessions", Tier::Machine),
+    ("POST", "/sessions/{id}/prompts", Tier::Chat),
+    ("POST", "/sessions/{id}/settings", Tier::Chat),
+    ("POST", "/sessions/{id}/interrupt", Tier::Chat),
+    ("POST", "/sessions/{id}/stop", Tier::Chat),
+    ("POST", "/sessions/{id}/resume", Tier::Chat),
+    ("POST", "/decisions/{id}/answer", Tier::Chat),
 ];
 
 async fn peer_gate(
@@ -92,8 +114,14 @@ async fn peer_gate(
 ) -> Response {
     let path = matched.as_ref().map(|m| m.as_str()).unwrap_or_default();
     let method = request.method().as_str();
-    if !PEER_ROUTES.iter().any(|(m, p)| *m == method && *p == path) {
+    let Some((_, _, tier)) = PEER_ROUTES
+        .iter()
+        .find(|(m, p, _)| *m == method && *p == path)
+    else {
         return error(StatusCode::FORBIDDEN, "not available to your other devices");
+    };
+    if *tier == Tier::Sync {
+        return next.run(request).await;
     }
     // A desktop that isn't a machine only ever syncs; nobody else drives it.
     if !app.cloud.mesh().is_some_and(|m| m.kind() == "machine") {
@@ -103,6 +131,24 @@ async fn peer_gate(
         )
             .into_response();
     }
+    if *tier == Tier::Chat {
+        let id = request.uri().path().split('/').nth(2).unwrap_or_default();
+        let synced_here = {
+            let store = app.store.lock().expect("store lock");
+            let session = if path.starts_with("/decisions/") {
+                DecisionId::parse(id)
+                    .and_then(|d| store.decision(&d).ok().map(|d| d.session_id))
+                    .and_then(|s| store.session(&s).ok())
+            } else {
+                SessionId::parse(id).and_then(|s| store.session(&s).ok())
+            };
+            session.is_some_and(|s| s.executor.is_some() && store.executes_here(s))
+        };
+        // Private chats are invisible to peers: the same answer as none.
+        if !synced_here {
+            return error(StatusCode::NOT_FOUND, "no such chat here");
+        }
+    }
     next.run(request).await
 }
 
@@ -111,6 +157,8 @@ fn api_routes() -> Router<Arc<App>> {
     Router::new()
         .route("/capabilities", get(capabilities))
         .route("/fs/dirs", get(fs_dirs))
+        .route("/sync/summary", get(sync_summary))
+        .route("/sync/sessions/{id}/events", get(sync_range))
         .route("/harnesses/{id}/models", get(harness_models))
         .route(
             "/harnesses/{id}/signin",
@@ -131,7 +179,7 @@ fn api_routes() -> Router<Arc<App>> {
         .route("/automations/{id}/enabled", post(set_rule_enabled))
         .route("/automations/{id}/run", post(run_rule))
         .route("/sessions", get(list_sessions).post(create_session))
-        .route("/sessions/{id}", get(get_session))
+        .route("/sessions/{id}", get(get_session).delete(delete_session))
         .route("/sessions/{id}/events", get(session_events))
         .route("/sessions/{id}/decisions", get(list_decisions))
         .route("/sessions/{id}/prompts", post(post_prompt))
@@ -978,15 +1026,48 @@ struct CreateSessionBody {
     /// tier `fast`).
     #[serde(default)]
     fast: bool,
+    /// Cloud: run the chat on another of the user's devices.
+    #[serde(default)]
+    pub(crate) device_id: Option<String>,
+    /// Cloud: sync the chat to the user's other devices.
+    #[serde(default)]
+    synced: bool,
 }
 
 async fn create_session(
     State(app): State<Arc<App>>,
+    peer: Option<axum::Extension<crate::host::PeerOrigin>>,
     Json(body): Json<CreateSessionBody>,
 ) -> Response {
     if let Some(receipt) = app.supervisor.receipt(&body.request_id) {
         return receipt_response(&receipt);
     }
+    let me = app.cloud.device_id();
+    let target = body
+        .device_id
+        .as_deref()
+        .and_then(openremote_core::DeviceId::parse);
+    if let Some(device) = target.filter(|d| Some(*d) != me) {
+        if peer.is_some() {
+            return error(StatusCode::BAD_REQUEST, "a chat runs where it is created");
+        }
+        return crate::cloud_http::create_remote(&app, device, &body.request_id, &body.raw()).await;
+    }
+    // A chat a peer asks for, or one made in Cloud, syncs to every device.
+    let executor = if body.synced || target.is_some() || peer.is_some() {
+        match me {
+            Some(me) => Some(me),
+            None => {
+                return error(
+                    StatusCode::CONFLICT,
+                    "sign in to OpenRemote Cloud to sync chats",
+                );
+            }
+        }
+    } else {
+        None
+    };
+
     let workspace = std::path::PathBuf::from(&body.workspace);
     // Workspace-root containment: absolute, existing, a directory.
     if !workspace.is_absolute() || !workspace.is_dir() {
@@ -1000,16 +1081,17 @@ async fn create_session(
         .create_session(
             &body.harness,
             workspace,
-            body.model,
-            body.effort,
-            body.permission_mode,
+            body.model.clone(),
+            body.effort.clone(),
+            body.permission_mode.clone(),
             body.fast,
+            executor,
         )
         .await
     {
         Ok(session) => {
             let receipt = Receipt {
-                request_id: body.request_id,
+                request_id: body.request_id.clone(),
                 session_id: Some(session.id),
                 status: ReceiptStatus::Completed,
                 result: Some(serde_json::to_value(&session).unwrap_or(Value::Null)),
@@ -1021,7 +1103,7 @@ async fn create_session(
         }
         Err(err) => {
             let receipt = Receipt {
-                request_id: body.request_id,
+                request_id: body.request_id.clone(),
                 session_id: None,
                 status: ReceiptStatus::Failed,
                 result: None,
@@ -1032,6 +1114,77 @@ async fn create_session(
             supervisor_error(err)
         }
     }
+}
+
+impl CreateSessionBody {
+    /// The request as the other device should receive it.
+    fn raw(&self) -> Value {
+        json!({
+            "request_id": self.request_id,
+            "harness": self.harness,
+            "workspace": self.workspace,
+            "model": self.model,
+            "effort": self.effort,
+            "permission_mode": self.permission_mode,
+            "fast": self.fast,
+        })
+    }
+}
+
+async fn sync_summary(State(app): State<Arc<App>>) -> Response {
+    Json(crate::sync::summary(&app)).into_response()
+}
+
+#[derive(Deserialize)]
+struct RangeQuery {
+    #[serde(default)]
+    from: u64,
+}
+
+async fn sync_range(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+    axum::extract::Query(q): axum::extract::Query<RangeQuery>,
+) -> Response {
+    let Some(id) = SessionId::parse(&id) else {
+        return error(StatusCode::NOT_FOUND, "no such chat");
+    };
+    match crate::sync::range(&app, id, q.from) {
+        Ok(range) => Json(range).into_response(),
+        Err((status, message)) => error(
+            StatusCode::from_u16(status).unwrap_or(StatusCode::NOT_FOUND),
+            message,
+        ),
+    }
+}
+
+/// Deletes a synced chat everywhere: stopped if it runs here, removed from
+/// this device, and a tombstone for every other device.
+async fn delete_session(State(app): State<Arc<App>>, AxumPath(id): AxumPath<String>) -> Response {
+    let Some(id) = SessionId::parse(&id) else {
+        return error(StatusCode::NOT_FOUND, "no such chat");
+    };
+    let synced = app
+        .store
+        .lock()
+        .expect("store lock")
+        .session(&id)
+        .map(|s| s.executor.is_some());
+    match synced {
+        Err(_) => return error(StatusCode::NOT_FOUND, "no such chat"),
+        Ok(false) => return error(StatusCode::CONFLICT, "only synced chats can be deleted"),
+        Ok(true) => {}
+    }
+    let Some(me) = app.cloud.device_id() else {
+        return error(StatusCode::CONFLICT, "sign in to OpenRemote Cloud first");
+    };
+    let stone = openremote_core::store::Tombstone {
+        at: openremote_core::now_ms(),
+        by: me,
+    };
+    crate::sync::apply_tombstone(&app, id, stone).await;
+    crate::sync::announce_tombstone(&app, id, stone).await;
+    StatusCode::NO_CONTENT.into_response()
 }
 
 async fn list_sessions(State(app): State<Arc<App>>) -> Response {

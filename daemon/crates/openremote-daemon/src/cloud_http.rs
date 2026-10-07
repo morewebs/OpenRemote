@@ -315,3 +315,163 @@ pub async fn passthrough(
         Err(e) => json_error(StatusCode::BAD_GATEWAY, &e.to_string()),
     }
 }
+
+/// Fails fast, without a round trip, when a device can't take the request:
+/// the status and message to answer with.
+fn check_device(
+    mesh: &openremote_cloud::Mesh,
+    device: DeviceId,
+) -> Result<(), (StatusCode, String)> {
+    match mesh.peer(device) {
+        None => Err((
+            StatusCode::NOT_FOUND,
+            "that device isn't one of yours".into(),
+        )),
+        Some(p) if !p.online => Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            format!("{} is offline", p.name),
+        )),
+        Some(p) if p.kind != "machine" => {
+            Err((StatusCode::CONFLICT, format!("{} isn't a machine", p.name)))
+        }
+        Some(_) => Ok(()),
+    }
+}
+
+fn mesh_response(result: Result<openremote_cloud::rpc::Response, MeshError>) -> Response {
+    match result {
+        Ok(response) => {
+            let status = StatusCode::from_u16(response.status).unwrap_or(StatusCode::BAD_GATEWAY);
+            let content_type = response
+                .content_type
+                .unwrap_or_else(|| "application/octet-stream".into());
+            (
+                status,
+                [(header::CONTENT_TYPE, content_type)],
+                response.body,
+            )
+                .into_response()
+        }
+        Err(e @ MeshError::Offline(_)) => {
+            json_error(StatusCode::SERVICE_UNAVAILABLE, &e.to_string())
+        }
+        Err(e) => json_error(StatusCode::BAD_GATEWAY, &e.to_string()),
+    }
+}
+
+/// A new chat on another of the user's devices: created there (it runs
+/// there), then copied here so it opens at once.
+pub async fn create_remote(
+    app: &Arc<App>,
+    device: DeviceId,
+    _request_id: &str,
+    body: &Value,
+) -> Response {
+    let Some(mesh) = app.cloud.mesh() else {
+        return json_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "not connected to OpenRemote Cloud",
+        );
+    };
+    if let Err((status, message)) = check_device(&mesh, device) {
+        return json_error(status, &message);
+    }
+    let request = openremote_cloud::rpc::Request {
+        method: "POST".into(),
+        path: "/sessions".into(),
+        content_type: Some("application/json".into()),
+        body: body.to_string().into_bytes(),
+    };
+    let result = mesh
+        .request(device, request, std::time::Duration::from_secs(90))
+        .await;
+    if let Ok(response) = &result {
+        if response.status == 201 {
+            let created: Value = serde_json::from_slice(&response.body).unwrap_or(Value::Null);
+            if let Some(id) = created["id"]
+                .as_str()
+                .and_then(openremote_core::SessionId::parse)
+            {
+                crate::sync::pull(app, device, id).await;
+            }
+        }
+    }
+    mesh_response(result)
+}
+
+const FORWARDED: &[&str] = &[
+    "/sessions/{id}/prompts",
+    "/sessions/{id}/settings",
+    "/sessions/{id}/interrupt",
+    "/sessions/{id}/stop",
+    "/sessions/{id}/resume",
+    "/decisions/{id}/answer",
+];
+
+/// Actions on a copy of a chat that runs on another device go to that
+/// device, so the console never has to know where a chat runs.
+pub async fn forward_remote(
+    State(app): State<Arc<App>>,
+    matched: Option<axum::extract::MatchedPath>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    let path = matched.as_ref().map(|m| m.as_str()).unwrap_or_default();
+    if request.method() != Method::POST || !FORWARDED.contains(&path) {
+        return next.run(request).await;
+    }
+    let id = request
+        .uri()
+        .path()
+        .split('/')
+        .nth(2)
+        .unwrap_or_default()
+        .to_string();
+    let executor = {
+        let store = app.store.lock().expect("store lock");
+        let session = if path.starts_with("/decisions/") {
+            openremote_core::DecisionId::parse(&id)
+                .and_then(|d| store.decision(&d).ok().map(|d| d.session_id))
+                .and_then(|s| store.session(&s).ok())
+        } else {
+            openremote_core::SessionId::parse(&id).and_then(|s| store.session(&s).ok())
+        };
+        session
+            .filter(|s| !store.executes_here(s))
+            .and_then(|s| s.executor)
+    };
+    let Some(executor) = executor else {
+        return next.run(request).await;
+    };
+    let Some(mesh) = app.cloud.mesh() else {
+        return json_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "this chat runs on another device - sign in to OpenRemote Cloud to reach it",
+        );
+    };
+    if let Err((status, message)) = check_device(&mesh, executor) {
+        return json_error(status, &message);
+    }
+    let (parts, body) = request.into_parts();
+    let Ok(body) = axum::body::to_bytes(body, openremote_cloud::rpc::MAX_REQUEST).await else {
+        return json_error(StatusCode::PAYLOAD_TOO_LARGE, "the request is too large");
+    };
+    let forwarded = openremote_cloud::rpc::Request {
+        method: "POST".into(),
+        path: parts
+            .uri
+            .path_and_query()
+            .map(|p| p.as_str().to_string())
+            .unwrap_or_default(),
+        content_type: parts
+            .headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string),
+        body: body.to_vec(),
+    };
+    mesh_response(
+        mesh.request(executor, forwarded, std::time::Duration::from_secs(30))
+            .await,
+    )
+}

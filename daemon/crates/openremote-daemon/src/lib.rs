@@ -11,6 +11,7 @@ pub mod plugins;
 pub mod registry;
 pub mod signin;
 pub mod supervisor;
+pub mod sync;
 
 pub use app::{AppOptions, serve};
 pub use registry::HarnessRegistry;

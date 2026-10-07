@@ -212,6 +212,12 @@ impl Supervisor {
     }
 
     /// Subscribe to the live event stream (serialized event JSON).
+    /// Tells live listeners about an event that arrived from another
+    /// device (a copy of a chat running there).
+    pub fn announce(&self, raw: String) {
+        let _ = self.events.send(raw);
+    }
+
     pub fn subscribe(&self) -> broadcast::Receiver<String> {
         self.events.subscribe()
     }
@@ -768,6 +774,7 @@ impl Supervisor {
                 None,
                 None,
                 false,
+                None,
             )
             .await?;
         let chat = session.id;
@@ -840,6 +847,7 @@ impl Supervisor {
         effort: Option<String>,
         permission_mode: Option<String>,
         fast: bool,
+        executor: Option<openremote_core::DeviceId>,
     ) -> Result<Session, SupervisorError> {
         let Some(backend) = self.backend(harness) else {
             return Err(SupervisorError::Harness(format!(
@@ -881,7 +889,7 @@ impl Supervisor {
             next_turn: 0,
             fast,
             approved_tools: Vec::new(),
-            executor: None,
+            executor,
             title: None,
         };
         let id = session.id;

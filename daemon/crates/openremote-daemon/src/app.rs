@@ -20,6 +20,7 @@ pub struct App {
     pub cloud: Arc<openremote_cloud::Cloud>,
     /// The loopback port the API listens on: the sign-in callback's address.
     pub port: OnceLock<u16>,
+    pub sync: crate::sync::SyncState,
 }
 
 pub struct AppOptions {
@@ -61,7 +62,9 @@ impl App {
             supervisor,
             cloud,
             port: OnceLock::new(),
+            sync: crate::sync::SyncState::default(),
         });
+        crate::sync::start_pusher(&app);
         app.start_cloud();
         app
     }
@@ -130,6 +133,20 @@ pub fn event_stream(
     let (tx, rx) = mpsc::channel::<Vec<u8>>(64);
     tokio::spawn(async move {
         let mut live = app.supervisor.subscribe();
+        // A copy of a chat running on another device: that device sends the
+        // chat's events live while it is open here (the watch ends when
+        // this stream does).
+        let watch: Arc<StdMutex<Option<crate::sync::Watch>>> = Arc::default();
+        {
+            let (app, watch) = (Arc::clone(&app), Arc::clone(&watch));
+            tokio::spawn(async move {
+                let started = crate::sync::watch(&app, session_id).await;
+                if let Ok(mut slot) = watch.lock() {
+                    *slot = started;
+                }
+            });
+        }
+        let _watch = watch;
         // The cursor: the highest seq the client already holds. `None` is a
         // fresh connect - replay everything, then accept any live seq.
         let mut last: Option<u64> = after;

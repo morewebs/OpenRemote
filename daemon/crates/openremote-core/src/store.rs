@@ -958,6 +958,11 @@ impl Store {
         }
     }
 
+    /// How many events this device holds for a chat (its next seq).
+    pub fn head(&self, session_id: &SessionId) -> u64 {
+        self.state.next_seq.get(session_id).copied().unwrap_or(0)
+    }
+
     pub fn this_device(&self) -> Option<DeviceId> {
         self.state.this_device
     }

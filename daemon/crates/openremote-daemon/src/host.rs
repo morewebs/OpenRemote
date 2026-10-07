@@ -60,9 +60,23 @@ impl CloudHost for DaemonHost {
         })
     }
 
-    fn note(&self, _peer: PeerContext, _note: Value) {}
+    fn note(&self, peer: PeerContext, note: Value) {
+        if let Some(app) = self.app.upgrade() {
+            crate::sync::on_note(&app, peer, note);
+        }
+    }
 
-    fn linked(&self, _peer: DeviceId) {}
+    /// A fresh link (this device or the peer restarted, or the relay
+    /// reconnected): compare notes in case anything was missed.
+    fn linked(&self, peer: DeviceId) {
+        self.online(peer);
+    }
+
+    fn online(&self, peer: DeviceId) {
+        if let Some(app) = self.app.upgrade() {
+            tokio::spawn(async move { crate::sync::sync_with(&app, peer).await });
+        }
+    }
 
     /// Removed from the account: the synced chats here go; private ones stay.
     fn revoked(&self) {
