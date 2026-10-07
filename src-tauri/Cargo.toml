@@ -7,10 +7,18 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# tray-icon: OpenRemote can keep running in the tray when its window closes.
+# (Keep panic = unwind: the Linux tray's appindicator guard catches a panic.)
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
+serde_json = "1"
+
+[target.'cfg(any(windows, target_os = "linux"))'.dependencies]
+# A second launch shows the running window instead of starting a second
+# daemon on the same data.
+tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

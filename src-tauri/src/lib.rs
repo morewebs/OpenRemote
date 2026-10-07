@@ -6,7 +6,9 @@
 
 use std::sync::Mutex;
 
-use tauri::{Manager, State};
+use tauri::{Manager, State, WindowEvent};
+
+mod tray;
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 
@@ -52,7 +54,13 @@ fn daemon_restart(app: tauri::AppHandle, state: State<'_, DaemonState>) {
 }
 
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // First, so a second launch is answered before anything else starts.
+    #[cfg(any(windows, target_os = "linux"))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        tray::show_main(app);
+    }));
+    builder
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
@@ -60,10 +68,28 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .manage(DaemonState::default())
-        .invoke_handler(tauri::generate_handler![daemon_info, daemon_restart])
+        .manage(tray::TrayState::default())
+        .invoke_handler(tauri::generate_handler![
+            daemon_info,
+            daemon_restart,
+            tray::tray_prefs,
+            tray::set_tray_prefs
+        ])
         .setup(|app| {
+            tray::load(app.handle());
+            tray::apply(app.handle());
             spawn_daemon(app.handle().clone());
             Ok(())
+        })
+        // With the tray on, closing the window hides it: the daemon keeps
+        // serving this computer's synced chats and the user's other devices.
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" && tray::keeps_running(window.app_handle()) {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running OpenRemote");

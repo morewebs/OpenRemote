@@ -145,6 +145,36 @@ export default function SettingsView({ onReplay }) {
     }
   }
 
+  // Keeping OpenRemote in the tray when the window closes: the shell's own
+  // setting (on by default when this computer is a machine). Absent in the
+  // browser, and where no tray can be shown.
+  const [tray, setTray] = useState(null)
+  useEffect(() => {
+    if (!hasTauri) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core')
+        const view = await invoke('tray_prefs')
+        if (!cancelled) setTray(view)
+      } catch {
+        /* the row stays absent */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  const toggleTray = async () => {
+    if (!tray) return
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      setTray(await invoke('set_tray_prefs', { keepRunning: !tray.keep_running }))
+    } catch {
+      /* the fact stays what it was */
+    }
+  }
+
   // The shell restart: this side is a single invoke; the console heals; the console heals
   const restartDaemon = async () => {
     if (!hasTauri || restarting) return
@@ -408,7 +438,7 @@ export default function SettingsView({ onReplay }) {
           <div className="pn-row">
             <div>
               <div className="pn-name">Launch at login</div>
-              <div className="pn-detail">Adds OpenRemote to Windows startup.</div>
+              <div className="pn-detail">Starts OpenRemote when you sign in to this computer.</div>
             </div>
             <button
               type="button"
@@ -416,6 +446,21 @@ export default function SettingsView({ onReplay }) {
               onClick={toggleAutoStart}
             >
               {autoStart ? 'On' : 'Off'}
+            </button>
+          </div>
+        )}
+        {tray?.available && (
+          <div className="pn-row">
+            <div>
+              <div className="pn-name">Keep running in the tray</div>
+              <div className="pn-detail">
+                {tray.machine
+                  ? 'Closing the window leaves OpenRemote running, so your other devices can still reach this one. Quit from the tray icon.'
+                  : 'Closing the window leaves OpenRemote running, so chats here keep going. Quit from the tray icon.'}
+              </div>
+            </div>
+            <button type="button" className={tray.keep_running ? 'pn-btn on' : 'pn-btn'} onClick={toggleTray}>
+              {tray.keep_running ? 'On' : 'Off'}
             </button>
           </div>
         )}

@@ -409,6 +409,21 @@ export function ConsoleProvider({ children }) {
 
   const createEnrollment = useCallback(() => api.createEnrollment(), [api])
 
+  // The shell keeps the app in the tray by default when this computer is a
+  // machine, so it hears when that changes.
+  const thisKind = devices.find((d) => d.id === cloud?.device?.id)?.kind ?? null
+  useEffect(() => {
+    if (!hasTauri || thisKind == null) return
+    ;(async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core')
+        await invoke('set_tray_prefs', { machine: thisKind === 'machine' })
+      } catch {
+        /* an older shell without a tray */
+      }
+    })()
+  }, [thisKind])
+
   // A private chat joins Cloud: every device copies it, transcript and
   // tool output included; it keeps running here.
   const syncChat = useCallback(
