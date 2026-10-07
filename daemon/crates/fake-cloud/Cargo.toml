@@ -1,0 +1,21 @@
+[package]
+name = "fake-cloud"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "A stand-in for moreweb's sign-in, device registry and relay, for tests and local runs"
+publish = false
+
+[dependencies]
+axum = { workspace = true, features = ["ws"] }
+base64 = "0.22"
+futures-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = "0.10"
+tokio = { workspace = true, features = ["net"] }
+uuid = { workspace = true }
+
+[lints]
+workspace = true

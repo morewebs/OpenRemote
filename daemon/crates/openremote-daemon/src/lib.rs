@@ -2,6 +2,7 @@
 //! `main.rs` is a thin shell over `app::serve`.
 
 pub mod app;
+pub mod cloud_http;
 pub mod http;
 pub mod install;
 pub mod plugins;

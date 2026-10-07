@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
 use openremote_core::Store;
-use openremote_daemon::app::{self, App};
+use openremote_daemon::app::{self, App, AppOptions};
 use openremote_daemon::registry::HarnessRegistry;
 use openremote_daemon::supervisor::Supervisor;
 use serde_json::Value;
@@ -65,11 +65,8 @@ impl Drop for DaemonChild {
     }
 }
 
-/// Spawn the daemon binary as a real process with `extra_env` - for the
-/// flows that ride process env (the install command override). The token
-/// is pre-written into a fresh data dir; the address comes from the
-/// binary's own `READY` line.
-pub async fn spawn_daemon_process(extra_env: &[(&str, String)]) -> TestDaemon {
+/// The daemon binary cargo built for this test run.
+pub fn daemon_binary() -> PathBuf {
     let target = std::env::var("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target"));
@@ -84,6 +81,15 @@ pub async fn spawn_daemon_process(extra_env: &[(&str, String)]) -> TestDaemon {
         "daemon binary not found at {}",
         bin.display()
     );
+    bin
+}
+
+/// Spawn the daemon binary as a real process with `extra_env` - for the
+/// flows that ride process env (the install command override). The token
+/// is pre-written into a fresh data dir; the address comes from the
+/// binary's own `READY` line.
+pub async fn spawn_daemon_process(extra_env: &[(&str, String)]) -> TestDaemon {
+    let bin = daemon_binary();
 
     let data_dir = tempfile::tempdir().expect("temp data dir");
     let token = uuid::Uuid::new_v4().to_string();
@@ -136,6 +142,15 @@ pub async fn spawn_daemon_process(extra_env: &[(&str, String)]) -> TestDaemon {
 }
 
 pub async fn start_daemon(overrides: &[(&str, PathBuf)]) -> TestDaemon {
+    start_cloud_daemon(overrides, None).await
+}
+
+/// A daemon whose Cloud mode talks to `cloud` (the stand-in), or to a dead
+/// address when there is none.
+pub async fn start_cloud_daemon(
+    overrides: &[(&str, PathBuf)],
+    cloud: Option<openremote_cloud::CloudConfig>,
+) -> TestDaemon {
     // Every harness slot defaults to the fixture agent, so the registry's
     // probes stay hermetic and cheap (no real CLIs get spawned from a
     // suite); a suite overrides only the harness it drives. The
@@ -158,12 +173,20 @@ pub async fn start_daemon(overrides: &[(&str, PathBuf)]) -> TestDaemon {
         Store::open(data_dir.path().to_path_buf()).expect("store"),
     ));
     let supervisor = Supervisor::new(store.clone(), HarnessRegistry::probe(&overrides).await);
-    let app = Arc::new(App {
-        token: token.clone(),
-        data_dir: data_dir.path().to_path_buf(),
+    let app = App::assemble(
+        AppOptions {
+            data_dir: data_dir.path().to_path_buf(),
+            token: token.clone(),
+            cloud: cloud.unwrap_or_else(|| openremote_cloud::CloudConfig {
+                api_base: "http://127.0.0.1:9/v1/openremote".into(),
+                auth_issuer: "http://127.0.0.1:9/v1/auth".into(),
+                client_id: openremote_cloud::config::CLIENT_ID.into(),
+                device_name: "test-device".into(),
+            }),
+        },
         store,
         supervisor,
-    });
+    );
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
         .await
         .expect("bind");

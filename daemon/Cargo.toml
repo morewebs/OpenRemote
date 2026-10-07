@@ -1,5 +1,6 @@
 [workspace]
-resolver = "2"
+# 3: new dependencies resolve to versions that build on rust-version.
+resolver = "3"
 members = [
     "crates/openremote-core",
     "crates/openremote-harness",
@@ -10,6 +11,8 @@ members = [
     "crates/openremote-opencode",
     "crates/openremote-agy",
     "crates/openremote-daemon",
+    "crates/openremote-cloud",
+    "crates/fake-cloud",
     "crates/fixture-agent",
 ]
 

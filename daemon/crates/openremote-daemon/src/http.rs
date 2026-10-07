@@ -53,6 +53,13 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/sessions/{id}/resume", post(post_resume))
         .route("/decisions/{id}/answer", post(post_answer))
         .route("/receipts/{request_id}", get(get_receipt))
+        .route("/cloud", get(crate::cloud_http::view))
+        .route("/cloud/signin", post(crate::cloud_http::sign_in))
+        .route(
+            "/cloud/signin/cancel",
+            post(crate::cloud_http::cancel_sign_in),
+        )
+        .route("/cloud/signout", post(crate::cloud_http::sign_out))
         .layer(middleware::from_fn_with_state(Arc::clone(&app), auth));
     Router::new()
         .route("/healthz", get(healthz))
@@ -60,6 +67,9 @@ pub fn router(app: Arc<App>) -> Router {
         // own key is the credential, not the daemon token. (The loopback
         // binding still keeps the surface local.)
         .route("/hooks/{id}", post(incoming_webhook))
+        // The browser lands here after moreweb sign-in. No daemon token:
+        // the single-use state and PKCE are what protect it.
+        .route("/cloud/callback", get(crate::cloud_http::callback))
         .merge(authed)
         .layer(console_cors())
         .with_state(app)

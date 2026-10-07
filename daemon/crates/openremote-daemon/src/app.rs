@@ -1,7 +1,7 @@
 //! App assembly: data dir, token, store, supervisor, and the serving loop.
 
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::Duration;
 
 use futures_util::stream::Stream;
@@ -17,11 +17,15 @@ pub struct App {
     pub data_dir: PathBuf,
     pub store: Arc<StdMutex<Store>>,
     pub supervisor: Arc<Supervisor>,
+    pub cloud: Arc<openremote_cloud::Cloud>,
+    /// The loopback port the API listens on: the sign-in callback's address.
+    pub port: OnceLock<u16>,
 }
 
 pub struct AppOptions {
     pub data_dir: PathBuf,
     pub token: String,
+    pub cloud: openremote_cloud::CloudConfig,
 }
 
 impl App {
@@ -32,11 +36,31 @@ impl App {
             store.clone(),
             HarnessRegistry::probe(&registry::env_overrides()).await,
         );
+        Self::assemble(options, store, supervisor)
+    }
+
+    /// The parts, already built (the e2e suites bring their own registry).
+    pub fn assemble(
+        options: AppOptions,
+        store: Arc<StdMutex<Store>>,
+        supervisor: Arc<Supervisor>,
+    ) -> Arc<Self> {
+        let cloud = openremote_cloud::Cloud::open(options.cloud, &options.data_dir);
+        // The store learns this device's id from Cloud's own files, so the
+        // two agree even when `enroll` ran in another process.
+        if let Ok(mut store) = store.lock() {
+            let id = cloud.device_id();
+            if id.is_some() && store.this_device() != id {
+                let _ = store.set_this_device(id);
+            }
+        }
         Arc::new(Self {
             token: options.token,
             data_dir: options.data_dir,
             store,
             supervisor,
+            cloud,
+            port: OnceLock::new(),
         })
     }
 }
@@ -76,6 +100,9 @@ pub fn load_or_create_token(data_dir: &std::path::Path) -> std::io::Result<Strin
 
 /// Serve the API on `listener`; runs until the process ends.
 pub async fn serve(app: Arc<App>, listener: tokio::net::TcpListener) -> std::io::Result<()> {
+    if let Ok(addr) = listener.local_addr() {
+        let _ = app.port.set(addr.port());
+    }
     let router = http::router(Arc::clone(&app));
     axum::serve(listener, router).await
 }

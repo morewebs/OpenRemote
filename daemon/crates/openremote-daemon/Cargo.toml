@@ -23,6 +23,7 @@ openremote-grok = { path = "../openremote-grok" }
 openremote-pi = { path = "../openremote-pi" }
 openremote-opencode = { path = "../openremote-opencode" }
 openremote-agy = { path = "../openremote-agy" }
+openremote-cloud = { path = "../openremote-cloud" }
 # local wall-clock time - the schedule engine fires at the machine's HH:MM
 chrono = "0.4"
 serde = { workspace = true }
@@ -40,6 +41,8 @@ libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"
+# the moreweb stand-in the Cloud e2e suites sign in to
+fake-cloud = { path = "../fake-cloud" }
 # the schedule e2e computes the machine's local HH:MM the same way the
 # engine does
 chrono = "0.4"
