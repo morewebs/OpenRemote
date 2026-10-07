@@ -343,6 +343,10 @@ async fn remove_machine(
 struct InstallHarnessBody {
     request_id: String,
     harness: String,
+    /// The human's go-ahead to set up a runtime the harness needs (pi's
+    /// Node.js) - never assumed.
+    #[serde(default)]
+    with_runtime: bool,
 }
 
 // ---- plugins ----
@@ -792,7 +796,7 @@ async fn install_harness(
     let Some(machine_id) = MachineId::parse(&id) else {
         return error(StatusCode::BAD_REQUEST, "bad machine id");
     };
-    // npm runs minutes, not milliseconds - accepted first, terminal state
+    // Installers run minutes, not milliseconds - accepted first, terminal state
     // when the install settles (a crash between surfaces as unknown work).
     let accepted = Receipt {
         request_id: body.request_id.clone(),
@@ -805,7 +809,7 @@ async fn install_harness(
     app.supervisor.record_receipt(accepted);
     match app
         .supervisor
-        .install_harness(&machine_id, &body.harness)
+        .install_harness(&machine_id, &body.harness, body.with_runtime)
         .await
     {
         Ok(view) => {

@@ -457,6 +457,7 @@ dependencies = [
  "axum",
  "chrono",
  "futures-util",
+ "libc",
  "openremote-agy",
  "openremote-claude",
  "openremote-codex",

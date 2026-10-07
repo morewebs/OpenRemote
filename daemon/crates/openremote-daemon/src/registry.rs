@@ -246,6 +246,9 @@ pub struct HarnessRegistry {
     /// The overrides this registry was probed with - an install re-probes
     /// with the same ones.
     overrides: HashMap<String, PathBuf>,
+    /// The Node.js pi would run on, by its own `--version` - whether pi's
+    /// install needs a runtime set up first.
+    node_version: Option<String>,
 }
 
 fn harness_from(id: &str, name: &str, resolution: &Resolution, version: Option<&str>) -> Harness {
@@ -284,13 +287,17 @@ impl HarnessRegistry {
             openremote_opencode::resolve_opencode(overrides.get("opencode").map(|p| p.as_path()));
         let agy = openremote_agy::resolve_agy(overrides.get("agy").map(|p| p.as_path()));
 
-        let (v_claude, v_codex, v_grok, v_pi, v_opencode, v_agy) = tokio::join!(
+        let node = crate::install::node_for_pi()
+            .map(Resolution::Executable)
+            .unwrap_or(Resolution::Unavailable);
+        let (v_claude, v_codex, v_grok, v_pi, v_opencode, v_agy, v_node) = tokio::join!(
             probe_version(&claude),
             probe_version(&codex),
             probe_version(&grok),
             probe_version(&pi),
             probe_version(&opencode),
             probe_version(&agy),
+            probe_version(&node),
         );
         // Sign-in is a separate fact from "the CLI is installed". Only a
         // harness with its own status command is asked; the others stay
@@ -353,6 +360,7 @@ impl HarnessRegistry {
         Self {
             entries,
             overrides: overrides.clone(),
+            node_version: v_node,
         }
     }
 
@@ -365,6 +373,13 @@ impl HarnessRegistry {
     /// The overrides this registry was probed with.
     pub fn overrides(&self) -> &HashMap<String, PathBuf> {
         &self.overrides
+    }
+
+    /// Whether a Node.js new enough for pi is on this machine.
+    pub fn node_ready(&self) -> bool {
+        self.node_version
+            .as_deref()
+            .is_some_and(|v| version_at_least(v, crate::install::PI_NODE_MIN))
     }
 
     pub fn harnesses(&self) -> Vec<Harness> {

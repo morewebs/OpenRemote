@@ -192,7 +192,7 @@ async fn installs_reject_their_honest_preconditions() {
             .expect("this machine id")
             .to_string();
 
-    // Already installed (every slot is fixture-backed): 409, no npm run.
+    // Already installed (every slot is fixture-backed): 409, no installer run.
     let installed = call(
         &daemon,
         "POST",
@@ -276,7 +276,7 @@ async fn an_install_materializes_the_harness_on_this_machine() {
         ("OPENREMOTE_OPENCODE_PATH", fixture_str.clone()),
         ("OPENREMOTE_AGY_PATH", fixture_str.clone()),
         (
-            "OPENREMOTE_INSTALL_NPM_CMD",
+            "OPENREMOTE_INSTALL_CMD",
             format!(
                 "node {} {} {}",
                 script.display(),
@@ -300,12 +300,15 @@ async fn an_install_materializes_the_harness_on_this_machine() {
             )
         })
         .collect();
+    // The row is the owner's own installer for this platform.
+    let codex_command = openremote_daemon::install::command_for("codex").expect("codex command");
+    assert!(
+        codex_command.contains("chatgpt.com/codex/install"),
+        "got: {codex_command}"
+    );
     assert_eq!(
         installable,
-        vec![(
-            "codex".to_string(),
-            "npm install -g @openai/codex".to_string()
-        )],
+        vec![("codex".to_string(), codex_command)],
         "raw: {}",
         machines.raw
     );

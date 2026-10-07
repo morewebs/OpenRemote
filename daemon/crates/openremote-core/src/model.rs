@@ -129,15 +129,23 @@ pub struct Machine {
     pub last_seen: Option<i64>,
 }
 
-/// A harness whose install on this machine is a plain npm package - the
-/// command is shown verbatim and run as-is. Harnesses that install through
-/// their own roots (Grok, Antigravity) have no row: nothing honest to run.
+/// A harness this machine can install through its owner's own installer -
+/// the command is shown verbatim and is what runs.
 #[derive(Clone, Serialize, Debug)]
 pub struct InstallSpec {
     pub harness_id: String,
     pub name: String,
-    /// The command that installs it, shown and run verbatim.
+    /// The command that installs it, shown verbatim.
     pub command: String,
+    /// `official` (the owner's install script) or `release` (the owner's
+    /// release artifact, unpacked by OpenRemote where no script exists).
+    pub source: String,
+    /// Plain words beside the command when it does more than it says.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// The harness needs a runtime this machine doesn't have yet (pi on
+    /// Node.js); the install waits for the human's go-ahead to set it up.
+    pub needs_runtime: bool,
 }
 
 /// One MCP server a session can call, installed on a machine from the

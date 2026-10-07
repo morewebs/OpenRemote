@@ -65,7 +65,12 @@ fn validate_time(time: Option<&str>) -> Result<String, SupervisorError> {
 /// One machine's console view: this machine carries its real inventory,
 /// sessions, presence, and install rows; a waiting one carries the install
 /// command for its OS (the enrollment token rides beside it).
-fn machine_view(s: &Store, harnesses: &[Harness], machine: &Machine) -> MachineView {
+fn machine_view(
+    s: &Store,
+    harnesses: &[Harness],
+    node_ready: bool,
+    machine: &Machine,
+) -> MachineView {
     let mut view = MachineView {
         machine: machine.clone(),
         harnesses: Vec::new(),
@@ -83,7 +88,7 @@ fn machine_view(s: &Store, harnesses: &[Harness], machine: &Machine) -> MachineV
             .filter(|h| h.available)
             .map(|h| h.id.clone())
             .collect();
-        view.installable = crate::install::installable(&installed);
+        view.installable = crate::install::installable(&installed, node_ready);
     } else {
         view.install_command = Some(match machine.platform.as_str() {
             "windows" => "irm openremote.space/install.ps1 | iex".to_string(),
@@ -271,19 +276,29 @@ impl Supervisor {
     /// Every machine as the console sees it: what's really on it, what
     /// runs there, and - for this machine - what could be installed.
     pub fn machines(&self) -> Vec<MachineView> {
-        let harnesses = self.registry.read().expect("registry lock").harnesses();
+        let (harnesses, node_ready) = self.inventory();
         self.with_store(|s| {
             s.machines()
                 .iter()
-                .map(|machine| machine_view(s, &harnesses, machine))
+                .map(|machine| machine_view(s, &harnesses, node_ready, machine))
                 .collect()
         })
     }
 
     pub fn machine(&self, id: &MachineId) -> Result<MachineView, SupervisorError> {
-        let harnesses = self.registry.read().expect("registry lock").harnesses();
-        self.with_store(|s| s.machine(id).map(|m| machine_view(s, &harnesses, m)))
-            .map_err(store_error)
+        let (harnesses, node_ready) = self.inventory();
+        self.with_store(|s| {
+            s.machine(id)
+                .map(|m| machine_view(s, &harnesses, node_ready, m))
+        })
+        .map_err(store_error)
+    }
+
+    /// The probed harnesses and whether pi's runtime is here - one read
+    /// of the registry, never held across the store lock.
+    fn inventory(&self) -> (Vec<Harness>, bool) {
+        let registry = self.registry.read().expect("registry lock");
+        (registry.harnesses(), registry.node_ready())
     }
 
     /// Add a machine: it lands `waiting` - it comes online when its agent
@@ -298,13 +313,16 @@ impl Supervisor {
             .map_err(store_error)
     }
 
-    /// Install a harness on this machine: run its install command, re-probe
-    /// with the same overrides, and hand back the machine's refreshed
-    /// view. The receipt carries the long wait - npm runs minutes.
+    /// Install a harness on this machine: run its owner's installer,
+    /// re-probe with the same overrides, and hand back the machine's
+    /// refreshed view. The receipt carries the long wait - installers run
+    /// minutes. `with_runtime` is the human's go-ahead to set up pi's
+    /// Node.js first.
     pub async fn install_harness(
         &self,
         machine_id: &MachineId,
         harness_id: &str,
+        with_runtime: bool,
     ) -> Result<MachineView, SupervisorError> {
         let machine = self
             .with_store(|s| s.machine(machine_id).cloned())
@@ -334,11 +352,32 @@ impl Supervisor {
             )));
         }
 
-        crate::install::install(harness_id)
+        let options = crate::install::InstallOptions {
+            with_runtime,
+            node_ready: self.registry.read().expect("registry lock").node_ready(),
+        };
+        let output = crate::install::install(harness_id, options)
             .await
-            .map_err(SupervisorError::Harness)?;
+            .map_err(|failed| SupervisorError::Harness(format!("install failed: {failed}")))?;
 
         self.swap_in_fresh_registry().await;
+
+        // An installer that exits cleanly but leaves nothing where this
+        // harness is looked for is not an install - say so with its own
+        // last words.
+        let landed = self
+            .registry
+            .read()
+            .expect("registry lock")
+            .harnesses()
+            .into_iter()
+            .any(|h| h.id == harness_id && h.available);
+        if !landed {
+            return Err(SupervisorError::Harness(format!(
+                "the installer finished, but {} wasn't found where OpenRemote looks for it:\n{output}",
+                entry.name
+            )));
+        }
 
         self.machine(machine_id)
     }
