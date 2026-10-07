@@ -380,6 +380,12 @@ button.side-tile:active {
   visibility: hidden;
 }
 
+/* A copy of a chat whose device is away: a hollow ring, not a status. */
+.dot--offline {
+  border: 1px solid var(--text-3);
+  background: transparent;
+}
+
 @keyframes breathe {
   0%,
   100% {
@@ -401,6 +407,22 @@ button.side-tile:active {
   color: var(--text-2);
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* Where a Cloud chat runs, when that isn't this computer. */
+.chat-device {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.chat-synced {
+  flex: none;
+  color: var(--text-3);
 }
 
 .chat-row.active .chat-title,

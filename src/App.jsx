@@ -10,12 +10,22 @@ import PluginsView from './PluginsView.jsx'
 import AutomationsView from './AutomationsView.jsx'
 import MachinesView from './MachinesView.jsx'
 import { ConsoleProvider, useConsole } from './state/console.jsx'
+import { needsSignIn } from './cloud.js'
 
 const OB_KEY = 'openremote-onboarded'
 const STORE_KEY = 'openremote-view-state'
-// 'machines' is deliberately absent - it returns with remote check-in;
-// a stale hash or stored history referencing it falls back to New chat.
-const STATIC_VIEWS = ['new', 'plugins', 'automations', 'settings']
+const MODE_KEY = 'openremote-mode'
+const STATIC_VIEWS = ['new', 'plugins', 'automations', 'machines', 'settings']
+
+// The mode the user left the app in. Local unless they chose Cloud, so a
+// first launch never asks anyone to sign in.
+function loadMode() {
+  try {
+    return localStorage.getItem(MODE_KEY) === 'cloud' ? 'cloud' : 'local'
+  } catch {
+    return 'local'
+  }
+}
 
 function loadViewState(sessions) {
   let saved = null
@@ -44,7 +54,7 @@ function loadViewState(sessions) {
 }
 
 function Shell() {
-  const { sessions, chats, connection, ensureChat } = useConsole()
+  const { sessions, chats, connection, ensureChat, cloud } = useConsole()
   // The sidebar's docked-vs-overlay shape is the viewport's, not a mount-time
   // guess: crossing 640px live swaps the layout (the alternative - reading
   // innerWidth once at mount - left the sidebar overlaid after narrowing).
@@ -67,12 +77,9 @@ function Shell() {
     }
   })
   // Settings is a view like the others - the gear navigates to it.
-  // Local vs Cloud - Cloud swaps the whole main area for its coming-soon
-  // state; the session history stays untouched underneath, so switching
-  // back returns to the exact view. Within cloud, Machines is a real
-  // view of its own ('hero' is the coming-soon pane).
-  const [mode, setMode] = useState('local')
-  const [cloudView, setCloudView] = useState('hero')
+  // Local vs Cloud: Local is this computer's chats; Cloud is the synced
+  // chats of every device, behind a moreweb sign-in the first time.
+  const [mode, setMode] = useState(loadMode)
 
   const view = history[hIndex]
   const chat = STATIC_VIEWS.includes(view) ? null : chats[view] ?? null
@@ -117,6 +124,16 @@ function Shell() {
       history: [...nav.history.slice(0, nav.hIndex + 1), id],
       hIndex: nav.hIndex + 1,
     }))
+  }
+
+  const switchMode = (next) => {
+    setMode(next)
+    try {
+      localStorage.setItem(MODE_KEY, next)
+    } catch {
+      /* storage unavailable */
+    }
+    navigate('new')
   }
 
   const goBack = () => setNav((nav) => ({ ...nav, hIndex: Math.max(0, nav.hIndex - 1) }))
@@ -175,28 +192,20 @@ function Shell() {
             open={sidebarOpen}
             active={view === 'new' ? null : view}
             mode={mode}
-            cloudView={cloudView}
-            onCloudView={setCloudView}
-            onMode={(m) => {
-              setMode(m)
-              setCloudView('hero')
-            }}
+            onMode={switchMode}
             onSelect={openSession}
           />
           <main className="main">
             {view === 'settings' ? (
               <SettingsView onReplay={replayOnboarding} />
-            ) : mode === 'cloud' ? (
-              cloudView === 'machines' ? (
-                <MachinesView onOpenChat={openSession} />
-              ) : (
-                <CloudMode onBackToLocal={() => setMode('local')} />
-              )
+            ) : mode === 'cloud' && needsSignIn(cloud) ? (
+              <CloudMode onBackToLocal={() => switchMode('local')} />
             ) : (
               <>
-                {view === 'new' && <NewChat onOpen={openSession} />}
-            {view === 'plugins' && <PluginsView />}
-            {view === 'automations' && <AutomationsView onOpenChat={openSession} />}
+                {view === 'new' && <NewChat onOpen={openSession} mode={mode} />}
+                {view === 'machines' && <MachinesView onOpenChat={openSession} />}
+                {view === 'plugins' && <PluginsView />}
+                {view === 'automations' && <AutomationsView onOpenChat={openSession} />}
                 {!STATIC_VIEWS.includes(view) &&
                   (chat ? (
                     <ChatView key={chat.id} chat={chat} />

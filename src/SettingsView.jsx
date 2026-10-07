@@ -3,6 +3,7 @@ import AboutModal from './AboutModal.jsx'
 import SignInModal from './SignInModal.jsx'
 import PickerMenu from './PickerMenu.jsx'
 import { useConsole } from './state/console.jsx'
+import { signedIn } from './cloud.js'
 import { harnessName } from './harness-names.js'
 import { SIGNIN_HARNESSES } from './harness-manager.js'
 import { loadDefaults, saveDefaults } from './defaults.js'
@@ -30,13 +31,16 @@ const SECTIONS = [
   { id: 'new-tasks', label: 'New tasks' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'startup', label: 'Startup' },
+  { id: 'cloud', label: 'Cloud' },
   { id: 'daemon', label: 'Daemon' },
   { id: 'harnesses', label: 'Harnesses' },
   { id: 'this-install', label: 'This install' },
 ]
 
 export default function SettingsView({ onReplay }) {
-  const { connection, capabilities, sessions, disconnect, modelsFor } = useConsole()
+  const { connection, capabilities, sessions, disconnect, modelsFor, cloud, signOutCloud } = useConsole()
+  const [confirmSignOut, setConfirmSignOut] = useState(false)
+  const inCloud = signedIn(cloud)
   const harnessList = capabilities?.harnesses ?? []
   const available = (harnessList ?? []).filter((h) => h.available)
   const [defaults, setDefaults] = useState(() => loadDefaults())
@@ -415,6 +419,43 @@ export default function SettingsView({ onReplay }) {
             </button>
           </div>
         )}
+      </div>
+
+      <h2 className="pn-section" id="stg-cloud">Cloud</h2>
+      <p className="pn-lead">Your moreweb account, and this computer's place in it.</p>
+      <div className="pn-list pn-list--tight">
+        <div className="pn-row">
+          <div>
+            <div className="pn-name">{inCloud ? `Signed in as ${cloud.account?.email ?? 'your account'}` : 'Not signed in'}</div>
+            <div className="pn-detail">
+              {inCloud
+                ? confirmSignOut
+                  ? 'Synced chats stay on this computer; they stop syncing until you sign in again.'
+                  : `This computer is ${cloud.device?.name ?? 'here'}, ${cloud.device?.kind === 'machine' ? 'a machine your other devices can run chats on' : 'a desktop'}.`
+                : 'Switch to Cloud to sign in. Local chats never need an account.'}
+            </div>
+          </div>
+          {inCloud &&
+            (confirmSignOut ? (
+              <div className="pn-actions">
+                <button
+                  type="button"
+                  className="pn-btn"
+                  onClick={async () => {
+                    setConfirmSignOut(false)
+                    await signOutCloud()
+                  }}
+                >
+                  Sign out
+                </button>
+                <button type="button" className="pn-btn" onClick={() => setConfirmSignOut(false)}>Cancel</button>
+              </div>
+            ) : (
+              <button type="button" className="pn-btn" onClick={() => setConfirmSignOut(true)}>
+                Sign out
+              </button>
+            ))}
+        </div>
       </div>
 
       <h2 className="pn-section" id="stg-daemon">Daemon</h2>

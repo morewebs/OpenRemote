@@ -8,7 +8,7 @@ import './signin.css'
 // browser URL it opened, the code it wants pasted), and the human's
 // answers ride back through the same relay. The words are the CLI's -
 // never ours.
-export default function SignInModal({ harnessId, onDone }) {
+export default function SignInModal({ harnessId, onDone, deviceId = null }) {
   const { signIn, feedSignIn, stopSignIn } = useConsole()
   const [view, setView] = useState(null)
   const [error, setError] = useState(null)
@@ -22,7 +22,7 @@ export default function SignInModal({ harnessId, onDone }) {
   // still be finishing in the browser - the daemon's run continues.
   useEffect(() => {
     let cancelled = false
-    signIn(harnessId, { onBeat: (beat) => !cancelled && setView(beat) }).catch((err) => {
+    signIn(harnessId, { onBeat: (beat) => !cancelled && setView(beat), deviceId }).catch((err) => {
       if (!cancelled) setError(err?.message ?? String(err))
     })
     return () => {
@@ -42,7 +42,7 @@ export default function SignInModal({ harnessId, onDone }) {
   const submit = async () => {
     if (!answer.trim()) return
     try {
-      await feedSignIn(harnessId, answer.trim())
+      await feedSignIn(harnessId, answer.trim(), deviceId)
       setAnswer('')
     } catch (err) {
       setError(err?.message ?? String(err))
@@ -55,7 +55,7 @@ export default function SignInModal({ harnessId, onDone }) {
     // should not block the next attempt.
     if (running && !stopping) {
       setStopping(true)
-      stopSignIn(harnessId).catch(() => {})
+      stopSignIn(harnessId, deviceId).catch(() => {})
     }
     onDone()
   }
@@ -130,7 +130,7 @@ export default function SignInModal({ harnessId, onDone }) {
                 className="si-stop"
                 onClick={() => {
                   setStopping(true)
-                  stopSignIn(harnessId).catch(() => {})
+                  stopSignIn(harnessId, deviceId).catch(() => {})
                 }}
                 disabled={stopping}
               >

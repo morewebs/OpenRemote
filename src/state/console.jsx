@@ -27,6 +27,10 @@ export function ConsoleProvider({ children }) {
   const [automations, setAutomations] = useState([])
   const [chats, setChats] = useState({})
   const [modelsByHarness, setModelsByHarness] = useState({})
+  // Cloud: this computer's account state, and the account's devices.
+  const [cloud, setCloud] = useState(null)
+  const [devices, setDevices] = useState([])
+  const [capabilitiesByDevice, setCapabilitiesByDevice] = useState({})
   const [openChatId, setOpenChatId] = useState(null)
   const stopEventsRef = useRef(null)
   const cursorRef = useRef(null)
@@ -130,7 +134,11 @@ export function ConsoleProvider({ children }) {
       const pluginList = await api.plugins()
       const market = await api.pluginMarketplace()
       const rules = await api.automations()
+      // Cloud is optional: a daemon without it still connects.
+      const [cloudView, deviceList] = await Promise.allSettled([api.cloud(), api.cloudDevices()])
       if (cancelled) return
+      if (cloudView.status === 'fulfilled') setCloud(cloudView.value)
+      if (deviceList.status === 'fulfilled') setDevices(deviceList.value?.devices ?? [])
       setCapabilities(caps)
       setSessions(list ?? [])
       setMachines(machineList ?? [])
@@ -168,12 +176,17 @@ export function ConsoleProvider({ children }) {
     if (!api.ready) return
     let misses = 0
     const poll = setInterval(async () => {
-      const [sessionList, machineList, pluginList, ruleList] = await Promise.allSettled([
-        api.sessions(),
-        api.machines(),
-        api.plugins(),
-        api.automations(),
-      ])
+      const [sessionList, machineList, pluginList, ruleList, cloudView, deviceList] =
+        await Promise.allSettled([
+          api.sessions(),
+          api.machines(),
+          api.plugins(),
+          api.automations(),
+          api.cloud(),
+          api.cloudDevices(),
+        ])
+      if (cloudView.status === 'fulfilled') setCloud(cloudView.value)
+      if (deviceList.status === 'fulfilled') setDevices(deviceList.value?.devices ?? [])
       if (sessionList.status === 'fulfilled') setSessions(sessionList.value ?? [])
       if (machineList.status === 'fulfilled') setMachines(machineList.value ?? [])
       if (pluginList.status === 'fulfilled') setPlugins(pluginList.value ?? [])
@@ -299,9 +312,12 @@ export function ConsoleProvider({ children }) {
     [],
   )
 
+  // A new chat. In Cloud it syncs to every device, and with `deviceId` it
+  // runs on that machine (created there, copied here); the prompt that
+  // follows reaches it through this daemon either way.
   const createChat = useCallback(
-    async (text, workspace, harness, model, fast, effort) => {
-      const session = await api.createSession({ harness, workspace, model, effort, fast })
+    async (text, workspace, harness, model, fast, effort, { deviceId = null, synced = false } = {}) => {
+      const session = await api.createSession({ harness, workspace, model, effort, fast, deviceId, synced })
       ensureChat(session)
       if (text.trim()) await api.prompt(session.id, text.trim())
       return session.id
@@ -309,20 +325,94 @@ export function ConsoleProvider({ children }) {
     [api, ensureChat],
   )
 
-  // The model catalog for a harness, cached per connection. Empty means
-  // the harness advertises nothing - the picker stays hidden.
+  // The API of another of the user's devices, through this daemon.
+  const apiFor = useCallback((deviceId) => api.device(deviceId), [api])
+
+  // The model catalog for a harness, cached per connection and device.
+  // Empty means the harness advertises nothing - the picker stays hidden.
   const modelsFor = useCallback(
-    async (harnessId) => {
-      if (!api.ready || modelsByHarness[harnessId]) return modelsByHarness[harnessId] ?? []
+    async (harnessId, deviceId = null) => {
+      const key = `${deviceId ?? ''}:${harnessId}`
+      if (!api.ready || modelsByHarness[key]) return modelsByHarness[key] ?? []
       try {
-        const list = (await api.models(harnessId)) ?? []
-        setModelsByHarness((current) => ({ ...current, [harnessId]: list }))
+        const list = (await api.device(deviceId).models(harnessId)) ?? []
+        setModelsByHarness((current) => ({ ...current, [key]: list }))
         return list
       } catch {
         return []
       }
     },
     [api, modelsByHarness],
+  )
+
+  // What another device can run, fetched when a new chat aims at it.
+  const capabilitiesFor = useCallback(
+    async (deviceId) => {
+      if (!deviceId) return capabilities
+      try {
+        const caps = await api.device(deviceId).capabilities()
+        setCapabilitiesByDevice((current) => ({ ...current, [deviceId]: caps }))
+        return caps
+      } catch {
+        return capabilitiesByDevice[deviceId] ?? null
+      }
+    },
+    [api, capabilities, capabilitiesByDevice],
+  )
+
+  const refreshCloud = useCallback(async () => {
+    const [view, list] = await Promise.allSettled([api.cloud(), api.cloudDevices()])
+    if (view.status === 'fulfilled') setCloud(view.value)
+    if (list.status === 'fulfilled') setDevices(list.value?.devices ?? [])
+  }, [api])
+
+  // Sign-in happens in the system browser, which the daemon opens; the
+  // poll picks up the result when the browser comes back.
+  const signInCloud = useCallback(async () => {
+    const started = await api.cloudSignIn({ open: true })
+    await refreshCloud()
+    return started
+  }, [api, refreshCloud])
+
+  const cancelCloudSignIn = useCallback(async () => {
+    setCloud(await api.cloudSignInCancel())
+  }, [api])
+
+  const signOutCloud = useCallback(async () => {
+    setCloud(await api.cloudSignOut())
+    setDevices([])
+  }, [api])
+
+  const setDeviceKind = useCallback(
+    async (id, kind) => {
+      await api.setDeviceKind(id, kind)
+      await refreshCloud()
+    },
+    [api, refreshCloud],
+  )
+
+  const removeDevice = useCallback(
+    async (id) => {
+      await api.removeDevice(id)
+      await refreshCloud()
+    },
+    [api, refreshCloud],
+  )
+
+  const createEnrollment = useCallback(() => api.createEnrollment(), [api])
+
+  // Deleting a synced chat removes it from every device.
+  const deleteChat = useCallback(
+    async (id) => {
+      await api.deleteSession(id)
+      setSessions((current) => current.filter((s) => s.id !== id))
+      setChats((current) => {
+        const next = { ...current }
+        delete next[id]
+        return next
+      })
+    },
+    [api],
   )
 
   const sendPrompt = useCallback(
@@ -410,19 +500,22 @@ export function ConsoleProvider({ children }) {
   // `onBeat` receives each view while the login runs; the promise settles
   // when the CLI exits, and the capabilities are re-read so the row
   // carries the harness's own fresh status words.
+  // A harness's own sign-in, relayed - on this computer, or on one of the
+  // account's machines (`deviceId`), where its CLI runs.
   const signIn = useCallback(
-    async (harnessId, { onBeat } = {}) => {
+    async (harnessId, { onBeat, deviceId = null } = {}) => {
+      const target = api.device(deviceId)
       let start
       try {
-        start = await api.startSignIn(harnessId)
+        start = await target.startSignIn(harnessId)
       } catch (err) {
         // A relay already running is one the human abandoned (or a modal
         // reopened): stop the stale attempt, then start fresh - the new
         // CLI's own login server is the one that must answer the browser.
         if (err?.status !== 409) throw err
-        await api.stopSignIn(harnessId)
+        await target.stopSignIn(harnessId)
         await new Promise((r) => setTimeout(r, 400))
-        start = await api.startSignIn(harnessId)
+        start = await target.startSignIn(harnessId)
       }
       const first = start?.result ?? start
       onBeat?.(first)
@@ -434,7 +527,7 @@ export function ConsoleProvider({ children }) {
         const poll = setInterval(async () => {
           let view = null
           try {
-            view = await api.signInView(harnessId)
+            view = await target.signInView(harnessId)
           } catch {
             return // the poll heals
           }
@@ -451,15 +544,15 @@ export function ConsoleProvider({ children }) {
   )
 
   const feedSignIn = useCallback(
-    async (harnessId, text) => {
-      await api.signInInput(harnessId, text)
+    async (harnessId, text, deviceId = null) => {
+      await api.device(deviceId).signInInput(harnessId, text)
     },
     [api],
   )
 
   const stopSignIn = useCallback(
-    async (harnessId) => {
-      await api.stopSignIn(harnessId)
+    async (harnessId, deviceId = null) => {
+      await api.device(deviceId).stopSignIn(harnessId)
     },
     [api],
   )
@@ -577,6 +670,19 @@ export function ConsoleProvider({ children }) {
       ensureChat,
       createChat,
       modelsFor,
+      cloud,
+      devices,
+      thisDevice: cloud?.device?.id ?? null,
+      apiFor,
+      capabilitiesFor,
+      refreshCloud,
+      signInCloud,
+      cancelCloudSignIn,
+      signOutCloud,
+      setDeviceKind,
+      removeDevice,
+      createEnrollment,
+      deleteChat,
       sendPrompt,
       updateChatSettings,
       answerDecision,
@@ -615,6 +721,18 @@ export function ConsoleProvider({ children }) {
       ensureChat,
       createChat,
       modelsFor,
+      cloud,
+      devices,
+      apiFor,
+      capabilitiesFor,
+      refreshCloud,
+      signInCloud,
+      cancelCloudSignIn,
+      signOutCloud,
+      setDeviceKind,
+      removeDevice,
+      createEnrollment,
+      deleteChat,
       sendPrompt,
       updateChatSettings,
       answerDecision,

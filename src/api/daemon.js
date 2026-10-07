@@ -36,13 +36,21 @@ export function newRequestId() {
 }
 
 export class DaemonApi {
-  constructor(url, token) {
+  // `prefix` points every call at another of the user's devices, through
+  // this daemon (`/devices/<id>`): the same API, answered over there.
+  constructor(url, token, prefix = '') {
     let clean = url?.replace(/\/+$/, '') ?? null
     // Manual entry often omits the scheme; without one, fetch treats the
     // address as a relative path and fails confusingly.
     if (clean && !/^https?:\/\//.test(clean)) clean = `http://${clean}`
     this.url = clean
     this.token = token
+    this.prefix = prefix
+  }
+
+  /** The same client, aimed at another of the user's devices. */
+  device(id) {
+    return id ? new DaemonApi(this.url, this.token, `/devices/${id}`) : this
   }
 
   get ready() {
@@ -50,7 +58,7 @@ export class DaemonApi {
   }
 
   async call(method, path, body) {
-    const response = await fetch(`${this.url}${path}`, {
+    const response = await fetch(`${this.url}${this.prefix}${path}`, {
       method,
       headers: {
         Authorization: `Bearer ${this.token}`,
@@ -89,7 +97,7 @@ export class DaemonApi {
     return this.call('GET', `/sessions/${id}`)
   }
 
-  createSession({ harness, workspace, model, effort, permissionMode, fast }) {
+  createSession({ harness, workspace, model, effort, permissionMode, fast, deviceId, synced }) {
     return this.call('POST', '/sessions', {
       request_id: newRequestId(),
       harness,
@@ -98,7 +106,54 @@ export class DaemonApi {
       ...(effort ? { effort } : {}),
       ...(permissionMode ? { permission_mode: permissionMode } : {}),
       ...(fast ? { fast: true } : {}),
+      ...(deviceId ? { device_id: deviceId } : {}),
+      ...(synced ? { synced: true } : {}),
     })
+  }
+
+  /** Deletes a synced chat on every device. */
+  deleteSession(id) {
+    return this.call('DELETE', `/sessions/${id}`)
+  }
+
+  // Cloud mode: this computer's account and devices.
+
+  cloud() {
+    return this.call('GET', '/cloud')
+  }
+
+  /** Starts a moreweb sign-in; `open` has the daemon open the browser. */
+  cloudSignIn({ open = true } = {}) {
+    return this.call('POST', '/cloud/signin', { open })
+  }
+
+  cloudSignInCancel() {
+    return this.call('POST', '/cloud/signin/cancel')
+  }
+
+  cloudSignOut() {
+    return this.call('POST', '/cloud/signout')
+  }
+
+  cloudDevices() {
+    return this.call('GET', '/cloud/devices')
+  }
+
+  setDeviceKind(id, kind) {
+    return this.call('POST', `/cloud/devices/${id}/kind`, { kind })
+  }
+
+  removeDevice(id) {
+    return this.call('DELETE', `/cloud/devices/${id}`)
+  }
+
+  createEnrollment() {
+    return this.call('POST', '/cloud/enrollments')
+  }
+
+  /** The subfolders of `path` (default: home) on the device this aims at. */
+  fsDirs(path) {
+    return this.call('GET', `/fs/dirs${path ? `?path=${encodeURIComponent(path)}` : ''}`)
   }
 
   prompt(id, text) {

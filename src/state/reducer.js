@@ -52,7 +52,11 @@ export function chatFromSession(session) {
     thinkingTokens: 0,
     lastError: session.last_error ?? null,
     running: ['starting', 'working', 'waiting'].includes(session.status),
-    title: null,
+    // The daemon keeps each chat's title, so every device shows the same
+    // name before the transcript loads.
+    title: session.title ?? null,
+    // The device that runs a synced chat; none for a private one.
+    executor: session.executor ?? null,
     timeline: [],
     pendingDecisionId: null,
     // The highest event seq already folded into the timeline - reopening

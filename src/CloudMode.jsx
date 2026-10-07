@@ -1,10 +1,12 @@
-// Cloud mode's coming-soon state: the main area while the mode switch
-// sits on Cloud. The subject itself is the hero - the cloud with
-// machines checking in around it, in the app's own status palette -
-// drawn in once, then the words under it: status pill, title, subtext,
-// one action.
+// Cloud's door: the main area while the mode switch sits on Cloud and this
+// computer isn't signed in. The subject is the hero - the cloud with
+// machines checking in around it, in the app's own status palette, drawn
+// in once - then the words and one action. Signing in happens in the
+// system browser; the daemon opens it and the poll notices when it's done.
 
-import { House } from '@phosphor-icons/react'
+import { useState } from 'react'
+import { ArrowSquareOut, Copy, House } from '@phosphor-icons/react'
+import { useConsole } from './state/console.jsx'
 import './cloudmode.css'
 
 // One machine checking in: a small card with its status dot - green for
@@ -19,7 +21,63 @@ function MachineNode({ x, y, online, delay }) {
   )
 }
 
+// What the screen says for each sign-in state.
+function words(cloud) {
+  switch (cloud?.state) {
+    case 'signing_in':
+      return {
+        title: 'Finish in your browser',
+        body: "moreweb's sign-in page is open in your browser. Come back here once it says you're signed in.",
+      }
+    case 'relink':
+      return {
+        title: 'Sign in again',
+        body: 'Your sign-in on this computer ended. Sign in to reach your other devices again.',
+      }
+    case 'revoked':
+      return {
+        title: 'This computer was removed',
+        body: "It was taken out of your Cloud, and the synced chats it kept for your other devices were deleted here. Its Local chats are untouched. Sign in to add it again.",
+      }
+    default:
+      return {
+        title: 'Sign in to use Cloud',
+        body: 'Cloud connects this computer with your others - servers, home machines, other laptops. Chats sync between them end to end encrypted; moreweb never sees or keeps them.',
+      }
+  }
+}
+
 export default function CloudMode({ onBackToLocal }) {
+  const { cloud, connection, signInCloud, cancelCloudSignIn } = useConsole()
+  const [link, setLink] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const { title, body } = words(cloud)
+  const signingIn = cloud?.state === 'signing_in'
+
+  const start = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const started = await signInCloud()
+      // No browser could be opened from here: hand over the link instead.
+      setLink(started?.opened ? null : started?.authorize_url ?? null)
+    } catch (err) {
+      setError(err.message ?? String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const cancel = async () => {
+    setLink(null)
+    try {
+      await cancelCloudSignIn()
+    } catch {
+      /* the poll settles it */
+    }
+  }
+
   return (
     <div className="cloudmode">
       <div className="cm-horizon" aria-hidden="true" />
@@ -49,17 +107,58 @@ export default function CloudMode({ onBackToLocal }) {
           <MachineNode x={226} y={118} delay={660} />
         </svg>
 
-        <h1 className="cm-title">Cloud is coming</h1>
+        <h1 className="cm-title">{title}</h1>
+        <p className="cm-body">{body}</p>
+        {(error || cloud?.error) && !signingIn && (
+          <p className="cm-error" role="alert">
+            {error ?? cloud.error}
+          </p>
+        )}
 
-        <p className="cm-body">
-          Cloud mode connects the harnesses on machines you reach over the network - cloud hosts,
-          home servers, anything that checks in. Until it lands, everything stays on this computer.
-        </p>
+        {link && (
+          <div className="cm-linkbox">
+            <span className="cm-linktext">{link}</span>
+            <button
+              type="button"
+              className="cm-back cm-copy"
+              onClick={() => navigator.clipboard?.writeText(link)}
+              title="Copy the sign-in link"
+            >
+              <Copy size={13} />
+              Copy link
+            </button>
+          </div>
+        )}
 
-        <button type="button" className="cm-back" onClick={onBackToLocal}>
-          <House size={13} />
-          Back to Local
-        </button>
+        <div className="cm-actions">
+          {signingIn ? (
+            <>
+              <button type="button" className="cm-back primary" onClick={start} disabled={busy}>
+                <ArrowSquareOut size={13} />
+                Open the page again
+              </button>
+              <button type="button" className="cm-back" onClick={cancel}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="cm-back primary"
+                onClick={start}
+                disabled={busy || connection.state !== 'connected'}
+              >
+                <ArrowSquareOut size={13} />
+                {cloud?.state === 'revoked' || cloud?.state === 'relink' ? 'Sign in again' : 'Sign in with moreweb'}
+              </button>
+              <button type="button" className="cm-back" onClick={onBackToLocal}>
+                <House size={13} />
+                Back to Local
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )

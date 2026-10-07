@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ArrowUp, House, FolderOpen, Lightning } from '@phosphor-icons/react'
 import PickerMenu from './PickerMenu.jsx'
+import FolderBrowserModal from './FolderBrowserModal.jsx'
+import { machinePickerItems } from './cloud.js'
 import { HarnessMark } from './brand-marks.jsx'
 import SignInModal from './SignInModal.jsx'
 import HarnessManagerModal from './HarnessManagerModal.jsx'
@@ -17,8 +19,18 @@ import './composer.css'
 // sign-in prompt offers the relay only there; the others say their own
 // honest words.
 
-export default function NewChat({ onOpen }) {
-  const { connection, capabilities, sessions, chats, createChat, modelsFor } = useConsole()
+export default function NewChat({ onOpen, mode = 'local' }) {
+  const { connection, capabilities, sessions, chats, createChat, modelsFor, devices, thisDevice, capabilitiesFor, apiFor } =
+    useConsole()
+  // In Cloud a chat can run on this computer or one of the account's
+  // machines; in Local it always runs here.
+  const [target, setTarget] = useState(null)
+  const [targetCaps, setTargetCaps] = useState(null)
+  const [browsing, setBrowsing] = useState(false)
+  const cloudMode = mode === 'cloud'
+  const machines = cloudMode ? machinePickerItems(devices, thisDevice) : []
+  const targetItem = machines.find((m) => m.id === target) ?? null
+  const targetOffline = Boolean(target && targetItem && !targetItem.online)
   const [defaults] = useState(() => loadDefaults())
   const [text, setText] = useState('')
   const [workspace, setWorkspace] = useState(() => defaults.workspace ?? loadRecentWorkspaces()[0] ?? null)
@@ -33,8 +45,23 @@ export default function NewChat({ onOpen }) {
   const [signInFor, setSignInFor] = useState(null)
   const [managingHarnesses, setManagingHarnesses] = useState(false)
 
-  // Only what the daemon reports installed - no dead UI.
-  const available = (capabilities?.harnesses ?? []).filter((h) => h.available)
+  // A machine's own harnesses, fetched when a chat aims at it.
+  useEffect(() => {
+    let cancelled = false
+    setTargetCaps(null)
+    if (target) {
+      capabilitiesFor(target).then((caps) => {
+        if (!cancelled) setTargetCaps(caps)
+      })
+    }
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target])
+
+  // Only what the machine reports installed - no dead UI.
+  const available = ((target ? targetCaps : capabilities)?.harnesses ?? []).filter((h) => h.available)
   const currentHarness = available.find((h) => h.id === harness) ?? available[0] ?? null
   // The picked harness's own sign-in fact: a harness that isn't signed in
   // says so right here - the task is about to run on it.
@@ -55,7 +82,7 @@ export default function NewChat({ onOpen }) {
       return
     }
     setModelsPending(true)
-    modelsFor(currentHarness.id).then((list) => {
+    modelsFor(currentHarness.id, target).then((list) => {
       if (!cancelled) {
         setModels(list ?? [])
         setModelsPending(false)
@@ -65,11 +92,11 @@ export default function NewChat({ onOpen }) {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentHarness?.id, connection.state])
+  }, [currentHarness?.id, connection.state, target])
 
   const canSend =
     text.trim().length > 0 && workspace && !busy && currentHarness && connection.state === 'connected'
-    && !needsSignIn
+    && !needsSignIn && !targetOffline
   // The harness's own pre-send fact: what its config says a fresh chat
   // runs, in its own words (grok's config.toml, agy's settings, claude's
   // priority chain) - none where the harness says nothing (the slot stays
@@ -83,7 +110,7 @@ export default function NewChat({ onOpen }) {
     resolvedDefault && currentHarness?.default_effort
       ? `${resolvedDefault} · ${currentHarness.default_effort}`
       : resolvedDefault
-  const recents = loadRecentWorkspaces()
+  const recents = target ? [] : loadRecentWorkspaces()
   const active = workspace ?? ''
   const inProgress = (sessions ?? []).filter((s) => ['starting', 'working', 'waiting'].includes(s.status))
   // The effort slot follows the model slot's rule: only where the active
@@ -102,8 +129,16 @@ export default function NewChat({ onOpen }) {
     setBusy(true)
     setError(null)
     try {
-      const id = await createChat(text.trim(), workspace, currentHarness.id, model ?? undefined, fast || undefined, chosenEffort ?? undefined)
-      pushRecentWorkspace(workspace)
+      const id = await createChat(
+        text.trim(),
+        workspace,
+        currentHarness.id,
+        model ?? undefined,
+        fast || undefined,
+        chosenEffort ?? undefined,
+        { deviceId: target, synced: cloudMode },
+      )
+      if (!target) pushRecentWorkspace(workspace)
       setText('')
       onOpen(id)
     } catch (err) {
@@ -114,11 +149,25 @@ export default function NewChat({ onOpen }) {
   }
 
   // The native folder dialog - one click instead of a typed absolute path.
+  // Another machine's folders (or this one's, with no native dialog) are
+  // browsed in the app instead.
   const browse = async () => {
+    if (target || !canPickFolder) {
+      setBrowsing(true)
+      return
+    }
     const path = await pickFolder()
     if (!path) return
     setWorkspace(path)
     pushRecentWorkspace(path)
+  }
+
+  // Switching machines: a folder belongs to one machine, so the choice
+  // starts over (this computer gets its recents back).
+  const chooseTarget = (id) => {
+    setTarget(id)
+    setWorkspace(id ? null : defaults.workspace ?? loadRecentWorkspaces()[0] ?? null)
+    setPicker(null)
   }
 
   return (
@@ -344,17 +393,72 @@ export default function NewChat({ onOpen }) {
               )}
             </div>
           )}
-          {canPickFolder && (
-            <button type="button" className="nc-browse" onClick={browse} title="Choose a folder">
+          {target && workspace && (
+            <span className="nc-meta nc-static" title={workspace}>
               <FolderOpen size={13} weight="light" />
-              Browse…
-            </button>
+              {workspace.split(/[\\/]/).filter(Boolean).pop()}
+            </span>
           )}
-          <span className="nc-meta nc-static">
-            <House size={13} weight="light" />
-            This computer
-          </span>
+          <button type="button" className="nc-browse" onClick={browse} title="Choose a folder">
+            <FolderOpen size={13} weight="light" />
+            Browse…
+          </button>
+          {cloudMode ? (
+            <div className="nc-device">
+              <button
+                className="nc-meta"
+                onClick={openPicker('machine')}
+                aria-haspopup="listbox"
+                aria-expanded={picker?.kind === 'machine'}
+                title="Where the chat runs"
+              >
+                <span className={`nc-dev-dot nc-dev-dot--${targetOffline ? 'offline' : 'online'}`} />
+                {targetItem?.name ?? 'This computer'}
+              </button>
+              {picker?.kind === 'machine' && (
+                <PickerMenu
+                  label="Run on"
+                  searchPlaceholder="Search machines"
+                  items={machines.map((m) => ({ ...m, id: m.id ?? 'here' }))}
+                  groups={null}
+                  selectedId={target ?? 'here'}
+                  onChoose={(id) => chooseTarget(id === 'here' ? null : id)}
+                  onClose={() => setPicker(null)}
+                  anchor={{ left: picker.x, top: picker.y }}
+                  renderIcon={(m) =>
+                    m.here ? (
+                      <House size={13} weight="light" />
+                    ) : (
+                      <span className={`nc-dev-dot nc-dev-dot--${m.online ? 'online' : 'offline'}`} />
+                    )
+                  }
+                  renderSubline={(m) =>
+                    m.here ? null : <span className="nc-item-sub">{m.online ? m.platform : 'Offline'}</span>
+                  }
+                />
+              )}
+            </div>
+          ) : (
+            <span className="nc-meta nc-static">
+              <House size={13} weight="light" />
+              This computer
+            </span>
+          )}
         </div>
+        {targetOffline && <p className="nc-error">{targetItem.name} is offline.</p>}
+        {browsing && (
+          <FolderBrowserModal
+            api={apiFor(target)}
+            where={targetItem?.name ?? 'this computer'}
+            start={workspace}
+            onChoose={(path) => {
+              setWorkspace(path)
+              if (!target) pushRecentWorkspace(path)
+              setBrowsing(false)
+            }}
+            onClose={() => setBrowsing(false)}
+          />
+        )}
         {connection.state === 'error' && <p className="nc-error">{connection.error}</p>}
         {error && <p className="nc-error">{error}</p>}
         {signInFor && (

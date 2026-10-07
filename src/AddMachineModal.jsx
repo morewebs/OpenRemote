@@ -1,37 +1,35 @@
-// Add a machine: pick the OS (its install command), name it (the grid's
-// hostname slug). The machine lands waiting - it comes online when its
-// agent checks in, never from here.
+// Add a machine: a one-time install command for a Linux computer. Run on
+// the machine, it installs OpenRemote as a background service and joins
+// this Cloud; the modal notices when it arrives. The command works once,
+// for an hour.
 
-import { useEffect, useState } from 'react'
-import { AppleLogo, Check, Copy, LinuxLogo, WindowsLogo, X } from '@phosphor-icons/react'
+import { useEffect, useRef, useState } from 'react'
+import { Check, Copy, X } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 
-const OS_OPTIONS = [
-  { id: 'macos', name: 'macOS', icon: AppleLogo, cmd: 'curl -fsSL openremote.space/install | sh' },
-  { id: 'linux', name: 'Linux', icon: LinuxLogo, cmd: 'curl -fsSL openremote.space/install | sh' },
-  { id: 'windows', name: 'Windows', icon: WindowsLogo, cmd: 'irm openremote.space/install.ps1 | iex' },
-]
-
-function slug(name) {
-  return (
-    String(name ?? '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-  )
-}
-
 export default function AddMachineModal({ onClose }) {
-  const { machines, createMachine } = useConsole()
-  const [os, setOs] = useState('linux')
-  const [name, setName] = useState('')
-  const [copied, setCopied] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const { createEnrollment, devices, refreshCloud } = useConsole()
+  const [enrollment, setEnrollment] = useState(null)
   const [error, setError] = useState(null)
-  const current = OS_OPTIONS.find((o) => o.id === os)
-  const hostname = slug(name)
-  const duplicate = hostname && (machines ?? []).some((m) => m.machine.name === hostname)
+  const [copied, setCopied] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
+  // The devices there before the command existed: a new one is the arrival.
+  const known = useRef(new Set((devices ?? []).map((d) => d.id)))
+
+  const mint = async () => {
+    setError(null)
+    setCopied(false)
+    try {
+      setEnrollment(await createEnrollment())
+    } catch (err) {
+      setError(err.message ?? String(err))
+    }
+  }
+
+  useEffect(() => {
+    mint()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     const onKey = (e) => {
@@ -41,36 +39,26 @@ export default function AddMachineModal({ onClose }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  // Look for the machine while the modal is open (the poll is slower).
+  useEffect(() => {
+    const tick = setInterval(() => {
+      setNow(Date.now())
+      refreshCloud()
+    }, 2000)
+    return () => clearInterval(tick)
+  }, [refreshCloud])
+
+  const joined = (devices ?? []).find((d) => !known.current.has(d.id) && d.created_via === 'enrollment')
+  const expired = enrollment && enrollment.expires_at > 0 && now / 1000 > enrollment.expires_at
+
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(current.cmd)
+      await navigator.clipboard.writeText(enrollment.install_command)
       setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
     } catch {
-      /* clipboard unavailable */
+      /* the command stays selectable */
     }
   }
-
-  const add = async () => {
-    if (!hostname || duplicate || busy) return
-    setBusy(true)
-    setError(null)
-    try {
-      await createMachine(hostname, os)
-      onClose()
-    } catch (err) {
-      setError(err.message ?? String(err))
-      setBusy(false)
-    }
-  }
-
-  const hint = !hostname
-    ? 'The machine stays waiting until its agent checks in.'
-    : duplicate
-      ? `${hostname} is already in the list.`
-      : name.trim() !== hostname
-        ? `It will show up as ${hostname}.`
-        : 'The machine stays waiting until its agent checks in.'
 
   return (
     <div
@@ -86,52 +74,38 @@ export default function AddMachineModal({ onClose }) {
             <X size={14} weight="bold" />
           </button>
         </div>
-        <p className="dv-modal-hint">
-          Run this on the machine, then name it. It does not come online from here.
-        </p>
-        <div className="dv-os" role="group" aria-label="Operating system">
-          {OS_OPTIONS.map((o) => {
-            const Icon = o.icon
-            return (
-              <button
-                key={o.id}
-                className={o.id === os ? 'on' : ''}
-                aria-pressed={o.id === os}
-                onClick={() => setOs(o.id)}
-              >
-                <Icon size={13} />
-                {o.name}
-              </button>
-            )
-          })}
-        </div>
-        <div className="dv-modal-cmd">
-          <code>{current.cmd}</code>
-          <button className="dv-modal-copy" onClick={copy} title="Copy command">
-            {copied ? <Check size={13} weight="bold" /> : <Copy size={13} />}
-          </button>
-        </div>
-        <label className="dv-host">
-          Hostname
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="build-box"
-            spellCheck={false}
-            autoComplete="off"
-            aria-label="Hostname"
-          />
-          <span className="dv-host-hint">{hint}</span>
-        </label>
+        {joined ? (
+          <p className="dv-modal-hint">
+            {joined.name} joined your Cloud. Your devices can run chats on it now.
+          </p>
+        ) : (
+          <>
+            <p className="dv-modal-hint">
+              Run this on a Linux computer. It installs OpenRemote as a background service and joins your Cloud as a
+              machine. The command works once, for an hour.
+            </p>
+            {enrollment && !expired && (
+              <div className="dv-modal-cmd">
+                <code>{enrollment.install_command}</code>
+                <button className="dv-modal-copy" onClick={copy} title="Copy command">
+                  {copied ? <Check size={13} weight="bold" /> : <Copy size={13} />}
+                </button>
+              </div>
+            )}
+            {enrollment && !expired && <p className="dv-modal-hint">Waiting for it to join…</p>}
+          </>
+        )}
         {error && <p className="dv-error">{error}</p>}
-        <button
-          type="button"
-          className="dv-act dv-connect"
-          disabled={!hostname || duplicate || busy}
-          onClick={add}
-        >
-          {busy ? 'Adding…' : 'Add machine'}
-        </button>
+        {(expired || error) && !joined && (
+          <button type="button" className="dv-act dv-connect" onClick={mint}>
+            Get a new command
+          </button>
+        )}
+        {joined && (
+          <button type="button" className="dv-act dv-connect" onClick={onClose}>
+            Done
+          </button>
+        )}
       </div>
     </div>
   )

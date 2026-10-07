@@ -210,6 +210,69 @@
   color: var(--text-3);
 }
 
+.cm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.cm-actions .cm-back {
+  margin-top: 0;
+}
+
+/* amber marks the primary interaction (DESIGN.md) - no fill, no shadow */
+.cm-back.primary {
+  border-color: rgba(220, 162, 75, 0.45);
+  color: var(--accent);
+}
+
+.cm-back.primary svg {
+  color: var(--accent);
+}
+
+.cm-back.primary:hover {
+  background: rgba(220, 162, 75, 0.08);
+  color: var(--accent);
+}
+
+.cm-back:disabled {
+  opacity: 0.5;
+}
+
+.cm-error {
+  max-width: 40ch;
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+/* the sign-in link, when no browser could be opened from here */
+.cm-linkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  margin-top: 18px;
+}
+
+.cm-linktext {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono, 'Geist Mono', ui-monospace, Consolas, monospace);
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  user-select: all;
+}
+
+.cm-copy {
+  flex: none;
+  margin-top: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cm-cloud,
   .cm-node,

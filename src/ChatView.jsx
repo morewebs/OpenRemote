@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Lightning, Stop, Play, HandPalm, Brain } from '@phosphor-icons/react'
+import { ArrowUp, Lightning, Stop, Play, HandPalm, Brain, Trash } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
+import { chatAccess, deviceName } from './cloud.js'
 import { railItems } from './state/reducer.js'
 import { harnessName } from './harness-names.js'
 import { HarnessMark } from './brand-marks.jsx'
@@ -55,8 +56,34 @@ const LIVE_SETTINGS = {
 }
 
 export default function ChatView({ chat, onBack }) {
-  const { capabilities, connection, sendPrompt, updateChatSettings, answerDecision, stopChat, interruptChat, resumeChat, modelsFor } =
-    useConsole()
+  const {
+    capabilities,
+    connection,
+    sendPrompt,
+    updateChatSettings,
+    answerDecision,
+    stopChat,
+    interruptChat,
+    resumeChat,
+    modelsFor,
+    devices,
+    thisDevice,
+    cloud,
+    setDeviceKind,
+    deleteChat,
+  } = useConsole()
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  // A synced chat may run on another device: what can be done from here.
+  const access = chatAccess(chat, devices, thisDevice, cloud)
+  const reachable = access === 'here' || access === 'remote'
+  const elsewhere = chat.executor && chat.executor !== thisDevice
+  const where = elsewhere ? deviceName(devices, chat.executor) : 'this computer'
+  const blocked = {
+    offline: `${where} is offline - this copy is read-only until it is back`,
+    'not-machine': `${where} isn't a machine - make it one to continue from here`,
+    'signed-out': 'Sign in to Cloud to continue this chat',
+    gone: `${where} left your Cloud - this copy is read-only`,
+  }[access]
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -72,7 +99,7 @@ export default function ChatView({ chat, onBack }) {
   // need Resume first. Gating on `running` dead-locked the composer
   // after the first turn completed.
   const alive = !['stopped', 'failed'].includes(chat.status)
-  const canSend = text.trim().length > 0 && !pendingDecision && alive && !busy
+  const canSend = text.trim().length > 0 && !pendingDecision && alive && !busy && reachable
   const harness = (capabilities?.harnesses ?? []).find((h) => h.id === chat.harness)
   const live = LIVE_SETTINGS[chat.harness] ?? { model: false, effort: false, fast: false }
   // A stopped chat can change anything the harness accepts at start. A
@@ -88,7 +115,7 @@ export default function ChatView({ chat, onBack }) {
       return
     }
     setModelsPending(true)
-    modelsFor(chat.harness).then((list) => {
+    modelsFor(chat.harness, elsewhere ? chat.executor : null).then((list) => {
       if (!cancelled) {
         setModels(list ?? [])
         setModelsPending(false)
@@ -182,6 +209,7 @@ export default function ChatView({ chat, onBack }) {
           {chat.status !== 'idle' && <span className={`cv-dot cv-dot--${chat.status}`} />}
           <span className="cv-where">{chat.workspace}</span>
           <span className="cv-fact">{harnessName(chat.harness)}</span>
+          {elsewhere && <span className="cv-fact">on {where}</span>}
           {chat.model && <span className="cv-fact">{chat.model}</span>}
           {chat.effort && <span className="cv-fact">{chat.effort}</span>}
           {chat.fast && <span className="cv-fact">Fast</span>}
@@ -197,7 +225,16 @@ export default function ChatView({ chat, onBack }) {
             </span>
           )}
           <span className="cv-fact">{STATUS_LABEL[chat.status] ?? chat.status}</span>
-          {chat.running && (
+          {access === 'not-machine' && (
+            <button
+              className="cv-fact-btn"
+              onClick={() => control(() => setDeviceKind(chat.executor, 'machine'))}
+              title={`Let your other devices run chats on ${where}`}
+            >
+              Make {where} a machine
+            </button>
+          )}
+          {reachable && chat.running && (
             <>
               <button className="cv-fact-btn" onClick={() => control(() => interruptChat(chat.id))} title="Interrupt the running turn - the session stays alive">
                 <HandPalm size={11} weight="fill" />
@@ -209,11 +246,31 @@ export default function ChatView({ chat, onBack }) {
               </button>
             </>
           )}
-          {(chat.status === 'stopped' || chat.status === 'failed') && (
+          {reachable && (chat.status === 'stopped' || chat.status === 'failed') && (
             <button className="cv-fact-btn" onClick={() => control(() => resumeChat(chat.id))} title="Resume the session">
               <Play size={11} weight="fill" />
               Resume
             </button>
+          )}
+          {/* Deleting a synced chat removes it from every device - asked
+              twice, in place. */}
+          {chat.executor && (
+            confirmDelete ? (
+              <>
+                <button className="cv-fact-btn" onClick={() => control(() => deleteChat(chat.id))} title="Delete this chat on all your devices">
+                  <Trash size={11} />
+                  Delete everywhere
+                </button>
+                <button className="cv-fact-btn" onClick={() => setConfirmDelete(false)}>
+                  Keep
+                </button>
+              </>
+            ) : (
+              <button className="cv-fact-btn" onClick={() => setConfirmDelete(true)} title="Delete this chat">
+                <Trash size={11} />
+                Delete
+              </button>
+            )
           )}
         </p>
         {chat.lastError && chat.status === 'failed' && <p className="cv-facts cv-error">{chat.lastError}</p>}
@@ -340,7 +397,7 @@ export default function ChatView({ chat, onBack }) {
           })}
           {chat.running && !pendingDecision && (
             <p className="cv-node cv-node--run cv-running">
-              With {harnessName(chat.harness)} · this computer
+              With {harnessName(chat.harness)} · {where}
             </p>
           )}
         </div>
@@ -357,8 +414,17 @@ export default function ChatView({ chat, onBack }) {
                 send()
               }
             }}
-            placeholder={pendingDecision ? 'Decide above to continue' : alive ? (chat.running ? 'Steer the session' : 'Send a message') : 'Resume the session to continue'}
-            disabled={pendingDecision || !alive}
+            placeholder={
+              blocked ??
+              (pendingDecision
+                ? 'Decide above to continue'
+                : alive
+                  ? chat.running
+                    ? 'Steer the session'
+                    : 'Send a message'
+                  : 'Resume the session to continue')
+            }
+            disabled={pendingDecision || !alive || !reachable}
             spellCheck={false}
           />
           <div className="cv-foot">
