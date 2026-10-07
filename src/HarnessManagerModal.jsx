@@ -1,8 +1,8 @@
 // The harness manager: the inventory of all six harnesses on this
 // machine, installed or not. Installed rows carry the daemon's own probe
 // words (version, path, sign-in status); missing ones install right here
-// through their owner's own installer, shown verbatim. Opened from the
-// harness picker's footer row.
+// through their owner's own installer. Opened from the harness picker's
+// footer row.
 
 import { useEffect, useState } from 'react'
 import { X } from '@phosphor-icons/react'
@@ -68,8 +68,8 @@ export default function HarnessManagerModal({ onClose, onSignIn }) {
           </button>
         </div>
         <p className="dv-modal-hint">
-          What the daemon can drive on this machine. Install runs each harness&apos;s own
-          installer, the command shown.
+          The coding agents on this machine. Install any that are missing - each one
+          comes from its maker&apos;s official installer.
         </p>
         <div className="dv-hm-list">
           {rows.map((row) => (
@@ -86,8 +86,7 @@ export default function HarnessManagerModal({ onClose, onSignIn }) {
                 </div>
                 {row.detail &&
                   // Mono is for technical content (DESIGN.md): the
-                  // daemon's probe words and install commands are mono,
-                  // the prose notes are plain text.
+                  // daemon's probe words are mono, prose is plain text.
                   (row.detailKind === 'mono' ? (
                     <code className="dv-hm-detail" title={row.detail}>
                       {row.detail}
@@ -95,7 +94,6 @@ export default function HarnessManagerModal({ onClose, onSignIn }) {
                   ) : (
                     <span className="dv-hm-detail dv-hm-note">{row.detail}</span>
                   ))}
-                {row.note && <span className="dv-hm-detail dv-hm-note">{row.note}</span>}
                 {error?.harnessId === row.id && (
                   <div className="dv-error dv-hm-error">
                     <pre>{error.message}</pre>
@@ -157,7 +155,6 @@ function RuntimeConfirm({ name, onCancel, onConfirm }) {
           {name} runs on Node.js. OpenRemote will set up the official Node.js 22 for it, in{' '}
           {name}&apos;s own folder - the same place {name}&apos;s installer puts it.
         </p>
-        <code className="dv-hm-detail">nodejs.org/dist/latest-v22.x</code>
         <div className="dv-actions">
           <button type="button" className="dv-act primary" autoFocus onClick={onConfirm}>
             Install {name}

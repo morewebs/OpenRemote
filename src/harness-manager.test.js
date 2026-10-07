@@ -38,7 +38,7 @@ test('a signed-out harness offers sign-in only where the daemon can relay it', (
   assert.equal(rows[1].action, 'none')
 })
 
-test('every missing harness with a spec installs - grok and agy included', () => {
+test('every missing harness with a spec installs - grok and agy included, no command shown', () => {
   const ids = ['claude', 'codex', 'grok', 'pi', 'opencode', 'agy']
   const rows = harnessRows(
     cap(ids.map((id) => ({ id, available: false }))),
@@ -47,12 +47,11 @@ test('every missing harness with a spec installs - grok and agy included', () =>
   for (const row of rows) {
     assert.equal(row.statusLabel, 'Not installed')
     assert.equal(row.action, 'install')
-    assert.equal(row.detail, `curl -fsSL https://example.test/${row.id} | bash`)
-    assert.equal(row.detailKind, 'mono')
+    assert.equal(row.detail, null)
   }
 })
 
-test('a spec that needs a runtime waits for the go-ahead, and notes ride along', () => {
+test('a spec that needs a runtime waits for the go-ahead', () => {
   const [pi, opencode] = harnessRows(
     cap([
       { id: 'pi', available: false },
@@ -62,7 +61,7 @@ test('a spec that needs a runtime waits for the go-ahead, and notes ride along',
   )
   assert.equal(pi.action, 'install-runtime')
   assert.equal(opencode.action, 'install')
-  assert.equal(opencode.note, 'Unpacks its release.')
+  assert.equal(opencode.detail, null)
 })
 
 test('a missing harness with no spec says so, once the machine has answered', () => {

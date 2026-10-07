@@ -147,8 +147,8 @@ Every screen the design specifies, backed by the real daemon:
 - **New chat** - the greeting + composer; harness picker (installed only,
   with a pinned "Manage harnesses…" row that opens the harness manager:
   all six harnesses, each installable through its owner's own installer
-  on Windows, macOS, and Linux, the command shown verbatim; pi's Node.js
-  is set up only after a calm go-ahead),
+  on Windows, macOS, and Linux - the command stays the daemon's, never
+  shown; pi's Node.js is set up only after a calm go-ahead),
   model picker where the harness advertises (its own catalog, efforts as
   sublines), the Fast toggle where the harness's own fast mode is usable
   (claude `fastMode` ≥ 2.1.205, codex `fast` service tier ≥ 0.110), the

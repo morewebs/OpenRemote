@@ -764,10 +764,6 @@
   width: 380px;
 }
 
-.dv-hm-confirm .dv-hm-detail {
-  margin-top: 10px;
-}
-
 /* amber marks the primary interaction (DESIGN.md) - no fill, no shadow */
 .dv-act.primary {
   border-color: rgba(220, 162, 75, 0.45);

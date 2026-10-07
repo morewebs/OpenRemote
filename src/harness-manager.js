@@ -1,7 +1,9 @@
 // The harness manager's row model. Capabilities say what the daemon
 // found on this machine; the machine's install specs say what it can
 // install, each through its owner's own installer - every harness, on
-// every desktop platform the owners ship for.
+// every desktop platform the owners ship for. The install command stays
+// the daemon's business: a missing row is its name, its status, and an
+// Install button.
 
 import { harnessName } from './harness-names.js'
 
@@ -30,7 +32,6 @@ export function harnessRows(capabilities, installable) {
         ready: !signedOut,
         detail,
         detailKind: 'mono',
-        note: null,
         action: signedOut && SIGNIN_HARNESSES.has(h.id) ? 'signin' : 'none',
       }
     }
@@ -41,9 +42,8 @@ export function harnessRows(capabilities, installable) {
         name,
         statusLabel: 'Not installed',
         ready: false,
-        detail: spec.command,
-        detailKind: 'mono',
-        note: spec.note ?? null,
+        detail: null,
+        detailKind: 'note',
         // A harness that needs a runtime set up first waits for the
         // human's go-ahead; the daemon refuses it otherwise.
         action: spec.needs_runtime ? 'install-runtime' : 'install',
@@ -56,7 +56,6 @@ export function harnessRows(capabilities, installable) {
       ready: false,
       detail: specById ? 'No installer for this platform.' : null,
       detailKind: 'note',
-      note: null,
       action: 'none',
     }
   })
