@@ -6,6 +6,7 @@
 
 pub mod anthropic_wire;
 pub mod events;
+pub mod paths;
 
 pub use events::{ApprovalRequest, DecisionSpec, DriverEvent};
 

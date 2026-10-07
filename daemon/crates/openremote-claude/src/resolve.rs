@@ -7,6 +7,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 
 use openremote_harness::Resolution;
+use openremote_harness::paths::{home_dir, which};
 
 pub(crate) fn resolve_impl(override_path: Option<PathBuf>) -> Resolution {
     // An override is authoritative: an injected daemon never leaks to the
@@ -64,34 +65,14 @@ pub(crate) fn resolve_impl(override_path: Option<PathBuf>) -> Resolution {
     Resolution::Unavailable
 }
 
-fn home_dir() -> Option<PathBuf> {
-    env::var_os("USERPROFILE")
-        .or_else(|| env::var_os("HOME"))
-        .map(PathBuf::from)
-}
-
-fn which_exact(name: &str) -> Option<PathBuf> {
-    let path = env::var_os("PATH")?;
-    for dir in env::split_paths(&path) {
-        if !dir.is_absolute() {
-            continue;
-        }
-        let candidate = dir.join(name);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    None
-}
-
 fn which_claude() -> Option<PathBuf> {
     if cfg!(windows) {
         // Only a native exe: the extensionless `claude` file in the npm dir
         // is a POSIX sh script and `claude.cmd` is unspawnable via
         // CreateProcess - both are refused on purpose.
-        which_exact("claude.exe")
+        which("claude.exe")
     } else {
-        which_exact("claude")
+        which("claude")
     }
 }
 
@@ -100,15 +81,13 @@ fn node_script_resolution(script: PathBuf) -> Option<Resolution> {
         return None;
     }
     let node = if cfg!(windows) { "node.exe" } else { "node" };
-    let node = which_exact(node)
-        .or_else(|| which_exact("node"))
-        .or_else(|| {
-            env::var_os("PROGRAMFILES").map(|pf| {
-                let pf = PathBuf::from(pf);
-                pf.join("nodejs")
-                    .join(if cfg!(windows) { "node.exe" } else { "node" })
-            })
-        })?;
+    let node = which(node).or_else(|| which("node")).or_else(|| {
+        env::var_os("PROGRAMFILES").map(|pf| {
+            let pf = PathBuf::from(pf);
+            pf.join("nodejs")
+                .join(if cfg!(windows) { "node.exe" } else { "node" })
+        })
+    })?;
     Some(Resolution::NodeScript { node, script })
 }
 

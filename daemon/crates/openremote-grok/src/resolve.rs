@@ -1,10 +1,10 @@
 //! Grok CLI resolution: PATH first, then the documented install root
 //! `~/.grok/bin` (verified on this machine).
 
-use std::env;
 use std::path::PathBuf;
 
 use openremote_harness::Resolution;
+use openremote_harness::paths::{home_dir, which};
 
 pub(crate) fn resolve_impl(override_path: Option<PathBuf>) -> Resolution {
     // An override is authoritative: an injected daemon never leaks to the
@@ -27,24 +27,4 @@ pub(crate) fn resolve_impl(override_path: Option<PathBuf>) -> Resolution {
         }
     }
     Resolution::Unavailable
-}
-
-fn which(name: &str) -> Option<PathBuf> {
-    let path = env::var_os("PATH")?;
-    for dir in env::split_paths(&path) {
-        if !dir.is_absolute() {
-            continue;
-        }
-        let candidate = dir.join(name);
-        if candidate.is_file() {
-            return Some(candidate);
-        }
-    }
-    None
-}
-
-fn home_dir() -> Option<PathBuf> {
-    env::var_os("USERPROFILE")
-        .or_else(|| env::var_os("HOME"))
-        .map(PathBuf::from)
 }
