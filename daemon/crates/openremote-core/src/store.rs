@@ -192,12 +192,9 @@ impl Store {
             return *id;
         }
         let id = MachineId::new();
-        let hostname = std::env::var("COMPUTERNAME")
-            .or_else(|_| std::env::var("HOSTNAME"))
-            .unwrap_or_else(|_| "this-computer".to_string());
         let machine = Machine {
             id,
-            name: slug(&hostname),
+            name: slug(&crate::hostname()),
             platform: std::env::consts::OS.to_string(),
             status: MachineStatus::Online,
             this_machine: true,
@@ -682,15 +679,11 @@ impl Store {
         Ok(())
     }
 
+    /// State holds webhook keys, so only this user may read it.
     fn persist(&self) -> Result<(), StoreError> {
-        let tmp = self.dir.join("state.json.tmp");
-        let mut f = fs::File::create(&tmp)?;
         let json = serde_json::to_string_pretty(&self.state)
             .map_err(|e| StoreError::BadState(e.to_string()))?;
-        f.write_all(json.as_bytes())?;
-        f.sync_all()?;
-        drop(f);
-        fs::rename(&tmp, self.dir.join("state.json"))?;
+        crate::fsx::write_private(&self.dir.join("state.json"), json.as_bytes())?;
         Ok(())
     }
 }

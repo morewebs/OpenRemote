@@ -56,17 +56,21 @@ pub fn default_data_dir() -> PathBuf {
 }
 
 /// The bearer token: read from `<data>/token` or generated on first run.
-pub fn load_or_create_token(data_dir: &PathBuf) -> std::io::Result<String> {
+/// Whoever reads it controls every harness here, so the file and its
+/// directory are this user's alone (older builds left them group-readable).
+pub fn load_or_create_token(data_dir: &std::path::Path) -> std::io::Result<String> {
     let path = data_dir.join("token");
     if let Ok(token) = std::fs::read_to_string(&path) {
         let token = token.trim().to_string();
         if !token.is_empty() {
+            openremote_core::fsx::restrict(&path)?;
+            openremote_core::fsx::create_private_dir(data_dir)?;
             return Ok(token);
         }
     }
-    std::fs::create_dir_all(data_dir)?;
+    openremote_core::fsx::create_private_dir(data_dir)?;
     let token = uuid::Uuid::new_v4().to_string();
-    std::fs::write(&path, &token)?;
+    openremote_core::fsx::write_private(&path, token.as_bytes())?;
     Ok(token)
 }
 

@@ -52,13 +52,8 @@ async fn this_machine_is_real_from_the_first_boot() {
     let machine = &view["machine"];
     assert_eq!(machine["status"], "online");
     assert_eq!(machine["platform"], std::env::consts::OS);
-    // The name is the hostname, derived the daemon's way: COMPUTERNAME,
-    // then HOSTNAME, then the fallback - slugified. The test env differs
-    // per OS (CI runners set HOSTNAME, not COMPUTERNAME), so mirror the
-    // chain instead of assuming one variable.
-    let raw_name = std::env::var("COMPUTERNAME")
-        .or_else(|_| std::env::var("HOSTNAME"))
-        .unwrap_or_else(|_| "this-computer".to_string());
+    // The name is the hostname, slugified, found the daemon's way.
+    let raw_name = openremote_core::hostname();
     assert_eq!(
         machine["name"],
         json!(slugify(&raw_name)),

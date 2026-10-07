@@ -98,13 +98,13 @@ async fn healthz() -> impl IntoResponse {
 }
 
 async fn auth(State(app): State<Arc<App>>, request: Request, next: Next) -> Response {
-    let expected = format!("Bearer {}", app.token);
-    let header = request
+    let presented = request
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
         .unwrap_or_default();
-    if header == expected {
+    if openremote_core::same_secret(presented, &app.token) {
         return next.run(request).await;
     }
     (StatusCode::UNAUTHORIZED, "unauthorized").into_response()

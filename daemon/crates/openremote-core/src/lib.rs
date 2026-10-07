@@ -18,6 +18,7 @@
 //!   is never resent.
 
 pub mod events;
+pub mod fsx;
 pub mod ids;
 pub mod model;
 pub mod store;
@@ -30,6 +31,33 @@ pub use model::{
     Session, SessionStatus, Trigger, TriggerKind, TurnOutcome,
 };
 pub use store::Store;
+
+/// This computer's name: COMPUTERNAME on Windows, HOSTNAME when it is
+/// exported, else the kernel's own name. On Linux HOSTNAME is usually a shell
+/// variable that never reaches child processes, so the environment alone
+/// named every Linux computer "this-computer".
+pub fn hostname() -> String {
+    std::env::var("COMPUTERNAME")
+        .ok()
+        .or_else(|| std::env::var("HOSTNAME").ok())
+        .or_else(|| std::fs::read_to_string("/proc/sys/kernel/hostname").ok())
+        .or_else(|| std::fs::read_to_string("/etc/hostname").ok())
+        .or_else(|| {
+            std::process::Command::new("hostname")
+                .output()
+                .ok()
+                .and_then(|out| String::from_utf8(out.stdout).ok())
+        })
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| "this-computer".to_string())
+}
+
+/// Compares two secrets in time that doesn't depend on where they differ.
+pub fn same_secret(presented: &str, expected: &str) -> bool {
+    let (a, b) = (presented.as_bytes(), expected.as_bytes());
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
 
 /// Millis since the Unix epoch - the crate's clock surface, so tests can pin time.
 pub fn now_ms() -> i64 {

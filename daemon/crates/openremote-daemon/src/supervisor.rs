@@ -723,7 +723,8 @@ impl Supervisor {
             return Err(SupervisorError::Conflict("the rule is not enabled".into()));
         }
         let expected = rule.trigger.key.clone().unwrap_or_default();
-        if key.unwrap_or_default() != expected {
+        if expected.is_empty() || !openremote_core::same_secret(key.unwrap_or_default(), &expected)
+        {
             return Err(SupervisorError::Conflict(
                 "the webhook key does not match".into(),
             ));
