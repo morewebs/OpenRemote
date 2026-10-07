@@ -123,10 +123,17 @@ async fn get(mesh: &Mesh, peer: DeviceId, path: String) -> Option<Value> {
         .flatten()
 }
 
-/// Copies what `peer` has of chat `id` beyond this device's head.
+/// Copies what `peer` has of chat `id` beyond this device's head. One pull
+/// runs per chat at a time; a second one waits for it and then catches up
+/// itself, so a caller that needs the copy (a chat just created on a
+/// machine) never returns before it exists.
 pub async fn pull(app: &Arc<App>, peer: DeviceId, id: SessionId) {
-    if !lock(&app.sync.pulling).insert(id) {
-        return;
+    let deadline = Instant::now() + Duration::from_secs(60);
+    while !lock(&app.sync.pulling).insert(id) {
+        if Instant::now() > deadline {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
     }
     let Some(mesh) = app.cloud.mesh() else {
         lock(&app.sync.pulling).remove(&id);
