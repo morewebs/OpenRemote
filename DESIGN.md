@@ -209,10 +209,17 @@ moreweb relays ciphertext and never stores a chat.
   a machine from elsewhere (Undo). Shown once each.
 - **While OpenRemote is open:** a desktop that is a machine serves its
   devices only while the app runs; the copy says so.
+- **Keep running in the tray:** a Settings > Startup row, on by default
+  while this computer is a machine. Closing the window then hides it;
+  Quit lives in the tray menu. Where no tray can be shown (Linux without
+  appindicator) the row is absent.
+- **Sync this chat:** a private chat's facts row offers Sync once
+  signed in, asked first ("tool output included"); the chat then syncs
+  like one made in Cloud, running where it is.
 
-Deferred: the tray, the updater and its badge, auto-update, the Linux
-AppImage, signed releases, machine installers beyond Linux, "Sync this
-chat" for a private chat, moving a chat between machines and switching
+Deferred: the updater and its badge, auto-update, the Linux AppImage
+build, signed releases, machine installers beyond Linux, moving a chat
+between machines and switching
 its harness mid-chat (one hand-over mechanism), the connector triggers
 (pipeline/errors/review/release), the agent behind the pill, claude's
 context window (no wire fact yet), grok/pi/opencode/agy MCP wires,
