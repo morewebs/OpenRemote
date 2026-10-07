@@ -104,6 +104,10 @@ fn spawn_daemon(app: tauri::AppHandle) {
             .shell()
             .sidecar(DAEMON_NAME)
             .expect("daemon sidecar registered in tauri.conf.json");
+        let sidecar = match system_env() {
+            Some(vars) => sidecar.env_clear().envs(vars),
+            None => sidecar,
+        };
         let (mut rx, child) = sidecar.spawn().expect("daemon sidecar spawns");
         app.state::<DaemonState>()
             .child
@@ -131,6 +135,41 @@ fn spawn_daemon(app: tauri::AppHandle) {
             publish(&app, &mut info);
         }
     });
+}
+
+/// Under an AppImage the shell runs with the image's own library and data
+/// paths. The daemon and every harness it starts (node, python, git...)
+/// must see the system's instead, or they load the image's libraries and
+/// break. None outside an AppImage: the environment passes through as is.
+fn system_env() -> Option<Vec<(String, String)>> {
+    let appdir = std::env::var("APPDIR").ok().filter(|d| !d.is_empty())?;
+    let mut vars = Vec::new();
+    for (key, value) in std::env::vars() {
+        // The AppImage runtime's own variables, and toolkit paths set only
+        // for the image's GTK/WebKit.
+        if matches!(key.as_str(), "APPDIR" | "APPIMAGE" | "ARGV0" | "OWD")
+            || key.starts_with("GTK_")
+            || key.starts_with("GIO_")
+            || key.starts_with("GDK_PIXBUF_")
+            || key == "GI_TYPELIB_PATH"
+            || key == "GSETTINGS_SCHEMA_DIR"
+        {
+            continue;
+        }
+        if !value.contains(&appdir) {
+            vars.push((key, value));
+            continue;
+        }
+        // Path lists keep their entries from outside the image.
+        let kept: Vec<&str> = value
+            .split(':')
+            .filter(|entry| !entry.is_empty() && !entry.starts_with(&appdir))
+            .collect();
+        if !kept.is_empty() {
+            vars.push((key, kept.join(":")));
+        }
+    }
+    Some(vars)
 }
 
 /// Fill in the token (from the daemon's data dir) and hand the info to the
