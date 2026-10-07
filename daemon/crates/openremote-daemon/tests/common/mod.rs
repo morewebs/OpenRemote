@@ -118,10 +118,11 @@ pub async fn spawn_daemon_process(extra_env: &[(&str, String)]) -> TestDaemon {
             break;
         }
     }
-    for _ in 0..2 {
-        // Drain the DATA_DIR line (and the eprintln's token note if it
-        // ever moves to stdout): empty the pipe before the reader drops.
-        if lines.next().is_none() {
+    // Drain exactly the DATA_DIR line: empty the pipe before the reader
+    // drops. Reading past it would block - the daemon prints nothing
+    // more on stdout until it exits (its token note goes to stderr).
+    for line in lines.by_ref() {
+        if line.map_or(true, |l| l.starts_with("DATA_DIR ")) {
             break;
         }
     }
