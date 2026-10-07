@@ -24,6 +24,16 @@
   border-radius: var(--radius);
 }
 
+/* the same quiet scrollbar as the pickers */
+.fb-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.fb-list::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .fb-row {
   display: flex;
   flex: none;

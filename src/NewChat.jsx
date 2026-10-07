@@ -19,6 +19,8 @@ import './composer.css'
 // sign-in prompt offers the relay only there; the others say their own
 // honest words.
 
+const PLATFORM_LABEL = { windows: 'Windows', macos: 'macOS', linux: 'Linux' }
+
 export default function NewChat({ onOpen, mode = 'local' }) {
   const { connection, capabilities, sessions, chats, createChat, modelsFor, devices, thisDevice, capabilitiesFor, apiFor } =
     useConsole()
@@ -433,7 +435,9 @@ export default function NewChat({ onOpen, mode = 'local' }) {
                     )
                   }
                   renderSubline={(m) =>
-                    m.here ? null : <span className="nc-item-sub">{m.online ? m.platform : 'Offline'}</span>
+                    m.here ? null : (
+                      <span className="nc-item-sub">{m.online ? PLATFORM_LABEL[m.platform] ?? m.platform : 'Offline'}</span>
+                    )
                   }
                 />
               )}
