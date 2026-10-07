@@ -54,14 +54,23 @@ impl App {
                 let _ = store.set_this_device(id);
             }
         }
-        Arc::new(Self {
+        let app = Arc::new(Self {
             token: options.token,
             data_dir: options.data_dir,
             store,
             supervisor,
             cloud,
             port: OnceLock::new(),
-        })
+        });
+        app.start_cloud();
+        app
+    }
+
+    /// Brings the mesh up once this device has joined Cloud.
+    pub fn start_cloud(self: &Arc<Self>) {
+        self.cloud.start(Arc::new(crate::host::DaemonHost {
+            app: Arc::downgrade(self),
+        }));
     }
 }
 

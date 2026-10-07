@@ -3,6 +3,8 @@
 
 pub mod app;
 pub mod cloud_http;
+pub mod fsdirs;
+pub mod host;
 pub mod http;
 pub mod install;
 pub mod plugins;

@@ -21,8 +21,96 @@ use crate::app::App;
 use crate::supervisor::SupervisorError;
 
 pub fn router(app: Arc<App>) -> Router {
-    let authed = Router::new()
+    let authed = api_routes()
+        .route("/cloud", get(crate::cloud_http::view))
+        .route("/cloud/signin", post(crate::cloud_http::sign_in))
+        .route(
+            "/cloud/signin/cancel",
+            post(crate::cloud_http::cancel_sign_in),
+        )
+        .route("/cloud/signout", post(crate::cloud_http::sign_out))
+        .route("/cloud/devices", get(crate::cloud_http::devices))
+        .route(
+            "/cloud/devices/{id}",
+            axum::routing::delete(crate::cloud_http::remove_device),
+        )
+        .route(
+            "/cloud/devices/{id}/kind",
+            post(crate::cloud_http::set_kind),
+        )
+        // The console reaches another device's API through this one.
+        .route(
+            "/devices/{id}/{*rest}",
+            axum::routing::any(crate::cloud_http::passthrough).layer(
+                axum::extract::DefaultBodyLimit::max(openremote_cloud::rpc::MAX_REQUEST),
+            ),
+        )
+        .layer(middleware::from_fn_with_state(Arc::clone(&app), auth));
+    Router::new()
+        .route("/healthz", get(healthz))
+        // Webhooks arrive from outside the console's trust - the rule's
+        // own key is the credential, not the daemon token. (The loopback
+        // binding still keeps the surface local.)
+        .route("/hooks/{id}", post(incoming_webhook))
+        // The browser lands here after moreweb sign-in. No daemon token:
+        // the single-use state and PKCE are what protect it.
+        .route("/cloud/callback", get(crate::cloud_http::callback))
+        .merge(authed)
+        .layer(console_cors())
+        .with_state(app)
+}
+
+/// The API as the user's other devices see it: the same handlers, behind
+/// `peer_gate`. No daemon token: the mesh already proved the caller is one
+/// of the account's devices.
+pub fn peer_router(app: Arc<App>) -> Router {
+    api_routes()
+        .route_layer(middleware::from_fn_with_state(Arc::clone(&app), peer_gate))
+        .with_state(app)
+}
+
+/// What another of the user's devices may ask of this one, and only when
+/// this one is a machine. Plugins, automations, webhooks, receipts and
+/// Cloud itself never answer a peer.
+const PEER_ROUTES: &[(&str, &str)] = &[
+    ("GET", "/capabilities"),
+    ("GET", "/machines"),
+    ("GET", "/harnesses/{id}/models"),
+    ("GET", "/fs/dirs"),
+    ("POST", "/harnesses/{id}/signin"),
+    ("GET", "/harnesses/{id}/signin"),
+    ("POST", "/harnesses/{id}/signin/input"),
+    ("POST", "/harnesses/{id}/signin/stop"),
+    ("POST", "/machines/{id}/harnesses"),
+];
+
+async fn peer_gate(
+    State(app): State<Arc<App>>,
+    matched: Option<axum::extract::MatchedPath>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let path = matched.as_ref().map(|m| m.as_str()).unwrap_or_default();
+    let method = request.method().as_str();
+    if !PEER_ROUTES.iter().any(|(m, p)| *m == method && *p == path) {
+        return error(StatusCode::FORBIDDEN, "not available to your other devices");
+    }
+    // A desktop that isn't a machine only ever syncs; nobody else drives it.
+    if !app.cloud.mesh().is_some_and(|m| m.kind() == "machine") {
+        return (
+            StatusCode::CONFLICT,
+            Json(json!({"error": "this computer isn't a machine", "code": "not_a_machine"})),
+        )
+            .into_response();
+    }
+    next.run(request).await
+}
+
+/// Every route the console and (through the gate) peers share.
+fn api_routes() -> Router<Arc<App>> {
+    Router::new()
         .route("/capabilities", get(capabilities))
+        .route("/fs/dirs", get(fs_dirs))
         .route("/harnesses/{id}/models", get(harness_models))
         .route(
             "/harnesses/{id}/signin",
@@ -53,26 +141,6 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/sessions/{id}/resume", post(post_resume))
         .route("/decisions/{id}/answer", post(post_answer))
         .route("/receipts/{request_id}", get(get_receipt))
-        .route("/cloud", get(crate::cloud_http::view))
-        .route("/cloud/signin", post(crate::cloud_http::sign_in))
-        .route(
-            "/cloud/signin/cancel",
-            post(crate::cloud_http::cancel_sign_in),
-        )
-        .route("/cloud/signout", post(crate::cloud_http::sign_out))
-        .layer(middleware::from_fn_with_state(Arc::clone(&app), auth));
-    Router::new()
-        .route("/healthz", get(healthz))
-        // Webhooks arrive from outside the console's trust - the rule's
-        // own key is the credential, not the daemon token. (The loopback
-        // binding still keeps the surface local.)
-        .route("/hooks/{id}", post(incoming_webhook))
-        // The browser lands here after moreweb sign-in. No daemon token:
-        // the single-use state and PKCE are what protect it.
-        .route("/cloud/callback", get(crate::cloud_http::callback))
-        .merge(authed)
-        .layer(console_cors())
-        .with_state(app)
 }
 
 /// The console is a webview on a different origin than the daemon
@@ -247,17 +315,60 @@ async fn stop_sign_in(
 
 // ---- machines ----
 
-async fn list_machines(State(app): State<Arc<App>>) -> Response {
-    Json(app.supervisor.machines()).into_response()
+/// A peer sees only the chats this machine runs for the account; private
+/// chats never leave the computer.
+fn for_peer(app: &App, view: &mut Value) {
+    let me = app.store.lock().ok().and_then(|s| s.this_device());
+    if let Some(sessions) = view.get_mut("sessions").and_then(Value::as_array_mut) {
+        sessions.retain(|s| {
+            me.is_some_and(|me| s["executor"].as_str() == Some(me.to_string().as_str()))
+        });
+    }
 }
 
-async fn get_machine(State(app): State<Arc<App>>, AxumPath(id): AxumPath<String>) -> Response {
+async fn list_machines(
+    State(app): State<Arc<App>>,
+    peer: Option<axum::Extension<crate::host::PeerOrigin>>,
+) -> Response {
+    let mut views = serde_json::to_value(app.supervisor.machines()).unwrap_or(Value::Null);
+    if peer.is_some() {
+        for view in views.as_array_mut().into_iter().flatten() {
+            for_peer(&app, view);
+        }
+    }
+    Json(views).into_response()
+}
+
+async fn get_machine(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+    peer: Option<axum::Extension<crate::host::PeerOrigin>>,
+) -> Response {
     match MachineId::parse(&id) {
         Some(id) => match app.supervisor.machine(&id) {
-            Ok(view) => Json(view).into_response(),
+            Ok(view) => {
+                let mut view = serde_json::to_value(view).unwrap_or(Value::Null);
+                if peer.is_some() {
+                    for_peer(&app, &mut view);
+                }
+                Json(view).into_response()
+            }
             Err(err) => supervisor_error(err),
         },
         None => error(StatusCode::BAD_REQUEST, "bad machine id"),
+    }
+}
+
+#[derive(Deserialize)]
+struct FsQuery {
+    path: Option<String>,
+}
+
+async fn fs_dirs(axum::extract::Query(q): axum::extract::Query<FsQuery>) -> Response {
+    match tokio::task::spawn_blocking(move || crate::fsdirs::list(q.path.as_deref())).await {
+        Ok(Ok(listing)) => Json(listing).into_response(),
+        Ok(Err(e)) => error(StatusCode::BAD_REQUEST, &e),
+        Err(_) => error(StatusCode::INTERNAL_SERVER_ERROR, "folder listing failed"),
     }
 }
 

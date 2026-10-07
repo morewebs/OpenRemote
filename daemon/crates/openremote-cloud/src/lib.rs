@@ -10,10 +10,13 @@
 pub mod config;
 pub mod https;
 pub mod identity;
+pub mod link;
+pub mod mesh;
 pub mod oauth;
 pub mod registry;
+pub mod rpc;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -24,6 +27,7 @@ use serde_json::{Value, json};
 pub use config::CloudConfig;
 use https::Http;
 use identity::{Account, Credentials, Files, Identity};
+pub use mesh::{CloudHost, Mesh, MeshError, PeerContext};
 use registry::{DeviceInfo, Registry, RegistryError};
 
 /// A sign-in left in the browser this long is abandoned.
@@ -89,7 +93,14 @@ pub struct Cloud {
     http: Http,
     registry: Registry,
     files: Files,
+    data_dir: PathBuf,
     inner: Mutex<Inner>,
+    running: Mutex<Option<Running>>,
+}
+
+struct Running {
+    mesh: Arc<Mesh>,
+    tasks: Vec<tokio::task::JoinHandle<()>>,
 }
 
 fn now_s() -> i64 {
@@ -108,6 +119,8 @@ impl Cloud {
         };
         Arc::new(Self {
             registry: Registry::new(http.clone(), &config.api_base),
+            data_dir: data_dir.to_path_buf(),
+            running: Mutex::new(None),
             config,
             http,
             inner: Mutex::new(Inner {
@@ -359,6 +372,7 @@ impl Cloud {
     /// device credential dropped. The identity stays, so signing in again is
     /// the same device, and synced chats stay on this computer.
     pub async fn signout(&self) -> Result<(), CloudError> {
+        self.stop();
         let refresh = self.inner().credentials.refresh_token.clone();
         if let Some(token) = refresh {
             oauth::revoke(
@@ -425,6 +439,84 @@ impl Cloud {
 
     pub fn http(&self) -> &Http {
         &self.http
+    }
+
+    pub fn data_dir(&self) -> &Path {
+        &self.data_dir
+    }
+
+    /// Brings up the mesh (the relay link and the device list) for a device
+    /// that has joined. Does nothing when it isn't joined or is already up.
+    pub fn start(self: &Arc<Self>, host: Arc<dyn CloudHost>) {
+        let mut running = self.running.lock().unwrap_or_else(|e| e.into_inner());
+        if running.is_some() || !self.enrolled() {
+            return;
+        }
+        if let Some((mesh, tasks)) = mesh::start(self, host) {
+            *running = Some(Running { mesh, tasks });
+        }
+    }
+
+    /// Takes the mesh down (signing out).
+    pub fn stop(&self) {
+        if let Some(running) = self
+            .running
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+        {
+            for task in running.tasks {
+                task.abort();
+            }
+        }
+    }
+
+    pub fn mesh(&self) -> Option<Arc<Mesh>> {
+        self.running
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|r| Arc::clone(&r.mesh))
+    }
+
+    /// This device was removed from the account: its credential is gone for
+    /// good, and the daemon wipes the synced chats it held.
+    pub(crate) fn removed(&self, host: &dyn CloudHost) {
+        let _ = self.files.save_credentials(&Credentials::default());
+        {
+            let mut inner = self.inner();
+            inner.credentials = Credentials::default();
+            inner.phase = Phase::Revoked;
+            inner.error = Some("This device was removed from your account.".into());
+        }
+        host.revoked();
+    }
+
+    /// The user removed this device from their account here: it leaves for
+    /// good, and joins as a new device if it signs in again.
+    pub async fn leave(&self) -> Result<(), CloudError> {
+        self.stop();
+        if let (Some(credential), Some(id)) = (self.device_credential(), self.device_id()) {
+            let _ = self.registry.delete(&credential, &id.to_string()).await;
+        }
+        let refresh = self.inner().credentials.refresh_token.clone();
+        if let Some(token) = refresh {
+            oauth::revoke(
+                &self.http,
+                &self.config.auth_issuer,
+                &self.config.client_id,
+                &token,
+            )
+            .await;
+        }
+        self.files.save_credentials(&Credentials::default())?;
+        self.files.forget_identity()?;
+        let mut inner = self.inner();
+        inner.credentials = Credentials::default();
+        inner.identity = None;
+        inner.phase = Phase::SignedOut;
+        inner.error = None;
+        Ok(())
     }
 
     pub fn set_phase(&self, phase: Phase, error: Option<String>) {

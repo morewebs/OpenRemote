@@ -5,11 +5,14 @@
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::{Query, State};
-use axum::http::{StatusCode, header};
+use axum::extract::{Path, Query, State};
+use axum::http::{HeaderMap, Method, StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
+use openremote_cloud::registry::RegistryError;
+use openremote_cloud::{CloudError, MeshError};
+use openremote_core::DeviceId;
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::app::App;
 
@@ -104,6 +107,7 @@ pub async fn callback(State(app): State<Arc<App>>, Query(q): Query<CallbackQuery
                 }
                 let _ = store.set_this_device(Some(signed_in.device_id));
             }
+            app.start_cloud();
             page(
                 StatusCode::OK,
                 "You're signed in",
@@ -129,4 +133,185 @@ fn escape(text: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+}
+
+fn json_error(status: StatusCode, message: &str) -> Response {
+    (status, Json(json!({"error": message}))).into_response()
+}
+
+fn cloud_error(e: CloudError) -> Response {
+    match e {
+        CloudError::Registry(e) => registry_error(e),
+        CloudError::SignedOut | CloudError::OAuth(_) => json_error(
+            StatusCode::UNAUTHORIZED,
+            "sign in to OpenRemote Cloud again to change your devices",
+        ),
+        other => json_error(StatusCode::INTERNAL_SERVER_ERROR, &other.to_string()),
+    }
+}
+
+fn registry_error(e: RegistryError) -> Response {
+    match e {
+        RegistryError::Unauthorized => json_error(StatusCode::UNAUTHORIZED, &e.to_string()),
+        RegistryError::Revoked => json_error(StatusCode::GONE, &e.to_string()),
+        RegistryError::Refused {
+            status, message, ..
+        } => json_error(
+            StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY),
+            &message,
+        ),
+        RegistryError::Http(e) => json_error(StatusCode::BAD_GATEWAY, &e.to_string()),
+    }
+}
+
+/// The account's devices with who is online, from this device's view.
+pub async fn devices(State(app): State<Arc<App>>) -> Response {
+    let Some(mesh) = app.cloud.mesh() else {
+        return Json(json!({"devices": [], "auto_update": true})).into_response();
+    };
+    let me = mesh.me();
+    let devices: Vec<Value> = mesh
+        .peers()
+        .into_iter()
+        .map(|peer| {
+            let mut value = serde_json::to_value(&peer).unwrap_or(Value::Null);
+            value["this_device"] = json!(peer.id == me);
+            value
+        })
+        .collect();
+    Json(json!({"devices": devices, "auto_update": mesh.auto_update()})).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct KindBody {
+    kind: String,
+}
+
+/// Makes a desktop a machine (or back): this one or another of the user's.
+pub async fn set_kind(
+    State(app): State<Arc<App>>,
+    Path(id): Path<String>,
+    Json(body): Json<KindBody>,
+) -> Response {
+    if !matches!(body.kind.as_str(), "desktop" | "machine") {
+        return json_error(StatusCode::BAD_REQUEST, "kind is desktop or machine");
+    }
+    let token = match app.cloud.account_token().await {
+        Ok(token) => token,
+        Err(e) => return cloud_error(e),
+    };
+    match app
+        .cloud
+        .registry()
+        .patch(&token, &id, &json!({"kind": body.kind}))
+        .await
+    {
+        Ok(device) => {
+            if let Some(mesh) = app.cloud.mesh() {
+                mesh.refresh_now();
+            }
+            Json(device).into_response()
+        }
+        Err(e) => registry_error(e),
+    }
+}
+
+/// Removes a device from the account. Removing this one leaves Cloud here:
+/// its synced chats go, its private chats stay.
+pub async fn remove_device(State(app): State<Arc<App>>, Path(id): Path<String>) -> Response {
+    if app.cloud.device_id().is_some_and(|me| me.to_string() == id) {
+        if let Err(e) = app.cloud.leave().await {
+            return cloud_error(e);
+        }
+        if let Ok(mut store) = app.store.lock() {
+            let _ = store.purge_synced();
+        }
+        return Json(app.cloud.view()).into_response();
+    }
+    let token = match app.cloud.account_token().await {
+        Ok(token) => token,
+        Err(e) => return cloud_error(e),
+    };
+    match app.cloud.registry().delete(&token, &id).await {
+        Ok(()) => {
+            if let Some(mesh) = app.cloud.mesh() {
+                mesh.refresh_now();
+            }
+            StatusCode::NO_CONTENT.into_response()
+        }
+        Err(e) => registry_error(e),
+    }
+}
+
+/// How long an answer may take: installing a harness runs a real installer.
+fn timeout_for(method: &Method, rest: &str) -> std::time::Duration {
+    let secs = if method == Method::POST
+        && rest.starts_with("machines/")
+        && rest.ends_with("/harnesses")
+    {
+        900
+    } else if method == Method::POST && rest == "sessions" {
+        90
+    } else {
+        30
+    };
+    std::time::Duration::from_secs(secs)
+}
+
+/// The console's request to another device, carried over the mesh and
+/// answered by that device's own API (through its gate).
+pub async fn passthrough(
+    State(app): State<Arc<App>>,
+    Path((id, rest)): Path<(String, String)>,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> Response {
+    let Some(mesh) = app.cloud.mesh() else {
+        return json_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "not connected to OpenRemote Cloud",
+        );
+    };
+    let Some(device) = DeviceId::parse(&id) else {
+        return json_error(StatusCode::NOT_FOUND, "no such device");
+    };
+    let path = match uri.query() {
+        Some(q) => format!("/{rest}?{q}"),
+        None => format!("/{rest}"),
+    };
+    let request = openremote_cloud::rpc::Request {
+        method: method.to_string(),
+        path,
+        content_type: headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string),
+        body: body.to_vec(),
+    };
+    match mesh
+        .request(device, request, timeout_for(&method, &rest))
+        .await
+    {
+        Ok(response) => {
+            let status = StatusCode::from_u16(response.status).unwrap_or(StatusCode::BAD_GATEWAY);
+            let content_type = response
+                .content_type
+                .unwrap_or_else(|| "application/octet-stream".into());
+            (
+                status,
+                [(header::CONTENT_TYPE, content_type)],
+                response.body,
+            )
+                .into_response()
+        }
+        Err(e @ MeshError::Offline(_)) => {
+            json_error(StatusCode::SERVICE_UNAVAILABLE, &e.to_string())
+        }
+        Err(e @ (MeshError::Unknown | MeshError::KeyChanged(_))) => {
+            json_error(StatusCode::NOT_FOUND, &e.to_string())
+        }
+        Err(e) => json_error(StatusCode::BAD_GATEWAY, &e.to_string()),
+    }
 }

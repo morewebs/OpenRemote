@@ -34,6 +34,8 @@ thiserror = { workspace = true }
 axum = { workspace = true }
 futures-util = { workspace = true }
 tower-http = { workspace = true }
+# serving a peer's request in-process through the router (ServiceExt::oneshot)
+tower = { version = "0.5", features = ["util"] }
 
 [target.'cfg(unix)'.dependencies]
 # setsid for installers: no controlling terminal to prompt into
