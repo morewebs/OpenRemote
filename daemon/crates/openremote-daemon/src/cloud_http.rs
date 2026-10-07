@@ -20,8 +20,17 @@ pub async fn view(State(app): State<Arc<App>>) -> Response {
     Json(app.cloud.view()).into_response()
 }
 
-/// Starts a sign-in and hands back the page to open in the browser.
-pub async fn sign_in(State(app): State<Arc<App>>) -> Response {
+#[derive(Deserialize, Default)]
+pub struct SignInBody {
+    /// Open the sign-in page in the system browser from here.
+    #[serde(default)]
+    open: bool,
+}
+
+/// Starts a sign-in and hands back the page to open in the browser; with
+/// `open`, this computer's default browser is opened on it too (the console
+/// can't open one from inside its webview).
+pub async fn sign_in(State(app): State<Arc<App>>, body: axum::body::Bytes) -> Response {
     let Some(port) = app.port.get().copied() else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -30,7 +39,34 @@ pub async fn sign_in(State(app): State<Arc<App>>) -> Response {
             .into_response();
     };
     let url = app.cloud.begin_signin(port);
-    Json(json!({"authorize_url": url})).into_response()
+    // An empty body is a plain start (no browser opened here).
+    let body: SignInBody = serde_json::from_slice(&body).unwrap_or_default();
+    let opened = body.open && open_browser(&url);
+    Json(json!({"authorize_url": url, "opened": opened})).into_response()
+}
+
+/// Opens `url` in the default browser. Only ever the sign-in page this
+/// daemon built itself, passed as one argument (never through a shell).
+fn open_browser(url: &str) -> bool {
+    let mut command = if cfg!(windows) {
+        let mut c = std::process::Command::new("rundll32");
+        c.args(["url.dll,FileProtocolHandler", url]);
+        c
+    } else if cfg!(target_os = "macos") {
+        let mut c = std::process::Command::new("open");
+        c.arg(url);
+        c
+    } else {
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(url);
+        c
+    };
+    command
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .is_ok()
 }
 
 pub async fn cancel_sign_in(State(app): State<Arc<App>>) -> Response {
@@ -474,4 +510,35 @@ pub async fn forward_remote(
         mesh.request(executor, forwarded, std::time::Duration::from_secs(30))
             .await,
     )
+}
+
+/// A one-time install command that adds a machine (Linux for now) to the
+/// account. Pointed at a non-default backend, the command carries that
+/// backend along so the new machine joins the same one.
+pub async fn create_enrollment(State(app): State<Arc<App>>) -> Response {
+    let token = match app.cloud.account_token().await {
+        Ok(token) => token,
+        Err(e) => return cloud_error(e),
+    };
+    let me = app.cloud.device_id().map(|d| d.to_string());
+    let body = json!({"platform": "linux", "created_by_device": me});
+    let mut created = match app.cloud.registry().create_enrollment(&token, &body).await {
+        Ok(created) => created,
+        Err(e) => return registry_error(e),
+    };
+    let config = app.cloud.config();
+    if config.api_base != openremote_cloud::config::DEFAULT_API {
+        if let Some(command) = created["install_command"].as_str() {
+            let pointed = command.replacen(
+                "| sh",
+                &format!(
+                    "| OPENREMOTE_CLOUD_API={} OPENREMOTE_AUTH_ISSUER={} sh",
+                    config.api_base, config.auth_issuer
+                ),
+                1,
+            );
+            created["install_command"] = json!(pointed);
+        }
+    }
+    (StatusCode::CREATED, Json(created)).into_response()
 }

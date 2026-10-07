@@ -38,6 +38,10 @@ pub fn router(app: Arc<App>) -> Router {
             "/cloud/devices/{id}/kind",
             post(crate::cloud_http::set_kind),
         )
+        .route(
+            "/cloud/enrollments",
+            post(crate::cloud_http::create_enrollment),
+        )
         // The console reaches another device's API through this one.
         .route(
             "/devices/{id}/{*rest}",

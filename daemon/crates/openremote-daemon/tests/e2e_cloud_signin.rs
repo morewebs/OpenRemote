@@ -210,3 +210,23 @@ async fn a_machine_enrolls_with_an_install_code() {
         assert_eq!(mode & 0o777, 0o600, "the device credential is owner-only");
     }
 }
+
+#[tokio::test]
+async fn a_desktop_mints_an_install_command_for_a_machine() {
+    let cloud = FakeCloud::start().await;
+    let daemon = start_cloud_daemon(&[], Some(config(&cloud, "desk-3"))).await;
+    let refused = call(&daemon, "POST", "/cloud/enrollments", None).await;
+    assert_eq!(refused.status, 401, "signed out: {}", refused.raw);
+    let (status, _, _) = browser_sign_in(&daemon).await;
+    assert_eq!(status, 200);
+    let minted = call(&daemon, "POST", "/cloud/enrollments", None).await;
+    assert_eq!(minted.status, 201, "{}", minted.raw);
+    let command = minted.body["install_command"].as_str().unwrap();
+    let code = minted.body["code"].as_str().unwrap();
+    assert!(command.starts_with("curl -fsSL https://moreweb.space/openremote/install.sh |"));
+    assert!(command.ends_with(&format!("sh -s -- {code}")), "{command}");
+    assert!(
+        command.contains(&format!("OPENREMOTE_CLOUD_API={}", cloud.api())),
+        "a non-default backend rides along: {command}"
+    );
+}
