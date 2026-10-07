@@ -82,7 +82,11 @@ function Shell() {
   // chats of every device, behind a moreweb sign-in the first time.
   const [mode, setMode] = useState(loadMode)
 
-  const view = history[hIndex]
+  // Each mode has its own views; one restored from history that belongs to
+  // the other mode opens New chat instead.
+  const OTHER_MODE = { local: ['machines'], cloud: ['plugins', 'automations'] }
+  const stored = history[hIndex]
+  const view = OTHER_MODE[mode].includes(stored) ? 'new' : stored
   const chat = STATIC_VIEWS.includes(view) ? null : chats[view] ?? null
 
   // Reconcile navigation with the live session list (a chat in the history

@@ -106,3 +106,12 @@
   color: #fff;
 }
 
+/* The caption glyphs drawn for systems without Segoe MDL2: hairline
+   strokes in the button's own colour, like the Windows ones. */
+.tb-glyph {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}

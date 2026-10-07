@@ -7,6 +7,26 @@ import './titlebar.css'
 
 const hasTauri = typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__
 
+// Windows draws its caption glyphs from Segoe MDL2 (the contract). Other
+// systems don't have that font, so the same 10px shapes are drawn here.
+const MDL2 = typeof navigator !== 'undefined' && /Windows/.test(navigator.userAgent)
+
+function CaptionGlyph({ kind }) {
+  return (
+    <svg className="tb-glyph" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+      {kind === 'minimize' && <path d="M0 5.5h10" />}
+      {kind === 'maximize' && <rect x="0.5" y="0.5" width="9" height="9" />}
+      {kind === 'restore' && (
+        <>
+          <rect x="0.5" y="2.5" width="7" height="7" />
+          <path d="M2.5 2.5V0.5h7v7h-2" />
+        </>
+      )}
+      {kind === 'close' && <path d="M0.5 0.5l9 9M9.5 0.5l-9 9" />}
+    </svg>
+  )
+}
+
 export default function TitleBar({
   onToggleSidebar,
   sidebarOpen,
@@ -76,17 +96,17 @@ export default function TitleBar({
       </div>
       <div className="tb-controls">
         <button className="tb-btn" onClick={action('minimize')} title="Minimize">
-          {'\uE921'}
+          {MDL2 ? '\uE921' : <CaptionGlyph kind="minimize" />}
         </button>
         <button
           className="tb-btn"
           onClick={action('toggleMaximize')}
           title={maximized ? 'Restore' : 'Maximize'}
         >
-          {maximized ? '\uE923' : '\uE8E7'}
+          {MDL2 ? (maximized ? '\uE923' : '\uE8E7') : <CaptionGlyph kind={maximized ? 'restore' : 'maximize'} />}
         </button>
         <button className="tb-btn tb-close" onClick={action('close')} title="Close">
-          {'\uE8BB'}
+          {MDL2 ? '\uE8BB' : <CaptionGlyph kind="close" />}
         </button>
       </div>
       {about && <AboutModal onClose={() => setAbout(false)} daemonVersion={capabilities?.daemon ?? null} />}
