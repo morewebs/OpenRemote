@@ -72,11 +72,12 @@ spacing.
   back/forward, centered title + about, Windows caption glyphs (Segoe MDL2).
   The whole bar is a drag region.
 - **Sidebar (264px, collapsible):** mode switch (Local/Cloud), New chat tile,
-  search, then nav tiles; chats grouped by project with collapse carets and
-  status dots; Settings pinned in the footer.
+  search, then nav tiles - Plugins and Automations in Local, Machines in
+  Cloud (grid-rows reveal, reduced-motion aware); chats grouped by project
+  with collapse carets and status dots; Settings pinned in the footer.
 - **Settings is a view, not a popup:** a slim section rail on the left
-  (New tasks, Appearance, Startup, Daemon, Harnesses, This install), the
-  panel on the right. Phone width stacks the rail into a top scroller.
+  (New tasks, Appearance, Startup, Cloud, Daemon, Harnesses, This install),
+  the panel on the right. Phone width stacks the rail into a top scroller.
 - **Main canvas:** one view at a time; views are flat lists/cards, not
   dashboards.
 
@@ -133,9 +134,10 @@ spacing.
   not a squeezed desktop.
 - **Process:** build slowly; overthink single elements; review at real
   milestones only.
-- **Vocabulary (2026-10-01):** *chat* is the UI word for a conversation with a
-  harness (the daemon domain says *session*; the console boundary translates).
-  *machine* is a computer you own (the Devices view renames to Machines).
+- **Vocabulary (2026-10-01, Cloud 2026-10-07):** *chat* is the UI word for a
+  conversation with a harness (the daemon domain says *session*; the console
+  boundary translates). A *device* is any of your computers signed in to
+  Cloud; a *machine* is a device that runs chats for your other devices.
   *task* is the prompt text a human or automation sends.
 
 ---
@@ -159,16 +161,14 @@ Every screen the design specifies, backed by the real daemon:
   «tool» allowed for this chat · status), stop/resume, the floating
   composer with the ContextRing where the harness reports its window
   (codex; claude reports usage but no window on the wire).
-- **Machines** - hidden with remote check-in deferred (2026-10-03): the
-  view's Add-a-machine flow would point at an install command that
-  doesn't exist yet, and no-dead-UI is the rule. The components stay in
-  the tree (MachinesView, MachineModal, AddMachineModal); the sidebar
-  tile and route return when remote machines check in for real. Until
-  then a stale `#machines` hash or stored history falls back to New
-  chat. Previously shipped: this machine real from first boot (its
-  inventory, sessions with jumps, 24h presence band), the local
-  harness install chain (now the harness manager's: every harness through
-  its owner's own installer).
+- **Machines** - Cloud's view of the account's devices (2026-10-07): this
+  computer first with its "Make this computer a machine" row, then each
+  device's card (platform, Machine/Desktop, version, online). A device's
+  detail lists the synced chats it runs (from this computer's copies, so
+  they show while it's offline) and, for an online machine, its harnesses -
+  installed and signed in remotely through the same installer chain and
+  sign-in relay. Add a machine mints a one-time Linux install command and
+  notices the arrival; Remove is asked twice and says what it deletes.
 - **Plugins** - MCP installs written by hand; the needs-key lifecycle
   (keys never cross the API); the ride-along through each harness's own MCP wire (claude `--mcp-config`
   JSON string, codex `thread/start` config keyPaths).
@@ -183,8 +183,37 @@ Every screen the design specifies, backed by the real daemon:
   (port, version, data dir, restart, two-step Forget), the harness list,
   reduce-motion (restored before first paint), first-run replay.
 
-Deferred with the map's tickets: remote-machine check-in + relay + cloud
-placement, the connector triggers (pipeline/errors/review/release), the
-agent behind the pill, the updater, per-chat model/effort switching,
-claude's context window (no wire fact yet), grok/pi/opencode/agy MCP wires,
+## Cloud mode (2026-10-07)
+
+Local is this computer's chats and needs no account. Cloud is the user's
+own computers working together through moreweb, end to end encrypted:
+moreweb relays ciphertext and never stores a chat.
+
+- **The door:** Cloud shows its sign-in screen (the cloud art, one amber
+  action, Back to Local) until this computer is signed in. Signing in
+  happens in the system browser; first launch never asks.
+- **Lists:** Local lists everything that runs on this computer (synced
+  ones carry a small cloud mark). Cloud lists every synced chat, with the
+  device it runs on named in muted text and a hollow ring while that
+  device is away. A copy stays readable offline.
+- **New chat in Cloud:** a machine picker (this computer first, then the
+  account's machines, online first) and that machine's own harnesses and
+  models; its folders are browsed in the app (FolderBrowserModal), never
+  typed. Chats made in Cloud sync to every device.
+- **A chat on another device:** prompts, stop, resume and answers travel
+  to it. When they can't, the composer says why (offline, not a machine,
+  signed out, gone) and offers "Make it a machine" where that is the fix.
+  Synced chats can be deleted everywhere, asked twice.
+- **Notices:** a thin row above the main area for a device that joined the
+  account ("Not you?" - any sign-in adds one), and for this computer made
+  a machine from elsewhere (Undo). Shown once each.
+- **While OpenRemote is open:** a desktop that is a machine serves its
+  devices only while the app runs; the copy says so.
+
+Deferred: the tray, the updater and its badge, auto-update, the Linux
+AppImage, signed releases, machine installers beyond Linux, "Sync this
+chat" for a private chat, moving a chat between machines and switching
+its harness mid-chat (one hand-over mechanism), the connector triggers
+(pipeline/errors/review/release), the agent behind the pill, claude's
+context window (no wire fact yet), grok/pi/opencode/agy MCP wires,
 per-harness approval-mode defaults (no daemon-side vocabulary surface yet).

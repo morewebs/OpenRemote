@@ -52,6 +52,23 @@ npm test               # console reducer tests
 cd daemon && cargo test --locked   # unit + e2e (drives the fixture agent)
 ```
 
+## Cloud mode
+
+Local chats never leave the computer and need no account. Cloud mode joins
+your own computers - your laptops, a home server, a VPS - through your
+moreweb account: chats run on whichever one you pick and are copied to all
+of them, end to end encrypted. moreweb's relay only ever forwards
+ciphertext and stores no chats.
+
+Add a Linux machine from Cloud > Machines > Add a machine: it gives you a
+one-time command that installs OpenRemote as a background service and
+joins it to your Cloud. To try Cloud mode without moreweb, run the
+stand-in and point the daemon at it:
+
+```sh
+cd daemon && cargo run -p fake-cloud   # prints the OPENREMOTE_* exports
+```
+
 ## Conventions
 
 - Windows first: frameless window with a custom titlebar (Segoe MDL2 glyphs).
