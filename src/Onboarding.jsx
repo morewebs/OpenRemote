@@ -4,6 +4,12 @@ import { harnessName } from './harness-names.js'
 import { HarnessMark } from './brand-marks.jsx'
 import './onboarding.css'
 
+// Every harness the daemon can drive, in their own spellings - the
+// welcome names them all rather than one.
+const ALL_HARNESSES = new Intl.ListFormat('en', { type: 'conjunction' }).format(
+  ['claude', 'codex', 'grok', 'pi', 'opencode', 'agy'].map(harnessName),
+)
+
 // The happy path is two steps - welcome, ready - and the user never sees
 // connection plumbing: the daemon comes up with the app. A quiet setup
 // beat shows only while it boots (a moment), and the manual connect form
@@ -47,10 +53,10 @@ export default function Onboarding({ onDone }) {
       <div className="ob-panel">
         {step === 'welcome' && (
           <>
-            <h1 className="ob-title">One window for the agents on this computer</h1>
+            <h1 className="ob-title">One window for all your coding agents</h1>
             <p className="ob-sub">
-              Claude Code stays installed where it is. OpenRemote is where you start a
-              task, read the session, and approve what it runs.
+              Run {ALL_HARNESSES} side by side. Start tasks, follow every session as it
+              runs, approve what the agents do, and put routine work on a schedule.
             </p>
             <button className="ob-cta" onClick={begin}>
               Get started
@@ -103,11 +109,11 @@ export default function Onboarding({ onDone }) {
 
         {step === 'ready' && (
           <>
-            <h1 className="ob-title">New tasks run on this computer</h1>
+            <h1 className="ob-title">You&apos;re all set</h1>
             <p className="ob-sub">
               {available.length > 0
-                ? 'These harnesses are installed and ready. Describe the work and pick the folder it runs in.'
-                : 'No harness CLI was found on this machine - install Claude Code or Codex, then start a task.'}
+                ? 'These agents are ready. Describe the work, pick a folder, and start a task.'
+                : 'No agents are installed yet. Choose Manage harnesses in the harness picker to install any of them.'}
             </p>
             <div className="ob-harnesses">
               {available.map((h) => (
