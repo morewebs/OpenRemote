@@ -94,6 +94,14 @@ pub struct Session {
     /// vocabulary (codex `acceptForSession`, opencode `always`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub approved_tools: Vec<String>,
+    /// The device that runs a chat synced to the user's other devices
+    /// (Cloud). None: a private chat that never leaves this computer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executor: Option<crate::ids::DeviceId>,
+    /// The first line of the first prompt, so a chat has a name on every
+    /// device without replaying its log.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
 }
 
 /// One computer that can run agent chats. The daemon's own machine is

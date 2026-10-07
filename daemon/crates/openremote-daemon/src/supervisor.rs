@@ -221,6 +221,21 @@ impl Supervisor {
         f(&mut guard)
     }
 
+    /// A copy of a chat that runs on another device is only ever read here:
+    /// acting on it (above all, resuming it) would start a second runner.
+    fn ensure_here(&self, id: &SessionId) -> Result<(), SupervisorError> {
+        let here = self
+            .with_store(|s| s.session(id).map(|session| s.executes_here(session)))
+            .map_err(store_error)?;
+        if here {
+            Ok(())
+        } else {
+            Err(SupervisorError::Conflict(
+                "this chat runs on another device".into(),
+            ))
+        }
+    }
+
     /// Append a sequence of events atomically (one store lock) and nudge
     /// the live listeners.
     fn emit_all(
@@ -228,13 +243,7 @@ impl Supervisor {
         id: &SessionId,
         payloads: Vec<EventPayload>,
     ) -> Result<Vec<Event>, SupervisorError> {
-        let events = self.with_store(|s| {
-            let mut out = Vec::with_capacity(payloads.len());
-            for payload in payloads {
-                out.push(s.append(*id, payload)?);
-            }
-            Ok::<_, openremote_core::store::StoreError>(out)
-        })?;
+        let events = self.with_store(|s| s.append_batch(*id, payloads))?;
         for event in &events {
             let _ = self
                 .events
@@ -872,6 +881,8 @@ impl Supervisor {
             next_turn: 0,
             fast,
             approved_tools: Vec::new(),
+            executor: None,
+            title: None,
         };
         let id = session.id;
         self.emit_all(&id, vec![EventPayload::SessionCreated { session }])?;
@@ -917,6 +928,7 @@ impl Supervisor {
 
     /// Send a prompt: turn + user message events, then the envelope.
     pub async fn prompt(&self, id: &SessionId, text: &str) -> Result<(), SupervisorError> {
+        self.ensure_here(id)?;
         let entry = self.entry(id).await?;
         let _order = entry.order.lock().await;
         let turn = self.with_store(|s| s.bump_turn(id))?;
@@ -955,6 +967,7 @@ impl Supervisor {
         if settings.model.is_none() && settings.effort.is_none() && settings.fast.is_none() {
             return self.session(id);
         }
+        self.ensure_here(id)?;
         let session = self.session(id)?;
         if let Ok(entry) = self.entry(id).await {
             entry
@@ -991,6 +1004,7 @@ impl Supervisor {
     /// Interrupt the running turn (the harness cancels; its boundary event
     /// follows).
     pub async fn interrupt(&self, id: &SessionId) -> Result<(), SupervisorError> {
+        self.ensure_here(id)?;
         let entry = self.entry(id).await?;
         entry.driver.lock().await.interrupt().await?;
         Ok(())
@@ -1000,6 +1014,7 @@ impl Supervisor {
     /// status and retires pending decisions. Returns the session as it
     /// settled (stopped, or failed if the process died first).
     pub async fn stop(&self, id: &SessionId) -> Result<Session, SupervisorError> {
+        self.ensure_here(id)?;
         let entry = self.entry(id).await?;
         entry.stopping.store(true, AtomicOrdering::SeqCst);
         let (tx, rx) = oneshot::channel();
@@ -1041,6 +1056,7 @@ impl Supervisor {
     /// Resume a stopped/failed session on its harness's own conversation
     /// (claude `--resume=<id>`, codex `thread/resume`, pi `--session`, …).
     pub async fn resume(self: &Arc<Self>, id: &SessionId) -> Result<Session, SupervisorError> {
+        self.ensure_here(id)?;
         let session = self.session(id)?;
         if session.status.is_alive() {
             return Err(SupervisorError::Conflict(format!(
@@ -1100,6 +1116,7 @@ impl Supervisor {
         choice: &str,
     ) -> Result<Decision, SupervisorError> {
         let decision = self.decision(decision_id)?;
+        self.ensure_here(&decision.session_id)?;
         if decision.state != DecisionState::Pending {
             return Err(SupervisorError::Conflict(
                 "the decision is no longer pending".into(),

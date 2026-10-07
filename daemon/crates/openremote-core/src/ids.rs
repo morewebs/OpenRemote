@@ -43,6 +43,18 @@ id_newtype!(SessionId);
 id_newtype!(DecisionId);
 id_newtype!(MachineId);
 id_newtype!(RuleId);
+id_newtype!(DeviceId);
+
+impl DeviceId {
+    /// The 16 raw bytes: how the relay addresses a device.
+    pub fn to_bytes(&self) -> [u8; 16] {
+        *self.as_uuid().as_bytes()
+    }
+
+    pub fn from_bytes(bytes: [u8; 16]) -> Self {
+        Self(Uuid::from_bytes(bytes))
+    }
+}
 
 #[cfg(test)]
 mod tests {

@@ -9,6 +9,10 @@ pub struct Event {
     /// Per-session monotonic sequence number.
     pub seq: u64,
     pub session_id: crate::ids::SessionId,
+    /// When it happened (ms), so every device dates a chat by its history,
+    /// not by when the event reached it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<i64>,
     #[serde(flatten)]
     pub payload: EventPayload,
 }

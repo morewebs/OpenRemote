@@ -24,7 +24,7 @@ pub mod model;
 pub mod store;
 
 pub use events::{Event, EventPayload};
-pub use ids::{DecisionId, MachineId, RuleId, SessionId};
+pub use ids::{DecisionId, DeviceId, MachineId, RuleId, SessionId};
 pub use model::{
     AutomationRule, ChatMessage, Decision, DecisionKind, DecisionOption, DecisionState, Harness,
     InstallSpec, Machine, MachineStatus, MachineView, MessageRole, Plugin, Receipt, ReceiptStatus,
@@ -51,6 +51,18 @@ pub fn hostname() -> String {
         .map(|name| name.trim().to_string())
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| "this-computer".to_string())
+}
+
+/// A chat's name: the first line of its first prompt, at most 44 characters
+/// (the console's own rule).
+pub fn title_from(text: &str) -> String {
+    let first = text.trim().lines().next().unwrap_or("");
+    if first.chars().count() > 44 {
+        let cut: String = first.chars().take(44).collect();
+        format!("{}…", cut.trim_end())
+    } else {
+        first.to_string()
+    }
 }
 
 /// Compares two secrets in time that doesn't depend on where they differ.

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 
 use thiserror::Error;
@@ -27,9 +27,9 @@ fn slug(name: &str) -> String {
 }
 
 use crate::events::{Event, EventPayload};
-use crate::ids::{DecisionId, MachineId, RuleId, SessionId};
+use crate::ids::{DecisionId, DeviceId, MachineId, RuleId, SessionId};
 use crate::model::{
-    AutomationRule, Decision, DecisionState, Machine, MachineStatus, Plugin, Receipt,
+    AutomationRule, Decision, DecisionState, Machine, MachineStatus, MessageRole, Plugin, Receipt,
     ReceiptStatus, Session, SessionStatus,
 };
 
@@ -43,6 +43,35 @@ pub enum StoreError {
     Io(#[from] std::io::Error),
     #[error("bad state file: {0}")]
     BadState(String),
+    /// A replicated range doesn't continue the log: the caller pulls from
+    /// `have` instead.
+    #[error("gap: have {have}, got {got}")]
+    Gap { have: u64, got: u64 },
+}
+
+/// A synced chat deleted everywhere. Peers that still hold it delete their
+/// copy instead of handing it back.
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
+pub struct Tombstone {
+    pub at: i64,
+    pub by: DeviceId,
+}
+
+/// Where a synced chat's log stands, for comparing with a peer's.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct SessionSummary {
+    pub id: SessionId,
+    pub executor: DeviceId,
+    /// The next sequence number: how many events this copy holds.
+    pub head: u64,
+    pub updated_at: i64,
+}
+
+/// What a replicated append did.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ReplicaAppend {
+    pub appended: usize,
+    pub head: u64,
 }
 
 /// Sessions, decisions, receipts - the durable daemon state.
@@ -69,6 +98,11 @@ struct State {
     plugins: BTreeMap<String, Plugin>,
     #[serde(default)]
     rules: BTreeMap<RuleId, AutomationRule>,
+    /// This computer's id in Cloud mode, once it has one.
+    #[serde(default)]
+    this_device: Option<DeviceId>,
+    #[serde(default)]
+    tombstones: BTreeMap<SessionId, Tombstone>,
 }
 
 pub struct Store {
@@ -77,51 +111,163 @@ pub struct Store {
 }
 
 impl Store {
-    /// Open (or create) the store under `dir`; reconciles crashed sessions.
+    /// Open (or create) the store under `dir`; heals torn logs and
+    /// reconciles chats that were running when the daemon died.
     pub fn open(dir: PathBuf) -> Result<Self, StoreError> {
         fs::create_dir_all(&dir)?;
-        let mut state = match fs::read_to_string(dir.join("state.json")) {
+        let state = match fs::read_to_string(dir.join("state.json")) {
             Ok(raw) => {
                 serde_json::from_str(&raw).map_err(|e| StoreError::BadState(e.to_string()))?
             }
             Err(_) => State::default(),
         };
-        let now = crate::now_ms();
-        let crashed: Vec<(SessionId, SessionStatus)> = state
+        let mut store = Self { dir, state };
+        let healed = store.heal_logs()?;
+        let reconciled = store.reconcile_crashed()?;
+        let titled = store.backfill_titles();
+        let had_this_machine = store.machines().iter().any(|m| m.this_machine);
+        let this_id = store.ensure_this_machine();
+        // Opening the store means the daemon is running - present now.
+        store.mark_present(&this_id).ok();
+        if healed || reconciled || titled || !had_this_machine {
+            store.persist()?;
+        }
+        Ok(store)
+    }
+
+    /// A crash can tear the last line of a log, or land a batch in the log
+    /// that state.json never recorded (the log is written first). Cut the
+    /// torn line, and re-apply whatever the log holds past the recorded
+    /// sequence, so the next append doesn't reuse a number.
+    fn heal_logs(&mut self) -> Result<bool, StoreError> {
+        const TAIL: u64 = 64 * 1024;
+        let ids: Vec<SessionId> = self.state.sessions.keys().copied().collect();
+        let mut changed = false;
+        for id in ids {
+            let Ok(mut file) = fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(self.event_log(&id))
+            else {
+                continue;
+            };
+            let len = file.metadata()?.len();
+            if len == 0 {
+                continue;
+            }
+            let start = len.saturating_sub(TAIL);
+            file.seek(SeekFrom::Start(start))?;
+            let mut tail = Vec::new();
+            file.read_to_end(&mut tail)?;
+            if tail.last() != Some(&b'\n') {
+                match tail.iter().rposition(|b| *b == b'\n') {
+                    Some(i) => {
+                        file.set_len(start + i as u64 + 1)?;
+                        tail.truncate(i + 1);
+                    }
+                    None if start == 0 => {
+                        file.set_len(0)?;
+                        tail.clear();
+                    }
+                    // A torn line longer than the window: readers skip it.
+                    None => continue,
+                }
+                changed = true;
+            }
+            let text = String::from_utf8_lossy(&tail);
+            // The window may start mid-line; that partial line is skipped.
+            let lines = text.lines().skip(usize::from(start > 0));
+            let recorded = self.state.next_seq.get(&id).copied().unwrap_or(0);
+            let mut next = recorded;
+            for line in lines {
+                if let Ok(event) = serde_json::from_str::<Event>(line) {
+                    if event.seq >= next {
+                        self.apply(&event)?;
+                        next = event.seq + 1;
+                    }
+                }
+            }
+            if next > recorded {
+                self.state.next_seq.insert(id, next);
+                changed = true;
+            }
+        }
+        Ok(changed)
+    }
+
+    /// Chats that were running here when the daemon died: mid-turn deaths
+    /// lose work (failed, reason recorded), quiet ones just need a resume
+    /// (stopped), and their pending decisions retire silently. A private
+    /// chat changes silently, as always; a synced one records the change as
+    /// an event so the user's other devices learn of it. Copies of chats
+    /// running on another device are that device's business.
+    fn reconcile_crashed(&mut self) -> Result<bool, StoreError> {
+        let crashed: Vec<(SessionId, SessionStatus, bool)> = self
+            .state
             .sessions
-            .iter()
-            .filter(|(_, s)| s.status.is_alive())
-            .map(|(id, s)| (*id, s.status))
+            .values()
+            .filter(|s| s.status.is_alive() && self.executes_here(s))
+            .map(|s| (s.id, s.status, s.executor.is_some()))
             .collect();
-        for (id, was) in &crashed {
-            // The process died with the daemon. Mid-turn deaths lose work
-            // (failed, reason recorded); quiet ones just need a resume (stopped).
-            let now_status = if matches!(was, SessionStatus::Working | SessionStatus::Waiting) {
+        for (id, was, synced) in &crashed {
+            let status = if matches!(was, SessionStatus::Working | SessionStatus::Waiting) {
                 SessionStatus::Failed
             } else {
                 SessionStatus::Stopped
             };
-            if let Some(session) = state.sessions.get_mut(id) {
-                session.status = now_status;
-                session.last_error = Some("daemon restart".to_string());
-                session.updated_at = now;
+            let reason = Some("daemon restart".to_string());
+            if *synced {
+                self.append(*id, EventPayload::SessionStatusChanged { status, reason })?;
+            } else if let Some(session) = self.state.sessions.get_mut(id) {
+                session.status = status;
+                session.last_error = reason;
+                session.updated_at = crate::now_ms();
             }
-            // Retire silently - no event is ever invented for this.
-            for decision in state.decisions.values_mut() {
+            for decision in self.state.decisions.values_mut() {
                 if decision.session_id == *id && decision.state == DecisionState::Pending {
                     decision.state = DecisionState::Retired;
                 }
             }
         }
-        let mut store = Self { dir, state };
-        let had_this_machine = store.machines().iter().any(|m| m.this_machine);
-        let this_id = store.ensure_this_machine();
-        // Opening the store means the daemon is running - present now.
-        store.mark_present(&this_id).ok();
-        if !crashed.is_empty() || !had_this_machine {
-            store.persist()?;
+        Ok(!crashed.is_empty())
+    }
+
+    /// Chats from before titles were stored take theirs from the first
+    /// prompt in their log.
+    fn backfill_titles(&mut self) -> bool {
+        let untitled: Vec<SessionId> = self
+            .state
+            .sessions
+            .values()
+            .filter(|s| s.title.is_none())
+            .map(|s| s.id)
+            .collect();
+        let mut changed = false;
+        for id in untitled {
+            let Ok(file) = fs::File::open(self.event_log(&id)) else {
+                continue;
+            };
+            let mut head = Vec::new();
+            if file.take(64 * 1024).read_to_end(&mut head).is_err() {
+                continue;
+            }
+            let title =
+                String::from_utf8_lossy(&head).lines().find_map(
+                    |line| match serde_json::from_str::<Event>(line).ok()?.payload {
+                        EventPayload::MessageAdded { message }
+                            if message.role == MessageRole::User =>
+                        {
+                            Some(crate::title_from(&message.text))
+                        }
+                        _ => None,
+                    },
+                );
+            if let (Some(title), Some(session)) = (title, self.state.sessions.get_mut(&id)) {
+                session.title = Some(title);
+                changed = true;
+            }
         }
-        Ok(store)
+        changed
     }
 
     pub fn session(&self, id: &SessionId) -> Result<&Session, StoreError> {
@@ -544,39 +690,302 @@ impl Store {
         Ok(())
     }
 
-    /// Append an event: assigns `seq`, applies it to state, persists both.
+    /// Append one event; see `append_batch`.
     pub fn append(
         &mut self,
         session_id: SessionId,
         payload: EventPayload,
     ) -> Result<Event, StoreError> {
+        let mut events = self.append_batch(session_id, vec![payload])?;
+        events
+            .pop()
+            .ok_or_else(|| StoreError::BadState("empty batch".to_string()))
+    }
+
+    /// Append events to a chat this device runs: assigns `seq`s and applies
+    /// them, then one log write and one state write for the whole batch (a
+    /// streamed reply is many events a second). Copies of chats running on
+    /// another device only grow through `append_replicated`, and a chat
+    /// deleted everywhere takes nothing more.
+    pub fn append_batch(
+        &mut self,
+        session_id: SessionId,
+        payloads: Vec<EventPayload>,
+    ) -> Result<Vec<Event>, StoreError> {
+        let Some(first) = payloads.first() else {
+            return Ok(Vec::new());
+        };
+        if self.state.tombstones.contains_key(&session_id) {
+            return Err(StoreError::Conflict(format!(
+                "chat {session_id} was deleted"
+            )));
+        }
         // Only session.created may name a session the state doesn't know -
         // it is the event that inserts it.
-        let creating = matches!(payload, EventPayload::SessionCreated { .. });
-        if !creating && !self.state.sessions.contains_key(&session_id) {
-            return Err(StoreError::NotFound(format!("session {session_id}")));
+        match self.state.sessions.get(&session_id) {
+            None if !matches!(first, EventPayload::SessionCreated { .. }) => {
+                return Err(StoreError::NotFound(format!("session {session_id}")));
+            }
+            Some(session) if !self.executes_here(session) => {
+                return Err(StoreError::Conflict(format!(
+                    "chat {session_id} runs on another device"
+                )));
+            }
+            _ => {}
         }
-        let seq = self.state.next_seq.entry(session_id).or_insert(0);
-        let event = Event {
-            seq: *seq,
-            session_id,
-            payload,
-        };
-        *seq += 1;
+        let at = crate::now_ms();
+        let mut lines = String::new();
+        let mut events = Vec::with_capacity(payloads.len());
+        for payload in payloads {
+            let seq = self.state.next_seq.entry(session_id).or_insert(0);
+            let event = Event {
+                seq: *seq,
+                session_id,
+                at: Some(at),
+                payload,
+            };
+            *seq += 1;
+            lines.push_str(
+                &serde_json::to_string(&event).map_err(|e| StoreError::BadState(e.to_string()))?,
+            );
+            lines.push('\n');
+            self.apply(&event)?;
+            events.push(event);
+        }
+        self.write_log(&session_id, &lines)?;
+        self.persist()?;
+        Ok(events)
+    }
 
-        let json =
-            serde_json::to_string(&event).map_err(|e| StoreError::BadState(e.to_string()))?;
-        self.apply(&event)?;
+    /// Extend this device's copy of a chat that runs on another device with
+    /// events from that device's log, verbatim. They must continue the copy
+    /// exactly: duplicates are skipped, a gap stops the append and is
+    /// reported so the caller pulls the missing range. Event types this
+    /// build doesn't know are kept as they are and skipped by state, so an
+    /// older device never stalls a newer one.
+    pub fn append_replicated(
+        &mut self,
+        session_id: SessionId,
+        events: Vec<serde_json::Value>,
+    ) -> Result<ReplicaAppend, StoreError> {
+        if self.state.tombstones.contains_key(&session_id) {
+            return Err(StoreError::Conflict(format!(
+                "chat {session_id} was deleted"
+            )));
+        }
+        if let Some(session) = self.state.sessions.get(&session_id) {
+            if self.executes_here(session) {
+                return Err(StoreError::Conflict(format!(
+                    "chat {session_id} runs on this device"
+                )));
+            }
+        }
+        let mut head = self.state.next_seq.get(&session_id).copied().unwrap_or(0);
+        let mut lines = String::new();
+        let mut appended = 0;
+        let mut gap = None;
+        for value in events {
+            let seq = value["seq"].as_u64();
+            let same_chat = value["session_id"].as_str() == Some(&session_id.to_string());
+            let Some(seq) = seq.filter(|_| same_chat) else {
+                return Err(StoreError::BadState(
+                    "a replicated event without its chat or seq".into(),
+                ));
+            };
+            if seq < head {
+                continue;
+            }
+            if seq > head {
+                gap = Some(seq);
+                break;
+            }
+            match serde_json::from_value::<Event>(value.clone()) {
+                Ok(event) => {
+                    let opens = matches!(event.payload, EventPayload::SessionCreated { .. });
+                    if (head == 0) != opens {
+                        return Err(StoreError::BadState(
+                            "a copy starts with session.created, and only there".into(),
+                        ));
+                    }
+                    if opens {
+                        let EventPayload::SessionCreated { session } = &event.payload else {
+                            unreachable!()
+                        };
+                        if session.executor.is_none() || session.executor == self.state.this_device
+                        {
+                            return Err(StoreError::BadState(
+                                "a replicated chat names another device as its runner".into(),
+                            ));
+                        }
+                    }
+                    self.apply(&event)?;
+                }
+                Err(_) if head == 0 => {
+                    return Err(StoreError::BadState(
+                        "a copy starts with session.created".into(),
+                    ));
+                }
+                Err(_) => {}
+            }
+            lines.push_str(&value.to_string());
+            lines.push('\n');
+            head += 1;
+            appended += 1;
+        }
+        if appended > 0 {
+            self.state.next_seq.insert(session_id, head);
+            // A copy never runs anything, so nothing is left to decide once
+            // the chat isn't running any more.
+            if self
+                .state
+                .sessions
+                .get(&session_id)
+                .is_some_and(|s| !s.status.is_alive())
+            {
+                for decision in self.state.decisions.values_mut() {
+                    if decision.session_id == session_id && decision.state == DecisionState::Pending
+                    {
+                        decision.state = DecisionState::Retired;
+                    }
+                }
+            }
+            self.write_log(&session_id, &lines)?;
+            self.persist()?;
+        }
+        match gap {
+            Some(got) if appended == 0 => Err(StoreError::Gap { have: head, got }),
+            _ => Ok(ReplicaAppend { appended, head }),
+        }
+    }
+
+    /// Raw log lines from `from` on, about `max_bytes` of them (always at
+    /// least one when there is one), and the head: what a peer pulls.
+    pub fn raw_range(
+        &self,
+        session_id: &SessionId,
+        from: u64,
+        max_bytes: usize,
+    ) -> Result<(Vec<String>, u64), StoreError> {
+        self.session(session_id)?;
+        let head = self.state.next_seq.get(session_id).copied().unwrap_or(0);
+        let raw = match fs::read_to_string(self.event_log(session_id)) {
+            Ok(raw) => raw,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok((Vec::new(), head)),
+            Err(e) => return Err(e.into()),
+        };
+        #[derive(serde::Deserialize)]
+        struct Seq {
+            seq: u64,
+        }
+        let mut out = Vec::new();
+        let mut size = 0;
+        for line in raw.lines() {
+            let Ok(Seq { seq }) = serde_json::from_str(line) else {
+                continue;
+            };
+            if seq < from {
+                continue;
+            }
+            if !out.is_empty() && size + line.len() > max_bytes {
+                break;
+            }
+            size += line.len();
+            out.push(line.to_string());
+        }
+        Ok((out, head))
+    }
+
+    /// Where every synced chat stands, and which ones were deleted.
+    pub fn summaries(&self) -> (Vec<SessionSummary>, Vec<(SessionId, Tombstone)>) {
+        let sessions = self
+            .state
+            .sessions
+            .values()
+            .filter_map(|s| {
+                Some(SessionSummary {
+                    id: s.id,
+                    executor: s.executor?,
+                    head: self.state.next_seq.get(&s.id).copied().unwrap_or(0),
+                    updated_at: s.updated_at,
+                })
+            })
+            .collect();
+        let tombstones = self
+            .state
+            .tombstones
+            .iter()
+            .map(|(id, t)| (*id, *t))
+            .collect();
+        (sessions, tombstones)
+    }
+
+    /// Deletes a synced chat for good: its record, decisions and log, and
+    /// remembers the deletion so no peer hands it back.
+    pub fn tombstone(&mut self, session_id: SessionId, stone: Tombstone) -> Result<(), StoreError> {
+        self.forget_session(&session_id)?;
+        self.state.tombstones.insert(session_id, stone);
+        self.persist()
+    }
+
+    /// This device was removed from the account: every synced chat goes
+    /// (the user's other devices keep theirs), and private chats stay.
+    pub fn purge_synced(&mut self) -> Result<usize, StoreError> {
+        let synced: Vec<SessionId> = self
+            .state
+            .sessions
+            .values()
+            .filter(|s| s.executor.is_some())
+            .map(|s| s.id)
+            .collect();
+        for id in &synced {
+            self.forget_session(id)?;
+        }
+        self.state.tombstones.clear();
+        self.state.this_device = None;
+        self.persist()?;
+        Ok(synced.len())
+    }
+
+    fn forget_session(&mut self, session_id: &SessionId) -> Result<(), StoreError> {
+        self.state.sessions.remove(session_id);
+        self.state.next_seq.remove(session_id);
+        self.state
+            .decisions
+            .retain(|_, d| d.session_id != *session_id);
+        match fs::remove_dir_all(self.dir.join("sessions").join(session_id.to_string())) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e.into()),
+            _ => Ok(()),
+        }
+    }
+
+    pub fn this_device(&self) -> Option<DeviceId> {
+        self.state.this_device
+    }
+
+    pub fn set_this_device(&mut self, device: Option<DeviceId>) -> Result<(), StoreError> {
+        self.state.this_device = device;
+        self.persist()
+    }
+
+    pub fn tombstoned(&self, session_id: &SessionId) -> bool {
+        self.state.tombstones.contains_key(session_id)
+    }
+
+    /// Private chats and synced chats this device runs execute here; the
+    /// rest are copies of chats running on the user's other devices.
+    pub fn executes_here(&self, session: &Session) -> bool {
+        session.executor.is_none() || session.executor == self.state.this_device
+    }
+
+    fn write_log(&self, session_id: &SessionId, lines: &str) -> Result<(), StoreError> {
         let log_dir = self.dir.join("sessions").join(session_id.to_string());
         fs::create_dir_all(&log_dir)?;
         let mut log = fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(log_dir.join("events.jsonl"))?;
-        log.write_all(json.as_bytes())?;
-        log.write_all(b"\n")?;
-        self.persist()?;
-        Ok(event)
+        log.write_all(lines.as_bytes())?;
+        Ok(())
     }
 
     /// Events after a cursor. `None` replays from the beginning (a fresh
@@ -622,13 +1031,30 @@ impl Store {
     }
 
     fn apply(&mut self, event: &Event) -> Result<(), StoreError> {
-        let now = crate::now_ms();
+        // The event's own time, so a copy dates the chat by its history.
+        let now = event.at.unwrap_or_else(crate::now_ms);
         match &event.payload {
             EventPayload::SessionCreated { session } => {
                 self.state.sessions.insert(session.id, session.clone());
             }
             EventPayload::SessionUpdated { session } => {
-                self.state.sessions.insert(session.id, session.clone());
+                let mut session = session.clone();
+                if session.title.is_none() {
+                    session.title = self
+                        .state
+                        .sessions
+                        .get(&session.id)
+                        .and_then(|s| s.title.clone());
+                }
+                self.state.sessions.insert(session.id, session);
+            }
+            EventPayload::MessageAdded { message } => {
+                if let Some(session) = self.state.sessions.get_mut(&event.session_id) {
+                    session.updated_at = now;
+                    if session.title.is_none() && message.role == MessageRole::User {
+                        session.title = Some(crate::title_from(&message.text));
+                    }
+                }
             }
             EventPayload::SessionStatusChanged { status, reason } => {
                 let session = self
@@ -660,7 +1086,6 @@ impl Store {
             }
             EventPayload::TurnStarted { .. }
             | EventPayload::TurnCompleted { .. }
-            | EventPayload::MessageAdded { .. }
             | EventPayload::MessageDelta { .. }
             | EventPayload::ToolStarted { .. }
             | EventPayload::ToolResult { .. }
@@ -715,6 +1140,8 @@ mod tests {
             next_turn: 1,
             fast: false,
             approved_tools: Vec::new(),
+            executor: None,
+            title: None,
         }
     }
 
@@ -842,6 +1269,295 @@ mod tests {
             reopened.decision(&d_id).unwrap().state,
             DecisionState::Retired
         );
+    }
+
+    fn user_message(turn: u64, text: &str) -> EventPayload {
+        EventPayload::MessageAdded {
+            message: crate::model::ChatMessage {
+                id: format!("m{turn}"),
+                turn,
+                role: MessageRole::User,
+                text: text.into(),
+            },
+        }
+    }
+
+    /// The raw log of a chat, as a peer would receive it.
+    fn log_values(store: &Store, id: &SessionId) -> Vec<serde_json::Value> {
+        let (lines, _) = store.raw_range(id, 0, usize::MAX).unwrap();
+        lines
+            .iter()
+            .map(|l| serde_json::from_str(l).unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn a_batch_is_one_contiguous_dated_append_and_names_the_chat() {
+        let mut store = Store::open(tempdir()).unwrap();
+        let s = session();
+        let events = store
+            .append_batch(
+                s.id,
+                vec![
+                    EventPayload::SessionCreated { session: s.clone() },
+                    user_message(1, "Fix the login redirect loop\nand add a test"),
+                    EventPayload::MessageDelta {
+                        turn: 1,
+                        text: "On it".into(),
+                    },
+                ],
+            )
+            .unwrap();
+        assert_eq!(
+            events.iter().map(|e| e.seq).collect::<Vec<_>>(),
+            vec![0, 1, 2]
+        );
+        assert!(events.iter().all(|e| e.at.is_some()));
+        assert_eq!(
+            store.session(&s.id).unwrap().title.as_deref(),
+            Some("Fix the login redirect loop")
+        );
+        assert_eq!(log_values(&store, &s.id).len(), 3);
+        assert!(store.append_batch(s.id, vec![]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_copy_grows_only_by_contiguous_replication() {
+        let elsewhere = DeviceId::new();
+        let mut source = Store::open(tempdir()).unwrap();
+        source.set_this_device(Some(elsewhere)).unwrap();
+        let mut s = session();
+        s.executor = Some(elsewhere);
+        source
+            .append_batch(
+                s.id,
+                vec![
+                    EventPayload::SessionCreated { session: s.clone() },
+                    user_message(1, "Deploy the site"),
+                    EventPayload::MessageDelta {
+                        turn: 1,
+                        text: "Done".into(),
+                    },
+                ],
+            )
+            .unwrap();
+        let mut log = log_values(&source, &s.id);
+        // A newer device's event type rides along verbatim.
+        log.push(serde_json::json!({
+            "seq": 3, "session_id": s.id.to_string(), "type": "future.event", "x": 1
+        }));
+
+        let mut copy = Store::open(tempdir()).unwrap();
+        copy.set_this_device(Some(DeviceId::new())).unwrap();
+        // Out of order: the first event must be session.created at 0.
+        assert!(matches!(
+            copy.append_replicated(s.id, log[1..].to_vec()),
+            Err(StoreError::Gap { have: 0, got: 1 })
+        ));
+        let done = copy.append_replicated(s.id, log[..2].to_vec()).unwrap();
+        assert_eq!(
+            done,
+            ReplicaAppend {
+                appended: 2,
+                head: 2
+            }
+        );
+        // Overlap is skipped; the rest continues the copy.
+        let done = copy.append_replicated(s.id, log.clone()).unwrap();
+        assert_eq!(
+            done,
+            ReplicaAppend {
+                appended: 2,
+                head: 4
+            }
+        );
+        assert_eq!(
+            log_values(&copy, &s.id),
+            log,
+            "the copy is the log, verbatim"
+        );
+        let copied = copy.session(&s.id).unwrap();
+        assert_eq!(copied.title.as_deref(), Some("Deploy the site"));
+        assert!(!copy.executes_here(copied));
+
+        // A copy can't be written to as if it ran here, and the runner's own
+        // log never takes replicated events.
+        assert!(matches!(
+            copy.append(s.id, user_message(2, "hi")),
+            Err(StoreError::Conflict(_))
+        ));
+        assert!(matches!(
+            source.append_replicated(s.id, log.clone()),
+            Err(StoreError::Conflict(_))
+        ));
+
+        // A private chat from another computer is never accepted as a copy.
+        let mut private = session();
+        private.executor = None;
+        let raw = serde_json::to_value(Event {
+            seq: 0,
+            session_id: private.id,
+            at: None,
+            payload: EventPayload::SessionCreated {
+                session: private.clone(),
+            },
+        })
+        .unwrap();
+        assert!(matches!(
+            copy.append_replicated(private.id, vec![raw]),
+            Err(StoreError::BadState(_))
+        ));
+    }
+
+    #[test]
+    fn deletion_is_remembered_and_removal_purges_synced_chats_only() {
+        let me = DeviceId::new();
+        let mut store = Store::open(tempdir()).unwrap();
+        store.set_this_device(Some(me)).unwrap();
+        let private = session();
+        let mut synced = session();
+        synced.executor = Some(me);
+        let mut other = session();
+        other.executor = Some(me);
+        for s in [&private, &synced, &other] {
+            store
+                .append(s.id, EventPayload::SessionCreated { session: s.clone() })
+                .unwrap();
+        }
+        let (summaries, _) = store.summaries();
+        assert_eq!(summaries.len(), 2, "only synced chats are summarised");
+
+        let stone = Tombstone { at: 1, by: me };
+        store.tombstone(other.id, stone).unwrap();
+        assert!(store.session(&other.id).is_err());
+        assert!(store.tombstoned(&other.id));
+        assert!(matches!(
+            store.append(
+                other.id,
+                EventPayload::SessionCreated {
+                    session: other.clone()
+                }
+            ),
+            Err(StoreError::Conflict(_))
+        ));
+        assert!(
+            !store
+                .dir
+                .join("sessions")
+                .join(other.id.to_string())
+                .exists()
+        );
+
+        assert_eq!(store.purge_synced().unwrap(), 1);
+        assert!(store.session(&synced.id).is_err());
+        assert!(store.session(&private.id).is_ok(), "private chats stay");
+        assert_eq!(store.this_device(), None);
+        assert!(!store.tombstoned(&other.id));
+    }
+
+    #[test]
+    fn a_restart_reconciles_only_chats_running_here_and_tells_peers() {
+        let me = DeviceId::new();
+        let dir = tempdir();
+        let mut store = Store::open(dir.clone()).unwrap();
+        store.set_this_device(Some(me)).unwrap();
+        let working = EventPayload::SessionStatusChanged {
+            status: SessionStatus::Working,
+            reason: None,
+        };
+        let private = session();
+        let mut synced = session();
+        synced.executor = Some(me);
+        for s in [&private, &synced] {
+            store
+                .append_batch(
+                    s.id,
+                    vec![
+                        EventPayload::SessionCreated { session: s.clone() },
+                        working.clone(),
+                    ],
+                )
+                .unwrap();
+        }
+        // A copy of a chat that is working on another device.
+        let elsewhere = DeviceId::new();
+        let mut mirrored = session();
+        mirrored.executor = Some(elsewhere);
+        let log: Vec<serde_json::Value> = [
+            EventPayload::SessionCreated {
+                session: mirrored.clone(),
+            },
+            working.clone(),
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(seq, payload)| {
+            serde_json::to_value(Event {
+                seq: seq as u64,
+                session_id: mirrored.id,
+                at: Some(1),
+                payload,
+            })
+            .unwrap()
+        })
+        .collect();
+        store.append_replicated(mirrored.id, log).unwrap();
+        drop(store);
+
+        let store = Store::open(dir).unwrap();
+        assert_eq!(
+            store.session(&private.id).unwrap().status,
+            SessionStatus::Failed
+        );
+        assert_eq!(log_values(&store, &private.id).len(), 2, "private: silent");
+        assert_eq!(
+            store.session(&synced.id).unwrap().status,
+            SessionStatus::Failed
+        );
+        let synced_log = log_values(&store, &synced.id);
+        assert_eq!(synced_log.len(), 3, "synced: the restart is an event");
+        assert_eq!(synced_log[2]["reason"], "daemon restart");
+        assert_eq!(
+            store.session(&mirrored.id).unwrap().status,
+            SessionStatus::Working,
+            "a copy waits for its runner"
+        );
+    }
+
+    #[test]
+    fn a_torn_log_heals_and_unrecorded_events_are_reapplied() {
+        let dir = tempdir();
+        let mut store = Store::open(dir.clone()).unwrap();
+        let s = session();
+        store
+            .append(s.id, EventPayload::SessionCreated { session: s.clone() })
+            .unwrap();
+        let log = store.event_log(&s.id);
+        drop(store);
+        // The daemon died after writing an event but before state.json, and
+        // again in the middle of the next line.
+        let unrecorded = serde_json::to_string(&Event {
+            seq: 1,
+            session_id: s.id,
+            at: Some(5),
+            payload: user_message(1, "Rename the module"),
+        })
+        .unwrap();
+        let mut file = fs::OpenOptions::new().append(true).open(&log).unwrap();
+        write!(file, "{unrecorded}\n{{\"seq\":2,\"sess").unwrap();
+        drop(file);
+
+        let mut store = Store::open(dir).unwrap();
+        assert!(
+            fs::read_to_string(&log).unwrap().ends_with('\n'),
+            "torn line cut"
+        );
+        assert_eq!(
+            store.session(&s.id).unwrap().title.as_deref(),
+            Some("Rename the module")
+        );
+        let next = store.append(s.id, user_message(2, "and test it")).unwrap();
+        assert_eq!(next.seq, 2, "no sequence number is reused");
     }
 
     #[test]
