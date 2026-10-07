@@ -1,0 +1,7 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- The console is dark in either system mode. -->
+    <style name="Theme.openremote_ui_desktop" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowBackground">@color/or_surface</item>
+        <item name="android:colorBackground">@color/or_surface</item>
+    </style>
+</resources>

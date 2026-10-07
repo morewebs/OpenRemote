@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The console's sidebar and titlebar colour: what shows behind
+         the system bars and while the webview loads. -->
+    <color name="or_surface">#FF0F1216</color>
+</resources>

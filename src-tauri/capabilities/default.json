@@ -3,6 +3,7 @@
   "identifier": "default",
   "description": "Main window: frameless caption controls, daemon sidecar",
   "windows": ["main"],
+  "platforms": ["windows", "linux", "macOS"],
   "permissions": [
     "core:default",
     "autostart:allow-enable",

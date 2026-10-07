@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test \"src/**/*.test.js\"",
-    "daemon": "node scripts/sync-daemon.mjs"
+    "daemon": "node scripts/sync-daemon.mjs",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@fontsource/geist-mono": "^5.3.0",

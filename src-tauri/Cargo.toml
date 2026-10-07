@@ -7,20 +7,33 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 # tray-icon: OpenRemote can keep running in the tray when its window closes.
 # (Keep panic = unwind: the Linux tray's appindicator guard catches a panic.)
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-autostart = "2"
-tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
-serde_json = "1"
 
 [target.'cfg(any(windows, target_os = "linux"))'.dependencies]
 # A second launch shows the running window instead of starting a second
 # daemon on the same data.
 tauri-plugin-single-instance = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+
+[target.'cfg(target_os = "android")'.dependencies]
+# The Android app runs the daemon in its own process (there are no
+# sidecars on Android) and hears the sign-in's return address through
+# its own URI scheme.
+openremote-daemon = { path = "../daemon/crates/openremote-daemon" }
+openremote-cloud = { path = "../daemon/crates/openremote-cloud" }
+tauri-plugin-deep-link = "2"
+tauri-plugin-opener = "2"
+android_system_properties = "0.1"
+tokio = { version = "1", features = ["time"] }
 
 [lib]
 name = "openremote_ui_desktop_lib"
