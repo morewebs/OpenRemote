@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Lightning, Stop, Play, HandPalm, Brain, Trash } from '@phosphor-icons/react'
+import { ArrowUp, Lightning, Stop, Play, HandPalm, Brain, Trash, CloudArrowUp } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
-import { chatAccess, deviceName } from './cloud.js'
+import { chatAccess, deviceName, signedIn } from './cloud.js'
 import { railItems } from './state/reducer.js'
 import { harnessName } from './harness-names.js'
 import { HarnessMark } from './brand-marks.jsx'
@@ -71,8 +71,10 @@ export default function ChatView({ chat, onBack }) {
     cloud,
     setDeviceKind,
     deleteChat,
+    syncChat,
   } = useConsole()
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmSync, setConfirmSync] = useState(false)
   // A synced chat may run on another device: what can be done from here.
   const access = chatAccess(chat, devices, thisDevice, cloud)
   const reachable = access === 'here' || access === 'remote'
@@ -251,6 +253,39 @@ export default function ChatView({ chat, onBack }) {
               <Play size={11} weight="fill" />
               Resume
             </button>
+          )}
+          {/* A private chat can join Cloud - asked first, since the whole
+              transcript goes, tool output included. */}
+          {!chat.executor && signedIn(cloud) && (
+            confirmSync ? (
+              <>
+                <span className="cv-fact">Copy this chat, tool output included, to your other devices?</span>
+                <button
+                  className="cv-fact-btn"
+                  onClick={() =>
+                    control(async () => {
+                      await syncChat(chat.id)
+                      setConfirmSync(false)
+                    })
+                  }
+                >
+                  <CloudArrowUp size={11} />
+                  Sync
+                </button>
+                <button className="cv-fact-btn" onClick={() => setConfirmSync(false)}>
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                className="cv-fact-btn"
+                onClick={() => setConfirmSync(true)}
+                title="Copy this chat to your other devices"
+              >
+                <CloudArrowUp size={11} />
+                Sync
+              </button>
+            )
           )}
           {/* Deleting a synced chat removes it from every device - asked
               twice, in place. */}

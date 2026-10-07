@@ -206,3 +206,85 @@ async fn laptops_that_are_never_online_together_meet_through_a_machine() {
             .any(|s| s["id"] == id.as_str())
     );
 }
+
+#[tokio::test]
+async fn a_private_chat_can_be_synced_later_whole() {
+    let cloud = FakeCloud::start().await;
+    let (desk, desk_id) = device(&cloud, "desk").await;
+    let (laptop, _) = device(&cloud, "laptop").await;
+    let ws = workspace(Some("plain"));
+
+    // A private chat with some history.
+    let created = call(
+        &desk,
+        "POST",
+        "/sessions",
+        Some(json!({"request_id": rid(), "harness": "claude", "workspace": ws.path()})),
+    )
+    .await;
+    assert_eq!(created.status, 201, "{}", created.raw);
+    let id = created.body["id"].as_str().unwrap().to_string();
+    assert!(created.body["executor"].is_null());
+    let prompt = call(
+        &desk,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": rid(), "text": "Sketch the release checklist"})),
+    )
+    .await;
+    assert_eq!(prompt.status, 200, "{}", prompt.raw);
+    until_count(
+        &desk,
+        &format!("/sessions/{id}/events"),
+        "turn.completed",
+        1,
+    )
+    .await;
+    let peek = call(&laptop, "GET", "/sessions", None).await;
+    assert!(
+        !peek
+            .body
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["id"] == id.as_str()),
+        "private: the laptop never sees it"
+    );
+
+    // Synced: it keeps running on the desk, and the laptop gets all of it.
+    let synced = call(&desk, "POST", &format!("/sessions/{id}/sync"), None).await;
+    assert_eq!(synced.status, 200, "{}", synced.raw);
+    assert_eq!(synced.body["executor"], desk_id.as_str());
+    let copy = until("the laptop copies it", || async {
+        sessions(&laptop)
+            .await
+            .into_iter()
+            .find(|s| s["id"] == id.as_str())
+    })
+    .await;
+    assert_eq!(
+        copy["executor"],
+        desk_id.as_str(),
+        "the copy knows where it runs"
+    );
+    assert_eq!(copy["title"], "Sketch the release checklist");
+    until_count(
+        &laptop,
+        &format!("/sessions/{id}/events"),
+        "turn.completed",
+        1,
+    )
+    .await;
+
+    // The desk isn't a machine, so the laptop can read but not drive it.
+    let driven = call(
+        &laptop,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": rid(), "text": "more"})),
+    )
+    .await;
+    assert_eq!(driven.status, 409, "{}", driven.raw);
+    let again = call(&desk, "POST", &format!("/sessions/{id}/sync"), None).await;
+    assert_eq!(again.status, 200, "syncing twice is fine");
+}

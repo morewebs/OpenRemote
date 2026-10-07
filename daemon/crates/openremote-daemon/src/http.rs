@@ -191,6 +191,7 @@ fn api_routes() -> Router<Arc<App>> {
         .route("/sessions/{id}/interrupt", post(post_interrupt))
         .route("/sessions/{id}/stop", post(post_stop))
         .route("/sessions/{id}/resume", post(post_resume))
+        .route("/sessions/{id}/sync", post(post_sync))
         .route("/decisions/{id}/answer", post(post_answer))
         .route("/receipts/{request_id}", get(get_receipt))
 }
@@ -1132,6 +1133,20 @@ impl CreateSessionBody {
             "permission_mode": self.permission_mode,
             "fast": self.fast,
         })
+    }
+}
+
+/// Syncs a private chat to the user's other devices (it keeps running here).
+async fn post_sync(State(app): State<Arc<App>>, AxumPath(id): AxumPath<String>) -> Response {
+    let Some(id) = SessionId::parse(&id) else {
+        return error(StatusCode::NOT_FOUND, "no such chat");
+    };
+    let Some(me) = app.cloud.device_id() else {
+        return error(StatusCode::CONFLICT, "sign in to OpenRemote Cloud first");
+    };
+    match app.supervisor.sync_session(&id, me) {
+        Ok(session) => Json(session).into_response(),
+        Err(err) => supervisor_error(err),
     }
 }
 

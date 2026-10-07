@@ -757,26 +757,36 @@ impl Store {
         Ok(events)
     }
 
-    /// Extend this device's copy of a chat that runs on another device with
-    /// events from that device's log, verbatim. They must continue the copy
-    /// exactly: duplicates are skipped, a gap stops the append and is
-    /// reported so the caller pulls the missing range. Event types this
-    /// build doesn't know are kept as they are and skipped by state, so an
-    /// older device never stalls a newer one.
+    /// Extend this device's copy of a chat that runs on `runner` with
+    /// events from its log, verbatim. They must continue the copy exactly:
+    /// duplicates are skipped, a gap stops the append and is reported so the
+    /// caller pulls the missing range. Event types this build doesn't know
+    /// are kept as they are and skipped by state, so an older device never
+    /// stalls a newer one.
+    ///
+    /// A chat that started private and was synced later opens with a
+    /// `session.created` that names no runner; the copy takes `runner` from
+    /// its first event, so it is never mistaken for a private chat here.
     pub fn append_replicated(
         &mut self,
         session_id: SessionId,
+        runner: DeviceId,
         events: Vec<serde_json::Value>,
     ) -> Result<ReplicaAppend, StoreError> {
+        if Some(runner) == self.state.this_device {
+            return Err(StoreError::Conflict(format!(
+                "chat {session_id} runs on this device"
+            )));
+        }
         if self.state.tombstones.contains_key(&session_id) {
             return Err(StoreError::Conflict(format!(
                 "chat {session_id} was deleted"
             )));
         }
         if let Some(session) = self.state.sessions.get(&session_id) {
-            if self.executes_here(session) {
+            if self.executes_here(session) || session.executor != Some(runner) {
                 return Err(StoreError::Conflict(format!(
-                    "chat {session_id} runs on this device"
+                    "chat {session_id} runs on another device"
                 )));
             }
         }
@@ -800,23 +810,20 @@ impl Store {
                 break;
             }
             match serde_json::from_value::<Event>(value.clone()) {
-                Ok(event) => {
+                Ok(mut event) => {
                     let opens = matches!(event.payload, EventPayload::SessionCreated { .. });
                     if (head == 0) != opens {
                         return Err(StoreError::BadState(
                             "a copy starts with session.created, and only there".into(),
                         ));
                     }
-                    if opens {
-                        let EventPayload::SessionCreated { session } = &event.payload else {
-                            unreachable!()
-                        };
-                        if session.executor.is_none() || session.executor == self.state.this_device
-                        {
+                    if let EventPayload::SessionCreated { session } = &mut event.payload {
+                        if session.executor.is_some_and(|e| e != runner) {
                             return Err(StoreError::BadState(
-                                "a replicated chat names another device as its runner".into(),
+                                "a replicated chat names another runner".into(),
                             ));
                         }
+                        session.executor = Some(runner);
                     }
                     self.apply(&event)?;
                 }
@@ -1044,6 +1051,15 @@ impl Store {
             }
             EventPayload::SessionUpdated { session } => {
                 let mut session = session.clone();
+                // Events from before a chat was synced name no runner; the
+                // runner it has now stays.
+                if session.executor.is_none() {
+                    session.executor = self
+                        .state
+                        .sessions
+                        .get(&session.id)
+                        .and_then(|s| s.executor);
+                }
                 if session.title.is_none() {
                     session.title = self
                         .state
@@ -1356,10 +1372,12 @@ mod tests {
         copy.set_this_device(Some(DeviceId::new())).unwrap();
         // Out of order: the first event must be session.created at 0.
         assert!(matches!(
-            copy.append_replicated(s.id, log[1..].to_vec()),
+            copy.append_replicated(s.id, elsewhere, log[1..].to_vec()),
             Err(StoreError::Gap { have: 0, got: 1 })
         ));
-        let done = copy.append_replicated(s.id, log[..2].to_vec()).unwrap();
+        let done = copy
+            .append_replicated(s.id, elsewhere, log[..2].to_vec())
+            .unwrap();
         assert_eq!(
             done,
             ReplicaAppend {
@@ -1368,7 +1386,9 @@ mod tests {
             }
         );
         // Overlap is skipped; the rest continues the copy.
-        let done = copy.append_replicated(s.id, log.clone()).unwrap();
+        let done = copy
+            .append_replicated(s.id, elsewhere, log.clone())
+            .unwrap();
         assert_eq!(
             done,
             ReplicaAppend {
@@ -1392,25 +1412,37 @@ mod tests {
             Err(StoreError::Conflict(_))
         ));
         assert!(matches!(
-            source.append_replicated(s.id, log.clone()),
+            source.append_replicated(s.id, elsewhere, log.clone()),
             Err(StoreError::Conflict(_))
         ));
 
-        // A private chat from another computer is never accepted as a copy.
-        let mut private = session();
-        private.executor = None;
+        // A chat synced after it started opens with no runner named; the
+        // copy takes the runner it was pulled for, never "private here".
+        let mut later = session();
+        later.executor = None;
         let raw = serde_json::to_value(Event {
             seq: 0,
-            session_id: private.id,
+            session_id: later.id,
             at: None,
             payload: EventPayload::SessionCreated {
-                session: private.clone(),
+                session: later.clone(),
             },
         })
         .unwrap();
+        copy.append_replicated(later.id, elsewhere, vec![raw.clone()])
+            .unwrap();
+        let taken = copy.session(&later.id).unwrap();
+        assert_eq!(taken.executor, Some(elsewhere));
+        assert!(!copy.executes_here(taken));
+        // And a copy can't be claimed for this device or another runner.
+        let me = copy.this_device().unwrap();
         assert!(matches!(
-            copy.append_replicated(private.id, vec![raw]),
-            Err(StoreError::BadState(_))
+            copy.append_replicated(SessionId::new(), me, vec![raw.clone()]),
+            Err(StoreError::Conflict(_))
+        ));
+        assert!(matches!(
+            copy.append_replicated(later.id, DeviceId::new(), vec![raw]),
+            Err(StoreError::Conflict(_))
         ));
     }
 
@@ -1506,7 +1538,9 @@ mod tests {
             .unwrap()
         })
         .collect();
-        store.append_replicated(mirrored.id, log).unwrap();
+        store
+            .append_replicated(mirrored.id, elsewhere, log)
+            .unwrap();
         drop(store);
 
         let store = Store::open(dir).unwrap();

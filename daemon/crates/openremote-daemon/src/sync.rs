@@ -78,11 +78,16 @@ pub fn range(app: &App, id: SessionId, from: u64) -> Result<Value, (u16, &'stati
 
 /// Takes events from a peer into this device's copy, and tells local
 /// listeners (the console's open chat) about the new ones.
-fn ingest(app: &App, id: SessionId, events: Vec<Value>) -> Result<u64, StoreError> {
+fn ingest(
+    app: &App,
+    id: SessionId,
+    runner: DeviceId,
+    events: Vec<Value>,
+) -> Result<u64, StoreError> {
     let (fresh, head) = {
         let mut store = lock(&app.store);
         let before = store.head(&id);
-        let done = store.append_replicated(id, events.clone())?;
+        let done = store.append_replicated(id, runner, events.clone())?;
         let fresh: Vec<String> = events
             .iter()
             .filter(|e| {
@@ -127,7 +132,7 @@ async fn get(mesh: &Mesh, peer: DeviceId, path: String) -> Option<Value> {
 /// runs per chat at a time; a second one waits for it and then catches up
 /// itself, so a caller that needs the copy (a chat just created on a
 /// machine) never returns before it exists.
-pub async fn pull(app: &Arc<App>, peer: DeviceId, id: SessionId) {
+pub async fn pull(app: &Arc<App>, peer: DeviceId, id: SessionId, runner: DeviceId) {
     let deadline = Instant::now() + Duration::from_secs(60);
     while !lock(&app.sync.pulling).insert(id) {
         if Instant::now() > deadline {
@@ -155,7 +160,7 @@ pub async fn pull(app: &Arc<App>, peer: DeviceId, id: SessionId) {
         if events.is_empty() {
             break;
         }
-        match ingest(app, id, events) {
+        match ingest(app, id, runner, events) {
             Ok(head) if head < theirs && head > from => continue,
             _ => break,
         }
@@ -199,7 +204,7 @@ pub async fn sync_with(app: &Arc<App>, peer: DeviceId) {
         }
     }
     let me = mesh.me();
-    let mut wanted: Vec<(i64, SessionId)> = Vec::new();
+    let mut wanted: Vec<(i64, SessionId, DeviceId)> = Vec::new();
     for s in theirs["sessions"].as_array().into_iter().flatten() {
         let (Some(id), Some(executor), Some(head)) = (
             s["id"].as_str().and_then(SessionId::parse),
@@ -213,13 +218,13 @@ pub async fn sync_with(app: &Arc<App>, peer: DeviceId) {
             continue;
         }
         if head > local_head(app, &id) {
-            wanted.push((s["updated_at"].as_i64().unwrap_or(0), id));
+            wanted.push((s["updated_at"].as_i64().unwrap_or(0), id, executor));
         }
     }
     // Newest chats first, so the list fills in the order it is read.
-    wanted.sort_by_key(|(updated, _)| std::cmp::Reverse(*updated));
-    for (_, id) in wanted {
-        pull(app, peer, id).await;
+    wanted.sort_by_key(|(updated, _, _)| std::cmp::Reverse(*updated));
+    for (_, id, runner) in wanted {
+        pull(app, peer, id, runner).await;
     }
 }
 
@@ -249,9 +254,11 @@ pub fn on_note(app: &Arc<App>, peer: PeerContext, note: Value) {
         }
         Some("sync.events") => {
             let events = note["events"].as_array().cloned().unwrap_or_default();
-            if let Err(StoreError::Gap { .. }) = ingest(app, id, events) {
+            // Live events only ever come from the chat's runner.
+            let runner = peer.device_id;
+            if let Err(StoreError::Gap { .. }) = ingest(app, id, runner, events) {
                 let app = Arc::clone(app);
-                tokio::spawn(async move { pull(&app, peer.device_id, id).await });
+                tokio::spawn(async move { pull(&app, runner, id, runner).await });
             }
         }
         Some("sync.head") => {
@@ -259,9 +266,11 @@ pub fn on_note(app: &Arc<App>, peer: PeerContext, note: Value) {
                 .as_u64()
                 .is_some_and(|h| h > local_head(app, &id));
             let deleted = lock(&app.store).tombstoned(&id);
+            // Head notices too: only the runner sends them.
             if behind && !deleted {
                 let app = Arc::clone(app);
-                tokio::spawn(async move { pull(&app, peer.device_id, id).await });
+                let runner = peer.device_id;
+                tokio::spawn(async move { pull(&app, runner, id, runner).await });
             }
         }
         Some("sync.tombstone") => {
@@ -309,7 +318,7 @@ pub async fn watch(app: &Arc<App>, session: SessionId) -> Option<Watch> {
     let mesh = app.cloud.mesh()?;
     let on = json!({"type": "sync.watch", "session": session, "on": true});
     let _ = mesh.note(executor, &on).await;
-    pull(app, executor, session).await;
+    pull(app, executor, session, executor).await;
     Some(Watch {
         app: Arc::clone(app),
         executor,

@@ -428,7 +428,7 @@ pub async fn create_remote(
                 .as_str()
                 .and_then(openremote_core::SessionId::parse)
             {
-                crate::sync::pull(app, device, id).await;
+                crate::sync::pull(app, device, id, device).await;
             }
         }
     }

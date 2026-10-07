@@ -111,6 +111,11 @@ export class DaemonApi {
     })
   }
 
+  /** Syncs a private chat to the user's other devices (it keeps running here). */
+  syncSession(id) {
+    return this.call('POST', `/sessions/${id}/sync`, { request_id: newRequestId() })
+  }
+
   /** Deletes a synced chat on every device. */
   deleteSession(id) {
     return this.call('DELETE', `/sessions/${id}`)

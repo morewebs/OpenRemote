@@ -409,6 +409,19 @@ export function ConsoleProvider({ children }) {
 
   const createEnrollment = useCallback(() => api.createEnrollment(), [api])
 
+  // A private chat joins Cloud: every device copies it, transcript and
+  // tool output included; it keeps running here.
+  const syncChat = useCallback(
+    async (id) => {
+      const session = await api.syncSession(id)
+      setSessions((current) => current.map((s) => (s.id === id ? { ...s, ...session } : s)))
+      setChats((current) =>
+        current[id] ? { ...current, [id]: { ...current[id], executor: session.executor ?? null } } : current,
+      )
+    },
+    [api],
+  )
+
   // Deleting a synced chat removes it from every device.
   const deleteChat = useCallback(
     async (id) => {
@@ -691,6 +704,7 @@ export function ConsoleProvider({ children }) {
       removeDevice,
       createEnrollment,
       deleteChat,
+      syncChat,
       sendPrompt,
       updateChatSettings,
       answerDecision,
@@ -741,6 +755,7 @@ export function ConsoleProvider({ children }) {
       removeDevice,
       createEnrollment,
       deleteChat,
+      syncChat,
       sendPrompt,
       updateChatSettings,
       answerDecision,

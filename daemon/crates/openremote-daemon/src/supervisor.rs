@@ -212,6 +212,28 @@ impl Supervisor {
     }
 
     /// Subscribe to the live event stream (serialized event JSON).
+    /// Syncs a private chat to the user's other devices: it keeps running
+    /// here, now as a synced chat, and every device copies it whole.
+    pub fn sync_session(
+        &self,
+        id: &SessionId,
+        me: openremote_core::DeviceId,
+    ) -> Result<Session, SupervisorError> {
+        let mut session = self.session(id)?;
+        match session.executor {
+            Some(runner) if runner == me => return Ok(session),
+            Some(_) => {
+                return Err(SupervisorError::Conflict(
+                    "this chat runs on another device".into(),
+                ));
+            }
+            None => {}
+        }
+        session.executor = Some(me);
+        self.emit_all(id, vec![EventPayload::SessionUpdated { session }])?;
+        self.session(id)
+    }
+
     /// Tells live listeners about an event that arrived from another
     /// device (a copy of a chat running there).
     pub fn announce(&self, raw: String) {
