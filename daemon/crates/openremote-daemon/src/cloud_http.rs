@@ -232,6 +232,9 @@ pub async fn set_kind(
     if !matches!(body.kind.as_str(), "desktop" | "machine") {
         return json_error(StatusCode::BAD_REQUEST, "kind is desktop or machine");
     }
+    if body.kind == "machine" && is_phone_device(&app, &id) {
+        return json_error(StatusCode::CONFLICT, "a phone can't be a machine");
+    }
     let token = match app.cloud.account_token().await {
         Ok(token) => token,
         Err(e) => return cloud_error(e),
@@ -250,6 +253,20 @@ pub async fn set_kind(
         }
         Err(e) => registry_error(e),
     }
+}
+
+/// Whether device `id` is a phone: this one by its own config, another by
+/// the platform it registered with.
+fn is_phone_device(app: &App, id: &str) -> bool {
+    use openremote_cloud::config::is_phone;
+    if app.cloud.device_id().is_some_and(|me| me.to_string() == id) {
+        return is_phone(&app.cloud.config().platform);
+    }
+    app.cloud.mesh().is_some_and(|mesh| {
+        mesh.peers()
+            .iter()
+            .any(|peer| peer.id.to_string() == id && is_phone(&peer.platform))
+    })
 }
 
 /// Removes a device from the account. Removing this one leaves Cloud here:

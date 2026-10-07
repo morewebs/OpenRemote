@@ -272,6 +272,16 @@ fn harness_from(id: &str, name: &str, resolution: &Resolution, version: Option<&
 }
 
 impl HarnessRegistry {
+    /// No harnesses at all, and nothing probed: a device that drives the
+    /// user's machines and runs nothing itself (the Android app).
+    pub fn none() -> Self {
+        Self {
+            entries: Vec::new(),
+            overrides: HashMap::new(),
+            node_version: None,
+        }
+    }
+
     /// Probe every supported harness. `overrides` maps harness ids to
     /// binaries (e2e points them at fixture agents) and is authoritative
     /// where given. One bounded `--version` per harness runs in parallel -

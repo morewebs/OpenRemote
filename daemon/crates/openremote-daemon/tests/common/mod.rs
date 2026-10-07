@@ -184,6 +184,8 @@ pub async fn start_cloud_daemon(
                 auth_issuer: "http://127.0.0.1:9/v1/auth".into(),
                 client_id: openremote_cloud::config::CLIENT_ID.into(),
                 device_name: "test-device".into(),
+                platform: std::env::consts::OS.into(),
+                redirect_uri: None,
             }),
         },
         store,
@@ -200,6 +202,28 @@ pub async fn start_cloud_daemon(
         _data_dir: data_dir,
         _child: None,
     }
+}
+
+/// The daemon as the Android app runs it: in-process, no harnesses. The
+/// app itself is handed back too, for what the OS does to it (a sign-in's
+/// return address, coming back to the front).
+pub async fn start_embedded(cloud: openremote_cloud::CloudConfig) -> (TestDaemon, Arc<App>) {
+    let data_dir = tempfile::tempdir().expect("temp data dir");
+    let embedded = openremote_daemon::embedded::start(data_dir.path().to_path_buf(), cloud)
+        .await
+        .expect("embedded daemon");
+    let addr = embedded
+        .url
+        .trim_start_matches("http://")
+        .parse()
+        .expect("loopback address");
+    let daemon = TestDaemon {
+        token: embedded.token,
+        addr,
+        _data_dir: data_dir,
+        _child: None,
+    };
+    (daemon, embedded.app)
 }
 
 /// A workspace the fixture agent runs in, with an optional scenario file.

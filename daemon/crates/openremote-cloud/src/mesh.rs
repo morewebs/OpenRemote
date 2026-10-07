@@ -112,6 +112,9 @@ pub struct Mesh {
     host: Arc<dyn CloudHost>,
     pins_file: PathBuf,
     refresh: Notify,
+    /// Check the relay link now: reconnect at once if it's down, and probe
+    /// it if it looks up (it may have died while the OS froze the app).
+    wake: Notify,
 }
 
 const MAX_INBOUND_PER_PEER: usize = 32;
@@ -129,6 +132,10 @@ impl Mesh {
     /// Fetches the device list again (after this device changed it).
     pub fn refresh_now(&self) {
         self.refresh.notify_one();
+    }
+
+    pub fn wake(&self) {
+        self.wake.notify_one();
     }
 
     /// This device's own kind, as the registry last said.
@@ -647,6 +654,7 @@ pub fn start(
         host,
         pins_file: cloud.data_dir().join("cloud").join("peers.json"),
         refresh: Notify::new(),
+        wake: Notify::new(),
     });
     let relay = tokio::spawn(run_relay(Arc::clone(cloud), Arc::clone(&mesh), out_rx));
     let refresher = tokio::spawn(refresh_devices(Arc::clone(cloud), Arc::clone(&mesh)));
@@ -691,11 +699,17 @@ async fn run_relay(
         mesh.drop_links();
         if cloud.phase() == Phase::Online {
             cloud.set_phase(Phase::Offline, None);
+            // The link was up: this is a fresh drop, not a run of failures.
+            backoff = Duration::from_secs(1);
         }
         // Jitter, so a relay restart isn't met by every device at once.
         let jitter = Duration::from_millis(u64::from(uuid::Uuid::new_v4().as_bytes()[0]) * 4);
-        tokio::time::sleep(backoff + jitter).await;
-        backoff = (backoff * 2).min(Duration::from_secs(60));
+        tokio::select! {
+            _ = tokio::time::sleep(backoff + jitter) => {
+                backoff = (backoff * 2).min(Duration::from_secs(60));
+            }
+            _ = mesh.wake.notified() => backoff = Duration::from_secs(1),
+        }
         // Frames queued while away can't be delivered in order any more.
         while out_rx.try_recv().is_ok() {}
     }
@@ -748,13 +762,19 @@ async fn relay_session(
     let (mut sink, mut stream) = ws.split();
     let mut ping = tokio::time::interval(Duration::from_secs(25));
     ping.tick().await;
+    // Set by a wake: the relay must answer the probe ping by then.
+    let mut probe: Option<tokio::time::Instant> = None;
     loop {
+        let quiet = probe.map_or(Duration::from_secs(60), |by| {
+            by.saturating_duration_since(tokio::time::Instant::now())
+        });
         tokio::select! {
-            incoming = tokio::time::timeout(Duration::from_secs(60), stream.next()) => {
+            incoming = tokio::time::timeout(quiet, stream.next()) => {
                 let message = match incoming {
                     Ok(Some(Ok(m))) => m,
                     _ => return Ended::Retry,
                 };
+                probe = None;
                 match message {
                     Message::Binary(data) if data.len() > 16 => {
                         let mut id = [0u8; 16];
@@ -825,6 +845,12 @@ async fn relay_session(
                 if sink.send(Message::Ping(Default::default())).await.is_err() {
                     return Ended::Retry;
                 }
+            }
+            _ = mesh.wake.notified() => {
+                if sink.send(Message::Ping(Default::default())).await.is_err() {
+                    return Ended::Retry;
+                }
+                probe.get_or_insert(tokio::time::Instant::now() + Duration::from_secs(10));
             }
         }
     }

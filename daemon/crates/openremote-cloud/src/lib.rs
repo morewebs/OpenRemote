@@ -161,7 +161,7 @@ impl Cloud {
                 "id": identity.device_id,
                 "name": self.config.device_name,
                 "kind": inner.credentials.kind,
-                "platform": std::env::consts::OS,
+                "platform": self.config.platform,
             })),
         })
     }
@@ -181,11 +181,16 @@ impl Cloud {
     }
 
     /// Starts a sign-in: the URL to open in the system browser. The code
-    /// comes back to this daemon at `/cloud/callback` on `port`.
+    /// comes back to this daemon at `/cloud/callback` on `port`, or through
+    /// the configured redirect (the app passes it on to that same route).
     pub fn begin_signin(&self, port: u16) -> String {
         let pkce = oauth::Pkce::new();
         let state = oauth::new_state();
-        let redirect_uri = format!("http://127.0.0.1:{port}/cloud/callback");
+        let redirect_uri = self
+            .config
+            .redirect_uri
+            .clone()
+            .unwrap_or_else(|| format!("http://127.0.0.1:{port}/cloud/callback"));
         let url = oauth::authorize_url(
             &self.config.auth_issuer,
             &self.config.client_id,
@@ -281,7 +286,7 @@ impl Cloud {
                         &DeviceInfo {
                             id: &id,
                             name: &name,
-                            platform: std::env::consts::OS,
+                            platform: &self.config.platform,
                             noise_pubkey: &key,
                             app_version: version,
                         },
@@ -344,7 +349,7 @@ impl Cloud {
                 &DeviceInfo {
                     id: &id,
                     name: &self.config.device_name,
-                    platform: std::env::consts::OS,
+                    platform: &self.config.platform,
                     noise_pubkey: &identity.noise_public,
                     app_version: env!("CARGO_PKG_VERSION"),
                 },
@@ -454,6 +459,15 @@ impl Cloud {
         }
         if let Some((mesh, tasks)) = mesh::start(self, host) {
             *running = Some(Running { mesh, tasks });
+        }
+    }
+
+    /// Reconnects to the relay now instead of when the backoff says: the
+    /// app came back to the front, and the link it held may have died while
+    /// the OS had it frozen.
+    pub fn reconnect_now(&self) {
+        if let Some(mesh) = self.mesh() {
+            mesh.wake();
         }
     }
 

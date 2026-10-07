@@ -1058,6 +1058,12 @@ async fn create_session(
         }
         return crate::cloud_http::create_remote(&app, device, &body.request_id, &body.raw()).await;
     }
+    if openremote_cloud::config::is_phone(&app.cloud.config().platform) {
+        return error(
+            StatusCode::CONFLICT,
+            "a phone can't run chats - start this one on one of your machines",
+        );
+    }
     // A chat a peer asks for, or one made in Cloud, syncs to every device.
     let executor = if body.synced || target.is_some() || peer.is_some() {
         match me {

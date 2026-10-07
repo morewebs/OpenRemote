@@ -14,6 +14,8 @@ fn config(cloud: &FakeCloud, name: &str) -> CloudConfig {
         auth_issuer: cloud.issuer(),
         client_id: openremote_cloud::config::CLIENT_ID.into(),
         device_name: name.into(),
+        platform: std::env::consts::OS.into(),
+        redirect_uri: None,
     }
 }
 

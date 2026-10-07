@@ -230,7 +230,9 @@ struct AuthorizeQuery {
 async fn authorize(State(cloud): State<FakeCloud>, Query(q): Query<AuthorizeQuery>) -> Response {
     let loopback = q.redirect_uri.starts_with("http://127.0.0.1:")
         && q.redirect_uri.ends_with("/cloud/callback");
-    if q.client_id != CLIENT_ID || !loopback || q.code_challenge_method != "S256" {
+    // The Android app's private-use scheme, registered beside the loopback.
+    let app = q.redirect_uri == "space.moreweb.openremote:/cloud/callback";
+    if q.client_id != CLIENT_ID || !(loopback || app) || q.code_challenge_method != "S256" {
         return error(StatusCode::BAD_REQUEST, "invalid_request");
     }
     let email = cloud.world().current_user.clone();

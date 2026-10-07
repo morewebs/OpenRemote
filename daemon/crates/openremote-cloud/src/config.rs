@@ -10,11 +10,25 @@ pub struct CloudConfig {
     pub client_id: String,
     /// This device's name in the user's device list.
     pub device_name: String,
+    /// The OS this device registers as (`windows`, `linux`, `android`...).
+    pub platform: String,
+    /// Where the sign-in page sends the browser back. None is the loopback
+    /// callback on this daemon's own port; the Android app, which the OS
+    /// may freeze while the browser is in front, takes [`APP_REDIRECT`].
+    pub redirect_uri: Option<String>,
 }
 
 pub const DEFAULT_API: &str = "https://api.moreweb.space/v1/openremote";
 pub const DEFAULT_ISSUER: &str = "https://auth.moreweb.space/v1/auth";
 pub const CLIENT_ID: &str = "openremote-desktop";
+/// The Android app's sign-in return address: a private-use scheme named
+/// after the app's id (RFC 8252 7.1), which the OS hands to the app.
+pub const APP_REDIRECT: &str = "space.moreweb.openremote:/cloud/callback";
+
+/// A phone drives machines and is never one: it can't run harnesses.
+pub fn is_phone(platform: &str) -> bool {
+    matches!(platform, "android" | "ios")
+}
 
 impl CloudConfig {
     /// `OPENREMOTE_CLOUD_API`, `OPENREMOTE_AUTH_ISSUER` and
@@ -32,6 +46,8 @@ impl CloudConfig {
                 .to_string(),
             client_id: CLIENT_ID.to_string(),
             device_name: var("OPENREMOTE_DEVICE_NAME").unwrap_or_else(openremote_core::hostname),
+            platform: std::env::consts::OS.to_string(),
+            redirect_uri: None,
         }
     }
 

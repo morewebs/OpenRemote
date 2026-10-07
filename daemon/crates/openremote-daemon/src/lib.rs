@@ -3,6 +3,7 @@
 
 pub mod app;
 pub mod cloud_http;
+pub mod embedded;
 pub mod fsdirs;
 pub mod host;
 pub mod http;
