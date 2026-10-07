@@ -144,7 +144,11 @@ spacing.
 
 Every screen the design specifies, backed by the real daemon:
 
-- **New chat** - the greeting + composer; harness picker (installed only),
+- **New chat** - the greeting + composer; harness picker (installed only,
+  with a pinned "Manage harnesses…" row that opens the harness manager:
+  all six harnesses, each installable through its owner's own installer
+  on Windows, macOS, and Linux, the command shown verbatim; pi's Node.js
+  is set up only after a calm go-ahead),
   model picker where the harness advertises (its own catalog, efforts as
   sublines), the Fast toggle where the harness's own fast mode is usable
   (claude `fastMode` ≥ 2.1.205, codex `fast` service tier ≥ 0.110), the
@@ -163,8 +167,8 @@ Every screen the design specifies, backed by the real daemon:
   then a stale `#machines` hash or stored history falls back to New
   chat. Previously shipped: this machine real from first boot (its
   inventory, sessions with jumps, 24h presence band), the local
-  harness install chain (claude/codex/pi/opencode - their own npm
-  packages; grok/agy install through their own roots, no row).
+  harness install chain (now the harness manager's: every harness through
+  its owner's own installer).
 - **Plugins** - MCP installs written by hand; the needs-key lifecycle
   (keys never cross the API); the ride-along through each harness's own MCP wire (claude `--mcp-config`
   JSON string, codex `thread/start` config keyPaths).
