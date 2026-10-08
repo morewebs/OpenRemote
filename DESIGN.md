@@ -73,9 +73,12 @@ spacing.
   The whole bar is a drag region.
 - **Sidebar (264px, collapsible):** mode switch (Local/Cloud), New chat tile,
   search, then nav tiles - Plugins and Automations in Local, Machines in
-  Cloud (grid-rows reveal, reduced-motion aware); chats grouped by project
-  with collapse carets, each row led by its harness's brand mark with the
-  status dot at the row's right edge; Settings pinned in the footer.
+  Cloud (grid-rows reveal, reduced-motion aware); then the two sections -
+  Projects (the registered ones, each with collapse caret and count, the
+  `+` in the section head, unregister on hover; a project's chats grouped
+  under it) and the flat Chats list (every chat that belongs to no
+  project), each row led by its harness's brand mark with the status dot
+  at the row's right edge; Settings pinned in the footer.
 - **Settings is a view, not a popup:** a slim section rail on the left
   (New tasks, Appearance, Startup, Cloud, Daemon, Harnesses, This install),
   the panel on the right. Phone width stacks the rail into a top scroller.
@@ -173,11 +176,19 @@ spacing.
   not a squeezed desktop.
 - **Process:** build slowly; overthink single elements; review at real
   milestones only.
-- **Vocabulary (2026-10-01, Cloud 2026-10-07):** *chat* is the UI word for a
-  conversation with a harness (the daemon domain says *session*; the console
-  boundary translates). A *device* is any of your computers signed in to
-  Cloud; a *machine* is a device that runs chats for your other devices.
-  *task* is the prompt text a human or automation sends.
+- **Vocabulary (2026-10-01, Cloud 2026-10-07, Projects 2026-10-08):** *chat*
+  is the UI word for a conversation with a harness (the daemon domain says
+  *session*; the console boundary translates). A *device* is any of your
+  computers signed in to Cloud; a *machine* is a device that runs chats for
+  your other devices. *task* is the prompt text a human or automation sends.
+  A *project* is a registered entity the daemon stores (like rules and
+  plugins): the folders whose chats group under it - exactly one this
+  release, the list is the multi-folder future. A *workspace* is the folder a
+  chat runs in - now optional; a chat with none belongs to no project and
+  runs in the home folder. *Folder* is the disk thing; the word appears
+  only inside the folder picker, never as a noun the UI groups by (the old
+  derived basename grouping is gone - the sidebar's projects are the
+  registered ones, everything else is the flat Chats section).
 
 ---
 
@@ -193,7 +204,10 @@ Every screen the design specifies, backed by the real daemon:
   model picker where the harness advertises (its own catalog, efforts as
   sublines), the Fast toggle where the harness's own fast mode is usable
   (claude `fastMode` ≥ 2.1.205, codex `fast` service tier ≥ 0.110), the
-  workspace (recents + free path), the In-progress list.
+  project picker (the registered projects on the machine the chat runs
+  on, "No project", and the picker's own Add project row; the Add project
+  button beside the composer opens the in-app folder picker - the same
+  one Cloud uses on another machine's disk), the In-progress list.
 - **Chat** - the rail transcript (user cards, agent text, notes, tool
   cards with In/Out, decisions in the harness's own words with its
   affirmative first), the facts row (workspace · harness · model · Fast ·
