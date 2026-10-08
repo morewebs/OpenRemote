@@ -439,6 +439,32 @@ impl FixtureAgent {
                     serde_json::json!({"still_queued": [], "cancelled": []}),
                 );
             }
+            // The initialize handshake's answer: the same `models` array
+            // the real CLI serves (pick words, resolved ids, display
+            // names, and the description whose opening versions the row),
+            // so the console's catalog path runs against real shapes.
+            Some("initialize") => {
+                self.control_response_ok(
+                    &request_id,
+                    serde_json::json!({"models": [
+                        {"value": "default",
+                         "resolvedModel": "fixture-sonnet",
+                         "displayName": "Default (recommended)",
+                         "description": "Sonnet 9.9 · the catalog the e2e suite serves",
+                         "supportedEffortLevels": ["low", "high"]},
+                        {"value": "sonnet",
+                         "resolvedModel": "fixture-sonnet",
+                         "displayName": "Sonnet",
+                         "description": "Sonnet 9.9 · the catalog the e2e suite serves",
+                         "supportedEffortLevels": ["low", "high"]},
+                        {"value": "fixture-fable-9-9[1m]",
+                         "resolvedModel": "fixture-fable-9-9[1m]",
+                         "displayName": "Fable",
+                         "description": "Fable 9.9 · the long-running tier",
+                         "supportedEffortLevels": ["low", "high"]}
+                    ]}),
+                );
+            }
             Some(other) => {
                 eprintln!("fixture-agent: control request {other} acknowledged, no-op");
                 self.control_response_ok(&request_id, serde_json::json!({}));

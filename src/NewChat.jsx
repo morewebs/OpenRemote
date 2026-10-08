@@ -8,6 +8,7 @@ import SignInModal from './SignInModal.jsx'
 import HarnessManagerModal from './HarnessManagerModal.jsx'
 import { useConsole } from './state/console.jsx'
 import { harnessName } from './harness-names.js'
+import { findModel, modelDisplayName } from './model-display.js'
 import { SIGNIN_HARNESSES } from './harness-manager.js'
 import { loadDefaults } from './defaults.js'
 import { loadRecentWorkspaces, pushRecentWorkspace } from './settings.js'
@@ -107,10 +108,13 @@ export default function NewChat({ onOpen, mode = 'local' }) {
   const configDefault = currentHarness?.default_model ?? null
   const catalogDefault = models.find((m) => m.is_default)?.model ?? null
   const resolvedDefault = configDefault ?? catalogDefault
+  // The pre-send fact's label, in the harness's own words: the config's
+  // model name where the catalog knows it, the id where it doesn't.
+  const resolvedDefaultName = resolvedDefault ? modelDisplayName(models, resolvedDefault) : null
   const defaultLabel =
-    resolvedDefault && currentHarness?.default_effort
-      ? `${resolvedDefault} · ${currentHarness.default_effort}`
-      : resolvedDefault
+    resolvedDefaultName && currentHarness?.default_effort
+      ? `${resolvedDefaultName} · ${currentHarness.default_effort}`
+      : resolvedDefaultName
   const recents = target ? [] : loadRecentWorkspaces()
   const active = workspace ?? ''
   const inProgress = (sessions ?? []).filter((s) => ['starting', 'working', 'waiting'].includes(s.status))
@@ -231,7 +235,7 @@ export default function NewChat({ onOpen, mode = 'local' }) {
                     aria-expanded={picker?.kind === 'model'}
                     title="Model"
                   >
-                    {model ?? defaultLabel}
+                    {model ? modelDisplayName(models, model) : defaultLabel}
                   </button>
                 ) : (
                   // No catalog to pick from, but the harness's own config

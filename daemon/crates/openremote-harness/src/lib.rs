@@ -107,9 +107,18 @@ pub struct SessionSettings {
 /// console's model slot; empty means the slot stays reserved.
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct ModelDescriptor {
+    /// The pick word the harness's own picker takes (`opus`) or the full
+    /// id when the harness offers no alias (`claude-fable-5-1[1m]`).
     pub model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
+    /// The model id the harness actually runs once the pick word is
+    /// resolved (`claude-opus-5-5`) - the value a running session
+    /// reports back, where the harness splits pick word from id. The
+    /// console matches both spellings against a session's model so a
+    /// resolved id still finds its row's display name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_model: Option<String>,
     /// The harness's own reasoning-effort words for this model.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reasoning_efforts: Vec<String>,

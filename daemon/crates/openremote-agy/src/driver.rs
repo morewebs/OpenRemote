@@ -351,6 +351,7 @@ pub async fn models(
         models.push(openremote_harness::ModelDescriptor {
             model: id.to_string(),
             display_name: (!name.is_empty()).then(|| name.to_string()),
+            resolved_model: None,
             reasoning_efforts: Vec::new(),
             is_default: false,
         });

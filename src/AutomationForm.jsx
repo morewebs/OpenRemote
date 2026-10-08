@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { X } from '@phosphor-icons/react'
 import PickerMenu from './PickerMenu.jsx'
 import { useConsole } from './state/console.jsx'
+import { modelDisplayName } from './model-display.js'
 import { canPickFolder, pickFolder } from './pick-folder.js'
 import { loadRecentWorkspaces } from './settings.js'
 import './devices.css'
@@ -243,7 +244,7 @@ export default function AutomationForm({ rule, onClose }) {
                   aria-haspopup="listbox"
                   aria-expanded={picker?.kind === 'model'}
                 >
-                  {model ?? `${currentHarness?.name} default`}
+                  {model ? modelDisplayName(models, model) : `${currentHarness?.name} default`}
                 </button>
                 {picker?.kind === 'model' && (
                   <PickerMenu
