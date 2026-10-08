@@ -52,6 +52,10 @@ export function chatFromSession(session) {
     thinkingTokens: 0,
     lastError: session.last_error ?? null,
     running: ['starting', 'working', 'waiting'].includes(session.status),
+    // The harness has its own conversation for this chat (claude's
+    // `--resume` id, codex's thread id, ...). Without one - a chat stopped
+    // before its first message - there is nothing to resume, ever.
+    resumable: Boolean(session.harness_session_ref),
     // The daemon keeps each chat's title, so every device shows the same
     // name before the transcript loads.
     title: session.title ?? null,
@@ -107,6 +111,7 @@ export function foldEvent(chat, event) {
       chat.lastError = session.last_error ?? chat.lastError
       if (session.model) chat.model = session.model
       if (session.effort) chat.effort = session.effort
+      if (session.harness_session_ref) chat.resumable = true
       chat.fast = session.fast ?? chat.fast
       chat.approvedTools = session.approved_tools ?? chat.approvedTools
       break

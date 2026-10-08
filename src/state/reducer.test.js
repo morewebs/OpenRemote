@@ -145,6 +145,22 @@ test('session.updated folds the session-scoped grant into the chat', () => {
   assert.equal(chat.running, true)
 })
 
+test('resumable follows the harness conversation: present, absent, arrived late', () => {
+  // A chat that ran a turn has the harness's own conversation to resume.
+  assert.equal(chatFromSession(session({ harness_session_ref: 'c-42' })).resumable, true)
+  // One stopped before its first message never got one - nothing to
+  // resume, ever, and the console must not offer it.
+  assert.equal(chatFromSession(session()).resumable, false)
+  // The ref rides the first turn's init; the session.updated that follows
+  // turns a dead chat resumable without a reload.
+  let chat = chatFromSession(session())
+  chat = foldEvent(
+    chat,
+    event(9, { type: 'session.updated', session: session({ harness_session_ref: 'c-42' }) }),
+  )
+  assert.equal(chat.resumable, true)
+})
+
 test('the harness\'s own context numbers fold in, and compaction notes land in order', () => {
   let chat = chatFromSession(session())
   chat = foldEvent(chat, event(9, { type: 'context.used', used: 1250, window: 200000 }))
