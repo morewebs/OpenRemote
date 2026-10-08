@@ -16,8 +16,8 @@ use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock};
 
 use openremote_core::{
     AutomationRule, Decision, DecisionId, DecisionState, Event, EventPayload, Harness, Machine,
-    MachineId, MachineStatus, MachineView, Plugin, Receipt, RuleId, Session, SessionId,
-    SessionStatus, Store, TriggerKind, now_ms,
+    MachineId, MachineStatus, MachineView, Plugin, Project, ProjectId, Receipt, RuleId, Session,
+    SessionId, SessionStatus, Store, TriggerKind, now_ms,
 };
 use openremote_harness::DriverEvent;
 use serde_json::Value;
@@ -719,6 +719,45 @@ impl Supervisor {
         self.with_store(|s| s.remove_rule(id)).map_err(store_error)
     }
 
+    // ---- projects ----
+
+    pub fn projects(&self) -> Vec<Project> {
+        self.with_store(|s| s.projects().into_iter().cloned().collect())
+    }
+
+    /// Register a project: its folders must be real (the same bar a chat's
+    /// own create holds) and registered nowhere else. The folder's basename
+    /// is the project's name - never stored, so the disk stays the only
+    /// place it lives.
+    pub fn save_project(
+        &self,
+        folders: Vec<std::path::PathBuf>,
+    ) -> Result<Project, SupervisorError> {
+        if folders.is_empty() {
+            return Err(SupervisorError::Conflict(
+                "a project needs a folder".into(),
+            ));
+        }
+        for folder in &folders {
+            if !folder.is_absolute() || !folder.is_dir() {
+                return Err(SupervisorError::Conflict(
+                    "the folder must be an absolute path to an existing directory".into(),
+                ));
+            }
+        }
+        let project = Project {
+            id: ProjectId::new(),
+            folders,
+            created_at: now_ms(),
+            updated_at: now_ms(),
+        };
+        self.with_store(|s| s.save_project(project)).map_err(store_error)
+    }
+
+    pub fn remove_project(&self, id: &ProjectId) -> Result<(), SupervisorError> {
+        self.with_store(|s| s.remove_project(id)).map_err(store_error)
+    }
+
     pub fn set_rule_enabled(
         &self,
         id: &RuleId,
@@ -791,7 +830,7 @@ impl Supervisor {
         let session = self
             .create_session(
                 &rule.harness,
-                rule.workspace.clone(),
+                Some(rule.workspace.clone()),
                 rule.model.clone(),
                 None,
                 None,
@@ -858,13 +897,23 @@ impl Supervisor {
 
     // ---- session lifecycle ----
 
+    /// Where a project-less chat runs: the home folder, the place the OS
+    /// already means by "nowhere in particular".
+    fn home_dir() -> std::path::PathBuf {
+        std::env::var_os("USERPROFILE")
+            .or_else(|| std::env::var_os("HOME"))
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir)
+    }
+
     /// Create a session and spawn its harness driver. The session exists
     /// even when the spawn fails - the failure is the session's first fact.
+    /// A chat without a workspace (no project) runs in the home folder.
     #[allow(clippy::too_many_arguments)]
     pub async fn create_session(
         self: &Arc<Self>,
         harness: &str,
-        workspace: std::path::PathBuf,
+        workspace: Option<std::path::PathBuf>,
         model: Option<String>,
         effort: Option<String>,
         permission_mode: Option<String>,
@@ -919,7 +968,10 @@ impl Supervisor {
 
         let current = self.session(&id)?;
         let opts = openremote_harness::SpawnOptions {
-            cwd: current.workspace.clone(),
+            cwd: current
+                .workspace
+                .clone()
+                .unwrap_or_else(Self::home_dir),
             model: current.model.clone(),
             permission_mode: current.permission_mode.clone(),
             resume: None,
@@ -1105,7 +1157,10 @@ impl Supervisor {
             )));
         };
         let opts = openremote_harness::SpawnOptions {
-            cwd: session.workspace.clone(),
+            cwd: session
+                .workspace
+                .clone()
+                .unwrap_or_else(Self::home_dir),
             model: session.model.clone(),
             permission_mode: session.permission_mode.clone(),
             resume: Some(harness_ref),

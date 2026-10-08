@@ -44,6 +44,7 @@ id_newtype!(DecisionId);
 id_newtype!(MachineId);
 id_newtype!(RuleId);
 id_newtype!(DeviceId);
+id_newtype!(ProjectId);
 
 impl DeviceId {
     /// The 16 raw bytes: how the relay addresses a device.

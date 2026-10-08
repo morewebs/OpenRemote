@@ -182,6 +182,8 @@ fn api_routes() -> Router<Arc<App>> {
         .route("/automations/{id}", axum::routing::delete(remove_rule))
         .route("/automations/{id}/enabled", post(set_rule_enabled))
         .route("/automations/{id}/run", post(run_rule))
+        .route("/projects", get(list_projects).post(save_project))
+        .route("/projects/{id}", axum::routing::delete(remove_project))
         .route("/sessions", get(list_sessions).post(create_session))
         .route("/sessions/{id}", get(get_session).delete(delete_session))
         .route("/sessions/{id}/events", get(session_events))
@@ -959,6 +961,98 @@ struct WebhookQuery {
     key: Option<String>,
 }
 
+// ---- projects ----
+
+async fn list_projects(State(app): State<Arc<App>>) -> Response {
+    Json(app.supervisor.projects()).into_response()
+}
+
+#[derive(Deserialize)]
+struct SaveProjectBody {
+    request_id: String,
+    /// One folder this release; the array is the multi-folder future.
+    folders: Vec<String>,
+}
+
+async fn save_project(
+    State(app): State<Arc<App>>,
+    Json(body): Json<SaveProjectBody>,
+) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&body.request_id) {
+        return receipt_response(&receipt);
+    }
+    let folders: Vec<std::path::PathBuf> = body
+        .folders
+        .iter()
+        .map(std::path::PathBuf::from)
+        .collect();
+    match app.supervisor.save_project(folders) {
+        Ok(project) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Completed,
+                result: Some(serde_json::to_value(&project).unwrap_or(Value::Null)),
+                error: None,
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            (StatusCode::CREATED, Json(project)).into_response()
+        }
+        Err(err) => {
+            let receipt = Receipt {
+                request_id: body.request_id,
+                session_id: None,
+                status: ReceiptStatus::Failed,
+                result: None,
+                error: Some(err.to_string()),
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            supervisor_error(err)
+        }
+    }
+}
+
+async fn remove_project(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+    axum::extract::Query(query): axum::extract::Query<MachineActionQuery>,
+) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&query.request_id) {
+        return receipt_response(&receipt);
+    }
+    let Some(project_id) = openremote_core::ProjectId::parse(&id) else {
+        return error(StatusCode::BAD_REQUEST, "bad project id");
+    };
+    match app.supervisor.remove_project(&project_id) {
+        Ok(()) => {
+            let receipt = Receipt {
+                request_id: query.request_id,
+                session_id: None,
+                status: ReceiptStatus::Completed,
+                result: Some(json!({"removed": true})),
+                error: None,
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            receipt_response(&receipt)
+        }
+        Err(err) => {
+            let receipt = Receipt {
+                request_id: query.request_id,
+                session_id: None,
+                status: ReceiptStatus::Failed,
+                result: None,
+                error: Some(err.to_string()),
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            supervisor_error(err)
+        }
+    }
+}
+
 async fn install_harness(
     State(app): State<Arc<App>>,
     AxumPath(id): AxumPath<String>,
@@ -1017,7 +1111,9 @@ async fn install_harness(
 struct CreateSessionBody {
     request_id: String,
     harness: String,
-    workspace: String,
+    /// Absent for a project-less chat - it runs in the home folder.
+    #[serde(default)]
+    workspace: Option<String>,
     #[serde(default)]
     model: Option<String>,
     /// The harness's own effort tier word (claude/codex high, grok's
@@ -1073,13 +1169,20 @@ async fn create_session(
         None
     };
 
-    let workspace = std::path::PathBuf::from(&body.workspace);
-    // Workspace-root containment: absolute, existing, a directory.
-    if !workspace.is_absolute() || !workspace.is_dir() {
-        return error(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "workspace must be an absolute path to an existing directory",
-        );
+    let workspace = body
+        .workspace
+        .as_deref()
+        .filter(|w| !w.trim().is_empty())
+        .map(std::path::PathBuf::from);
+    // Workspace-root containment: absolute, existing, a directory. A
+    // project-less chat names none and runs in the home folder.
+    if let Some(workspace) = &workspace {
+        if !workspace.is_absolute() || !workspace.is_dir() {
+            return error(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "workspace must be an absolute path to an existing directory",
+            );
+        }
     }
     match app
         .supervisor
@@ -1124,15 +1227,21 @@ async fn create_session(
 impl CreateSessionBody {
     /// The request as the other device should receive it.
     fn raw(&self) -> Value {
-        json!({
+        let mut body = json!({
             "request_id": self.request_id,
             "harness": self.harness,
-            "workspace": self.workspace,
             "model": self.model,
             "effort": self.effort,
             "permission_mode": self.permission_mode,
             "fast": self.fast,
-        })
+        });
+        // An absent workspace is omitted, never named null - the peer's
+        // own deserializer treats missing and null alike, and a named null
+        // would read as an empty workspace string on older builds.
+        if let Some(workspace) = &self.workspace {
+            body["workspace"] = json!(workspace);
+        }
+        body
     }
 }
 

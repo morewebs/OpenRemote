@@ -27,10 +27,10 @@ fn slug(name: &str) -> String {
 }
 
 use crate::events::{Event, EventPayload};
-use crate::ids::{DecisionId, DeviceId, MachineId, RuleId, SessionId};
+use crate::ids::{DecisionId, DeviceId, MachineId, ProjectId, RuleId, SessionId};
 use crate::model::{
-    AutomationRule, Decision, DecisionState, Machine, MachineStatus, MessageRole, Plugin, Receipt,
-    ReceiptStatus, Session, SessionStatus,
+    AutomationRule, Decision, DecisionState, Machine, MachineStatus, MessageRole, Plugin, Project,
+    Receipt, ReceiptStatus, Session, SessionStatus,
 };
 
 #[derive(Debug, Error)]
@@ -98,6 +98,8 @@ struct State {
     plugins: BTreeMap<String, Plugin>,
     #[serde(default)]
     rules: BTreeMap<RuleId, AutomationRule>,
+    #[serde(default)]
+    projects: BTreeMap<ProjectId, Project>,
     /// This computer's id in Cloud mode, once it has one.
     #[serde(default)]
     this_device: Option<DeviceId>,
@@ -558,6 +560,47 @@ impl Store {
         rule.last_chat = Some(chat);
         rule.last_run = Some(crate::now_ms());
         rule.updated_at = crate::now_ms();
+        self.persist()
+    }
+
+    // ---- projects ----
+
+    pub fn projects(&self) -> Vec<&Project> {
+        self.state.projects.values().collect()
+    }
+
+    pub fn project(&self, id: &ProjectId) -> Result<&Project, StoreError> {
+        self.state
+            .projects
+            .get(id)
+            .ok_or_else(|| StoreError::NotFound(format!("project {id}")))
+    }
+
+    /// Register a project. A folder already in a project is refused - one
+    /// registration per folder, so a chat's project is never ambiguous.
+    pub fn save_project(&mut self, mut project: Project) -> Result<Project, StoreError> {
+        if project
+            .folders
+            .iter()
+            .any(|folder| self.state.projects.values().any(|p| p.folders.contains(folder)))
+        {
+            return Err(StoreError::Conflict(
+                "that folder is already a project".into(),
+            ));
+        }
+        project.updated_at = crate::now_ms();
+        let id = project.id;
+        self.state.projects.insert(id, project.clone());
+        self.persist()?;
+        Ok(project)
+    }
+
+    /// Unregister: the folder on disk and every chat that ran in it are
+    /// untouched - the chats stop being grouped, nothing more.
+    pub fn remove_project(&mut self, id: &ProjectId) -> Result<(), StoreError> {
+        if self.state.projects.remove(id).is_none() {
+            return Err(StoreError::NotFound(format!("project {id}")));
+        }
         self.persist()
     }
 
@@ -1149,7 +1192,7 @@ mod tests {
         Session {
             id: SessionId::new(),
             harness: "claude".into(),
-            workspace: "/tmp/w".into(),
+            workspace: Some("/tmp/w".into()),
             status: SessionStatus::Starting,
             model: None,
             effort: None,
@@ -1716,7 +1759,7 @@ mod tests {
     #[test]
     fn presence_folds_into_the_24_hour_band() {
         let dir = tempdir();
-        let mut store = Store::open(dir).unwrap();
+        let mut store = Store::open(tempdir()).unwrap();
         let id = store.ensure_this_machine();
 
         // present right now: the last slice is up, the rest is history
@@ -1732,5 +1775,57 @@ mod tests {
         // a machine that never checked in has an all-down band
         let added = store.create_machine("spare", "linux").unwrap();
         assert!(!store.presence(&added.id).iter().any(|up| *up));
+    }
+
+    #[test]
+    fn a_folder_registers_once_and_removal_leaves_the_chats_alone() {
+        let dir = tempdir();
+        let mut store = Store::open(dir.clone()).unwrap();
+
+        let project = Project {
+            id: crate::ids::ProjectId::new(),
+            folders: vec!["/tmp/one".into()],
+            created_at: 0,
+            updated_at: 0,
+        };
+        let saved = store.save_project(project).unwrap();
+        assert_eq!(saved.folders, vec![std::path::PathBuf::from("/tmp/one")]);
+        assert!(saved.updated_at > 0);
+
+        // The same folder in another project is a conflict, whatever the
+        // project's other folders are.
+        let dup = Project {
+            id: crate::ids::ProjectId::new(),
+            folders: vec!["/tmp/elsewhere".into(), "/tmp/one".into()],
+            created_at: 0,
+            updated_at: 0,
+        };
+        assert!(matches!(
+            store.save_project(dup),
+            Err(StoreError::Conflict(_))
+        ));
+
+        // Removing the project unregisters it; the folder stays registrable
+        // again, and a chat in it was never the project's to remove.
+        let s = session();
+        store
+            .append(s.id, EventPayload::SessionCreated { session: s.clone() })
+            .unwrap();
+        store.remove_project(&saved.id).unwrap();
+        assert!(store.project(&saved.id).is_err());
+        assert_eq!(store.session(&s.id).unwrap().workspace, s.workspace);
+
+        // Registered projects persist across a reopen.
+        let again = Project {
+            id: crate::ids::ProjectId::new(),
+            folders: vec!["/tmp/one".into()],
+            created_at: 0,
+            updated_at: 0,
+        };
+        let id = again.id;
+        store.save_project(again).unwrap();
+        drop(store);
+        let reopened = Store::open(dir).unwrap();
+        assert_eq!(reopened.project(&id).unwrap().folders.len(), 1);
     }
 }
