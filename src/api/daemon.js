@@ -291,6 +291,30 @@ export class DaemonApi {
     return this.call('POST', `/automations/${ruleId}/run`, { request_id: newRequestId() })
   }
 
+  // ---- projects ----
+
+  /** The registered projects, daemon-side (the same list every surface reads). */
+  projects() {
+    return this.call('GET', '/projects')
+  }
+
+  /** Register a folder as a project. One folder this release; the array is
+   *  the multi-folder future. */
+  createProject({ folders }) {
+    return this.call('POST', '/projects', {
+      request_id: newRequestId(),
+      folders,
+    })
+  }
+
+  /** Unregister - the folder on disk and its chats are untouched. */
+  removeProject(projectId) {
+    return this.call(
+      'DELETE',
+      `/projects/${projectId}?request_id=${encodeURIComponent(newRequestId())}`,
+    )
+  }
+
   // The models a harness advertises, in its own words (empty = the slot
   // stays reserved for that harness).
   models(harnessId) {

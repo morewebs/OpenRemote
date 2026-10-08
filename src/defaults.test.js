@@ -11,23 +11,21 @@ globalThis.localStorage = {
 
 const { loadDefaults, saveDefaults } = await import('./defaults.js')
 
-test('defaults round-trip harness, model, and workspace', () => {
+test('defaults round-trip harness and model', () => {
   localStorage.clear()
-  saveDefaults({ harness: 'claude', model: 'opus', workspace: 'C:\\proj' })
+  saveDefaults({ harness: 'claude', model: 'opus' })
   const d = loadDefaults()
   assert.equal(d.harness, 'claude')
   assert.equal(d.model, 'opus')
-  assert.equal(d.workspace, 'C:\\proj')
 })
 
 test('a partial save keeps the untouched fields', () => {
   localStorage.clear()
   saveDefaults({ harness: 'codex', model: 'o4' })
-  saveDefaults({ workspace: 'C:\\other' })
+  saveDefaults({ model: 'o3' })
   const d = loadDefaults()
   assert.equal(d.harness, 'codex')
-  assert.equal(d.model, 'o4')
-  assert.equal(d.workspace, 'C:\\other')
+  assert.equal(d.model, 'o3')
 })
 
 test('the per-harness effort map survives partial saves', () => {

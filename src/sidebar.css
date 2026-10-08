@@ -340,6 +340,94 @@ button.side-tile:active {
   color: var(--text-3);
 }
 
+/* the Projects head: the title, the one way a folder becomes a project
+   (the +), and - per project - the unregister button. The section titles
+   stack with a little air: Projects, then the flat Chats list. */
+.sb-projects-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sb-projects-head .section-title-text,
+.sb-projects-head {
+  flex: 1;
+}
+
+.sb-add-project {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.sb-add-project:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.sb-projects-empty {
+  display: flex;
+  gap: 4px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.sb-empty-add {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.sb-empty-add:hover {
+  text-decoration: underline;
+}
+
+.sb-chats-title {
+  margin-top: 14px;
+}
+
+.project {
+  position: relative;
+}
+
+/* Unregister lives on the head row, revealed on hover - a quiet action
+   that never touches the disk. */
+.sb-project-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-3);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.project:hover .sb-project-remove {
+  opacity: 1;
+}
+
+.sb-project-remove:hover {
+  background: var(--bg-active);
+  color: var(--text-1);
+}
+
 .chat-row {
   display: flex;
   gap: 9px;

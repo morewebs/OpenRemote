@@ -17,11 +17,10 @@ export function loadDefaults() {
     return {
       harness: typeof raw.harness === 'string' ? raw.harness : null,
       model: typeof raw.model === 'string' ? raw.model : null,
-      workspace: typeof raw.workspace === 'string' ? raw.workspace : null,
       efforts,
     }
   } catch {
-    return { harness: null, model: null, workspace: null, efforts: {} }
+    return { harness: null, model: null, efforts: {} }
   }
 }
 

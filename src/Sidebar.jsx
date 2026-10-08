@@ -1,13 +1,25 @@
 import { useMemo, useState } from 'react'
-import { CaretDown, Cloud, Desktop, GearSix, House, Lightning, MagnifyingGlass, Plus, PuzzlePiece, X } from '@phosphor-icons/react'
+import {
+  CaretDown,
+  Cloud,
+  Desktop,
+  GearSix,
+  House,
+  Lightning,
+  MagnifyingGlass,
+  Plus,
+  PuzzlePiece,
+  TrashSimple,
+  X,
+} from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
-import { workspaceName } from './state/reducer.js'
+import { sections } from './projects.js'
 import { deviceName, sessionsForMode } from './cloud.js'
 import { HarnessMark } from './brand-marks.jsx'
 import './sidebar.css'
 
-export default function Sidebar({ open, active, mode, onMode, onSelect }) {
-  const { connection, sessions, chats, devices, thisDevice } = useConsole()
+export default function Sidebar({ open, active, mode, onMode, onSelect, onAddProject }) {
+  const { connection, sessions, chats, devices, thisDevice, projects, removeProject } = useConsole()
   const [query, setQuery] = useState('')
   const [collapsed, setCollapsed] = useState({})
 
@@ -22,7 +34,7 @@ export default function Sidebar({ open, active, mode, onMode, onSelect }) {
         title: chats[session.id]?.title ?? session.title ?? 'A new task',
         status: chats[session.id]?.status ?? 'idle',
         harness: session.harness,
-        project: workspaceName(session.workspace),
+        workspace: session.workspace ?? null,
         updatedAt: session.updated_at ?? 0,
         device: elsewhere ? deviceName(devices, session.executor) : null,
         // A copy's last status is stale while its device is away.
@@ -36,24 +48,42 @@ export default function Sidebar({ open, active, mode, onMode, onSelect }) {
     const q = query.trim().toLowerCase()
     const sorted = [...rows].sort((a, b) => b.updatedAt - a.updatedAt)
     if (!q) return sorted
-    return sorted.filter((c) => c.title.toLowerCase().includes(q) || c.project.toLowerCase().includes(q))
+    return sorted.filter((c) => c.title.toLowerCase().includes(q))
   }, [rows, query])
 
-  const groups = []
-  const byProject = new Map()
-  for (const row of visible) {
-    let group = byProject.get(row.project)
-    if (!group) {
-      group = { label: row.project, items: [] }
-      byProject.set(row.project, group)
-      groups.push(group)
-    }
-    group.items.push(row)
+  // The two sections: registered projects with their chats, then the flat
+  // Chats list - every chat that belongs to no project.
+  const grouped = useMemo(() => sections(projects, visible), [projects, visible])
+
+  const toggleProject = (id) => {
+    setCollapsed((c) => ({ ...c, [id]: !c[id] }))
   }
 
-  const toggleProject = (project) => {
-    setCollapsed((c) => ({ ...c, [project]: !c[project] }))
-  }
+  const chatRow = (row) => (
+    <button
+      key={row.id}
+      className={`chat-row${row.id === active ? ' active' : ''}`}
+      data-status={row.status}
+      onClick={() => onSelect(row.id)}
+    >
+      {/* the harness's mark leads - every harness, one
+          sidebar, the at-a-glance signal of which agent owns
+          each chat - then the title, with the status dot at
+          the right edge so every status scans in one column */}
+      {row.harness && <HarnessMark harness={row.harness} size={13} />}
+      <span className="chat-title">{row.title}</span>
+      {mode === 'cloud' && row.device && (
+        <span className="chat-device">{row.device}</span>
+      )}
+      {mode === 'local' && row.synced && (
+        <Cloud size={11} className="chat-synced" aria-label="Synced to your devices" />
+      )}
+      <span
+        className={`dot dot--${row.offline ? 'offline' : row.status}`}
+        title={row.offline ? `${row.device} is offline` : undefined}
+      />
+    </button>
+  )
 
   return (
     <aside className={`sidebar${open ? '' : ' collapsed'}`}>
@@ -130,61 +160,73 @@ export default function Sidebar({ open, active, mode, onMode, onSelect }) {
         </div>
       </div>
 
-      <nav className="sb-list" aria-label="Projects">
-        <div className="section-title">Projects</div>
-        {groups.length === 0 && (
-          <p className="sb-empty">
-            {query.trim()
-              ? `No chats match “${query.trim()}”.`
-              : mode === 'cloud'
-                ? 'No synced chats yet. Start one - it shows up on all your devices.'
-                : 'No chats yet. Start one - it will appear here grouped by folder.'}
+      <nav className="sb-list" aria-label="Projects and chats">
+        <div className="section-title sb-projects-head">
+          Projects
+          {/* The one way a folder becomes a project - the same flow the
+              home screen's Add project button opens. */}
+          <button
+            type="button"
+            className="sb-add-project"
+            onClick={onAddProject}
+            title="Add a project"
+          >
+            <Plus size={12} weight="bold" />
+          </button>
+        </div>
+        {grouped.projects.length === 0 && (
+          <p className="sb-empty sb-projects-empty">
+            No projects yet. <button className="sb-empty-add" onClick={onAddProject}>Add a project</button> to group its chats here.
           </p>
         )}
-        {groups.map((group) => {
-          const isCollapsed = !!collapsed[group.label]
+        {grouped.projects.map(({ project, items }) => {
+          const isCollapsed = !!collapsed[project.id]
           return (
-            <section key={group.label} className="project">
+            <section key={project.id} className="project">
               <button
                 className="project-head"
-                onClick={() => toggleProject(group.label)}
+                onClick={() => toggleProject(project.id)}
                 aria-expanded={!isCollapsed}
               >
                 <span className={`project-caret${isCollapsed ? ' closed' : ''}`}>
                   <CaretDown size={12} />
                 </span>
-                <span className="project-name">{group.label}</span>
-                <span className="project-count">{group.items.length}</span>
+                <span className="project-name">{project.folders[0].split(/[\\/]/).filter(Boolean).pop()}</span>
+                <span className="project-count">{items.length}</span>
               </button>
-              {!isCollapsed &&
-                group.items.map((row) => (
-                  <button
-                    key={row.id}
-                    className={`chat-row${row.id === active ? ' active' : ''}`}
-                    data-status={row.status}
-                    onClick={() => onSelect(row.id)}
-                  >
-                    {/* the harness's mark leads - every harness, one
-                        sidebar, the at-a-glance signal of which agent owns
-                        each chat - then the title, with the status dot at
-                        the right edge so every status scans in one column */}
-                    {row.harness && <HarnessMark harness={row.harness} size={13} />}
-                    <span className="chat-title">{row.title}</span>
-                    {mode === 'cloud' && row.device && (
-                      <span className="chat-device">{row.device}</span>
-                    )}
-                    {mode === 'local' && row.synced && (
-                      <Cloud size={11} className="chat-synced" aria-label="Synced to your devices" />
-                    )}
-                    <span
-                      className={`dot dot--${row.offline ? 'offline' : row.status}`}
-                      title={row.offline ? `${row.device} is offline` : undefined}
-                    />
-                  </button>
-                ))}
+              {/* Unregistering keeps the chats - they fall to the flat
+                  list below; the folder on disk is never touched. */}
+              <button
+                type="button"
+                className="sb-project-remove"
+                title="Remove the project - its chats stay"
+                onClick={() => removeProject(project.id)}
+              >
+                <TrashSimple size={11} />
+              </button>
+              {!isCollapsed && items.map(chatRow)}
             </section>
           )
         })}
+
+        <div className="section-title sb-chats-title">Chats</div>
+        {grouped.projects.length > 0 && grouped.flat.length === 0 && (
+          <p className="sb-empty">No chats outside projects.</p>
+        )}
+        {grouped.flat.map(chatRow)}
+
+        {rows.length === 0 && (
+          <p className="sb-empty">
+            {query.trim()
+              ? `No chats match “${query.trim()}”.`
+              : mode === 'cloud'
+                ? 'No synced chats yet. Start one - it shows up on all your devices.'
+                : 'No chats yet. Start one - it will appear here.'}
+          </p>
+        )}
+        {rows.length > 0 && query.trim() && visible.length === 0 && (
+          <p className="sb-empty">No chats match “{query.trim()}”.</p>
+        )}
       </nav>
 
       <footer className="sb-foot">

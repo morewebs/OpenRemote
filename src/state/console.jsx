@@ -25,6 +25,9 @@ export function ConsoleProvider({ children }) {
   const [plugins, setPlugins] = useState([])
   const [marketplace, setMarketplace] = useState([])
   const [automations, setAutomations] = useState([])
+  // The registered projects - daemon-side, the one list every surface
+  // reads (the sidebar's groups, the composer's picker, the pill).
+  const [projects, setProjects] = useState([])
   const [chats, setChats] = useState({})
   const [modelsByHarness, setModelsByHarness] = useState({})
   // Cloud: this computer's account state, and the account's devices.
@@ -134,6 +137,7 @@ export function ConsoleProvider({ children }) {
       const pluginList = await api.plugins()
       const market = await api.pluginMarketplace()
       const rules = await api.automations()
+      const projectList = await api.projects().catch(() => [])
       // Cloud is optional: a daemon without it still connects.
       const [cloudView, deviceList] = await Promise.allSettled([api.cloud(), api.cloudDevices()])
       if (cancelled) return
@@ -145,6 +149,7 @@ export function ConsoleProvider({ children }) {
       setPlugins(pluginList ?? [])
       setMarketplace(market ?? [])
       setAutomations(rules ?? [])
+      setProjects(projectList ?? [])
       setConnection({ state: 'connected', error: null })
     } catch (err) {
         if (cancelled) return
@@ -176,12 +181,13 @@ export function ConsoleProvider({ children }) {
     if (!api.ready) return
     let misses = 0
     const poll = setInterval(async () => {
-      const [sessionList, machineList, pluginList, ruleList, cloudView, deviceList] =
+      const [sessionList, machineList, pluginList, ruleList, projectList, cloudView, deviceList] =
         await Promise.allSettled([
           api.sessions(),
           api.machines(),
           api.plugins(),
           api.automations(),
+          api.projects(),
           api.cloud(),
           api.cloudDevices(),
         ])
@@ -191,6 +197,7 @@ export function ConsoleProvider({ children }) {
       if (machineList.status === 'fulfilled') setMachines(machineList.value ?? [])
       if (pluginList.status === 'fulfilled') setPlugins(pluginList.value ?? [])
       if (ruleList.status === 'fulfilled') setAutomations(ruleList.value ?? [])
+      if (projectList.status === 'fulfilled') setProjects(projectList.value ?? [])
       const answered = [sessionList, machineList, pluginList, ruleList].some(
         (r) => r.status === 'fulfilled',
       )
@@ -681,6 +688,36 @@ export function ConsoleProvider({ children }) {
     [api, refreshAutomations],
   )
 
+  // ---- projects ----
+
+  const refreshProjects = useCallback(async () => {
+    try {
+      setProjects((await api.projects()) ?? [])
+    } catch {
+      /* the poll heals */
+    }
+  }, [api])
+
+  // Add a project - one folder this release, registered on the machine
+  // that owns it (`apiFor(deviceId)` aims there in Cloud).
+  const addProject = useCallback(
+    async (folders, { deviceId = null } = {}) => {
+      const project = await api.device(deviceId).createProject({ folders })
+      await refreshProjects()
+      return project
+    },
+    [api, refreshProjects],
+  )
+
+  // Unregister a project - its chats stay, they just stop being grouped.
+  const removeProject = useCallback(
+    async (projectId) => {
+      await api.removeProject(projectId)
+      await refreshProjects()
+    },
+    [api, refreshProjects],
+  )
+
   const resumeChat = useCallback(
     async (chatId) => {
       await api.resume(chatId)
@@ -698,6 +735,7 @@ export function ConsoleProvider({ children }) {
       plugins,
       marketplace,
       automations,
+      projects,
       chats,
       openChat,
       openChatId,
@@ -740,6 +778,8 @@ export function ConsoleProvider({ children }) {
       removeAutomation,
       enableAutomation,
       runAutomation,
+      addProject,
+      removeProject,
     }),
     [
       api,
@@ -750,6 +790,7 @@ export function ConsoleProvider({ children }) {
       plugins,
       marketplace,
       automations,
+      projects,
       chats,
       openChat,
       openChatId,
@@ -791,6 +832,8 @@ export function ConsoleProvider({ children }) {
       removeAutomation,
       enableAutomation,
       runAutomation,
+      addProject,
+      removeProject,
     ],
   )
   return <ConsoleContext.Provider value={value}>{children}</ConsoleContext.Provider>

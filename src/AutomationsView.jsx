@@ -9,10 +9,9 @@ import AutomationForm from './AutomationForm.jsx'
 import PillComposer from './PillComposer.jsx'
 import { useConsole } from './state/console.jsx'
 import { harnessName } from './harness-names.js'
-import { workspaceName } from './state/reducer.js'
 import { whenSentence, CONNECTOR_KINDS } from './automation.js'
 import { parsePill } from './pill.js'
-import { loadRecentWorkspaces } from './settings.js'
+import { projectName } from './projects.js'
 import './devices.css'
 import './automations.css'
 import './pill.css'
@@ -30,7 +29,7 @@ export default function AutomationsView({ onOpenChat }) {
     automations,
     capabilities,
     machines,
-    sessions,
+    projects,
     saveAutomation,
     removeAutomation,
     enableAutomation,
@@ -55,14 +54,12 @@ export default function AutomationsView({ onOpenChat }) {
   const machineOnline = (id) =>
     (machines ?? []).some((m) => m.machine.id === id && m.machine.status === 'online')
 
-  // The pill's context: machines, workspace folders, and the defaults a
-  // draft falls back to.
-  const workspaces = useMemo(() => {
-    const seen = new Map()
-    for (const s of sessions ?? []) seen.set(workspaceName(s.workspace), s.workspace)
-    for (const path of loadRecentWorkspaces()) seen.set(workspaceName(path), path)
-    return [...seen.entries()] // [name, path]
-  }, [sessions])
+  // The pill's context: machines, the registered projects, and the
+  // defaults a draft falls back to.
+  const workspaces = useMemo(
+    () => (projects ?? []).map((p) => [projectName(p), p.folders[0]]), // [name, path]
+    [projects],
+  )
   const thisMachine = (machines ?? []).find((m) => m.machine.this_machine)
 
   const run = async (action, id, ...args) => {
@@ -114,7 +111,7 @@ export default function AutomationsView({ onOpenChat }) {
     if (!path) {
       setThread((t) => [
         ...t,
-        { role: 'note', text: 'No workspace yet - name one in the form first.' },
+        { role: 'note', text: 'No project yet - add one from the home screen first.' },
       ])
       return
     }
