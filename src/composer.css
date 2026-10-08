@@ -8,6 +8,11 @@
 }
 
 .nc-meta {
+  /* The composer chips stay ghosts - plain text and mark, no box, no
+     border. The launch film filled them as pills (its §4); the founder
+     overrode that on 2026-10-08 the same day it shipped: the pickers
+     read as text, not as buttons in boxes. Do not re-add a fill or
+     border here without the founder's word. */
   display: flex;
   align-items: center;
   gap: 6px;
@@ -132,9 +137,31 @@
   height: 30px;
   border: 0;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-1);
+  background: transparent;
+  color: var(--text-3);
   cursor: default;
+}
+
+/* The film's send: the composer's one recurring primary action carries
+   the brand amber when ready, and the press blooms - a scale dip plus a
+   glow pulse, the round trip ~0.24s on the house curve. Empty stays
+   quiet: transparent, muted arrow. */
+.nc-send:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 18px rgba(220, 162, 75, 0.25);
+  transition:
+    transform 0.12s cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 0.12s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.nc-send:not(:disabled):hover {
+  filter: brightness(1.08);
+}
+
+.nc-send:not(:disabled):active {
+  transform: scale(0.8);
+  box-shadow: 0 0 62px rgba(220, 162, 75, 0.75);
 }
 
 .nc-send:disabled {
@@ -142,6 +169,6 @@
   color: var(--text-3);
 }
 
-.nc-send:not(:disabled):hover {
-  background: rgba(255, 255, 255, 0.13);
+html[data-reduce-motion] .nc-send:not(:disabled) {
+  transition: none;
 }

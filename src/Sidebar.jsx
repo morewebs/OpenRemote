@@ -3,6 +3,7 @@ import { CaretDown, Cloud, Desktop, GearSix, House, Lightning, MagnifyingGlass, 
 import { useConsole } from './state/console.jsx'
 import { workspaceName } from './state/reducer.js'
 import { deviceName, sessionsForMode } from './cloud.js'
+import { HarnessMark } from './brand-marks.jsx'
 import './sidebar.css'
 
 export default function Sidebar({ open, active, mode, onMode, onSelect }) {
@@ -20,6 +21,7 @@ export default function Sidebar({ open, active, mode, onMode, onSelect }) {
         id: session.id,
         title: chats[session.id]?.title ?? session.title ?? 'A new task',
         status: chats[session.id]?.status ?? 'idle',
+        harness: session.harness,
         project: workspaceName(session.workspace),
         updatedAt: session.updated_at ?? 0,
         device: elsewhere ? deviceName(devices, session.executor) : null,
@@ -162,10 +164,11 @@ export default function Sidebar({ open, active, mode, onMode, onSelect }) {
                     data-status={row.status}
                     onClick={() => onSelect(row.id)}
                   >
-                    <span
-                      className={`dot dot--${row.offline ? 'offline' : row.status}`}
-                      title={row.offline ? `${row.device} is offline` : undefined}
-                    />
+                    {/* the harness's mark leads - every harness, one
+                        sidebar, the at-a-glance signal of which agent owns
+                        each chat - then the title, with the status dot at
+                        the right edge so every status scans in one column */}
+                    {row.harness && <HarnessMark harness={row.harness} size={13} />}
                     <span className="chat-title">{row.title}</span>
                     {mode === 'cloud' && row.device && (
                       <span className="chat-device">{row.device}</span>
@@ -173,6 +176,10 @@ export default function Sidebar({ open, active, mode, onMode, onSelect }) {
                     {mode === 'local' && row.synced && (
                       <Cloud size={11} className="chat-synced" aria-label="Synced to your devices" />
                     )}
+                    <span
+                      className={`dot dot--${row.offline ? 'offline' : row.status}`}
+                      title={row.offline ? `${row.device} is offline` : undefined}
+                    />
                   </button>
                 ))}
             </section>

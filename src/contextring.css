@@ -8,14 +8,14 @@
 
 .nc-ring-track {
   fill: none;
-  stroke: rgba(255, 255, 255, 0.08);
-  stroke-width: 2.25;
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 2;
 }
 
 .nc-ring-fill {
   fill: none;
   stroke: var(--green);
-  stroke-width: 2.25;
+  stroke-width: 2;
   stroke-linecap: round;
   transform: rotate(-90deg);
   transform-origin: center;

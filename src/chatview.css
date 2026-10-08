@@ -53,6 +53,9 @@
   margin-right: 8px;
   border-radius: 50%;
   background: var(--green);
+  /* the film's facts dot breathes on the same 2.4s cycle as the sidebar's
+     running dots - whatever status color it carries */
+  animation: cv-breathe 2.4s ease-in-out infinite;
 }
 
 .cv-dot--waiting {
@@ -158,7 +161,8 @@
   bottom: 0;
 }
 
-.cv-node--ok::before {
+.cv-node--ok::before,
+.cv-node--done::before {
   background: var(--green);
 }
 
@@ -579,10 +583,47 @@
   font-weight: 500;
 }
 
-.cv-node--pending .cv-tool-state,
-.cv-node--failed .cv-tool-state,
-.cv-node--denied .cv-tool-state {
+.cv-node--pending .cv-tool-state {
   color: var(--accent);
+}
+
+.cv-node--done .cv-tool-state {
+  color: var(--green);
+}
+
+/* ── the tool card's status, right-aligned on the name line ──
+   The beat of agent work: a breathing green dot and "Running" while the
+   tool is in flight, a check the moment the result lands (green for
+   done, red for failed). Without it a transcript reads as a log. */
+.cv-tool-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cv-tool-status svg {
+  flex: none;
+}
+
+.cv-tool-status .cv-check--ok {
+  color: var(--green);
+}
+
+.cv-tool-status .cv-check--failed {
+  color: #f87171;
+}
+
+.cv-tool-status-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: cv-breathe 2.4s ease-in-out infinite;
 }
 
 .cv-io {
@@ -665,12 +706,14 @@
 }
 
 .cv-diff-side--del {
-  background: rgba(248, 113, 113, 0.08);
+  /* the film's alphas: at 0.08 a fix reads faint; at 0.18 it reads as a
+     change (text colors unchanged) */
+  background: rgba(248, 113, 113, 0.18);
   color: #f87171;
 }
 
 .cv-diff-side--add {
-  background: rgba(76, 180, 135, 0.09);
+  background: rgba(76, 180, 135, 0.2);
   color: var(--green);
 }
 
@@ -701,11 +744,70 @@
   }
 }
 
+/* ── the decision card: the question is the content ──
+   The pending state wears the brand amber - "answer from one place" is
+   the product moment, and amber is the app's own attention color. On
+   answer the amber drains back to a settled card and the buttons fade
+   out over 0.3s. */
+.cv-decision {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  transition:
+    border-color 0.3s ease-out,
+    background-color 0.3s ease-out;
+}
+
+.cv-decision.pending {
+  border-color: rgba(220, 162, 75, 0.35);
+  background: rgba(220, 162, 75, 0.07);
+}
+
+.cv-decision-ask {
+  margin: 2px 0 10px;
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+/* the In row inside the decision card: borderless - the card is the frame */
+.cv-decision-io {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px 12px;
+}
+
+.cv-decision-io code {
+  color: var(--text-2);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.cv-decision-nochoice {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .cv-tool-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
+  transition: opacity 0.3s ease-out;
+}
+
+/* the just-answered card's buttons, mid-fade */
+.cv-tool-actions.leaving {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .cv-tool-actions button {
@@ -718,14 +820,35 @@
   font-size: 12px;
   font-weight: 500;
   cursor: default;
+  transition: transform 0.12s cubic-bezier(0.2, 0, 0, 1);
 }
 
 .cv-tool-actions button.primary {
-  background: rgba(255, 255, 255, 0.08);
+  border-color: transparent;
+  background: var(--accent);
+  color: #1a1206;
+}
+
+.cv-tool-actions button.primary:hover {
+  filter: brightness(1.06);
 }
 
 .cv-tool-actions button:hover {
   background: var(--bg-hover);
+}
+
+.cv-tool-actions button.primary:hover {
+  background: var(--accent);
+}
+
+/* the press pulse on primary actions: a scale dip plus, where amber, a
+   glow pulse - the same language as the composer's send */
+.cv-tool-actions button:active {
+  transform: scale(0.9);
+}
+
+.cv-tool-actions button.primary:active {
+  box-shadow: 0 0 34px rgba(220, 162, 75, 0.45);
 }
 
 .cv-caret {
@@ -739,8 +862,16 @@
 }
 
 html[data-reduce-motion] .cv-caret,
+html[data-reduce-motion] .cv-dot,
+html[data-reduce-motion] .cv-tool-status-dot,
 html[data-reduce-motion] .cv-node--run::before {
   animation: none;
+}
+
+html[data-reduce-motion] .cv-decision,
+html[data-reduce-motion] .cv-tool-actions,
+html[data-reduce-motion] .cv-tool-actions button {
+  transition: none;
 }
 
 

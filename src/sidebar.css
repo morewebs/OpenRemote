@@ -369,6 +369,12 @@ button.side-tile:active {
   border-radius: 50%;
 }
 
+/* the sidebar row's dot sits at the right edge - every status scans in
+   one vertical column (the New-chat in-progress row keeps its dot first) */
+.chat-row .dot {
+  margin-left: auto;
+}
+
 .dot--running {
   background: var(--green);
   animation: breathe 2.4s ease-in-out infinite;
