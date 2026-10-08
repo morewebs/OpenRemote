@@ -99,15 +99,14 @@ export default function NewChat({ onOpen, mode = 'local' }) {
   const canSend =
     text.trim().length > 0 && workspace && !busy && currentHarness && connection.state === 'connected'
     && !needsSignIn && !targetOffline
-  // The harness's own pre-send fact: what its config says a fresh chat
-  // runs, in its own words (grok's config.toml, agy's settings, claude's
-  // priority chain) - none where the harness says nothing (the slot stays
-  // reserved).
-  const resolvedDefault =
-    // The pre-send fact: the harness's own config first, then its own
-    // default-catalog marker (codex's isDefault - the model a fresh
-    // thread runs, the same fact thread/start echoes at create).
-    currentHarness?.default_model ?? models.find((m) => m.is_default)?.model ?? null
+  // The harness's own pre-send facts, each in its own words: what its
+  // config says a fresh chat runs (grok's config.toml, agy's settings,
+  // claude's priority chain), then its catalog's default marker (codex's
+  // isDefault, claude's `default` alias - the row its own picker marks
+  // recommended). Neither, and the slot stays reserved.
+  const configDefault = currentHarness?.default_model ?? null
+  const catalogDefault = models.find((m) => m.is_default)?.model ?? null
+  const resolvedDefault = configDefault ?? catalogDefault
   const defaultLabel =
     resolvedDefault && currentHarness?.default_effort
       ? `${resolvedDefault} · ${currentHarness.default_effort}`
@@ -123,6 +122,13 @@ export default function NewChat({ onOpen, mode = 'local' }) {
   const [effort, setEffort] = useState(null)
   const savedEffort = effort ?? defaults.efforts?.[currentHarness?.id] ?? null
   const chosenEffort = effortTiers.includes(savedEffort) ? savedEffort : null
+  // The model the chat runs from its first breath: the user's pick, else
+  // the catalog's default where the harness's config names none. The
+  // daemon resolves the config case itself at create (pairing grok's
+  // default effort with it); a catalog-only default - claude's `default`
+  // alias - would otherwise stay unnamed until the first turn's init
+  // frame reports it.
+  const startModel = model ?? (configDefault ? null : catalogDefault)
 
   const openPicker = (kind) => (e) => setPicker({ kind, x: e.clientX, y: e.clientY })
 
@@ -135,7 +141,7 @@ export default function NewChat({ onOpen, mode = 'local' }) {
         text.trim(),
         workspace,
         currentHarness.id,
-        model ?? undefined,
+        startModel ?? undefined,
         fast || undefined,
         chosenEffort ?? undefined,
         { deviceId: target, synced: cloudMode },

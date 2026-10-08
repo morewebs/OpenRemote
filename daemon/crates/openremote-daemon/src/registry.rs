@@ -215,9 +215,12 @@ impl Backend {
     pub fn default_model(&self) -> Option<(String, Option<String>)> {
         match self {
             // Claude's own priority chain (pick → env → settings.json →
-            // default env), verified against its docs; a probe process
-            // emits nothing before a turn (observed) so config is the only
-            // pre-send fact.
+            // default env), verified against its docs; the wire names the
+            // session's model only at the first turn's init, so this reads
+            // config alone. Where config is silent, the catalog's own
+            // `default` alias is the fact - the console holds that catalog
+            // and pins it as the create-time pick (a probe per create
+            // would price every chat).
             Backend::Claude(_) => {
                 openremote_claude::config::configured_model(None).map(|model| (model, None))
             }

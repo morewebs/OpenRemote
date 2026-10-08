@@ -8,8 +8,9 @@
 use std::path::PathBuf;
 
 /// The configured model, claude's own priority order. `None` when every
-/// rung is silent - claude's built-in default then governs, and nothing
-/// honest can be shown pre-send.
+/// rung is silent - claude's built-in default then governs, and the
+/// catalog's `default` alias (the models handshake's recommended row) is
+/// the pre-send fact that names it.
 pub fn configured_model(picked: Option<&str>) -> Option<String> {
     if let Some(model) = picked {
         return Some(model.to_string());
