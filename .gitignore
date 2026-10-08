@@ -16,3 +16,5 @@ src-tauri/binaries/
 Thumbs.db
 *.log
 .pi-sessions/
+# mimosa security-scanner state (session-private, never tracked)
+.mimosa/

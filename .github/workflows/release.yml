@@ -1,9 +1,11 @@
 name: Release
 
-# Bundles the Windows installer and publishes it as a GitHub Release.
-# Stages the daemon sidecar first - src-tauri/binaries/ is gitignored,
-# `npm run daemon` regenerates it - then tauri build produces the msi and
-# nsis bundles. Unsigned on purpose; the release notes say so.
+# Bundles the Windows and Linux installers and publishes them as a
+# GitHub Release. Stages the daemon sidecar first - src-tauri/binaries/
+# is gitignored, `npm run daemon` regenerates it - then tauri build
+# produces the msi and nsis bundles. The linux job builds the AppImage
+# and deb against the release the windows job created. Unsigned on
+# purpose; the release notes say so.
 
 on:
   push:
@@ -42,7 +44,36 @@ jobs:
           gh release create "$GITHUB_REF_NAME"
           src-tauri/target/release/bundle/msi/*.msi
           src-tauri/target/release/bundle/nsis/*.exe
-          --title "OpenRemote ${GITHUB_REF_NAME#v}"
+          --title "OpenRemote ${GITHUB_REF_NAME#v} - the first release"
           --notes-file "release-notes/${GITHUB_REF_NAME}.md"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  linux:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            daemon
+            src-tauri
+      # Tauri's Linux build dependencies (webkit2gtk 4.1 era).
+      - run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - run: npm ci
+      - run: OR_RELEASE=1 node scripts/sync-daemon.mjs
+      # The config's bundle targets are the Windows formats; the CLI
+      # flag picks the Linux ones for this runner.
+      - run: npx tauri build --bundles appimage,deb
+      - run: >
+          gh release upload "$GITHUB_REF_NAME"
+          src-tauri/target/release/bundle/appimage/*.AppImage
+          src-tauri/target/release/bundle/deb/*.deb
         env:
           GH_TOKEN: ${{ github.token }}
