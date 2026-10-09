@@ -41,6 +41,18 @@ test('new Cloud chats can run here or on a machine, online machines first', () =
   assert.deepEqual(machinePickerItems([], me).map((i) => i.name), ['This computer'])
 })
 
+test('on a phone the picker is the machines alone', async () => {
+  const { isPhone, platformLabel } = await import('./cloud.js')
+  const items = machinePickerItems(devices, me, { phone: true })
+  assert.deepEqual(items.map((i) => i.name), ['build-box', 'mac-mini'])
+  assert.deepEqual(machinePickerItems([], me, { phone: true }), [])
+  assert.equal(isPhone({ platform: 'android' }), true)
+  assert.equal(isPhone({ platform: 'linux' }), false)
+  assert.equal(isPhone(null), false)
+  assert.equal(platformLabel('android'), 'Android')
+  assert.equal(platformLabel('haiku'), 'haiku')
+})
+
 test('new devices are flagged once, after a baseline', async () => {
   const { newDevices, madeMachineElsewhere } = await import('./cloud.js')
   assert.deepEqual(newDevices(devices, null, me), [], 'no baseline yet: nothing flagged')

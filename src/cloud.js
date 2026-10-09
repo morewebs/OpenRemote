@@ -50,16 +50,38 @@ export function deviceName(devices, id) {
 
 /**
  * Where a new Cloud chat can run: this computer first, then the account's
- * machines, online ones before offline ones.
+ * machines, online ones before offline ones. A phone runs no chats, so on
+ * one the list is the machines alone.
  */
-export function machinePickerItems(devices, thisDevice) {
+export function machinePickerItems(devices, thisDevice, { phone = false } = {}) {
   const machines = (devices ?? [])
     .filter((d) => d.id !== thisDevice && d.kind === 'machine')
     .sort((a, b) => Number(b.online) - Number(a.online) || a.name.localeCompare(b.name))
-  return [
-    { id: null, name: 'This computer', online: true, here: true },
-    ...machines.map((d) => ({ id: d.id, name: d.name, online: Boolean(d.online), platform: d.platform })),
-  ]
+    .map((d) => ({ id: d.id, name: d.name, online: Boolean(d.online), platform: d.platform }))
+  return phone ? machines : [{ id: null, name: 'This computer', online: true, here: true }, ...machines]
+}
+
+/** A phone drives the account's machines and is never one itself. */
+export function isPhone(device) {
+  return device?.platform === 'android' || device?.platform === 'ios'
+}
+
+/** What a device is, for its card: a phone, a machine, or a desktop. */
+export function kindLabel(device) {
+  if (isPhone(device)) return 'Phone'
+  return device?.kind === 'machine' ? 'Machine' : 'Desktop'
+}
+
+/** How this device names itself. */
+export function selfLabel(device) {
+  return isPhone(device) ? 'This phone' : 'This computer'
+}
+
+const PLATFORM_LABEL = { windows: 'Windows', macos: 'macOS', linux: 'Linux', android: 'Android', ios: 'iOS' }
+
+/** A device's platform, in its owner's words. */
+export function platformLabel(platform) {
+  return PLATFORM_LABEL[platform] ?? platform
 }
 
 /**
