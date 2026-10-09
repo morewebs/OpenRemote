@@ -61,9 +61,11 @@ pub fn run() {
 }
 
 fn start_daemon(app: tauri::AppHandle, data_dir: std::path::PathBuf) {
+    eprintln!("openremote: starting the in-app daemon");
     tauri::async_runtime::spawn(async move {
         match openremote_daemon::embedded::start(data_dir, cloud_config()).await {
             Ok(daemon) => {
+                eprintln!("openremote: the in-app daemon is up at {}", daemon.url);
                 let state = app.state::<DaemonState>();
                 *state.info.lock().expect("daemon state lock") = DaemonInfo {
                     url: Some(daemon.url),
