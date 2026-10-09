@@ -2714,7 +2714,7 @@ dependencies = [
 
 [[package]]
 name = "openremote-agy"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "openremote-core",
  "openremote-harness",
@@ -2725,7 +2725,7 @@ dependencies = [
 
 [[package]]
 name = "openremote-claude"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "openremote-core",
  "openremote-harness",
@@ -2737,7 +2737,7 @@ dependencies = [
 
 [[package]]
 name = "openremote-cloud"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2762,7 +2762,7 @@ dependencies = [
 
 [[package]]
 name = "openremote-codex"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "openremote-core",
  "openremote-harness",
@@ -2774,7 +2774,7 @@ dependencies = [
 
 [[package]]
 name = "openremote-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2784,7 +2784,7 @@ dependencies = [
 
 [[package]]
 name = "openremote-daemon"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "axum",
  "chrono",
@@ -2810,7 +2810,7 @@ dependencies = [
 
 [[package]]
 name = "openremote-grok"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "openremote-core",
  "openremote-harness",
@@ -2821,7 +2821,7 @@ dependencies = [
 
 [[package]]
 name = "openremote-harness"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "openremote-core",
  "serde",
@@ -2832,7 +2832,7 @@ dependencies = [
 
 [[package]]
 name = "openremote-opencode"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "openremote-core",
  "openremote-harness",
@@ -2844,7 +2844,7 @@ dependencies = [
 
 [[package]]
 name = "openremote-pi"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "openremote-core",
  "openremote-harness",
