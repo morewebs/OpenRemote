@@ -43,10 +43,21 @@ pub fn hostname() -> String {
         .or_else(|| std::fs::read_to_string("/proc/sys/kernel/hostname").ok())
         .or_else(|| std::fs::read_to_string("/etc/hostname").ok())
         .or_else(|| {
-            std::process::Command::new("hostname")
-                .output()
-                .ok()
-                .and_then(|out| String::from_utf8(out.stdout).ok())
+            // A phone has no hostname command, and spawning one inside an
+            // app process can hang the caller: the forked child that
+            // never execs holds the vforked thread that asked. The phone
+            // passes its own name (Build.MODEL) instead.
+            #[cfg(any(target_os = "android", target_os = "ios"))]
+            {
+                None
+            }
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            {
+                std::process::Command::new("hostname")
+                    .output()
+                    .ok()
+                    .and_then(|out| String::from_utf8(out.stdout).ok())
+            }
         })
         .map(|name| name.trim().to_string())
         .filter(|name| !name.is_empty())
@@ -77,4 +88,25 @@ pub fn now_ms() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hostname_answers_quickly_and_never_empty() {
+        // The Android hang: a `hostname` spawn that never execs held the
+        // vforked caller forever (the daemon never came up). Every path,
+        // mobile included, must answer fast with something.
+        let started = std::time::Instant::now();
+        let name = hostname();
+        assert!(!name.is_empty());
+        assert!(name.len() <= 64);
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(2),
+            "hostname took {:?}",
+            started.elapsed()
+        );
+    }
 }
