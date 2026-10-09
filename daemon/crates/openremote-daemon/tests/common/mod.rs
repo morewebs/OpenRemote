@@ -7,7 +7,7 @@
 pub mod cloud;
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::Duration;
 
 use openremote_core::Store;
@@ -20,29 +20,48 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 // ---- the fixture binary ----
 
 pub fn fixture_agent() -> PathBuf {
-    let target = std::env::var("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target"));
-    let name = if cfg!(windows) {
-        "fixture-agent.exe"
-    } else {
-        "fixture-agent"
-    };
-    let path = target.join("debug").join(name);
-    // Always build: a no-op when fresh, a rescue when a targeted test run
-    // would otherwise drive a stale fixture from an earlier build.
-    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
-    let status = std::process::Command::new(cargo)
-        .args(["build", "-p", "fixture-agent"])
-        .status()
-        .expect("spawn cargo to build the fixture agent");
-    assert!(status.success(), "cargo build -p fixture-agent failed");
-    assert!(
-        path.is_file(),
-        "fixture agent binary not found at {}",
-        path.display()
-    );
-    path
+    // One build per test process: e2e tests run in parallel, and a
+    // nested cargo per test once piled forty lock-waiting builds onto
+    // the outer cargo's package-cache and build-dir locks on CI - one
+    // lost the race and its "successful" build left no binary behind.
+    static FIXTURE: OnceLock<PathBuf> = OnceLock::new();
+    FIXTURE
+        .get_or_init(|| {
+            let target = std::env::var("CARGO_TARGET_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target"));
+            let name = if cfg!(windows) {
+                "fixture-agent.exe"
+            } else {
+                "fixture-agent"
+            };
+            let path = target.join("debug").join(name);
+            // CI builds the fixture up front; present means done, and no
+            // nested cargo ever runs. Missing means a targeted local run:
+            // build it (the rescue), then give the relink a moment. The
+            // PATH cargo, not $CARGO: an env-derived executable is
+            // command-injection-shaped, and this path is local-only.
+            if !path.is_file() {
+                let status = std::process::Command::new("cargo")
+                    .args(["build", "-p", "fixture-agent"])
+                    .status()
+                    .expect("spawn cargo to build the fixture agent");
+                assert!(status.success(), "cargo build -p fixture-agent failed");
+                for _ in 0..20 {
+                    if path.is_file() {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+            }
+            assert!(
+                path.is_file(),
+                "fixture agent binary not found at {}",
+                path.display()
+            );
+            path
+        })
+        .clone()
 }
 
 // ---- the test daemon ----
