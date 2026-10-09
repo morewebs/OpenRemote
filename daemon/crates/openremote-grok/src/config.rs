@@ -76,6 +76,7 @@ pub fn catalog_in(home: &std::path::Path) -> Vec<ModelDescriptor> {
             Some(ModelDescriptor {
                 model: id.clone(),
                 display_name: Some(name.to_string()),
+                resolved_model: None,
                 reasoning_efforts: efforts,
                 is_default: false,
             })

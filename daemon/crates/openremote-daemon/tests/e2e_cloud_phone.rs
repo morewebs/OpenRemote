@@ -215,3 +215,75 @@ async fn a_phone_is_never_a_machine() {
     // From the phone, the desk can still be made a machine.
     make_machine(&phone, &desk, &desk_id).await;
 }
+
+#[tokio::test]
+async fn a_phone_manages_projects_on_its_machine() {
+    let cloud = FakeCloud::start().await;
+    let (phone, _app, _phone_id) = phone(&cloud).await;
+    let (machine, machine_id) = device(&cloud, "box").await;
+    make_machine(&phone, &machine, &machine_id).await;
+    until("the phone sees the machine online", || {
+        sees(&phone, &machine_id, "online", json!(true))
+    })
+    .await;
+
+    // The machine's project list, through the phone's device-prefixed
+    // route - the same call the console's project picker makes.
+    let empty = call(
+        &phone,
+        "GET",
+        &format!("/devices/{machine_id}/projects"),
+        None,
+    )
+    .await;
+    assert_eq!(empty.status, 200, "{}", empty.raw);
+    assert_eq!(empty.body.as_array().map(Vec::len), Some(0));
+
+    // A folder on the machine registers as a project, from the phone.
+    let ws = workspace(None);
+    let saved = call(
+        &phone,
+        "POST",
+        &format!("/devices/{machine_id}/projects"),
+        Some(json!({"request_id": rid(), "folders": [ws.path()]})),
+    )
+    .await;
+    assert_eq!(saved.status, 201, "{}", saved.raw);
+    let project_id = saved.body["id"].as_str().unwrap().to_string();
+
+    let listed = call(
+        &phone,
+        "GET",
+        &format!("/devices/{machine_id}/projects"),
+        None,
+    )
+    .await;
+    assert_eq!(listed.status, 200, "{}", listed.raw);
+    let one = listed.body.as_array().and_then(|a| a.first()).cloned();
+    assert_eq!(
+        one.as_ref().and_then(|p| p["id"].as_str()),
+        Some(project_id.as_str()),
+        "the machine holds the project the phone registered"
+    );
+
+    // And the phone can take it back off.
+    let removed = call(
+        &phone,
+        "DELETE",
+        &format!(
+            "/devices/{machine_id}/projects/{project_id}?request_id={}",
+            rid()
+        ),
+        None,
+    )
+    .await;
+    assert_eq!(removed.status, 200, "{}", removed.raw);
+    let after = call(
+        &phone,
+        "GET",
+        &format!("/devices/{machine_id}/projects"),
+        None,
+    )
+    .await;
+    assert_eq!(after.body.as_array().map(Vec::len), Some(0));
+}

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Lightning, Stop, Play, HandPalm, Brain, Trash, CloudArrowUp } from '@phosphor-icons/react'
+import { ArrowUp, Check, Lightning, Stop, Play, HandPalm, Brain, Trash, CloudArrowUp } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { chatAccess, deviceName, signedIn } from './cloud.js'
 import { railItems } from './state/reducer.js'
 import { harnessName } from './harness-names.js'
+import { findModel, modelDisplayName } from './model-display.js'
 import { HarnessMark } from './brand-marks.jsx'
 import { editRows, isFileEdit, writeRows } from './diff.js'
 import { renderMarkdown } from './markdown.js'
@@ -22,7 +23,10 @@ const STATUS_LABEL = {
   failed: 'Failed',
 }
 
-const TOOL_LABEL = { ok: 'Done', failed: 'Failed' }
+/// The choice the harness's own words gave the answered decision - the
+/// option's label, never its wire id.
+const decisionAnswer = (item) =>
+  item.options.find((option) => option.id === item.answeredChoice)?.label ?? item.answeredChoice ?? ''
 
 /// The harness's own reasoning, dim and collapsible. Collapsed by
 /// default; live streams breathe while the thinking runs.
@@ -40,6 +44,61 @@ function ReasoningBlock({ text, live }) {
           className={`cv-reasoning-body${live ? ' live' : ''}`}
           dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }}
         />
+      )}
+    </div>
+  )
+}
+
+/// A decision, as its own card: the question is the content, the pending
+/// state wears the brand amber, and the affirmative is the one amber
+/// action. On answer the amber drains back to a settled card and the
+/// buttons fade out over 0.3s - only for a decision this view watched
+/// pending, never for history reopened already answered.
+function DecisionCard({ item, onAnswer }) {
+  const [leaving, setLeaving] = useState(false)
+  const wasPending = useRef(item.pending)
+  useEffect(() => {
+    const was = wasPending.current
+    wasPending.current = item.pending
+    if (!was || item.pending) return
+    setLeaving(true)
+    const timer = setTimeout(() => setLeaving(false), 300)
+    return () => clearTimeout(timer)
+  }, [item.pending])
+  // The question the harness actually asked, where it asked one in a
+  // structured form (claude's AskUserQuestion); an approval carries its
+  // content in the In row instead - never invent a question for it.
+  const question =
+    item.input && typeof item.input === 'object' && Array.isArray(item.input.questions)
+      ? item.input.questions[0]?.question ?? null
+      : null
+  return (
+    <div className={`cv-decision${item.pending ? ' pending' : ''}`}>
+      {question && <p className="cv-decision-ask">{question}</p>}
+      {item.input && !question && (
+        <div className="cv-decision-io">
+          <span className="cv-io-label">In</span>
+          <code>{typeof item.input === 'string' ? item.input : JSON.stringify(item.input, null, 2)}</code>
+        </div>
+      )}
+      {item.pending && item.options.length === 0 && (
+        <p className="cv-decision-nochoice">
+          No choices were offered - stop the session to end this turn.
+        </p>
+      )}
+      {(item.pending || leaving) && item.options.length > 0 && (
+        <div className={`cv-tool-actions${leaving && !item.pending ? ' leaving' : ''}`}>
+          {item.options.map((option, index) => (
+            <button
+              key={option.id}
+              type="button"
+              className={index === 0 ? 'primary' : ''}
+              onClick={() => onAnswer(item.id, option.id)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   )
@@ -108,7 +167,10 @@ export default function ChatView({ chat, onBack }) {
   // A stopped chat can change anything the harness accepts at start. A
   // running one only where the wire accepts it now.
   const canChange = chat.running ? live : { model: true, effort: true, fast: Boolean(harness?.fast_supported) }
-  const currentModel = models.find((m) => m.model === chat.model)
+  // The catalog row for the chat's model, matched by pick word or by the
+  // resolved id a running session reports back - the row either way, so
+  // the chip's name never changes when the first turn resolves the id.
+  const currentModel = findModel(models, chat.model)
   const efforts = currentModel?.reasoning_efforts ?? []
 
   useEffect(() => {
@@ -213,7 +275,11 @@ export default function ChatView({ chat, onBack }) {
           <span className="cv-where">{chat.workspace}</span>
           <span className="cv-fact">{harnessName(chat.harness)}</span>
           {elsewhere && <span className="cv-fact">on {where}</span>}
-          {chat.model && <span className="cv-fact">{chat.model}</span>}
+          {chat.model && (
+            <span className="cv-fact" title={chat.model}>
+              {modelDisplayName(models, chat.model)}
+            </span>
+          )}
           {chat.effort && <span className="cv-fact">{chat.effort}</span>}
           {chat.fast && <span className="cv-fact">Fast</span>}
           {chat.costUsd > 0 && (
@@ -249,7 +315,11 @@ export default function ChatView({ chat, onBack }) {
               </button>
             </>
           )}
-          {reachable && (chat.status === 'stopped' || chat.status === 'failed') && (
+          {/* Resume rides the harness's own conversation (claude
+              `--resume`, codex thread/resume, ...). A chat stopped before
+              its first message never got one - the daemon would only
+              answer "nothing to resume", so the button never shows there. */}
+          {reachable && (chat.status === 'stopped' || chat.status === 'failed') && chat.resumable && (
             <button className="cv-fact-btn" onClick={() => control(() => resumeChat(chat.id))} title="Resume the session">
               <Play size={11} weight="fill" />
               Resume
@@ -356,11 +426,33 @@ export default function ChatView({ chat, onBack }) {
                   ? editRows(item.input.old_string, item.input.new_string)
                   : writeRows(item.input.content)
                 : null
+              // The status rides the name line, right-aligned - the beat of
+              // agent work: a breathing green dot and Running while the tool
+              // is in flight, a check the moment the result lands (green
+              // for done, red for failed) - and it stays, the transcript's
+              // own record. A tool left unresolved by an interrupted turn
+              // never pretends: no status word.
+              const inFlight = item.result == null && chat.running
               return (
                 <div key={item.id} className={`cv-node cv-node--${item.state}`}>
                   <div className="cv-tool-line">
                     <span className="cv-tool-name">{item.name}</span>
-                    {item.state !== 'ok' && <span className="cv-tool-state">{TOOL_LABEL[item.state] ?? item.state}</span>}
+                    {inFlight ? (
+                      <span className="cv-tool-status">
+                        <span className="cv-tool-status-dot" />
+                        Running
+                      </span>
+                    ) : item.state === 'failed' ? (
+                      <span className="cv-tool-status">
+                        <Check className="cv-check--failed" size={13} weight="bold" />
+                        Failed
+                      </span>
+                    ) : (
+                      <span className="cv-tool-status">
+                        <Check className="cv-check--ok" size={13} weight="bold" />
+                        Done
+                      </span>
+                    )}
                   </div>
                   {edit && edit.length > 0 && (
                     <div className="cv-diff">
@@ -399,35 +491,13 @@ export default function ChatView({ chat, onBack }) {
               <div key={item.id} className={`cv-node cv-node--${item.pending ? 'pending' : 'done'}`}>
                 <div className="cv-tool-line">
                   <span className="cv-tool-name">{item.toolName ?? 'Decision'}</span>
-                  <span className="cv-tool-state">{item.pending ? 'Needs a decision' : `Answered: ${item.answeredChoice}`}</span>
+                  <span className="cv-tool-state">
+                    {item.pending
+                      ? 'Needs a decision'
+                      : `Answered: ${decisionAnswer(item)}`}
+                  </span>
                 </div>
-                {item.input && (
-                  <div className="cv-io">
-                    <div className="cv-io-row">
-                      <span className="cv-io-label">In</span>
-                      <code>{typeof item.input === 'string' ? item.input : JSON.stringify(item.input, null, 2)}</code>
-                    </div>
-                  </div>
-                )}
-                {item.pending && item.options.length === 0 && (
-                  <p className="cv-tool-state">
-                    No choices were offered - stop the session to end this turn.
-                  </p>
-                )}
-                {item.pending && item.options.length > 0 && (
-                  <div className="cv-tool-actions">
-                    {item.options.map((option, index) => (
-                      <button
-                        key={option.id}
-                        type="button"
-                        className={index === 0 ? 'primary' : ''}
-                        onClick={() => answer(item.id, option.id)}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <DecisionCard item={item} onAnswer={answer} />
               </div>
             )
           })}
@@ -459,7 +529,9 @@ export default function ChatView({ chat, onBack }) {
                   ? chat.running
                     ? 'Steer the session'
                     : 'Send a message'
-                  : 'Resume the session to continue')
+                  : chat.resumable
+                    ? 'Resume the session to continue'
+                    : 'This chat never started')
             }
             disabled={pendingDecision || !alive || !reachable}
             spellCheck={false}
@@ -477,18 +549,15 @@ export default function ChatView({ chat, onBack }) {
                   aria-expanded={picker?.kind === 'model'}
                   title="Model - applies to the next turn"
                 >
-                  {chat.model ?? 'Model'}
+                  {chat.model ? modelDisplayName(models, chat.model) : 'Model'}
                 </button>
               ) : (
-                chat.model && <span className="nc-meta nc-static">{chat.model}</span>
+                chat.model && (
+                  <span className="nc-meta nc-static" title={chat.model}>
+                    {modelDisplayName(models, chat.model)}
+                  </span>
+                )
               )}
-              {(canChange.model ? models.length > 0 : Boolean(chat.model)) && (
-                <span className="nc-via">via</span>
-              )}
-              <span className="nc-meta nc-static">
-                <HarnessMark harness={chat.harness} size={16} />
-                {harnessName(chat.harness)}
-              </span>
               {picker?.kind === 'model' && (
                 <PickerMenu
                   label="Model"
@@ -526,6 +595,13 @@ export default function ChatView({ chat, onBack }) {
                   anchor={{ left: picker.x, top: picker.y }}
                 />
               )}
+              {(canChange.model ? models.length > 0 : Boolean(chat.model)) && (
+                <span className="nc-via">via</span>
+              )}
+              <span className="nc-meta nc-static">
+                <HarnessMark harness={chat.harness} size={16} />
+                {harnessName(chat.harness)}
+              </span>
               {canChange.fast && harness?.fast_supported && (
                 <button
                   type="button"
@@ -538,11 +614,20 @@ export default function ChatView({ chat, onBack }) {
                   Fast
                 </button>
               )}
-              {chat.context?.window != null && (
-                <ContextRing used={chat.context.used} window={chat.context.window} />
-              )}
             </div>
             <div className="nc-send-group">
+              {/* The ring renders wherever usage is known - the composer's
+                  one live element; a claude chat carries it from its first
+                  breath at zero. Codex reports its window too; claude
+                  reports usage only, so the fill rides a nominal window
+                  and the card says so. */}
+              {(chat.context?.used != null || chat.harness === 'claude') && (
+                <ContextRing
+                  used={chat.context?.used ?? 0}
+                  window={chat.context?.window ?? (chat.harness === 'claude' ? 200_000 : 0)}
+                  nominal={chat.context?.window == null}
+                />
+              )}
               <button className="nc-send" onClick={send} disabled={!canSend} title="Send">
                 <ArrowUp size={15} weight="bold" />
               </button>

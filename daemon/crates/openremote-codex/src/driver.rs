@@ -621,6 +621,7 @@ pub async fn models(
                     .get("displayName")
                     .and_then(Value::as_str)
                     .map(String::from),
+                resolved_model: None,
                 reasoning_efforts: efforts,
                 // Its own marker for the entry a fresh thread runs -
                 // the pre-send fact its config.toml never says.

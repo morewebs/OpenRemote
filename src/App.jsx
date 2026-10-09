@@ -88,6 +88,9 @@ function Shell() {
   // Local vs Cloud: Local is this computer's chats; Cloud is the synced
   // chats of every device, behind a moreweb sign-in the first time.
   const [mode, setMode] = useState(loadMode)
+  // The sidebar's + : opens New chat with the Add project flow engaged -
+  // the same picker the home screen's own button opens.
+  const [addProjectOpen, setAddProjectOpen] = useState(false)
 
   // Each mode has its own views; one restored from history that belongs to
   // the other mode opens New chat instead.
@@ -167,6 +170,14 @@ function Shell() {
       setSidebarOpen(false)
   }
 
+  // The sidebar's + : New chat, with the Add project flow engaged.
+  const addProject = () => {
+    setAddProjectOpen(true)
+    navigate('new')
+    if (typeof window !== 'undefined' && !window.matchMedia('(min-width: 640px)').matches)
+      setSidebarOpen(false)
+  }
+
   const finishOnboarding = () => {
     try {
       localStorage.setItem(OB_KEY, '1')
@@ -224,6 +235,7 @@ function Shell() {
             mode={mode}
             onMode={switchMode}
             onSelect={openSession}
+            onAddProject={addProject}
           />
           <main className="main">
             <CloudNotices />
@@ -233,7 +245,14 @@ function Shell() {
               <CloudMode onBackToLocal={isMobile ? null : () => switchMode('local')} />
             ) : (
               <>
-                {view === 'new' && <NewChat onOpen={openSession} mode={mode} />}
+                {view === 'new' && (
+                  <NewChat
+                    onOpen={openSession}
+                    mode={mode}
+                    addProjectOpen={addProjectOpen}
+                    onAddProjectDone={() => setAddProjectOpen(false)}
+                  />
+                )}
                 {view === 'machines' && <MachinesView onOpenChat={openSession} />}
                 {view === 'plugins' && <PluginsView />}
                 {view === 'automations' && <AutomationsView onOpenChat={openSession} />}

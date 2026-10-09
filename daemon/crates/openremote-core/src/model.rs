@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{DecisionId, MachineId, RuleId, SessionId};
+use crate::ids::{DecisionId, MachineId, ProjectId, RuleId, SessionId};
 
 /// An installed agent CLI the daemon can drive (`claude`, `codex`, …).
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -67,7 +67,11 @@ impl SessionStatus {
 pub struct Session {
     pub id: SessionId,
     pub harness: String,
-    pub workspace: PathBuf,
+    /// The folder the chat runs in - absent when it belongs to no project
+    /// (it then spawns in the home folder). Absolute, validated at create
+    /// time; the harness's own resolution replaces nothing here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<PathBuf>,
     pub status: SessionStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
@@ -228,6 +232,22 @@ pub struct AutomationRule {
     pub last_chat: Option<SessionId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_run: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// A registered project: the folders a chat's workspace can belong to.
+/// Exactly one folder this release - the list is the multi-folder future,
+/// arriving additively. A project never stores its name: it *is* its
+/// folder's basename, so the disk stays the only place the name lives.
+/// Removing a project unregisters it - the folder on disk, and every chat
+/// that ran in it, are untouched.
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub struct Project {
+    pub id: ProjectId,
+    /// The folders that make up the project - one this release, absolute
+    /// existing directories, no folder registered twice.
+    pub folders: Vec<PathBuf>,
     pub created_at: i64,
     pub updated_at: i64,
 }

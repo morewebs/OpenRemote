@@ -1,7 +1,7 @@
-// The context-window donut: the harness's own numbers, never ours. The
-// ring renders only where the harness reports its window (codex does;
-// claude's stream-json carries usage but no window - its ring stays
-// hidden until a wire fact exists).
+// The context-window donut. The harness's own numbers where it reports
+// its window (codex); where it reports usage only (claude's stream-json
+// carries no window), the ring still renders - the composer's one live
+// element - against a nominal window, and the card says so.
 
 import './contextring.css'
 
@@ -14,7 +14,7 @@ function formatTokens(n) {
   return String(Math.max(0, Math.round(n)))
 }
 
-export default function ContextRing({ used = 0, window = 0 }) {
+export default function ContextRing({ used = 0, window = 0, nominal = false }) {
   if (!window) return null
   const circumference = 2 * Math.PI * 8
   const frac = Math.min(1, Math.max(0, used / window))
@@ -37,7 +37,11 @@ export default function ContextRing({ used = 0, window = 0 }) {
       <div className="nc-ctx-card">
         <div className="nc-ctx-title">Context</div>
         <div className="nc-ctx-num">
-          {formatTokens(used)} <span>/ {formatTokens(window)} tokens</span>
+          {formatTokens(used)}{' '}
+          <span>
+            / {nominal ? '~' : ''}
+            {formatTokens(window)} tokens{nominal ? ' (nominal)' : ''}
+          </span>
         </div>
         <div className="nc-ctx-bar">
           <span style={{ width: `${pct}%` }} />
@@ -46,10 +50,17 @@ export default function ContextRing({ used = 0, window = 0 }) {
           <span>Used</span>
           <span>{pct}%</span>
         </div>
-        <div className="nc-ctx-row">
-          <span>Remaining</span>
-          <span>{formatTokens(remaining)}</span>
-        </div>
+        {nominal ? (
+          <div className="nc-ctx-row">
+            <span>Window</span>
+            <span>not reported yet</span>
+          </div>
+        ) : (
+          <div className="nc-ctx-row">
+            <span>Remaining</span>
+            <span>{formatTokens(remaining)}</span>
+          </div>
+        )}
       </div>
     </div>
   )

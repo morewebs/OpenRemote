@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react'
-import { ArrowUp, House, FolderOpen, Lightning } from '@phosphor-icons/react'
+import { ArrowUp, House, FolderOpen, Lightning, Plus } from '@phosphor-icons/react'
 import PickerMenu from './PickerMenu.jsx'
-import FolderBrowserModal from './FolderBrowserModal.jsx'
+import FolderPickerModal from './FolderPickerModal.jsx'
 import { machinePickerItems, platformLabel } from './cloud.js'
 import { HarnessMark } from './brand-marks.jsx'
 import SignInModal from './SignInModal.jsx'
 import HarnessManagerModal from './HarnessManagerModal.jsx'
 import { useConsole } from './state/console.jsx'
 import { harnessName } from './harness-names.js'
+import { findModel, modelDisplayName } from './model-display.js'
 import { SIGNIN_HARNESSES } from './harness-manager.js'
 import { loadDefaults } from './defaults.js'
-import { loadRecentWorkspaces, pushRecentWorkspace } from './settings.js'
-import { canPickFolder, pickFolder } from './pick-folder.js'
+import { projectName } from './projects.js'
 import { isMobile } from './platform.js'
 import './newchat.css'
 import './composer.css'
@@ -21,14 +21,17 @@ import './composer.css'
 // honest words.
 
 
-export default function NewChat({ onOpen, mode = 'local' }) {
-  const { connection, capabilities, sessions, chats, createChat, modelsFor, devices, thisDevice, capabilitiesFor, apiFor } =
-    useConsole()
+export default function NewChat({ onOpen, mode = 'local', addProjectOpen = false, onAddProjectDone }) {
+  const {
+    connection, capabilities, sessions, chats, createChat, modelsFor, devices, thisDevice,
+    capabilitiesFor, apiFor, projects, addProject,
+  } = useConsole()
   // In Cloud a chat can run on this computer or one of the account's
   // machines; in Local it always runs here.
   const [target, setTarget] = useState(null)
   const [targetCaps, setTargetCaps] = useState(null)
-  const [browsing, setBrowsing] = useState(false)
+  const [picking, setPicking] = useState(false)
+  const [addProjectError, setAddProjectError] = useState(null)
   const cloudMode = mode === 'cloud'
   // A phone runs no chats: its list is the machines alone.
   const machines = cloudMode ? machinePickerItems(devices, thisDevice, { phone: isMobile }) : []
@@ -36,7 +39,9 @@ export default function NewChat({ onOpen, mode = 'local' }) {
   const targetOffline = Boolean(target && targetItem && !targetItem.online)
   const [defaults] = useState(() => loadDefaults())
   const [text, setText] = useState('')
-  const [workspace, setWorkspace] = useState(() => defaults.workspace ?? loadRecentWorkspaces()[0] ?? null)
+  // The project the chat runs in: one of the registered projects, or
+  // null - a chat that belongs to no project and runs in the home folder.
+  const [projectId, setProjectId] = useState(null)
   const [picker, setPicker] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -57,6 +62,34 @@ export default function NewChat({ onOpen, mode = 'local' }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firstMachine])
+
+  // The sidebar's + opens the same Add project flow the home screen's
+  // button opens - one way in, whichever surface asked.
+  useEffect(() => {
+    if (addProjectOpen) setPicking(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addProjectOpen])
+
+  // The registered projects on the machine the chat will run on. A
+  // project belongs to the machine that owns its folder, so the list
+  // follows the target.
+  const [targetProjects, setTargetProjects] = useState([])
+  useEffect(() => {
+    let cancelled = false
+    if (!connection.state === 'connected') return
+    apiFor(target)
+      .projects()
+      .then((list) => {
+        if (!cancelled) setTargetProjects(list ?? [])
+      })
+      .catch(() => {
+        if (!cancelled) setTargetProjects([])
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target, connection.state, projects])
 
   // A machine's own harnesses, fetched when a chat aims at it.
   useEffect(() => {
@@ -107,24 +140,29 @@ export default function NewChat({ onOpen, mode = 'local' }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentHarness?.id, connection.state, target])
 
+  const chosenProject = targetProjects.find((p) => p.id === projectId) ?? null
+  // The chat's workspace is the project's folder; no project, no
+  // workspace - the chat runs in the home folder on its machine.
+  const workspace = chosenProject?.folders[0] ?? null
+
   const canSend =
-    text.trim().length > 0 && workspace && !busy && currentHarness && connection.state === 'connected'
+    text.trim().length > 0 && !busy && currentHarness && connection.state === 'connected'
     && !needsSignIn && !targetOffline
-  // The harness's own pre-send fact: what its config says a fresh chat
-  // runs, in its own words (grok's config.toml, agy's settings, claude's
-  // priority chain) - none where the harness says nothing (the slot stays
-  // reserved).
-  const resolvedDefault =
-    // The pre-send fact: the harness's own config first, then its own
-    // default-catalog marker (codex's isDefault - the model a fresh
-    // thread runs, the same fact thread/start echoes at create).
-    currentHarness?.default_model ?? models.find((m) => m.is_default)?.model ?? null
+  // The harness's own pre-send facts, each in its own words: what its
+  // config says a fresh chat runs (grok's config.toml, agy's settings,
+  // claude's priority chain), then its catalog's default marker (codex's
+  // isDefault, claude's `default` alias - the row its own picker marks
+  // recommended). Neither, and the slot stays reserved.
+  const configDefault = currentHarness?.default_model ?? null
+  const catalogDefault = models.find((m) => m.is_default)?.model ?? null
+  const resolvedDefault = configDefault ?? catalogDefault
+  // The pre-send fact's label, in the harness's own words: the config's
+  // model name where the catalog knows it, the id where it doesn't.
+  const resolvedDefaultName = resolvedDefault ? modelDisplayName(models, resolvedDefault) : null
   const defaultLabel =
-    resolvedDefault && currentHarness?.default_effort
-      ? `${resolvedDefault} · ${currentHarness.default_effort}`
-      : resolvedDefault
-  const recents = target ? [] : loadRecentWorkspaces()
-  const active = workspace ?? ''
+    resolvedDefaultName && currentHarness?.default_effort
+      ? `${resolvedDefaultName} · ${currentHarness.default_effort}`
+      : resolvedDefaultName
   const inProgress = (sessions ?? []).filter((s) => ['starting', 'working', 'waiting'].includes(s.status))
   // The effort slot follows the model slot's rule: only where the active
   // model advertises tiers. A saved default that the active model doesn't
@@ -134,6 +172,13 @@ export default function NewChat({ onOpen, mode = 'local' }) {
   const [effort, setEffort] = useState(null)
   const savedEffort = effort ?? defaults.efforts?.[currentHarness?.id] ?? null
   const chosenEffort = effortTiers.includes(savedEffort) ? savedEffort : null
+  // The model the chat runs from its first breath: the user's pick, else
+  // the catalog's default where the harness's config names none. The
+  // daemon resolves the config case itself at create (pairing grok's
+  // default effort with it); a catalog-only default - claude's `default`
+  // alias - would otherwise stay unnamed until the first turn's init
+  // frame reports it.
+  const startModel = model ?? (configDefault ? null : catalogDefault)
 
   const openPicker = (kind) => (e) => setPicker({ kind, x: e.clientX, y: e.clientY })
 
@@ -146,12 +191,11 @@ export default function NewChat({ onOpen, mode = 'local' }) {
         text.trim(),
         workspace,
         currentHarness.id,
-        model ?? undefined,
+        startModel ?? undefined,
         fast || undefined,
         chosenEffort ?? undefined,
         { deviceId: target, synced: cloudMode },
       )
-      if (!target) pushRecentWorkspace(workspace)
       setText('')
       onOpen(id)
     } catch (err) {
@@ -161,25 +205,27 @@ export default function NewChat({ onOpen, mode = 'local' }) {
     }
   }
 
-  // The native folder dialog - one click instead of a typed absolute path.
-  // Another machine's folders (or this one's, with no native dialog) are
-  // browsed in the app instead.
-  const browse = async () => {
-    if (target || !canPickFolder) {
-      setBrowsing(true)
-      return
+  // The one way a folder becomes a project: pick it on the machine that
+  // will own it, and it registers there. The same dialog serves both
+  // surfaces - a chat's project pick and the Add project button.
+  const chooseProjectFolder = async (folder) => {
+    setPicking(false)
+    setAddProjectError(null)
+    try {
+      const project = await addProject([folder], { deviceId: target })
+      setProjectId(project.id)
+    } catch (err) {
+      // The daemon's own words - a folder that is already a project, a
+      // path that is not a folder - surface right beside the flow.
+      setAddProjectError(err.message ?? String(err))
     }
-    const path = await pickFolder()
-    if (!path) return
-    setWorkspace(path)
-    pushRecentWorkspace(path)
   }
 
-  // Switching machines: a folder belongs to one machine, so the choice
-  // starts over (this computer gets its recents back).
+  // Switching machines: a project belongs to one machine, so the choice
+  // starts over.
   const chooseTarget = (id) => {
     setTarget(id)
-    setWorkspace(id ? null : defaults.workspace ?? loadRecentWorkspaces()[0] ?? null)
+    setProjectId(null)
     setPicker(null)
   }
 
@@ -237,7 +283,7 @@ export default function NewChat({ onOpen, mode = 'local' }) {
                     aria-expanded={picker?.kind === 'model'}
                     title="Model"
                   >
-                    {model ?? defaultLabel}
+                    {model ? modelDisplayName(models, model) : defaultLabel}
                   </button>
                 ) : (
                   // No catalog to pick from, but the harness's own config
@@ -371,54 +417,59 @@ export default function NewChat({ onOpen, mode = 'local' }) {
       </div>
       <div className="nc-under">
         <div className="nc-below">
-          {/* The workspace is picked, never typed: the recents picker
-              when there are any, the OS folder dialog beside it. An
-              empty recents list is no dead control - Browse is the
-              affordance. */}
-          {recents.length > 0 && (
-            <div className="nc-device">
-              <button
-                className="nc-meta"
-                onClick={openPicker('workspace')}
-                aria-haspopup="listbox"
-                aria-expanded={picker?.kind === 'workspace'}
-                title={active || 'The folder the harness works in'}
-              >
-                <FolderOpen size={13} weight="light" />
-                {active ? active.split(/[\\/]/).filter(Boolean).pop() : 'Choose a folder'}
-              </button>
-              {picker?.kind === 'workspace' && (
-                <PickerMenu
-                  label="Workspace"
-                  searchPlaceholder="Search workspaces"
-                  wide
-                  items={recents.map((p) => ({
-                    id: p,
-                    name: p.split(/[\\/]/).filter(Boolean).pop(),
-                  }))}
-                  groups={null}
-                  selectedId={active}
-                  onChoose={(id) => {
-                    setWorkspace(id)
-                    setPicker(null)
-                  }}
-                  onClose={() => setPicker(null)}
-                  anchor={{ left: picker.x, top: picker.y }}
-                  renderSubline={(p) => <span className="nc-item-sub">{p.id}</span>}
-                />
-              )}
-            </div>
-          )}
-          {target && workspace && (
-            <span className="nc-meta nc-static" title={workspace}>
+          {/* The project is picked, never typed: the registered projects
+              on the machine the chat runs on, "No project" for a chat
+              that belongs to none, and the one way to add - the picker's
+              own Add project row opens the folder picker. */}
+          <div className="nc-device">
+            <button
+              className="nc-meta"
+              onClick={openPicker('project')}
+              aria-haspopup="listbox"
+              aria-expanded={picker?.kind === 'project'}
+              title={chosenProject ? workspace : 'A chat can run in a project, or in no folder at all'}
+            >
               <FolderOpen size={13} weight="light" />
-              {workspace.split(/[\\/]/).filter(Boolean).pop()}
-            </span>
-          )}
-          <button type="button" className="nc-browse" onClick={browse} title="Choose a folder">
-            <FolderOpen size={13} weight="light" />
-            Browse…
-          </button>
+              {chosenProject ? projectName(chosenProject) : 'No project'}
+            </button>
+            {picker?.kind === 'project' && (
+              <PickerMenu
+                label="Project"
+                searchPlaceholder="Search projects"
+                wide
+                items={[
+                  { id: '__none__', name: 'No project' },
+                  ...targetProjects.map((p) => ({ id: p.id, name: projectName(p) })),
+                ]}
+                groups={null}
+                selectedId={chosenProject?.id ?? '__none__'}
+                onChoose={(id) => {
+                  setProjectId(id === '__none__' ? null : id)
+                  setPicker(null)
+                }}
+                onClose={() => setPicker(null)}
+                anchor={{ left: picker.x, top: picker.y }}
+                renderSubline={(item) =>
+                  item.id === '__none__' ? null : (
+                    <span className="nc-item-sub">
+                      {targetProjects.find((p) => p.id === item.id)?.folders[0]}
+                    </span>
+                  )
+                }
+                footer={
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPicker(null)
+                      setPicking(true)
+                    }}
+                  >
+                    <Plus size={12} weight="bold" /> Add project…
+                  </button>
+                }
+              />
+            )}
+          </div>
           {cloudMode ? (
             <div className="nc-device">
               <button
@@ -463,6 +514,11 @@ export default function NewChat({ onOpen, mode = 'local' }) {
             </span>
           )}
         </div>
+        <button type="button" className="nc-browse" onClick={() => setPicking(true)} title="Register a folder as a project">
+          <Plus size={13} weight="bold" />
+          Add project
+        </button>
+        {addProjectError && <p className="nc-error">{addProjectError}</p>}
         {targetOffline && <p className="nc-error">{targetItem.name} is offline.</p>}
         {isMobile && cloudMode && machines.length === 0 && (
           <div className="nc-signin">
@@ -475,17 +531,16 @@ export default function NewChat({ onOpen, mode = 'local' }) {
             </button>
           </div>
         )}
-        {browsing && (
-          <FolderBrowserModal
+        {picking && (
+          <FolderPickerModal
             api={apiFor(target)}
             where={targetItem?.name ?? 'this computer'}
             start={workspace}
-            onChoose={(path) => {
-              setWorkspace(path)
-              if (!target) pushRecentWorkspace(path)
-              setBrowsing(false)
+            onChoose={chooseProjectFolder}
+            onClose={() => {
+              setPicking(false)
+              onAddProjectDone?.()
             }}
-            onClose={() => setBrowsing(false)}
           />
         )}
         {connection.state === 'error' && <p className="nc-error">{connection.error}</p>}
@@ -518,7 +573,7 @@ export default function NewChat({ onOpen, mode = 'local' }) {
                   <span className="nc-resume-meta">
                     {session.status === 'waiting'
                       ? 'Needs a decision'
-                      : `${harnessName(session.harness)} · ${session.workspace?.split(/[\\/]/).filter(Boolean).pop() ?? ''}`}
+                      : harnessName(session.harness)}
                   </span>
                 </button>
               )

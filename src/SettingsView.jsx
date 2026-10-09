@@ -8,15 +8,14 @@ import { isMobile } from './platform.js'
 import { harnessName } from './harness-names.js'
 import { SIGNIN_HARNESSES } from './harness-manager.js'
 import { loadDefaults, saveDefaults } from './defaults.js'
+import { modelDisplayName } from './model-display.js'
 import {
   loadPrefs,
   savePrefs,
   applyReduceMotion,
   applyDensity,
-  loadRecentWorkspaces,
-  pushRecentWorkspace,
 } from './settings.js'
-import { canPickFolder, hasTauri, pickFolder } from './pick-folder.js'
+import { hasTauri } from './pick-folder.js'
 import { version } from '../package.json'
 import './devices.css'
 import './panels.css'
@@ -43,7 +42,17 @@ const SECTIONS = [
 const PHONE_SECTIONS = new Set(['appearance', 'cloud', 'this-install'])
 
 export default function SettingsView({ onReplay }) {
-  const { connection, capabilities, sessions, disconnect, modelsFor, cloud, signOutCloud } = useConsole()
+  const {
+    connection,
+    capabilities,
+    sessions,
+    disconnect,
+    modelsFor,
+    cloud,
+    signOutCloud,
+    projects: projectsList,
+    removeProject,
+  } = useConsole()
   const [confirmSignOut, setConfirmSignOut] = useState(false)
   const inCloud = signedIn(cloud)
   const harnessList = capabilities?.harnesses ?? []
@@ -55,11 +64,7 @@ export default function SettingsView({ onReplay }) {
   const [signInFor, setSignInFor] = useState(null)
   const [prefs, setPrefs] = useState(() => loadPrefs())
   const [confirmDisconnect, setConfirmDisconnect] = useState(false)
-  const recents = loadRecentWorkspaces()
   const defaultHarness = available.find((h) => h.id === defaults.harness) ?? available[0] ?? null
-  const defaultWorkspace = defaults.workspace && recents.includes(defaults.workspace)
-    ? defaults.workspace
-    : recents[0] ?? null
 
   // The model row only renders where the default harness advertises -
   // the same rule the composer holds.
@@ -101,15 +106,6 @@ export default function SettingsView({ onReplay }) {
   }
 
   const openPicker = (kind) => (e) => setPicker({ kind, x: e.clientX, y: e.clientY })
-
-  // A fresh folder is one dialog away even when recents are empty -
-  // the row never hides.
-  const browse = async () => {
-    const path = await pickFolder()
-    if (!path) return
-    pushRecentWorkspace(path)
-    set({ workspace: path })
-  }
 
   const toggleReduce = () => {
     const value = !prefs.reduce_motion
@@ -286,7 +282,7 @@ export default function SettingsView({ onReplay }) {
               aria-expanded={picker?.kind === 'model'}
             >
               {defaults.model && models.some((m) => m.model === defaults.model)
-                ? defaults.model
+                ? modelDisplayName(models, defaults.model)
                 : `${defaultHarness?.name} default`}
             </button>
             {picker?.kind === 'model' && (
@@ -346,44 +342,25 @@ export default function SettingsView({ onReplay }) {
         )}
         <div className="pn-row">
           <div>
-            <div className="pn-name">Workspace</div>
-            <div className="pn-detail">The folder a new task works in.</div>
+            <div className="pn-name">Projects</div>
+            <div className="pn-detail">
+              {projectsList.length
+                ? 'The folders whose chats group under their project. Removing a project keeps every chat.'
+                : 'No projects yet. Add one from the home screen.'}
+            </div>
           </div>
           <div className="pn-actions">
-            {canPickFolder && (
-              <button type="button" className="pn-btn" onClick={browse}>
-                Browse
+            {projectsList.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="pn-btn"
+                title={`Remove the project - its chats stay. Folder: ${p.folders[0]}`}
+                onClick={() => removeProject(p.id)}
+              >
+                {p.folders[0].split(/[\\/]/).filter(Boolean).pop()} ✕
               </button>
-            )}
-            <button
-              type="button"
-              className="pn-btn"
-              onClick={recents.length ? openPicker('workspace') : canPickFolder ? browse : undefined}
-              disabled={!recents.length && !canPickFolder}
-              aria-haspopup="listbox"
-              aria-expanded={picker?.kind === 'workspace'}
-            >
-              {defaultWorkspace
-                ? defaultWorkspace.split(/[\\/]/).filter(Boolean).pop()
-                : 'Choose a folder'}
-            </button>
-            {picker?.kind === 'workspace' && (
-              <PickerMenu
-                label="Workspace"
-                searchPlaceholder="Search workspaces"
-                wide
-                items={recents.map((p) => ({
-                  id: p,
-                  name: p.split(/[\\/]/).filter(Boolean).pop(),
-                }))}
-                groups={null}
-                selectedId={defaultWorkspace ?? ''}
-                onChoose={(id) => set({ workspace: id })}
-                onClose={() => setPicker(null)}
-                anchor={{ left: picker.x, top: picker.y }}
-                renderSubline={(p) => <span className="nc-item-sub">{p.id}</span>}
-              />
-            )}
+            ))}
           </div>
         </div>
       </div>

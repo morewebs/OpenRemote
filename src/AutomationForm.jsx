@@ -1,13 +1,14 @@
 // The rule editor: name, when (a schedule or a webhook - the kinds with
 // real sources), the chat it opens (harness, model, machine), and the
-// task it starts with. The workspace is the chat's own working folder.
+// task it starts with. The project is picked from the registered ones -
+// its folder is the chat's own working folder.
 
 import { useEffect, useState } from 'react'
 import { X } from '@phosphor-icons/react'
 import PickerMenu from './PickerMenu.jsx'
 import { useConsole } from './state/console.jsx'
-import { canPickFolder, pickFolder } from './pick-folder.js'
-import { loadRecentWorkspaces } from './settings.js'
+import { modelDisplayName } from './model-display.js'
+import { projectName } from './projects.js'
 import './devices.css'
 import './automations.css'
 import { useBack } from './use-back.js'
@@ -32,6 +33,7 @@ export default function AutomationForm({ rule, onClose }) {
     capabilities,
     machines,
     modelsFor,
+    projects,
     saveAutomation,
     enableAutomation,
     api,
@@ -54,7 +56,10 @@ export default function AutomationForm({ rule, onClose }) {
       ? rule.machine
       : online[0]?.machine.id ?? null,
   )
-  const [workspace, setWorkspace] = useState(rule?.workspace ?? defaultWorkspace())
+  // The rule's project: picked from the registered ones. A saved rule
+  // carries its folder; the picker matches it back to its project and
+  // preselects that.
+  const [workspace, setWorkspace] = useState(rule?.workspace ?? defaultWorkspace(projects))
   const [task, setTask] = useState(rule?.task ?? '')
   const [enabled, setEnabled] = useState(rule?.enabled ?? true)
   const [picker, setPicker] = useState(null)
@@ -90,6 +95,12 @@ export default function AutomationForm({ rule, onClose }) {
   const currentMachine = online.find((m) => m.machine.id === machineId)
   // One online machine cannot be chosen - the field still saves its id.
   const oneMachine = online.length <= 1
+  // The registered project whose folder the rule's workspace is - the
+  // picker's preselection; a rule whose folder no project holds (one
+  // saved before projects) keeps its folder as-is.
+  const matchedProject =
+    (projects ?? []).find((p) => p.folders.includes(workspace)) ?? null
+  const noProjects = (projects ?? []).length === 0
   const ready = name.trim() && task.trim() && workspace.trim() && harness && machineId && (kind !== 'schedule' || time.trim())
 
   const openPicker = (kind_) => (e) => setPicker({ kind: kind_, x: e.clientX, y: e.clientY })
@@ -245,7 +256,7 @@ export default function AutomationForm({ rule, onClose }) {
                   aria-haspopup="listbox"
                   aria-expanded={picker?.kind === 'model'}
                 >
-                  {model ?? `${currentHarness?.name} default`}
+                  {model ? modelDisplayName(models, model) : `${currentHarness?.name} default`}
                 </button>
                 {picker?.kind === 'model' && (
                   <PickerMenu
@@ -293,27 +304,41 @@ export default function AutomationForm({ rule, onClose }) {
             )}
           </div>
           <div className="af-workspace">
-            <span className="af-label">Workspace</span>
+            <span className="af-label">Project</span>
             <span className="af-workspace-row">
-              <span className="af-chip af-workspace-value" title={workspace || undefined}>
-                {workspace ? workspace.split(/[\\/]/).filter(Boolean).pop() : 'None yet'}
-              </span>
-              {canPickFolder ? (
-                <button
-                  type="button"
-                  className="af-browse"
-                  onClick={async () => {
-                    const path = await pickFolder()
-                    if (path) setWorkspace(path)
+              <button
+                type="button"
+                className="af-pick"
+                onClick={openPicker('project')}
+                aria-haspopup="listbox"
+                aria-expanded={picker?.kind === 'project'}
+              >
+                {matchedProject ? projectName(matchedProject) : 'No project yet'}
+              </button>
+              {picker?.kind === 'project' && (
+                <PickerMenu
+                  label="Project"
+                  searchPlaceholder="Search projects"
+                  wide
+                  items={(projects ?? []).map((p) => ({ id: p.folders[0], name: projectName(p) }))}
+                  groups={null}
+                  selectedId={workspace ?? ''}
+                  onChoose={(id) => {
+                    setWorkspace(id)
+                    setPicker(null)
                   }}
-                >
-                  Browse…
-                </button>
-              ) : (
-                <span className="af-when-note">Choose a folder in the desktop app.</span>
+                  onClose={() => setPicker(null)}
+                  anchor={{ left: picker.x, top: picker.y }}
+                  renderSubline={(item) => <span className="nc-item-sub">{item.id}</span>}
+                />
               )}
             </span>
           </div>
+          {noProjects && (
+            <p className="af-when-note">
+              No projects yet - add one from the home screen's Add project button.
+            </p>
+          )}
         </div>
 
         <div className="af-section">
@@ -341,6 +366,6 @@ export default function AutomationForm({ rule, onClose }) {
   )
 }
 
-function defaultWorkspace() {
-  return loadRecentWorkspaces()[0] ?? ''
+function defaultWorkspace(projects) {
+  return projects?.[0]?.folders[0] ?? ''
 }

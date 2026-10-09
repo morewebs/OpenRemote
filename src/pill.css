@@ -80,6 +80,9 @@
   color: var(--text-3);
 }
 
+/* the send, the composer family's one primary action: amber when
+   ready, quiet when empty, a scale-dip press pulse - the same language
+   as the chat composer's send */
 .pill-send {
   display: grid;
   place-items: center;
@@ -88,21 +91,36 @@
   height: 34px;
   border: 0;
   border-radius: 50%;
-  background: var(--bg-active);
-  color: var(--text-1);
+  background: transparent;
+  color: var(--text-3);
   font: inherit;
   cursor: default;
+}
+
+.pill-send:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 18px rgba(220, 162, 75, 0.25);
+  transition:
+    transform 0.12s cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 0.12s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.pill-send:not(:disabled):hover {
+  filter: brightness(1.08);
+}
+
+.pill-send:not(:disabled):active {
+  transform: scale(0.8);
+  box-shadow: 0 0 62px rgba(220, 162, 75, 0.75);
 }
 
 .pill-send:disabled {
   opacity: 0.45;
 }
 
-.pill-send:not(:disabled):hover {
-  background: rgba(255, 255, 255, 0.14);
-}
-
-html[data-reduce-motion] .pill {
+html[data-reduce-motion] .pill,
+html[data-reduce-motion] .pill-send:not(:disabled) {
   transition: none;
 }
 

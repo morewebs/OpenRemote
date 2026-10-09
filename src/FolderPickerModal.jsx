@@ -1,6 +1,6 @@
-// Choosing a folder on another machine (or here, when there is no native
-// dialog): browse its folders and use one. A path is never typed - the
-// same rule as the native dialog on this computer.
+// The one folder picker: choose a folder on this computer or another of
+// the user's machines, browsing its folders inside the app. A path is
+// never typed - the same rule everywhere, local and remote alike.
 
 import { useEffect, useState } from 'react'
 import { ArrowUp, Folder, House, X } from '@phosphor-icons/react'
@@ -8,7 +8,7 @@ import './devices.css'
 import './folders.css'
 import { useBack } from './use-back.js'
 
-export default function FolderBrowserModal({ api, where, start, onChoose, onClose }) {
+export default function FolderPickerModal({ api, where, start, onChoose, onClose }) {
   useBack(true, onClose)
   const [listing, setListing] = useState(null)
   const [error, setError] = useState(null)

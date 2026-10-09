@@ -277,11 +277,32 @@ async fn codex_models_endpoint_speaks_codex_words() {
         .collect();
     assert_eq!(efforts, vec!["low", "medium", "high"]);
 
-    // Claude advertises nothing through us - an empty list is a real
-    // answer (the slot stays reserved).
+    // Claude's slot speaks the fixture agent's own initialize catalog -
+    // the same shapes the real CLI serves, so the folding is e2e-covered:
+    // the description's opening versions the row name ("Sonnet" ->
+    // "Fixture Sonnet 9.9"), and the resolved id rides its own field.
     let claude_models = call(&daemon, "GET", "/harnesses/claude/models", None).await;
     assert_eq!(claude_models.status, 200, "raw: {}", claude_models.raw);
-    assert_eq!(claude_models.body.as_array().map(Vec::len), Some(0));
+    let claude_list = claude_models.body.as_array().expect("claude models array");
+    let by_id: std::collections::HashMap<&str, &Value> = claude_list
+        .iter()
+        .map(|m| (m["model"].as_str().expect("model id"), m))
+        .collect();
+    assert_eq!(
+        by_id["sonnet"]["display_name"].as_str(),
+        Some("Sonnet 9.9"),
+        "the description's opening versions the row: {claude_list:?}"
+    );
+    assert_eq!(
+        by_id["sonnet"]["resolved_model"].as_str(),
+        Some("fixture-sonnet")
+    );
+    // The default alias keeps the harness's marker - its description
+    // names the resolved model, not the marker.
+    assert_eq!(
+        by_id["default"]["display_name"].as_str(),
+        Some("Default (recommended)")
+    );
 }
 
 #[tokio::test]

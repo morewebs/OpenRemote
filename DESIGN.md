@@ -73,8 +73,12 @@ spacing.
   The whole bar is a drag region.
 - **Sidebar (264px, collapsible):** mode switch (Local/Cloud), New chat tile,
   search, then nav tiles - Plugins and Automations in Local, Machines in
-  Cloud (grid-rows reveal, reduced-motion aware); chats grouped by project
-  with collapse carets and status dots; Settings pinned in the footer.
+  Cloud (grid-rows reveal, reduced-motion aware); then the two sections -
+  Projects (the registered ones, each with collapse caret and count, the
+  `+` in the section head, unregister on hover; a project's chats grouped
+  under it) and the flat Chats list (every chat that belongs to no
+  project), each row led by its harness's brand mark with the status dot
+  at the row's right edge; Settings pinned in the footer.
 - **Settings is a view, not a popup:** a slim section rail on the left
   (New tasks, Appearance, Startup, Cloud, Daemon, Harnesses, This install),
   the panel on the right. Phone width stacks the rail into a top scroller.
@@ -84,19 +88,48 @@ spacing.
 ## Components
 
 - **Status dots (`dot--*`):** 6px pills of truth - `running` green (breathing),
-  `waiting` amber, `idle` hidden. The same dot language everywhere.
+  `waiting` amber, `idle` hidden. The same dot language everywhere. The
+  chat header's facts dot breathes too, on the same 2.4s cycle.
+- **Tool status (`cv-tool-status`):** every tool card carries its state,
+  right-aligned on the name line - a breathing green dot and "Running" while
+  in flight, a green check and "Done" when the result lands, a red check
+  and "Failed" on error. The status flip is the beat of agent work.
+- **Decision cards:** the question (where the harness asked one
+  structurally) renders as content, 14px/500 `--text-1` inside the card;
+  the pending state wears the brand amber (border `rgba(220,162,75,0.35)`,
+  background `rgba(220,162,75,0.07)`), and the affirmative option is the
+  one amber button. On answer the amber drains back to a settled card over
+  0.3s and the label flips to a green "Answered: {choice}".
 - **The composer family:** New chat's large box and the chat view's floating
   box share anatomy - autosizing textarea, a footer with pickers
-  (Model `via` Harness) on the left, send button right. The floating chat
-  composer publishes its measured height (`--cv-clear`) so the transcript's
-  bottom padding keeps the last message above it, never under it.
-- **Send button:** 30px circle, amber, white arrow; disabled goes quiet.
+  (Model `via` Harness) on the left, send button right. The foot's chips
+  are plain ghost text (`nc-meta`: no fill, no border, the hover wash is
+  the only affordance) - the film filled them as pills; the founder
+  overrode that the day it shipped (2026-10-08): the pickers read as
+  text, not buttons in boxes. The workspace/machine rows under the box
+  share the same ghost. The floating chat composer publishes its
+  measured height (`--cv-clear`) so the transcript's bottom padding keeps
+  the last message above it, never under it.
+- **Send button:** 30px radius-8 rounded square; amber (`--accent`) with a
+  white arrow when ready, transparent with a muted arrow when empty. The
+  press pulses - a scale dip to 0.8 and an amber glow bloom - the one
+  recurring primary action, rewarded.
 - **PickerMenu:** the one dropdown engine - opens at the cursor, searches,
   optional groups, keyboard-navigated, viewport-clamped.
 - **Modals:** one family (Esc / backdrop / X close): onboarding panel, device,
   plugin, about, confirm. Panels, not surprise shapes.
-- **Context ring:** a 20px SVG donut of context-window usage, hover card with
-  used/remaining/auto-compact rows.
+- **Context ring:** a 20px SVG donut of context-window usage (2px stroke,
+  round cap, track `rgba(255,255,255,0.12)`), in the composer foot left of
+  the send button, hover card with used/remaining/auto-compact rows.
+  Renders wherever usage is known: codex reports its window too; claude
+  reports usage only, so the fill rides a nominal 200k window and the card
+  says so ("~200k tokens (nominal)", "Window: not reported yet").
+- **Split-diff tints:** del `rgba(248,113,113,0.18)` / add
+  `rgba(76,180,135,0.20)` - a fix reads as a change, not a faint wash
+  (text colors unchanged: `#F87171` / `#4CB487`).
+- **Press feedback on primaries:** send and decision buttons pulse on press
+  (scale ~0.9-0.8 + an amber glow bloom where amber) - implemented once
+  in the two families, applies to every primary action in the console.
 - **Reduce motion:** a first-class setting (`data-reduce-motion` attr) kills
   the breathe and update animations; the preference is applied before
   first paint at boot, not just carried within a session.
@@ -104,7 +137,9 @@ spacing.
 ## Motion
 
 - One transition curve family (`cubic-bezier(0.2,0,0,1)`-ish), 0.12–0.18s.
-- The running dot breathes 2.4s. Nothing else animates by default.
+- The running dot breathes 2.4s (sidebar rows, the facts dot, the
+  in-flight tool status); the press pulse (scale dip + amber bloom) and
+  the answered decision's 0.3s amber-drain are the only other moves.
 - Measured, not felt: the Archive documents that native wheel scrolling beat
   a custom takeover; don't fight the compositor.
 
@@ -113,8 +148,8 @@ spacing.
 - **Do:** keep grey chrome dominant; let amber mark interaction and green
   mark life; put technical content in mono; keep the dot language consistent.
 - **Don't:** add shadows for hierarchy (1px lines + tints only); introduce
-  new colors beyond the set; animate beyond the breathe and hover fades;
-  brighten the canvas.
+  new colors beyond the set; animate beyond the breathe, the press pulse,
+  and hover fades; brighten the canvas.
 
 ---
 
@@ -124,7 +159,14 @@ spacing.
   a chat view is a zoom-in, not the whole product.
 - **Terminology parity:** present each harness's native options (approval
   modes, model/effort tiers) with the harness's own words - never invent
-  OpenRemote vocabulary for them.
+  OpenRemote vocabulary for them. A model's name is its catalog row's
+  display name (claude's carries its own version, "Opus 5.5"); the console
+  renders it through one shared lookup (`model-display.js`), which matches
+  both spellings a harness reports - the pick word its picker takes and
+  the resolved id a running session reports back - so a chat's name never
+  changes when the first turn resolves the id. Where the catalog has no
+  row, the raw id shows verbatim in a tooltip: never hidden, never
+  re-cased, never parsed by the console.
 - **No dead UI, ever:** controls that do nothing yet are not rendered.
 - **Model selection is a reserved dock slot** until a harness advertises
   models through the daemon.
@@ -134,11 +176,19 @@ spacing.
   not a squeezed desktop.
 - **Process:** build slowly; overthink single elements; review at real
   milestones only.
-- **Vocabulary (2026-10-01, Cloud 2026-10-07):** *chat* is the UI word for a
-  conversation with a harness (the daemon domain says *session*; the console
-  boundary translates). A *device* is any of your computers signed in to
-  Cloud; a *machine* is a device that runs chats for your other devices.
-  *task* is the prompt text a human or automation sends.
+- **Vocabulary (2026-10-01, Cloud 2026-10-07, Projects 2026-10-08):** *chat*
+  is the UI word for a conversation with a harness (the daemon domain says
+  *session*; the console boundary translates). A *device* is any of your
+  computers signed in to Cloud; a *machine* is a device that runs chats for
+  your other devices. *task* is the prompt text a human or automation sends.
+  A *project* is a registered entity the daemon stores (like rules and
+  plugins): the folders whose chats group under it - exactly one this
+  release, the list is the multi-folder future. A *workspace* is the folder a
+  chat runs in - now optional; a chat with none belongs to no project and
+  runs in the home folder. *Folder* is the disk thing; the word appears
+  only inside the folder picker, never as a noun the UI groups by (the old
+  derived basename grouping is gone - the sidebar's projects are the
+  registered ones, everything else is the flat Chats section).
 
 ---
 
@@ -154,7 +204,10 @@ Every screen the design specifies, backed by the real daemon:
   model picker where the harness advertises (its own catalog, efforts as
   sublines), the Fast toggle where the harness's own fast mode is usable
   (claude `fastMode` ≥ 2.1.205, codex `fast` service tier ≥ 0.110), the
-  workspace (recents + free path), the In-progress list.
+  project picker (the registered projects on the machine the chat runs
+  on, "No project", and the picker's own Add project row; the Add project
+  button beside the composer opens the in-app folder picker - the same
+  one Cloud uses on another machine's disk), the In-progress list.
 - **Chat** - the rail transcript (user cards, agent text, notes, tool
   cards with In/Out, decisions in the harness's own words with its
   affirmative first), the facts row (workspace · harness · model · Fast ·
@@ -222,5 +275,39 @@ build, signed releases, machine installers beyond Linux, moving a chat
 between machines and switching
 its harness mid-chat (one hand-over mechanism), the connector triggers
 (pipeline/errors/review/release), the agent behind the pill, claude's
-context window (no wire fact yet), grok/pi/opencode/agy MCP wires,
+context *window* on the wire (the ring rides a nominal 200k until the
+stream-json carries one), grok/pi/opencode/agy MCP wires,
 per-harness approval-mode defaults (no daemon-side vocabulary surface yet).
+
+## Shipped - the film's design, adopted (2026-10-08)
+
+The launch film's console mock beat the app in nine places
+(`DESIGN-FROM-THE-FILM.md` is the delta; the rule is where the film's
+design wins, the film leads). All adopted, every value transcribed
+from the film's own components:
+
+- **Tool cards carry status** - breathing green "Running" in flight,
+  green check "Done" / red check "Failed" on landing, right-aligned on
+  the name line. A tool left unresolved by an interrupted turn shows
+  no status word - never a false Running.
+- **Decision cards** - the structured question as content, pending
+  amber (border 0.35 / fill 0.07), amber affirmative, settle to grey
+  over 0.3s, green "Answered: {choice}" (the choice's label, never its
+  wire id).
+- **Amber send with press bloom** - ready amber + white arrow, empty
+  quiet, press scales 1→0.8→1 with an 18→62px amber glow; the
+  everywhere-pill's send speaks the same language.
+- **Not adopted - the film's filled pill chips** (its §4): the founder
+  overrode them the day the adoption shipped (2026-10-08) - the
+  Model/Effort/Harness/Fast pickers stay plain ghost text, no fill, no
+  border, same as the workspace/machine rows. The founder's word beats
+  the film.
+- **Diff tints doubled** - del 0.18 / add 0.20.
+- **The context ring always renders where usage is known** - moved left
+  of the send button, 2px stroke, track 0.12; claude rides a nominal
+  200k window (the hover card says so) until its wire carries one.
+- **The facts dot breathes** (2.4s, all statuses).
+- **Sidebar rows** - the harness mark leads, the title follows, the
+  status dot at the row's right edge (one vertical column of statuses).
+- **Press feedback on primaries** - both send buttons, the decision
+  affirmative; all of it under `data-reduce-motion`.

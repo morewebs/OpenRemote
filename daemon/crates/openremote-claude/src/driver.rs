@@ -269,8 +269,9 @@ async fn kill_and_reap(
 /// The model catalog for `/harnesses/claude/models`: a short-lived CLI
 /// process, the SDK's `initialize` handshake in, its `models` array out -
 /// the same list the CLI's own `/model` picker serves (pick words, display
-/// names, effort levels). No prompt is ever sent; the process is killed
-/// once the catalog lands.
+/// names, effort levels, and its `default` alias - the recommended row a
+/// fresh unpicked chat runs). No prompt is ever sent; the process is
+/// killed once the catalog lands.
 pub async fn models(
     resolution: &Resolution,
 ) -> Result<Vec<openremote_harness::ModelDescriptor>, DriverError> {
@@ -332,33 +333,13 @@ pub async fn models(
             if response.get("request_id").and_then(|r| r.as_str()) != Some(request_id) {
                 continue;
             }
-            let Some(list) = response.get("models").and_then(Value::as_array) else {
+            let Some(list) = catalog_list(&response) else {
                 break; // a shape we don't speak; empty beats a guess
             };
             for entry in list {
-                let Some(value) = entry.get("value").and_then(Value::as_str) else {
-                    continue;
-                };
-                let efforts = entry
-                    .get("supportedEffortLevels")
-                    .and_then(Value::as_array)
-                    .map(|levels| {
-                        levels
-                            .iter()
-                            .filter_map(|l| l.as_str())
-                            .map(String::from)
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                models.push(openremote_harness::ModelDescriptor {
-                    model: value.to_string(),
-                    display_name: entry
-                        .get("displayName")
-                        .and_then(Value::as_str)
-                        .map(String::from),
-                    reasoning_efforts: efforts,
-                    is_default: false,
-                });
+                if let Some(descriptor) = catalog_entry(entry) {
+                    models.push(descriptor);
+                }
             }
             break;
         }
@@ -374,6 +355,72 @@ pub async fn models(
         return Err(DriverError::Spawn(format!("claude models: {e}")));
     }
     Ok(models)
+}
+
+/// The `models` array inside a control response body. Current CLIs nest
+/// the handshake's payload under the body's own `response` key
+/// (`request_id` rides the body itself); older CLIs answered with
+/// `models` flat on the body. Both are honored.
+fn catalog_list(response: &Value) -> Option<&Vec<Value>> {
+    response
+        .pointer("/response/models")
+        .and_then(Value::as_array)
+        .or_else(|| response.get("models").and_then(Value::as_array))
+}
+
+/// One row of the CLI's own `/model` picker: its pick word, display name,
+/// and effort words. The `default` alias is the picker's recommended row -
+/// the model a fresh unpicked chat runs where config picks none, the one
+/// pre-send fact the wire itself holds back until the first turn's init.
+/// No explicit default flag rides the array; the alias is the marker.
+///
+/// The row's `description` opens with the harness's own combined name and
+/// version ("Opus 5.5 · Best for everyday, complex tasks"). Where that
+/// opening extends the display name, it *is* the row's full name - the
+/// version in the harness's own words, never parsed out of an id. The
+/// `default` row's description opens with the resolved model's name
+/// ("Opus 5.5 · …") while its display name is the marker "Default
+/// (recommended)" - the opening doesn't extend the marker, so the marker
+/// stands. `resolvedModel` rides along verbatim: the id a running session
+/// reports back, so the console can match a resolved id to its row.
+fn catalog_entry(entry: &Value) -> Option<openremote_harness::ModelDescriptor> {
+    let value = entry.get("value").and_then(Value::as_str)?;
+    let display = entry
+        .get("displayName")
+        .and_then(Value::as_str)
+        .map(String::from);
+    let versioned = entry
+        .get("description")
+        .and_then(Value::as_str)
+        .and_then(|d| d.split('·').next())
+        .map(str::trim)
+        .filter(|first| {
+            display
+                .as_deref()
+                .is_some_and(|base| first.starts_with(base) && first.len() > base.len())
+        })
+        .map(String::from);
+    let efforts = entry
+        .get("supportedEffortLevels")
+        .and_then(Value::as_array)
+        .map(|levels| {
+            levels
+                .iter()
+                .filter_map(|l| l.as_str())
+                .map(String::from)
+                .collect()
+        })
+        .unwrap_or_default();
+    Some(openremote_harness::ModelDescriptor {
+        model: value.to_string(),
+        display_name: versioned.or(display),
+        resolved_model: entry
+            .get("resolvedModel")
+            .and_then(Value::as_str)
+            .map(String::from),
+        reasoning_efforts: efforts,
+        is_default: value == "default",
+    })
 }
 
 /// The argv after the executable - the SDK's documented order, plus
@@ -752,5 +799,112 @@ mod tests {
             ["Postgres", "SQLite"]
         );
         assert_eq!(spec.summary.as_deref(), Some("Which DB?"));
+    }
+
+    #[test]
+    fn the_default_alias_marks_the_recommended_row() {
+        // The picker's own recommended row, observed on the wire: the
+        // alias `default` plus the id it resolves to. The array carries no
+        // explicit default flag, so the alias is the marker. The
+        // description's opening names the resolved model ("Opus 5.5 · …"),
+        // which does not extend the display name's marker - the marker
+        // stands, the resolved id rides its own field.
+        let descriptor = catalog_entry(&json!({
+            "value": "default",
+            "resolvedModel": "claude-opus-5-5",
+            "displayName": "Default (recommended)",
+            "description": "Opus 5.5 · Best for everyday, complex tasks",
+            "supportedEffortLevels": ["low", "high"]
+        }))
+        .expect("the default row maps");
+        assert!(descriptor.is_default);
+        assert_eq!(descriptor.model, "default");
+        assert_eq!(
+            descriptor.display_name.as_deref(),
+            Some("Default (recommended)")
+        );
+        assert_eq!(
+            descriptor.resolved_model.as_deref(),
+            Some("claude-opus-5-5")
+        );
+        assert_eq!(descriptor.reasoning_efforts, ["low", "high"]);
+    }
+
+    #[test]
+    fn a_named_model_is_not_the_default() {
+        let descriptor = catalog_entry(&json!({"value": "opus", "displayName": "Opus"}))
+            .expect("a named row maps");
+        assert!(!descriptor.is_default);
+        assert_eq!(descriptor.model, "opus");
+        assert_eq!(descriptor.display_name.as_deref(), Some("Opus"));
+        assert_eq!(descriptor.resolved_model, None);
+    }
+
+    #[test]
+    fn the_description_opening_versions_the_row_name() {
+        // The version, in the harness's own words: the description's
+        // opening "Opus 5.5" extends the display name "Opus", so it
+        // becomes the row's full name. Never parsed out of the id.
+        let descriptor = catalog_entry(&json!({
+            "value": "opus",
+            "resolvedModel": "claude-opus-5-5",
+            "displayName": "Opus",
+            "description": "Opus 5.5 · Best for everyday, complex tasks"
+        }))
+        .expect("a versioned row maps");
+        assert_eq!(descriptor.display_name.as_deref(), Some("Opus 5.5"));
+        assert_eq!(
+            descriptor.resolved_model.as_deref(),
+            Some("claude-opus-5-5")
+        );
+    }
+
+    #[test]
+    fn a_description_whose_opening_is_not_the_name_is_ignored() {
+        // A marketing sentence that happens to open the description
+        // ("Fast and capable · …") is not the row's name - only an
+        // opening that extends the display name is.
+        let descriptor = catalog_entry(&json!({
+            "value": "grok-opus",
+            "displayName": "Opus",
+            "description": "Fast and capable · the newest tier"
+        }))
+        .expect("the row maps");
+        assert_eq!(descriptor.display_name.as_deref(), Some("Opus"));
+    }
+
+    #[test]
+    fn a_row_without_a_pick_word_is_skipped() {
+        assert!(catalog_entry(&json!({"displayName": "Opus"})).is_none());
+    }
+
+    #[test]
+    fn the_catalog_rides_nested_on_the_current_wire() {
+        // The handshake's answer, observed on the wire: request_id on the
+        // response body, the payload under its own `response` key. Reading
+        // `models` off the body directly yields nothing - the catalog would
+        // come back empty and the console would hide the model slot.
+        let body = json!({
+            "subtype": "success",
+            "request_id": "or-models",
+            "response": {"models": [
+                {"value": "default", "displayName": "Default (recommended)"},
+                {"value": "opus", "displayName": "Opus"}
+            ]}
+        });
+        let list = catalog_list(&body).expect("the nested catalog is found");
+        assert_eq!(list.len(), 2);
+        assert!(catalog_entry(&list[0]).expect("row maps").is_default);
+    }
+
+    #[test]
+    fn an_older_flat_catalog_is_still_honored() {
+        let body = json!({
+            "subtype": "success",
+            "request_id": "or-models",
+            "models": [{"value": "opus", "displayName": "Opus"}]
+        });
+        let list = catalog_list(&body).expect("the flat catalog is found");
+        assert_eq!(list.len(), 1);
     }
 }
