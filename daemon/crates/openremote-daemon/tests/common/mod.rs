@@ -114,27 +114,52 @@ pub async fn spawn_daemon_process(extra_env: &[(&str, String)]) -> TestDaemon {
     // The binary announces itself: `READY 127.0.0.1:<port>`, then
     // `DATA_DIR <path>`. Read the second line too - dropping the stdout
     // reader with the pipe still holding unread output is what kills the
-    // daemon (the next println! hits EPIPE and panics the process), the
-    // ConnectionReset the spawn tests intermittently died of.
+    // daemon (the next println! hits EPIPE and panics the process).
+    // The reads block with no bound of their own, so they run on a
+    // thread and this side waits with a deadline: a daemon that never
+    // finishes its handshake fails the test fast instead of hanging it
+    // for the rest of the job.
     use std::io::BufRead;
-    let mut addr = None;
-    let mut lines = std::io::BufReader::new(stdout).lines();
-    for line in lines.by_ref() {
-        let line = line.expect("daemon stdout");
-        if let Some(rest) = line.strip_prefix("READY ") {
-            addr = rest.parse::<std::net::SocketAddr>().ok();
-            break;
+    let (tx, rx) = std::sync::mpsc::channel::<Result<std::net::SocketAddr, String>>();
+    let handshake = std::thread::spawn(move || {
+        let result = (|| -> Result<std::net::SocketAddr, String> {
+            let mut addr = None;
+            let mut lines = std::io::BufReader::new(stdout).lines();
+            for line in lines.by_ref() {
+                let line = match line {
+                    Ok(line) => line,
+                    Err(err) => return Err(format!("daemon stdout: {err}")),
+                };
+                if let Some(rest) = line.strip_prefix("READY ") {
+                    addr = rest.parse::<std::net::SocketAddr>().ok();
+                    break;
+                }
+            }
+            let addr = addr.ok_or("stdout closed before READY")?;
+            // Drain exactly the DATA_DIR line: empty the pipe before the
+            // reader drops. Reading past it would block - the daemon prints
+            // nothing more on stdout until it exits (its token note goes to
+            // stderr).
+            for line in lines.by_ref() {
+                match line {
+                    Ok(line) if line.starts_with("DATA_DIR ") => break,
+                    Ok(_) => continue,
+                    Err(err) => return Err(format!("daemon stdout: {err}")),
+                }
+            }
+            Ok(addr)
+        })();
+        let _ = tx.send(result);
+    });
+    let addr = match rx.recv_timeout(Duration::from_secs(30)) {
+        Ok(Ok(addr)) => addr,
+        Ok(Err(what)) => panic!("daemon handshake failed: {what}"),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+            panic!("daemon never finished its READY/DATA_DIR handshake within 30s")
         }
-    }
-    // Drain exactly the DATA_DIR line: empty the pipe before the reader
-    // drops. Reading past it would block - the daemon prints nothing
-    // more on stdout until it exits (its token note goes to stderr).
-    for line in lines.by_ref() {
-        if line.map_or(true, |l| l.starts_with("DATA_DIR ")) {
-            break;
-        }
-    }
-    let addr = addr.expect("daemon printed READY with an address");
+        Err(_) => panic!("daemon handshake thread died"),
+    };
+    let _ = handshake.join();
     TestDaemon {
         token,
         addr,
@@ -224,6 +249,17 @@ pub async fn call(daemon: &TestDaemon, method: &str, path: &str, body: Option<Va
     call_with_token(daemon, &daemon.token, method, path, body).await
 }
 
+/// A connection that died while the request was in flight - the class of
+/// failure a replay survives (the peer closed before or while answering).
+fn died_mid_flight(err: &std::io::Error) -> bool {
+    matches!(
+        err.kind(),
+        std::io::ErrorKind::ConnectionReset
+            | std::io::ErrorKind::ConnectionAborted
+            | std::io::ErrorKind::BrokenPipe
+    )
+}
+
 pub async fn call_with_token(
     daemon: &TestDaemon,
     token: &str,
@@ -231,21 +267,43 @@ pub async fn call_with_token(
     path: &str,
     body: Option<Value>,
 ) -> Reply {
-    let mut stream = tokio::net::TcpStream::connect(daemon.addr)
-        .await
-        .expect("connect");
     let body = body.map(|b| b.to_string()).unwrap_or_default();
     let request = format!(
         "{method} {path} HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {token}\r\n\
          Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
-    stream
-        .write_all(request.as_bytes())
-        .await
-        .expect("write request");
-    let mut raw = Vec::new();
-    stream.read_to_end(&mut raw).await.expect("read response");
+
+    // A daemon that accepts but never answers fails the test in 30s
+    // instead of hanging it for the rest of the job; a connection that
+    // died mid-flight (a process daemon exiting under the test, the
+    // runner's RST-on-close quirk) is retried. Safe to replay: every
+    // mutating e2e call carries a request_id, so the receipt contract
+    // dedups whatever did arrive.
+    let mut resets = 0;
+    let raw = loop {
+        let shot = tokio::time::timeout(Duration::from_secs(30), async {
+            let mut stream = tokio::net::TcpStream::connect(daemon.addr)
+                .await
+                .expect("connect");
+            stream.write_all(request.as_bytes()).await?;
+            let mut raw = Vec::new();
+            stream.read_to_end(&mut raw).await?;
+            Ok::<Vec<u8>, std::io::Error>(raw)
+        })
+        .await;
+        match shot {
+            Ok(Ok(raw)) => break raw,
+            Ok(Err(err)) if died_mid_flight(&err) => {
+                resets += 1;
+                if resets >= 3 {
+                    panic!("{method} {path}: the connection kept dying mid-flight ({err})");
+                }
+            }
+            Ok(Err(err)) => panic!("{method} {path}: {err}"),
+            Err(_) => panic!("{method} {path}: the daemon never answered within 30s"),
+        }
+    };
     let raw = String::from_utf8_lossy(&raw).to_string();
     let (head, rest) = raw
         .split_once("\r\n\r\n")
@@ -463,7 +521,15 @@ pub async fn raw_http(
     ));
     stream.write_all(request.as_bytes()).await.expect("write");
     let mut raw = Vec::new();
-    stream.read_to_end(&mut raw).await.expect("read");
+    // Bounded like call_with_token: a wedged daemon fails the test in
+    // 30s instead of hanging it for the rest of the job.
+    let read = stream.read_to_end(&mut raw);
+    match tokio::time::timeout(Duration::from_secs(30), read).await {
+        Ok(result) => {
+            result.expect("read");
+        }
+        Err(_) => panic!("{method} {path}: the daemon never answered within 30s"),
+    }
     let raw = String::from_utf8_lossy(&raw).to_string();
     let (head, _) = raw.split_once("\r\n\r\n").expect("header block");
     let status: u16 = head
