@@ -25,7 +25,13 @@ async fn a_folder_registers_as_a_project_once() {
     let daemon = start_daemon(&[]).await;
     let ws = workspace(Some("plain"));
 
-    let saved = call(&daemon, "POST", "/projects", Some(project_body(&ws, json!({})))).await;
+    let saved = call(
+        &daemon,
+        "POST",
+        "/projects",
+        Some(project_body(&ws, json!({}))),
+    )
+    .await;
     assert_eq!(saved.status, 201, "raw: {}", saved.raw);
     assert!(saved.body["id"].as_str().is_some());
     let folders: Vec<&str> = saved.body["folders"]
@@ -38,7 +44,13 @@ async fn a_folder_registers_as_a_project_once() {
     assert_eq!(std::path::Path::new(folders[0]), ws.path());
 
     // The same folder in another project is refused.
-    let dup = call(&daemon, "POST", "/projects", Some(project_body(&ws, json!({})))).await;
+    let dup = call(
+        &daemon,
+        "POST",
+        "/projects",
+        Some(project_body(&ws, json!({}))),
+    )
+    .await;
     assert_eq!(dup.status, 409, "raw: {}", dup.raw);
 
     // The folder must be real - the same bar a chat's own create holds.
@@ -46,7 +58,10 @@ async fn a_folder_registers_as_a_project_once() {
         &daemon,
         "POST",
         "/projects",
-        Some(project_body(&ws, json!({"folders": ["C:/definitely/not/a/folder"]}))),
+        Some(project_body(
+            &ws,
+            json!({"folders": ["C:/definitely/not/a/folder"]}),
+        )),
     )
     .await;
     assert_eq!(bad.status, 409, "raw: {}", bad.raw);
@@ -72,7 +87,13 @@ async fn removal_unregisters_but_never_deletes() {
     let daemon = start_daemon(&[]).await;
     let ws = workspace(Some("plain"));
 
-    let saved = call(&daemon, "POST", "/projects", Some(project_body(&ws, json!({})))).await;
+    let saved = call(
+        &daemon,
+        "POST",
+        "/projects",
+        Some(project_body(&ws, json!({}))),
+    )
+    .await;
     assert_eq!(saved.status, 201, "raw: {}", saved.raw);
     let project_id = saved.body["id"].as_str().expect("project id").to_string();
 
@@ -107,10 +128,19 @@ async fn removal_unregisters_but_never_deletes() {
 
     let session = call(&daemon, "GET", &format!("/sessions/{chat_id}"), None).await;
     assert_eq!(session.status, 200, "raw: {}", session.raw);
-    assert_eq!(session.body["workspace"].as_str(), Some(ws.path().to_str().unwrap()));
+    assert_eq!(
+        session.body["workspace"].as_str(),
+        Some(ws.path().to_str().unwrap())
+    );
 
     // The folder is registrable again.
-    let again = call(&daemon, "POST", "/projects", Some(project_body(&ws, json!({})))).await;
+    let again = call(
+        &daemon,
+        "POST",
+        "/projects",
+        Some(project_body(&ws, json!({}))),
+    )
+    .await;
     assert_eq!(again.status, 201, "raw: {}", again.raw);
 }
 

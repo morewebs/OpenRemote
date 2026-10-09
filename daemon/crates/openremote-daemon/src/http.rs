@@ -974,18 +974,12 @@ struct SaveProjectBody {
     folders: Vec<String>,
 }
 
-async fn save_project(
-    State(app): State<Arc<App>>,
-    Json(body): Json<SaveProjectBody>,
-) -> Response {
+async fn save_project(State(app): State<Arc<App>>, Json(body): Json<SaveProjectBody>) -> Response {
     if let Some(receipt) = app.supervisor.receipt(&body.request_id) {
         return receipt_response(&receipt);
     }
-    let folders: Vec<std::path::PathBuf> = body
-        .folders
-        .iter()
-        .map(std::path::PathBuf::from)
-        .collect();
+    let folders: Vec<std::path::PathBuf> =
+        body.folders.iter().map(std::path::PathBuf::from).collect();
     match app.supervisor.save_project(folders) {
         Ok(project) => {
             let receipt = Receipt {

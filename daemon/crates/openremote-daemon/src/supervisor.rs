@@ -734,9 +734,7 @@ impl Supervisor {
         folders: Vec<std::path::PathBuf>,
     ) -> Result<Project, SupervisorError> {
         if folders.is_empty() {
-            return Err(SupervisorError::Conflict(
-                "a project needs a folder".into(),
-            ));
+            return Err(SupervisorError::Conflict("a project needs a folder".into()));
         }
         for folder in &folders {
             if !folder.is_absolute() || !folder.is_dir() {
@@ -751,11 +749,13 @@ impl Supervisor {
             created_at: now_ms(),
             updated_at: now_ms(),
         };
-        self.with_store(|s| s.save_project(project)).map_err(store_error)
+        self.with_store(|s| s.save_project(project))
+            .map_err(store_error)
     }
 
     pub fn remove_project(&self, id: &ProjectId) -> Result<(), SupervisorError> {
-        self.with_store(|s| s.remove_project(id)).map_err(store_error)
+        self.with_store(|s| s.remove_project(id))
+            .map_err(store_error)
     }
 
     pub fn set_rule_enabled(
@@ -968,10 +968,7 @@ impl Supervisor {
 
         let current = self.session(&id)?;
         let opts = openremote_harness::SpawnOptions {
-            cwd: current
-                .workspace
-                .clone()
-                .unwrap_or_else(Self::home_dir),
+            cwd: current.workspace.clone().unwrap_or_else(Self::home_dir),
             model: current.model.clone(),
             permission_mode: current.permission_mode.clone(),
             resume: None,
@@ -1157,10 +1154,7 @@ impl Supervisor {
             )));
         };
         let opts = openremote_harness::SpawnOptions {
-            cwd: session
-                .workspace
-                .clone()
-                .unwrap_or_else(Self::home_dir),
+            cwd: session.workspace.clone().unwrap_or_else(Self::home_dir),
             model: session.model.clone(),
             permission_mode: session.permission_mode.clone(),
             resume: Some(harness_ref),

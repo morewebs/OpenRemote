@@ -579,11 +579,12 @@ impl Store {
     /// Register a project. A folder already in a project is refused - one
     /// registration per folder, so a chat's project is never ambiguous.
     pub fn save_project(&mut self, mut project: Project) -> Result<Project, StoreError> {
-        if project
-            .folders
-            .iter()
-            .any(|folder| self.state.projects.values().any(|p| p.folders.contains(folder)))
-        {
+        if project.folders.iter().any(|folder| {
+            self.state
+                .projects
+                .values()
+                .any(|p| p.folders.contains(folder))
+        }) {
             return Err(StoreError::Conflict(
                 "that folder is already a project".into(),
             ));
@@ -1758,7 +1759,6 @@ mod tests {
 
     #[test]
     fn presence_folds_into_the_24_hour_band() {
-        let dir = tempdir();
         let mut store = Store::open(tempdir()).unwrap();
         let id = store.ensure_this_machine();
 
