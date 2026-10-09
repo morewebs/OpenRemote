@@ -5,6 +5,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { DaemonApi, clearConnection, loadConnection, saveConnection } from '../api/daemon.js'
 import { chatFromSession, foldEvent } from './reducer.js'
+import { isMobile, openExternal } from '../platform.js'
 
 const ConsoleContext = createContext(null)
 
@@ -367,9 +368,14 @@ export function ConsoleProvider({ children }) {
   }, [api])
 
   // Sign-in happens in the system browser, which the daemon opens; the
-  // poll picks up the result when the browser comes back.
+  // poll picks up the result when the browser comes back. On a phone the
+  // shell opens it instead, in a browser tab that returns to the app.
   const signInCloud = useCallback(async () => {
-    const started = await api.cloudSignIn({ open: true })
+    const started = await api.cloudSignIn({ open: !isMobile })
+    if (isMobile && started?.authorize_url) {
+      await openExternal(started.authorize_url, { signIn: true })
+      started.opened = true
+    }
     await refreshCloud()
     return started
   }, [api, refreshCloud])
@@ -413,7 +419,7 @@ export function ConsoleProvider({ children }) {
   // machine, so it hears when that changes.
   const thisKind = devices.find((d) => d.id === cloud?.device?.id)?.kind ?? null
   useEffect(() => {
-    if (!hasTauri || thisKind == null) return
+    if (!hasTauri || isMobile || thisKind == null) return
     ;(async () => {
       try {
         const { invoke } = await import('@tauri-apps/api/core')

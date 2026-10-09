@@ -9,6 +9,7 @@ import { editRows, isFileEdit, writeRows } from './diff.js'
 import { renderMarkdown } from './markdown.js'
 import ContextRing from './ContextRing.jsx'
 import PickerMenu from './PickerMenu.jsx'
+import { isMobile } from './platform.js'
 import './chatview.css'
 import './composer.css'
 
@@ -444,7 +445,8 @@ export default function ChatView({ chat, onBack }) {
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              // A phone's keyboard Enter is a new line; the send button sends.
+              if (e.key === 'Enter' && !e.shiftKey && !isMobile) {
                 e.preventDefault()
                 send()
               }
