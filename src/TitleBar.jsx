@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Info, SidebarSimple } from '@phosphor-icons/reac
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import AboutModal from './AboutModal.jsx'
 import { useConsole } from './state/console.jsx'
+import { isMobile } from './platform.js'
 import './titlebar.css'
 
 const hasTauri = typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__
@@ -40,7 +41,7 @@ export default function TitleBar({
   const [about, setAbout] = useState(false)
 
   useEffect(() => {
-    if (!hasTauri) return
+    if (!hasTauri || isMobile) return
     const win = getCurrentWindow()
     let disposed = false
     const sync = async () => {
@@ -62,6 +63,35 @@ export default function TitleBar({
 
   const action = (method) => () => {
     if (hasTauri) getCurrentWindow()[method]()
+  }
+
+  // A phone has no window to drag, size or close, and its own back button:
+  // the bar keeps the drawer's toggle, the name, and About.
+  if (isMobile) {
+    return (
+      <header className="titlebar is-mobile">
+        {onToggleSidebar && (
+          <button
+            className="tb-toggle"
+            onClick={onToggleSidebar}
+            title={sidebarOpen ? 'Close the sidebar' : 'Open the sidebar'}
+            aria-label={sidebarOpen ? 'Close the sidebar' : 'Open the sidebar'}
+          >
+            <SidebarSimple size={20} />
+          </button>
+        )}
+        <div className="tb-title">OpenRemote</div>
+        <button
+          className="tb-toggle"
+          onClick={() => setAbout(true)}
+          title="About OpenRemote"
+          aria-label="About OpenRemote"
+        >
+          <Info size={18} />
+        </button>
+        {about && <AboutModal onClose={() => setAbout(false)} daemonVersion={capabilities?.daemon ?? null} />}
+      </header>
+    )
   }
 
   return (

@@ -6,8 +6,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, Copy, X } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
+import { useBack } from './use-back.js'
 
 export default function AddMachineModal({ onClose }) {
+  useBack(true, onClose)
   const { createEnrollment, devices, refreshCloud } = useConsole()
   const [enrollment, setEnrollment] = useState(null)
   const [error, setError] = useState(null)

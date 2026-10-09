@@ -5,8 +5,10 @@ import { X } from '@phosphor-icons/react'
 // installer side.
 import { version } from '../package.json'
 import './about.css'
+import { useBack } from './use-back.js'
 
 export default function AboutModal({ onClose, daemonVersion }) {
+  useBack(true, onClose)
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape') onClose()

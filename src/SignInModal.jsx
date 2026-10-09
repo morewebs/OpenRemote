@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { X } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import './signin.css'
+import { useBack } from './use-back.js'
 
 // The harness's own sign-in, relayed. The daemon runs the CLI's own
 // login command on the machine; the CLI's words stream in here (the
@@ -9,6 +10,7 @@ import './signin.css'
 // answers ride back through the same relay. The words are the CLI's -
 // never ours.
 export default function SignInModal({ harnessId, onDone, deviceId = null }) {
+  useBack(true, onDone)
   const { signIn, feedSignIn, stopSignIn } = useConsole()
   const [view, setView] = useState(null)
   const [error, setError] = useState(null)

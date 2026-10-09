@@ -12,6 +12,8 @@ import MachinesView from './MachinesView.jsx'
 import { ConsoleProvider, useConsole } from './state/console.jsx'
 import { needsSignIn } from './cloud.js'
 import CloudNotices from './CloudNotices.jsx'
+import { isMobile } from './platform.js'
+import { pushBack, useBack } from './use-back.js'
 
 const OB_KEY = 'openremote-onboarded'
 const STORE_KEY = 'openremote-view-state'
@@ -19,8 +21,10 @@ const MODE_KEY = 'openremote-mode'
 const STATIC_VIEWS = ['new', 'plugins', 'automations', 'machines', 'settings']
 
 // The mode the user left the app in. Local unless they chose Cloud, so a
-// first launch never asks anyone to sign in.
+// first launch never asks anyone to sign in. A phone runs no chats of its
+// own, so it is always in Cloud.
 function loadMode() {
+  if (isMobile) return 'cloud'
   try {
     return localStorage.getItem(MODE_KEY) === 'cloud' ? 'cloud' : 'local'
   } catch {
@@ -70,7 +74,10 @@ function Shell() {
     return () => mq.removeEventListener('change', onChange)
   }, [])
   const [{ history, hIndex }, setNav] = useState(() => loadViewState([]))
+  // The tour sets up this computer's harnesses; a phone has none, and
+  // Cloud's sign-in screen is its welcome.
   const [onboarded, setOnboarded] = useState(() => {
+    if (isMobile) return true
     try {
       return localStorage.getItem(OB_KEY) === '1'
     } catch {
@@ -110,7 +117,8 @@ function Shell() {
   }, [history, hIndex])
 
   useEffect(() => {
-    window.history.replaceState(null, '', `#${view}`)
+    // Keep the entry's state: on a phone it is a back step.
+    window.history.replaceState(window.history.state, '', `#${view}`)
     // The last view the user was on, for the startup preference's
     // restore path. Written only once onboarding is done - the tour's
     // own views are not the user's last view.
@@ -129,6 +137,8 @@ function Shell() {
       history: [...nav.history.slice(0, nav.hIndex + 1), id],
       hIndex: nav.hIndex + 1,
     }))
+    // Android's back button returns to the view before.
+    if (isMobile) pushBack(goBack)
   }
 
   const switchMode = (next) => {
@@ -141,7 +151,9 @@ function Shell() {
     navigate('new')
   }
 
-  const goBack = () => setNav((nav) => ({ ...nav, hIndex: Math.max(0, nav.hIndex - 1) }))
+  function goBack() {
+    setNav((nav) => ({ ...nav, hIndex: Math.max(0, nav.hIndex - 1) }))
+  }
   const goForward = () =>
     setNav((nav) => ({ ...nav, hIndex: Math.min(nav.history.length - 1, nav.hIndex + 1) }))
 
@@ -172,6 +184,19 @@ function Shell() {
     }
     setOnboarded(false)
   }
+
+  // On a phone the sidebar is a drawer over the page; back closes it.
+  const [narrow, setNarrow] = useState(
+    () => typeof window !== 'undefined' && !window.matchMedia('(min-width: 640px)').matches,
+  )
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia('(min-width: 640px)')
+    const onChange = (e) => setNarrow(!e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  useBack(narrow && sidebarOpen, () => setSidebarOpen(false))
 
   const body = () => (
     <>
@@ -205,7 +230,7 @@ function Shell() {
             {view === 'settings' ? (
               <SettingsView onReplay={replayOnboarding} />
             ) : mode === 'cloud' && needsSignIn(cloud) ? (
-              <CloudMode onBackToLocal={() => switchMode('local')} />
+              <CloudMode onBackToLocal={isMobile ? null : () => switchMode('local')} />
             ) : (
               <>
                 {view === 'new' && <NewChat onOpen={openSession} mode={mode} />}

@@ -10,8 +10,10 @@ import { useConsole } from './state/console.jsx'
 import { HarnessMark } from './brand-marks.jsx'
 import { harnessRows } from './harness-manager.js'
 import './devices.css'
+import { useBack } from './use-back.js'
 
 export default function HarnessManagerModal({ onClose, onSignIn }) {
+  useBack(true, onClose)
   const { capabilities, machines, installHarness } = useConsole()
   const [busy, setBusy] = useState(null)
   const [error, setError] = useState(null)

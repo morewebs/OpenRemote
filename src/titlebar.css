@@ -115,3 +115,24 @@
   stroke-width: 1;
   shape-rendering: crispEdges;
 }
+
+/* The Android app: a touch-height bar, the name beside the drawer's toggle. */
+.titlebar.is-mobile {
+  height: 48px;
+  justify-content: flex-start;
+}
+
+.titlebar.is-mobile .tb-toggle {
+  width: 48px;
+}
+
+.titlebar.is-mobile .tb-toggle:hover {
+  background: transparent;
+}
+
+.titlebar.is-mobile .tb-title {
+  flex: 1;
+  padding-left: 4px;
+  font-size: 15px;
+  color: var(--text-1);
+}

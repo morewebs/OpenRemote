@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Check, ClockCounterClockwise, MagnifyingGlass } from '@phosphor-icons/react'
+import { isMobile } from './platform.js'
+import { useBack } from './use-back.js'
 import './pickermenu.css'
 
 /**
@@ -33,8 +35,12 @@ export default function PickerMenu({
     return items.filter((i) => i.name.toLowerCase().includes(q))
   })()
 
+  useBack(true, onClose)
+
   useEffect(() => {
-    searchRef.current?.focus()
+    // On a phone the keyboard would cover the list it's searching; the
+    // search field is a tap away.
+    if (!isMobile) searchRef.current?.focus()
     const close = (e) => {
       if (ref.current && ref.current.contains(e.target)) return
       onClose()

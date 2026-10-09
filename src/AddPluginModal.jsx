@@ -6,10 +6,12 @@ import { useEffect, useState } from 'react'
 import { X } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import './devices.css'
+import { useBack } from './use-back.js'
 
 const STATUS = { online: 'Online', offline: 'Offline', waiting: 'Has not checked in' }
 
 export default function AddPluginModal({ onClose }) {
+  useBack(true, onClose)
   const { machines, plugins, installPlugin } = useConsole()
   const online = (machines ?? []).find((m) => m.machine.status === 'online')
   const [name, setName] = useState('')

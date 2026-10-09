@@ -10,6 +10,7 @@ import { canPickFolder, pickFolder } from './pick-folder.js'
 import { loadRecentWorkspaces } from './settings.js'
 import './devices.css'
 import './automations.css'
+import { useBack } from './use-back.js'
 
 const TRIGGERS = [
   { id: 'schedule', name: 'On a schedule' },
@@ -26,6 +27,7 @@ function splitTime(value) {
 }
 
 export default function AutomationForm({ rule, onClose }) {
+  useBack(true, onClose)
   const {
     capabilities,
     machines,
