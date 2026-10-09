@@ -3,18 +3,16 @@
 // comes first, with the switch that makes it a machine.
 
 import { useState } from 'react'
-import { Desktop, HardDrives, Plus } from '@phosphor-icons/react'
+import { Desktop, DeviceMobile, HardDrives, Plus } from '@phosphor-icons/react'
 import MachineModal from './MachineModal.jsx'
 import AddMachineModal from './AddMachineModal.jsx'
 import { useConsole } from './state/console.jsx'
+import { isPhone, kindLabel, platformLabel, selfLabel } from './cloud.js'
 import './devices.css'
 
-const PLATFORM_LABEL = { windows: 'Windows', macos: 'macOS', linux: 'Linux' }
-
 function detail(device) {
-  const platform = PLATFORM_LABEL[device.platform] ?? device.platform
-  const kind = device.kind === 'machine' ? 'Machine' : 'Desktop'
-  return [platform, kind, device.app_version].filter(Boolean).join(' · ')
+  const platform = platformLabel(device.platform)
+  return [platform, kindLabel(device), device.app_version].filter(Boolean).join(' · ')
 }
 
 export default function MachinesView({ onOpenChat }) {
@@ -46,7 +44,8 @@ export default function MachinesView({ onOpenChat }) {
           {list.length} {list.length === 1 ? 'device' : 'devices'} · {onlineCount} online
         </p>
       </header>
-      {me && me.created_via !== 'enrollment' && (
+      {/* A phone runs no chats, so it is never offered as a machine. */}
+      {me && me.created_via !== 'enrollment' && !isPhone(me) && (
         <div className="dv-self">
           <div>
             <div className="dv-self-name">
@@ -73,11 +72,17 @@ export default function MachinesView({ onOpenChat }) {
             title={device.name}
           >
             <span className="dv-icon">
-              {device.kind === 'machine' ? <HardDrives size={19} weight="light" /> : <Desktop size={19} weight="light" />}
+              {isPhone(device) ? (
+                <DeviceMobile size={19} weight="light" />
+              ) : device.kind === 'machine' ? (
+                <HardDrives size={19} weight="light" />
+              ) : (
+                <Desktop size={19} weight="light" />
+              )}
             </span>
             <span className="dv-name">
               {device.name}
-              {device.id === thisDevice && <span className="dv-badge">This computer</span>}
+              {device.id === thisDevice && <span className="dv-badge">{selfLabel(device)}</span>}
             </span>
             <span className="dv-detail">{detail(device)}</span>
             <span className="dv-status">

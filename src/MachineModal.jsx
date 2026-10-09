@@ -11,8 +11,9 @@ import SignInModal from './SignInModal.jsx'
 import { useConsole } from './state/console.jsx'
 import { harnessName } from './harness-names.js'
 import { SIGNIN_HARNESSES } from './harness-manager.js'
+import { useBack } from './use-back.js'
+import { isPhone, kindLabel, platformLabel, selfLabel } from './cloud.js'
 
-const PLATFORM_LABEL = { windows: 'Windows', macos: 'macOS', linux: 'Linux' }
 const STATUS_LABEL = {
   starting: 'Starting',
   working: 'Running',
@@ -31,6 +32,7 @@ function seen(device) {
 }
 
 export default function MachineModal({ device, onOpenChat, onClose }) {
+  useBack(true, onClose)
   const { sessions, thisDevice, apiFor, setDeviceKind, removeDevice, machines } = useConsole()
   const [view, setView] = useState(null)
   const [busyHarness, setBusyHarness] = useState(null)
@@ -39,7 +41,8 @@ export default function MachineModal({ device, onOpenChat, onClose }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const isMe = device.id === thisDevice
-  const reachable = isMe || (device.online && device.kind === 'machine')
+  // A phone has no harnesses to show or install.
+  const reachable = !isPhone(device) && (isMe || (device.online && device.kind === 'machine'))
   const chats = (sessions ?? []).filter((s) => s.executor === device.id)
 
   useEffect(() => {
@@ -114,11 +117,11 @@ export default function MachineModal({ device, onOpenChat, onClose }) {
           </button>
         </div>
         <p className="dv-modal-hint">
-          {[PLATFORM_LABEL[device.platform] ?? device.platform, device.kind === 'machine' ? 'Machine' : 'Desktop', device.app_version]
+          {[platformLabel(device.platform), kindLabel(device), device.app_version]
             .filter(Boolean)
             .join(' · ')}
           {' · '}
-          {isMe ? 'This computer' : seen(device)}
+          {isMe ? selfLabel(device) : seen(device)}
         </p>
         {device.problem === 'key_changed' && (
           <p className="dv-error">
@@ -200,7 +203,7 @@ export default function MachineModal({ device, onOpenChat, onClose }) {
         {error && <p className="dv-error">{error}</p>}
 
         <div className="dv-actions">
-          {canChangeKind && !isMe && (
+          {canChangeKind && !isMe && !isPhone(device) && (
             <button
               className={`dv-act${device.kind === 'machine' ? '' : ' primary'}`}
               disabled={busy}
@@ -235,18 +238,20 @@ export default function MachineModal({ device, onOpenChat, onClose }) {
               onClick={() => setConfirmRemove(true)}
               title={
                 isMe
-                  ? 'Take this computer out of your Cloud'
+                  ? `Take ${selfLabel(device).toLowerCase()} out of your Cloud`
                   : 'Take it out of your Cloud - it deletes the synced chats it kept, never its Local ones'
               }
             >
               <Trash size={14} />
-              {isMe ? 'Remove this computer' : 'Remove'}
+              {isMe ? `Remove ${selfLabel(device).toLowerCase()}` : 'Remove'}
             </button>
           )}
         </div>
         {confirmRemove && (
           <p className="dv-modal-hint">
-            {isMe
+            {isMe && isPhone(device)
+              ? 'This phone leaves your Cloud and deletes its copies of synced chats.'
+              : isMe
               ? 'This computer leaves your Cloud and deletes its copies of synced chats. Its Local chats stay.'
               : `${device.name} leaves your Cloud and deletes its copies of synced chats the next time it connects. Its Local chats stay.`}
           </p>

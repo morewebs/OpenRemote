@@ -3,6 +3,7 @@ import { CaretDown, Cloud, Desktop, GearSix, House, Lightning, MagnifyingGlass, 
 import { useConsole } from './state/console.jsx'
 import { workspaceName } from './state/reducer.js'
 import { deviceName, sessionsForMode } from './cloud.js'
+import { isMobile } from './platform.js'
 import './sidebar.css'
 
 export default function Sidebar({ open, active, mode, onMode, onSelect }) {
@@ -57,7 +58,8 @@ export default function Sidebar({ open, active, mode, onMode, onSelect }) {
     <aside className={`sidebar${open ? '' : ' collapsed'}`}>
       <div className="sb-actions">
         {/* Local is this computer's chats; Cloud is the synced chats of
-            every device the user signed in on. */}
+            every device the user signed in on. A phone has only Cloud. */}
+        {!isMobile && (
         <div className="mode-switch" role="group" aria-label="Connection mode">
           <button
             className={mode === 'local' ? 'on' : ''}
@@ -76,6 +78,7 @@ export default function Sidebar({ open, active, mode, onMode, onSelect }) {
             Cloud
           </button>
         </div>
+        )}
         <button className="side-tile" onClick={() => onSelect('new')}>
           <Plus size={17} weight="bold" />
           New chat

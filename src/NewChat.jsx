@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { ArrowUp, House, FolderOpen, Lightning } from '@phosphor-icons/react'
 import PickerMenu from './PickerMenu.jsx'
 import FolderBrowserModal from './FolderBrowserModal.jsx'
-import { machinePickerItems } from './cloud.js'
+import { machinePickerItems, platformLabel } from './cloud.js'
 import { HarnessMark } from './brand-marks.jsx'
 import SignInModal from './SignInModal.jsx'
 import HarnessManagerModal from './HarnessManagerModal.jsx'
@@ -12,6 +12,7 @@ import { SIGNIN_HARNESSES } from './harness-manager.js'
 import { loadDefaults } from './defaults.js'
 import { loadRecentWorkspaces, pushRecentWorkspace } from './settings.js'
 import { canPickFolder, pickFolder } from './pick-folder.js'
+import { isMobile } from './platform.js'
 import './newchat.css'
 import './composer.css'
 
@@ -19,7 +20,6 @@ import './composer.css'
 // sign-in prompt offers the relay only there; the others say their own
 // honest words.
 
-const PLATFORM_LABEL = { windows: 'Windows', macos: 'macOS', linux: 'Linux' }
 
 export default function NewChat({ onOpen, mode = 'local' }) {
   const { connection, capabilities, sessions, chats, createChat, modelsFor, devices, thisDevice, capabilitiesFor, apiFor } =
@@ -30,7 +30,8 @@ export default function NewChat({ onOpen, mode = 'local' }) {
   const [targetCaps, setTargetCaps] = useState(null)
   const [browsing, setBrowsing] = useState(false)
   const cloudMode = mode === 'cloud'
-  const machines = cloudMode ? machinePickerItems(devices, thisDevice) : []
+  // A phone runs no chats: its list is the machines alone.
+  const machines = cloudMode ? machinePickerItems(devices, thisDevice, { phone: isMobile }) : []
   const targetItem = machines.find((m) => m.id === target) ?? null
   const targetOffline = Boolean(target && targetItem && !targetItem.online)
   const [defaults] = useState(() => loadDefaults())
@@ -46,6 +47,16 @@ export default function NewChat({ onOpen, mode = 'local' }) {
   const [fast, setFast] = useState(false)
   const [signInFor, setSignInFor] = useState(null)
   const [managingHarnesses, setManagingHarnesses] = useState(false)
+
+  // On a phone a chat always runs on a machine: the first online one until
+  // the user picks another.
+  const firstMachine = machines.find((m) => m.online)?.id ?? machines[0]?.id ?? null
+  useEffect(() => {
+    if (isMobile && cloudMode && !machines.some((m) => m.id === target) && firstMachine) {
+      setTarget(firstMachine)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstMachine])
 
   // A machine's own harnesses, fetched when a chat aims at it.
   useEffect(() => {
@@ -180,8 +191,8 @@ export default function NewChat({ onOpen, mode = 'local' }) {
           <div className="nc-signin-note">
             {SIGNIN_HARNESSES.has(currentHarness.id) ? (
               <>
-                {harnessName(currentHarness.id)} isn’t signed in on this computer. Sign in to
-                start tasks with it.
+                {harnessName(currentHarness.id)} isn’t signed in on {targetItem?.name ?? 'this computer'}.
+                Sign in to start tasks with it.
               </>
             ) : (
               <>
@@ -202,13 +213,14 @@ export default function NewChat({ onOpen, mode = 'local' }) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            // A phone's keyboard Enter is a new line; the send button sends.
+            if (e.key === 'Enter' && !e.shiftKey && !isMobile) {
               e.preventDefault()
               start()
             }
           }}
           placeholder="Describe the task"
-          autoFocus
+          autoFocus={!isMobile}
           spellCheck={false}
         />
         <div className="nc-foot">
@@ -323,8 +335,10 @@ export default function NewChat({ onOpen, mode = 'local' }) {
                 footer={
                   // The way in to the harness manager - the only row in
                   // the empty state, and the honest answer when the list
-                  // is missing something.
-                  <button
+                  // is missing something. It manages this computer's
+                  // harnesses; a phone has none (a machine's are in
+                  // Machines).
+                  isMobile ? null : <button
                     type="button"
                     onClick={() => {
                       setPicker(null)
@@ -415,7 +429,7 @@ export default function NewChat({ onOpen, mode = 'local' }) {
                 title="Where the chat runs"
               >
                 <span className={`nc-dev-dot nc-dev-dot--${targetOffline ? 'offline' : 'online'}`} />
-                {targetItem?.name ?? 'This computer'}
+                {targetItem?.name ?? (isMobile ? 'Pick a machine' : 'This computer')}
               </button>
               {picker?.kind === 'machine' && (
                 <PickerMenu
@@ -436,7 +450,7 @@ export default function NewChat({ onOpen, mode = 'local' }) {
                   }
                   renderSubline={(m) =>
                     m.here ? null : (
-                      <span className="nc-item-sub">{m.online ? PLATFORM_LABEL[m.platform] ?? m.platform : 'Offline'}</span>
+                      <span className="nc-item-sub">{m.online ? platformLabel(m.platform) : 'Offline'}</span>
                     )
                   }
                 />
@@ -450,6 +464,17 @@ export default function NewChat({ onOpen, mode = 'local' }) {
           )}
         </div>
         {targetOffline && <p className="nc-error">{targetItem.name} is offline.</p>}
+        {isMobile && cloudMode && machines.length === 0 && (
+          <div className="nc-signin">
+            <div className="nc-signin-note">
+              Chats run on your machines. Add one - a server, a home computer, or a desktop made a
+              machine - and start chats on it from here.
+            </div>
+            <button className="nc-signin-btn" onClick={() => onOpen('machines')}>
+              Machines
+            </button>
+          </div>
+        )}
         {browsing && (
           <FolderBrowserModal
             api={apiFor(target)}

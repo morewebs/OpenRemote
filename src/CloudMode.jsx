@@ -7,6 +7,7 @@
 import { useState } from 'react'
 import { ArrowSquareOut, Copy, House } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
+import { isMobile } from './platform.js'
 import './cloudmode.css'
 
 // One machine checking in: a small card with its status dot - green for
@@ -21,8 +22,10 @@ function MachineNode({ x, y, online, delay }) {
   )
 }
 
-// What the screen says for each sign-in state.
+// What the screen says for each sign-in state. A phone is Cloud only, so
+// its door speaks for the whole app and never offers Local.
 function words(cloud) {
+  if (isMobile) return phoneWords(cloud)
   switch (cloud?.state) {
     case 'signing_in':
       return {
@@ -43,6 +46,31 @@ function words(cloud) {
       return {
         title: 'Sign in to use Cloud',
         body: 'Cloud connects this computer with your others - servers, home machines, other laptops. Chats sync between them end to end encrypted; moreweb never sees or keeps them.',
+      }
+  }
+}
+
+function phoneWords(cloud) {
+  switch (cloud?.state) {
+    case 'signing_in':
+      return {
+        title: 'Finish signing in',
+        body: "moreweb's sign-in page is open. Authorize OpenRemote there and you'll come straight back here.",
+      }
+    case 'relink':
+      return {
+        title: 'Sign in again',
+        body: 'Your sign-in on this phone ended. Sign in to reach your computers again.',
+      }
+    case 'revoked':
+      return {
+        title: 'This phone was removed',
+        body: 'It was taken out of your Cloud, and the synced chats it kept were deleted. Sign in to add it again.',
+      }
+    default:
+      return {
+        title: 'Your coding agents, in your pocket',
+        body: 'OpenRemote drives the agents on your own computers - servers, home machines, laptops. Chats sync between them end to end encrypted; moreweb never sees or keeps them.',
       }
   }
 }
@@ -152,10 +180,12 @@ export default function CloudMode({ onBackToLocal }) {
                 <ArrowSquareOut size={13} />
                 {cloud?.state === 'revoked' || cloud?.state === 'relink' ? 'Sign in again' : 'Sign in with moreweb'}
               </button>
-              <button type="button" className="cm-back" onClick={onBackToLocal}>
-                <House size={13} />
-                Back to Local
-              </button>
+              {onBackToLocal && (
+                <button type="button" className="cm-back" onClick={onBackToLocal}>
+                  <House size={13} />
+                  Back to Local
+                </button>
+              )}
             </>
           )}
         </div>

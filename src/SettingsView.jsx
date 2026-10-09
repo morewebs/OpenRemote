@@ -4,6 +4,7 @@ import SignInModal from './SignInModal.jsx'
 import PickerMenu from './PickerMenu.jsx'
 import { useConsole } from './state/console.jsx'
 import { signedIn } from './cloud.js'
+import { isMobile } from './platform.js'
 import { harnessName } from './harness-names.js'
 import { SIGNIN_HARNESSES } from './harness-manager.js'
 import { loadDefaults, saveDefaults } from './defaults.js'
@@ -36,6 +37,10 @@ const SECTIONS = [
   { id: 'harnesses', label: 'Harnesses' },
   { id: 'this-install', label: 'This install' },
 ]
+
+// A phone runs no harnesses and has no daemon of its own to manage or
+// start with the system: its settings are how it looks and its account.
+const PHONE_SECTIONS = new Set(['appearance', 'cloud', 'this-install'])
 
 export default function SettingsView({ onReplay }) {
   const { connection, capabilities, sessions, disconnect, modelsFor, cloud, signOutCloud } = useConsole()
@@ -118,7 +123,7 @@ export default function SettingsView({ onReplay }) {
   // renders there.
   const [autoStart, setAutoStart] = useState(null)
   useEffect(() => {
-    if (!hasTauri) return
+    if (!hasTauri || isMobile) return
     let cancelled = false
     ;(async () => {
       try {
@@ -150,7 +155,7 @@ export default function SettingsView({ onReplay }) {
   // browser, and where no tray can be shown.
   const [tray, setTray] = useState(null)
   useEffect(() => {
-    if (!hasTauri) return
+    if (!hasTauri || isMobile) return
     let cancelled = false
     ;(async () => {
       try {
@@ -213,14 +218,30 @@ export default function SettingsView({ onReplay }) {
   return (
     <div className="settings">
       <nav className="stg-nav" aria-label="Settings sections">
-        {SECTIONS.map((s) => (
-          <a key={s.id} href={`#stg-${s.id}`} className="stg-nav-btn">
+        {(isMobile ? SECTIONS.filter((s) => PHONE_SECTIONS.has(s.id)) : SECTIONS).map((s) => (
+          <a
+            key={s.id}
+            href={`#stg-${s.id}`}
+            className="stg-nav-btn"
+            onClick={
+              // On a phone a hash link would be a history entry, and the
+              // back button would land on it.
+              isMobile
+                ? (e) => {
+                    e.preventDefault()
+                    document.getElementById(`stg-${s.id}`)?.scrollIntoView({ behavior: 'smooth' })
+                  }
+                : undefined
+            }
+          >
             {s.label}
           </a>
         ))}
       </nav>
       <div className="panel stg-panel">
 
+      {!isMobile && (
+      <>
       <h2 className="pn-section" id="stg-new-tasks">New tasks</h2>
       <p className="pn-lead">What a new chat starts with. The composers still change their minds.</p>
       <div className="pn-list pn-list--tight">
@@ -366,6 +387,8 @@ export default function SettingsView({ onReplay }) {
           </div>
         </div>
       </div>
+      </>
+      )}
 
       <h2 className="pn-section" id="stg-appearance">Appearance</h2>
       <p className="pn-lead">Space, not themes - the dark theme is the contract.</p>
@@ -402,6 +425,8 @@ export default function SettingsView({ onReplay }) {
         </div>
       </div>
 
+      {!isMobile && (
+      <>
       <h2 className="pn-section" id="stg-startup">Startup</h2>
       <p className="pn-lead">What the app does when it opens.</p>
       <div className="pn-list pn-list--tight">
@@ -466,9 +491,11 @@ export default function SettingsView({ onReplay }) {
           </div>
         )}
       </div>
+      </>
+      )}
 
       <h2 className="pn-section" id="stg-cloud">Cloud</h2>
-      <p className="pn-lead">Your moreweb account, and this computer's place in it.</p>
+      <p className="pn-lead">Your moreweb account, and {isMobile ? "this phone's" : "this computer's"} place in it.</p>
       <div className="pn-list pn-list--tight">
         <div className="pn-row">
           <div>
@@ -476,8 +503,10 @@ export default function SettingsView({ onReplay }) {
             <div className="pn-detail">
               {inCloud
                 ? confirmSignOut
-                  ? 'Synced chats stay on this computer; they stop syncing until you sign in again.'
-                  : `This computer is ${cloud.device?.name ?? 'here'}, ${cloud.device?.kind === 'machine' ? 'a machine your other devices can run chats on' : 'a desktop'}.`
+                  ? `Synced chats stay on ${isMobile ? 'this phone' : 'this computer'}; they stop syncing until you sign in again.`
+                  : isMobile
+                    ? `This phone is ${cloud.device?.name ?? 'here'}.`
+                    : `This computer is ${cloud.device?.name ?? 'here'}, ${cloud.device?.kind === 'machine' ? 'a machine your other devices can run chats on' : 'a desktop'}.`
                 : 'Switch to Cloud to sign in. Local chats never need an account.'}
             </div>
           </div>
@@ -504,6 +533,8 @@ export default function SettingsView({ onReplay }) {
         </div>
       </div>
 
+      {!isMobile && (
+      <>
       <h2 className="pn-section" id="stg-daemon">Daemon</h2>
       <p className="pn-lead">The local process the chats run through.</p>
       <div className="pn-list pn-list--tight">
@@ -585,6 +616,8 @@ export default function SettingsView({ onReplay }) {
           </div>
         ))}
       </div>
+      </>
+      )}
 
       <h2 className="pn-section" id="stg-this-install">This install</h2>
       <div className="pn-list pn-list--tight">
@@ -595,13 +628,15 @@ export default function SettingsView({ onReplay }) {
           </div>
           <button type="button" className="pn-btn" onClick={() => setAbout(true)}>About</button>
         </div>
-        <div className="pn-row">
-          <div>
-            <div className="pn-name">First-run steps</div>
-            <div className="pn-detail">Shows them again. The chats stay.</div>
+        {!isMobile && (
+          <div className="pn-row">
+            <div>
+              <div className="pn-name">First-run steps</div>
+              <div className="pn-detail">Shows them again. The chats stay.</div>
+            </div>
+            <button type="button" className="pn-btn" onClick={onReplay}>Show</button>
           </div>
-          <button type="button" className="pn-btn" onClick={onReplay}>Show</button>
-        </div>
+        )}
       </div>
 
       </div>
