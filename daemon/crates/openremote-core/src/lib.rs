@@ -98,11 +98,12 @@ mod tests {
     fn hostname_answers_quickly_and_never_empty() {
         // The Android hang: a `hostname` spawn that never execs held the
         // vforked caller forever (the daemon never came up). Every path,
-        // mobile included, must answer fast with something.
+        // mobile included, must answer fast with something. No length
+        // cap here: a macOS runner's hostname is longer than 64 chars,
+        // and the registry applies its own limit at registration.
         let started = std::time::Instant::now();
         let name = hostname();
         assert!(!name.is_empty());
-        assert!(name.len() <= 64);
         assert!(
             started.elapsed() < std::time::Duration::from_secs(2),
             "hostname took {:?}",
