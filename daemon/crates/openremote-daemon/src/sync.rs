@@ -999,6 +999,7 @@ mod tests {
             queue: Vec::new(),
             queue_paused: false,
             mentioned_chats: Vec::new(),
+            parent: None,
         };
         let private = session(None);
         let mut synced = session(Some(DeviceId::new()));
@@ -1009,6 +1010,7 @@ mod tests {
                 turn: 1,
                 role: openremote_core::MessageRole::User,
                 text: "private words".into(),
+                origin: None,
             },
         };
         {

@@ -1463,6 +1463,7 @@ impl Supervisor {
             queue: Vec::new(),
             queue_paused: false,
             mentioned_chats: Vec::new(),
+            parent: None,
         };
         let id = session.id;
         self.emit_all(&id, vec![EventPayload::SessionCreated { session }])?;
@@ -1593,6 +1594,7 @@ impl Supervisor {
                 turn,
                 role: openremote_core::MessageRole::User,
                 text: text.to_string(),
+                origin: None,
             },
         };
         let payloads = if steering {
@@ -2385,6 +2387,7 @@ impl Supervisor {
                 id: Uuid::new_v4().to_string(),
                 text: text.to_string(),
                 at: now_ms(),
+                origin: None,
             });
             self.emit_queue(id, queue, session.queue_paused)?;
         }
@@ -2648,6 +2651,7 @@ impl Supervisor {
                             turn,
                             role: openremote_core::MessageRole::Assistant,
                             text,
+                            origin: None,
                         },
                     }],
                 )?;
@@ -2960,6 +2964,7 @@ mod tests {
             queue: Vec::new(),
             queue_paused: false,
             mentioned_chats: Vec::new(),
+            parent: None,
         };
         // A spawn still under way is refused, and the word says why.
         let err = refuse_busy(&session(SessionStatus::Starting), false).unwrap_err();
@@ -3171,6 +3176,7 @@ mod tests {
             queue: Vec::new(),
             queue_paused: false,
             mentioned_chats: Vec::new(),
+            parent: None,
         };
         let id = session.id;
         supervisor
@@ -3503,6 +3509,7 @@ mod tests {
                             turn,
                             role: openremote_core::MessageRole::Assistant,
                             text: format!("tail {i}"),
+                            origin: None,
                         },
                     }],
                 ) {

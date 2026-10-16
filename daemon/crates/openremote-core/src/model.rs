@@ -429,6 +429,45 @@ pub struct Session {
     /// its agent may read through OpenRemote's read-a-chat tool.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub mentioned_chats: Vec<SessionId>,
+    /// Who started this chat, when another chat's agent did: it is a worker
+    /// in that chat's team. Set when the chat is created and never changed,
+    /// so a copy on another device shows the same tree. A device that
+    /// predates teams ignores it and shows the chat on its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<ParentLink>,
+}
+
+/// Where a team member stands: the chat that started it, how many steps
+/// below the user's own chat it is, and the brief it was given.
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct ParentLink {
+    /// The chat whose agent started this one.
+    pub chat: SessionId,
+    /// The user's own chat is depth 0, its workers 1, theirs 2.
+    pub depth: u32,
+    /// What it is to its parent (`worker`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    /// The first 200 characters of the brief, so a copy of the chat on
+    /// another device says what it was for without replaying the log.
+    pub brief: String,
+    pub spawned_at: i64,
+}
+
+/// A message that did not come from the user: another agent in the same
+/// team sent it. The chat shows who; the harness is told in words it can
+/// not mistake for the user's.
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct Origin {
+    /// `agent` is the only kind there is.
+    pub kind: String,
+    /// The chat that sent it, and its name when it did.
+    pub chat: SessionId,
+    pub title: String,
+    /// A worker's report to its lead. A newer report from the same worker
+    /// replaces an older one that has not been delivered yet.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub report: bool,
 }
 
 /// One message in a chat's queue: sent on its own when the turn before it
@@ -438,6 +477,9 @@ pub struct QueuedMessage {
     pub id: String,
     pub text: String,
     pub at: i64,
+    /// Set when another agent sent it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<Origin>,
 }
 
 /// One computer that can run agent chats. The daemon's own machine is
@@ -857,6 +899,10 @@ pub struct ChatMessage {
     pub turn: u64,
     pub role: MessageRole,
     pub text: String,
+    /// Set on a user-role message another agent sent (a lead's brief, a
+    /// worker's report): the chat shows who it came from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<Origin>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]

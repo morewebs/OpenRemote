@@ -34,10 +34,11 @@ pub use model::{
     DecisionState, EndpointAuthKind, EndpointModel, EndpointSecret, Harness, HarnessHonors,
     InstallSpec, InstalledPlugin, LOCAL_MARKETPLACE, Machine, MachineStatus, MachineView,
     MarketplaceRecord, MarketplaceSource, McpServerEntry, MessageRole, ModelEndpoint,
-    ModelEndpointView, PluginHarnessRef, PluginPower, PluginRuntime, PluginScope, PluginSource,
-    Project, QueuedMessage, Receipt, ReceiptStatus, Session, SessionStatus, Trigger, TriggerKind,
-    TurnOutcome, endpoint_models_url, normalize_endpoint_base_url, normalize_endpoint_models_path,
-    validate_endpoint_harness, validate_endpoint_name, validate_model_id,
+    ModelEndpointView, Origin, ParentLink, PluginHarnessRef, PluginPower, PluginRuntime,
+    PluginScope, PluginSource, Project, QueuedMessage, Receipt, ReceiptStatus, Session,
+    SessionStatus, Trigger, TriggerKind, TurnOutcome, endpoint_models_url,
+    normalize_endpoint_base_url, normalize_endpoint_models_path, validate_endpoint_harness,
+    validate_endpoint_name, validate_model_id,
 };
 // Same reason as mod store: the desktop's store type is not in a browser build.
 #[cfg(not(target_arch = "wasm32"))]

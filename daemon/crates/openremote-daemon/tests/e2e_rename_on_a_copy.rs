@@ -44,6 +44,7 @@ fn chat(executor: Option<DeviceId>) -> Session {
         queue: Vec::new(),
         queue_paused: false,
         mentioned_chats: Vec::new(),
+        parent: None,
     }
 }
 
@@ -69,6 +70,7 @@ async fn a_rename_on_a_copy_is_refused_and_leaves_its_log_alone() {
                                 turn: 1,
                                 role: MessageRole::User,
                                 text: "fix the login redirect loop".into(),
+                                origin: None,
                             },
                         },
                     ],
