@@ -5,6 +5,7 @@
 const COMMANDS: &[&str] = &[
     "daemon_info",
     "daemon_restart",
+    "reveal_in_folder",
     "tray_prefs",
     "set_tray_prefs",
     "window_prefs",

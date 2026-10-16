@@ -23,6 +23,7 @@
     "core:window:allow-is-maximized",
     "allow-daemon-info",
     "allow-daemon-restart",
+    "allow-reveal-in-folder",
     "allow-tray-prefs",
     "allow-set-tray-prefs",
     "allow-window-prefs",

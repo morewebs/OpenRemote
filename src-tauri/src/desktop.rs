@@ -203,6 +203,24 @@ fn stop_by_pid(pid: u32) {
     }
 }
 
+/// Open a folder in the system's file manager: the sidebar's "Open folder"
+/// on a project. Only a folder that exists is opened - handed a file, the
+/// file manager would run it instead of showing it.
+#[tauri::command]
+fn reveal_in_folder(path: String) -> Result<(), String> {
+    let path = std::path::PathBuf::from(path);
+    if !path.is_absolute() || !path.is_dir() {
+        return Err("that folder is gone".into());
+    }
+    #[cfg(windows)]
+    let shown = std::process::Command::new("explorer").arg(&path).spawn();
+    #[cfg(target_os = "macos")]
+    let shown = std::process::Command::new("open").arg(&path).spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let shown = std::process::Command::new("xdg-open").arg(&path).spawn();
+    shown.map(|_| ()).map_err(|e| e.to_string())
+}
+
 pub fn run() {
     let builder = tauri::Builder::default();
     // First, so a second launch is answered before anything else starts.
@@ -225,6 +243,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             crate::daemon_info,
             daemon_restart,
+            reveal_in_folder,
             tray::tray_prefs,
             tray::set_tray_prefs,
             window_prefs::window_prefs,
