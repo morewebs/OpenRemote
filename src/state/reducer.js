@@ -61,6 +61,9 @@ export function chatFromSession(session) {
     updatedAt: session.updated_at ?? 0,
     // The device that runs a synced chat; none for a private one.
     executor: session.executor ?? null,
+    // The chat whose agent started this one, when one did: this chat is a
+    // worker in that chat's team ({ chat, depth, role, brief }).
+    parent: session.parent ?? null,
     // Messages waiting for the running turn to end (the daemon's queue),
     // and whether an interrupt, a stop or a failure is holding them.
     queue: session.queue ?? [],
@@ -343,6 +346,9 @@ export function foldEvent(chat, event) {
         id: message.id,
         role: message.role === 'user' ? 'user' : 'agent',
         text: message.text,
+        // Set when another agent sent it (a lead's brief, a worker's
+        // report): { kind: 'agent', chat, title, report }.
+        origin: message.origin ?? null,
       })
       if (message.role === 'user' && !chat.title) chat.title = titleFrom(message.text)
       break

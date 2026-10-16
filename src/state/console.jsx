@@ -11,6 +11,7 @@ import { errorCopy } from '../error-copy.js'
 import { isMobile, openExternal } from '../platform.js'
 import { loadArchived, saveArchived, withArchived } from '../archive.js'
 import { webFetch } from '../web/transport.js'
+import { descendantsOf, isAlive } from '../team.js'
 
 export const ConsoleContext = createContext(null)
 
@@ -1100,6 +1101,25 @@ export function ConsoleProvider({ children }) {
     [api],
   )
 
+  // Stop everyone under a chat that is still running; the chat stays up.
+  // The daemon that runs the chat does it in one go. A chat running on
+  // another device is stopped worker by worker, since the daemon reaches
+  // that device through each chat's own stop.
+  const stopTeam = useCallback(
+    async (chatId) => {
+      const lead = sessions.find((s) => s.id === chatId)
+      const here = cloud?.device?.id ?? null
+      if (!lead?.executor || lead.executor === here) {
+        await api.stopTeam(chatId)
+        return
+      }
+      for (const { session } of descendantsOf(sessions, chatId)) {
+        if (isAlive(session)) await api.stop(session.id)
+      }
+    },
+    [api, sessions, cloud],
+  )
+
   // Interrupt the running turn - the agent stops what it's doing but the
   // session stays alive (stop kills the process; interrupt cancels the turn).
   const interruptChat = useCallback(
@@ -1582,6 +1602,7 @@ export function ConsoleProvider({ children }) {
       updateChatSettings,
       answerDecision,
       stopChat,
+      stopTeam,
       interruptChat,
       queueMessage,
       removeQueued,
@@ -1672,6 +1693,7 @@ export function ConsoleProvider({ children }) {
       updateChatSettings,
       answerDecision,
       stopChat,
+      stopTeam,
       interruptChat,
       queueMessage,
       removeQueued,

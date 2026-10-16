@@ -498,6 +498,22 @@ export class DaemonApi {
     return this.call('POST', `/sessions/${seg(id)}/stop`, { request_id: newRequestId() })
   }
 
+  // Agent teams. What the user lets teams do (this computer's: the daemon
+  // that runs a lead holds them), and a change to it - `{name: value}`, a
+  // null putting a setting back to its default.
+  agentSettings() {
+    return this.call('GET', '/agents/settings')
+  }
+
+  setAgentSettings(patch) {
+    return this.call('POST', '/agents/settings', patch)
+  }
+
+  // Stop everyone under a chat that is still running (the lead stays up).
+  stopTeam(id) {
+    return this.call('POST', `/sessions/${id}/team/stop`, {})
+  }
+
   // Interrupt the running turn - the harness cancels, the session stays
   // alive for the next message. Unlike stop, nothing dies.
   interrupt(id) {

@@ -63,6 +63,7 @@ import {
   setLeafView,
   splitLeaf,
 } from './split.js'
+import { onBesideRequest } from './team-placement.js'
 
 
 const OB_KEY = 'openremote-onboarded'
@@ -603,6 +604,30 @@ function Shell() {
     const source = leaves(layout.root).find((pane) => pane.view === id)
     setLayout((l) => moveLeaf(l, source?.id ?? null, leafId, place.dir, place.before, id))
   }
+  // A chat asks to show another beside it - a lead's team bar opening a
+  // worker, a worker's "Started by" chip going back to its lead: in the
+  // pane that already shows it, else in a new one beside the asking chat's
+  // pane (the main view where there are no panes, as on the phone).
+  const besideRequest = useRef(null)
+  besideRequest.current = ({ from, chat }) => {
+    const session = (sessions ?? []).find((s) => s.id === chat)
+    if (!session) return
+    ensureChat(session)
+    const holder = leaves(layout.root).find((l) => (l.view ?? view) === chat)
+    if (holder) {
+      setLayout((l) => focusLeaf(l, holder.id))
+      return
+    }
+    if (isMobile) {
+      openInFocus(chat)
+      return
+    }
+    const origin = leaves(layout.root).find((l) => (l.view ?? view) === from) ?? focused
+    const next = splitLeaf(layout, origin.id, 'row', chat)
+    if (next === layout) openInFocus(chat)
+    else setLayout(next)
+  }
+  useEffect(() => onBesideRequest((request) => besideRequest.current?.(request)), [])
 
   // Right-click in the main area: split from the pane under the cursor,
   // and act on the chat it shows. Text fields are handled by the one listener
