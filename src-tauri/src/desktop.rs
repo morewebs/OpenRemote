@@ -212,6 +212,9 @@ fn reveal_in_folder(path: String) -> Result<(), String> {
     if !path.is_absolute() || !path.is_dir() {
         return Err("that folder is gone".into());
     }
+    // Explorer wants the platform's own separators: a folder stored with
+    // forward slashes is respelled with backslashes before it is handed over.
+    let path: std::path::PathBuf = path.components().collect();
     #[cfg(windows)]
     let shown = std::process::Command::new("explorer").arg(&path).spawn();
     #[cfg(target_os = "macos")]
