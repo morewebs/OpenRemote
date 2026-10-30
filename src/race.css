@@ -109,11 +109,11 @@
    so: no fill, no shadow - the same treatment as the console's other primary
    buttons. */
 .race-start:not(:disabled) {
-  border-color: rgba(220, 162, 75, 0.45);
+  border-color: rgba(122, 92, 255, 0.45);
   color: var(--accent);
 }
 
 .race-start:not(:disabled):hover {
-  background: rgba(220, 162, 75, 0.08);
+  background: rgba(122, 92, 255, 0.08);
   color: var(--accent);
 }

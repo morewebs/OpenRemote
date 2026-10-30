@@ -6,7 +6,7 @@
 
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { isRealPoint, resolvePickerSpot, spotBelow } from './picker-anchor.js'
+import { isRealPoint, resolvePickerSpot, spotAtBox, spotBelow } from './picker-anchor.js'
 
 test('a pointer position is kept exactly as the caller gave it', () => {
   const anchor = { left: 314, top: 208 }
@@ -29,6 +29,14 @@ test('a missing anchor with no trigger falls back to the window corner', () => {
     left: 8,
     top: 8,
   })
+})
+
+test('the model menu sits on the left edge of the composer box', () => {
+  assert.deepEqual(spotAtBox({ left: 200, top: 180, width: 620, height: 140, bottom: 320 }), {
+    left: 200,
+    top: 320,
+  })
+  assert.equal(spotAtBox({ left: 0, top: 0, width: 0, height: 40 }), null)
 })
 
 test('a malformed anchor is not a point', () => {

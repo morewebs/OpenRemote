@@ -90,15 +90,7 @@ export default function McpServersSection() {
           ? 'Tools a session can call, set up by hand. Each runs on this computer, and a key never leaves it.'
           : 'Tools a session can call, set up by hand. Each runs on a machine, and a key never leaves that machine.'}
       </p>
-      {installed.length === 0 && (
-        // "None on this machine" is only said once the machine has answered:
-        // an unanswered list is empty too, and that sentence is a claim.
-        <p className="pn-empty">
-          {mcpServersAnswered
-            ? `No MCP servers on your ${machineWord} yet.`
-            : 'Loading your MCP servers…'}
-        </p>
-      )}
+      {installed.length > 0 && (
       <div className="pn-list pn-list--wide">
         {installed.map((p) => {
           const state = serverState(p)
@@ -171,7 +163,15 @@ export default function McpServersSection() {
           )
         })}
       </div>
-      <div className="pn-list pn-list--tight">
+      )}
+      <div className="pn-list pn-list--tight mcp-add">
+        {installed.length === 0 && (
+          <p className="pn-empty mcp-none">
+            {mcpServersAnswered
+              ? `No MCP servers on your ${machineWord} yet.`
+              : 'Loading your MCP servers…'}
+          </p>
+        )}
         <div className="pn-row" data-stg="mcp-add">
           <div>
             <div className="pn-name">Add an MCP server</div>

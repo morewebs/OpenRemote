@@ -16,6 +16,8 @@
 //   agy        Antigravity's wave - the shape path from its own favicon
 
 import { siClaudecode, siOpencode } from 'simple-icons'
+import chatgptUrl from './assets/chatgpt.png'
+import antigravityUrl from './assets/antigravity.png'
 
 // simple-icons dropped the OpenAI mark in v12; this is their last
 // published official path (v11.6.0), byte for byte. Shared with the
@@ -58,14 +60,13 @@ export function ClaudeMark() {
   )
 }
 
+function ImageMark({ src, title }) {
+  return <img className="brand-mark" src={src} alt={title} />
+}
+
 export function CodexMark() {
-  // The hexapod is monochrome in OpenAI's own usage; on this dark UI,
-  // white is the official dark-mode rendition (openai.com dark header).
-  return (
-    <Mark viewBox="0 0 24 24" color="#FFFFFF" title="Codex">
-      <path fill="var(--mark)" d={OPENAI_PATH} />
-    </Mark>
-  )
+  // The white ChatGPT knot, the mark people know the models by.
+  return <ImageMark src={chatgptUrl} title="ChatGPT" />
 }
 
 export function GrokMark() {
@@ -111,18 +112,7 @@ export function OpencodeMark() {
 }
 
 export function AntigravityMark() {
-  // The wave in Antigravity's own blue. The viewBox is cropped to the
-  // path's own bounds - its favicon's 136x136 box exists for the
-  // background disc, and the wave occupies only the middle of it, so
-  // the full box left the mark visibly smaller than its neighbors.
-  return (
-    <Mark viewBox="10 17 88 80" color="#3186FF" title="Antigravity">
-      <path
-        fill="var(--mark)"
-        d="M89.6992 93.695C94.3659 97.195 101.366 94.8617 94.9492 88.445C75.6992 69.7783 79.7825 18.445 55.8659 18.445C31.9492 18.445 36.0325 69.7783 16.7825 88.445C9.78251 95.445 17.3658 97.195 22.0325 93.695C40.1159 81.445 38.9492 59.8617 55.8659 59.8617C72.7825 59.8617 71.6159 81.445 89.6992 93.695Z"
-      />
-    </Mark>
-  )
+  return <ImageMark src={antigravityUrl} title="Antigravity" />
 }
 
 // The registry: harness id -> its real mark, plus an optical size

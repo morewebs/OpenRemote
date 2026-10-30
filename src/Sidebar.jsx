@@ -997,8 +997,11 @@ export default function Sidebar({
             className="sb-add-project"
             onClick={onAddProject}
             title="Add a project"
+            aria-label="Add a project"
           >
-            <Plus size={12} weight="bold" />
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M6 1.25v9.5M1.25 6h9.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
           </button>
         </div>
         {grouped.projects.length === 0 && (

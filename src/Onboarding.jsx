@@ -111,6 +111,7 @@ export default function Onboarding({ onDone, onDismiss = null, startManual = fal
   return (
     <div className="ob">
       <div className="ob-panel">
+        <div className="ob-stage" key={step}>
         {step === 'welcome' && (
           <>
             <h1 className="ob-title">One window for all your coding agents</h1>
@@ -222,6 +223,7 @@ export default function Onboarding({ onDone, onDismiss = null, startManual = fal
             </button>
           </>
         )}
+        </div>
 
         <div className="ob-footer">
           <div className="ob-progress">

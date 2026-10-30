@@ -104,7 +104,7 @@
 /* Amber marks the primary interaction, and only the border and the label
    say so: no fill, no shadow. */
 .vb-btn--primary {
-  border-color: rgba(220, 162, 75, 0.45);
+  border-color: rgba(122, 92, 255, 0.45);
   color: var(--accent);
 }
 

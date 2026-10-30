@@ -475,8 +475,8 @@ export default function AutomationForm({ rule, onClose }) {
                     label="Permission"
                     searchPlaceholder="Search permission words"
                     items={(currentHarness?.permission_modes ?? []).map((word) => ({
-                      id: word,
-                      name: word,
+                      id: word.w ?? word,
+                      name: word.l ?? word.w ?? word,
                     }))}
                     groups={null}
                     selectedId={permission ?? ''}

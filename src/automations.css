@@ -490,7 +490,7 @@ html[data-reduce-motion] .am-row-actions {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 44px 48px 32px;
+  padding: 28px 40px 28px;
   overflow-y: auto;
   scrollbar-gutter: stable both-edges;
 }
@@ -605,9 +605,23 @@ html[data-reduce-motion] .am-search-input {
 }
 
 .am-empty {
-  margin: 28px 0 0;
+  margin: 16px 0 0;
   font-size: 13.5px;
   line-height: 1.5;
+  color: var(--text-3);
+}
+
+/* An empty page should not park the composer in a void at the bottom of
+   the window. It sits in the same column as the title, just under the copy. */
+.automations .pill-dock {
+  align-self: flex-start;
+  width: min(640px, 100%);
+  margin-top: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .am-starters {
@@ -694,7 +708,7 @@ html[data-reduce-motion] .am-search-input {
 .am-machine-act {
   flex: none;
   padding: 3px 10px;
-  border: 1px solid rgba(220, 162, 75, 0.45);
+  border: 1px solid rgba(122, 92, 255, 0.45);
   border-radius: 9999px;
   background: transparent;
   color: var(--accent);

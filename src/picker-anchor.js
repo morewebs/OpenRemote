@@ -17,6 +17,14 @@ export function isRealPoint(anchor) {
 // The spot under a trigger: its left edge, just below it. A rect with no size
 // is no trigger (a hidden button, a detached node), so it answers null and the
 // caller falls back.
+// The model list hangs off the composer, not the click. Its left edge is the
+// box's own left padding, and its top is just under the box, so the menu
+// lines up with the field instead of the pointer.
+export function spotAtBox(rect, { padLeft = 0, gap = 0 } = {}) {
+  if (!rect || !(rect.width > 0) || !(rect.height > 0)) return null
+  return { left: Math.round(rect.left + padLeft), top: Math.round(rect.bottom + gap) }
+}
+
 export function spotBelow(rect) {
   if (!rect || !(rect.width > 0) || !(rect.height > 0)) return null
   return { left: Math.round(rect.left), top: Math.round(rect.bottom + 6) }

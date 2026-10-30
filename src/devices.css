@@ -176,7 +176,7 @@
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   padding: 24px;
-  background: rgba(4, 6, 9, 0.55);
+  background: rgba(0, 0, 0, 0.55);
   animation: dv-fade 0.12s ease-out;
 }
 
@@ -188,7 +188,7 @@
   padding: 22px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
-  background: #171b21;
+  background: #1c1c1c;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), 0 4px 16px rgba(0, 0, 0, 0.3);
   animation: dv-pop 0.14s ease-out;
 }
@@ -840,12 +840,12 @@
 
 /* amber marks the primary interaction (DESIGN.md) - no fill, no shadow */
 .dv-act.primary {
-  border-color: rgba(220, 162, 75, 0.45);
+  border-color: rgba(122, 92, 255, 0.45);
   color: var(--accent);
 }
 
 .dv-act.primary:hover {
-  background: rgba(220, 162, 75, 0.08);
+  background: rgba(122, 92, 255, 0.08);
   color: var(--accent);
 }
 

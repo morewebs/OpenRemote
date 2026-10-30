@@ -4,9 +4,8 @@
   align-items: center;
   justify-content: center;
   background:
-    radial-gradient(620px 420px at 78% 8%, rgba(122, 92, 255, 0.17), transparent 70%),
-    radial-gradient(520px 400px at 8% 92%, rgba(88, 56, 220, 0.11), transparent 70%),
-    radial-gradient(900px 520px at 50% 125%, rgba(64, 34, 170, 0.09), transparent 75%),
+    radial-gradient(620px 420px at 78% 8%, rgba(255, 255, 255, 0.03), transparent 70%),
+    radial-gradient(520px 400px at 8% 92%, rgba(255, 255, 255, 0.02), transparent 70%),
     var(--bg-app);
 }
 
@@ -199,8 +198,45 @@
   height: 7px;
   border-radius: 9999px;
   background: rgba(255, 255, 255, 0.14);
+  transition: background 0.22s cubic-bezier(0.2, 0, 0, 1);
 }
 
 .ob-dot.on {
   background: var(--text-2);
+}
+
+/* The step body swaps in place. The dots stay put and only change colour,
+   so the card reads as one page turning rather than a new panel. */
+.ob-stage {
+  animation: ob-step-in 0.22s cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+@keyframes ob-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-stage {
+    animation: none;
+  }
+
+  .ob-dot {
+    transition: none;
+  }
+}
+
+html[data-reduce-motion] .ob-stage {
+  animation: none;
+}
+
+html[data-reduce-motion] .ob-dot {
+  transition: none;
 }

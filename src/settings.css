@@ -151,19 +151,12 @@
 }
 
 .stg-nav-btn.on {
-  background: var(--bg-active);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text-1);
 }
 
 .stg-nav-btn.on::before {
-  content: '';
-  position: absolute;
-  top: 7px;
-  bottom: 7px;
-  left: 0;
-  width: 2px;
-  border-radius: 1px;
-  background: var(--accent);
+  display: none;
 }
 
 .stg-nav-icon {
@@ -172,7 +165,7 @@
 }
 
 .stg-nav-btn.on .stg-nav-icon {
-  color: var(--accent);
+  color: var(--text-2);
 }
 
 .stg-nav-label {
@@ -231,10 +224,19 @@
 }
 
 .stg-subhead {
-  margin: 18px 0 4px;
+  margin: 18px 0 8px;
   font-size: 13.5px;
   font-weight: 600;
   color: var(--text-1);
+}
+
+.ep-empty {
+  margin: 0;
+  max-width: 62ch;
+}
+
+.ep-add {
+  margin-top: 12px;
 }
 
 /* ── grouped rows: one hairline card per list, dividers between rows ── */
@@ -270,13 +272,42 @@
 
 /* the row a search result landed on, until the next tab or search */
 .stg-panel .pn-row.stg-found {
-  background: rgba(220, 162, 75, 0.06);
+  background: rgba(122, 92, 255, 0.06);
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
 /* the keyboard section's groups are their own cards, each led by its name */
 .stg-panel .kb-set {
   margin-top: 12px;
+}
+
+/* The key already is the chip. The button around it was a second box. */
+.stg-panel .pn-btn:has(> .kb-keys) {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.stg-panel .pn-btn:has(> .kb-keys):hover {
+  background: transparent;
+}
+
+/* The empty sentence lives in the add card. No second hairline above it. */
+.stg-panel .mcp-add {
+  border: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+.stg-panel .mcp-add .mcp-none {
+  margin: 0 0 10px;
+  padding: 0;
+}
+
+.stg-panel .mcp-add .pn-row {
+  border: 1px solid var(--line);
+  border-radius: 12px;
 }
 
 .stg-panel .kb-set .kb-group-label {

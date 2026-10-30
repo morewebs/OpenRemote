@@ -741,11 +741,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
             >
               <X size={11} weight="bold" />
             </button>
-          ) : (
-            <kbd className="stg-search-key" aria-hidden="true">
-              /
-            </kbd>
-          )}
+          ) : null}
         </label>
         <nav
           ref={navRef}

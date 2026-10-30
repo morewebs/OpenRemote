@@ -953,8 +953,8 @@
 }
 
 .cv-decision.pending {
-  border-color: rgba(220, 162, 75, 0.35);
-  background: rgba(220, 162, 75, 0.07);
+  border-color: rgba(122, 92, 255, 0.35);
+  background: rgba(122, 92, 255, 0.07);
 }
 
 .cv-decision-ask {
@@ -1036,11 +1036,11 @@
 /* the press pulse on primary actions: a scale dip plus, where amber, a
    glow pulse - the same language as the composer's send */
 .cv-tool-actions button:active {
-  transform: scale(0.9);
+  transform: none;
 }
 
 .cv-tool-actions button.primary:active {
-  box-shadow: 0 0 34px rgba(220, 162, 75, 0.45);
+  box-shadow: 0 0 34px rgba(122, 92, 255, 0.45);
 }
 
 .cv-caret {

@@ -30,7 +30,8 @@ import {
   siMistralai,
   siQwen,
 } from 'simple-icons'
-import { OPENAI_PATH, XAI_POLYGONS } from './brand-marks.jsx'
+import { XAI_POLYGONS } from './brand-marks.jsx'
+import chatgptUrl from './assets/chatgpt.png'
 
 // One mark: the same anatomy as brand-marks.jsx - full-bleed svg that
 // fills the box the parent sizes, fill from the mark's own color
@@ -59,12 +60,7 @@ export function ClaudeModelMark() {
 }
 
 export function OpenAIModelMark() {
-  // The hexapod, white - OpenAI's own dark-mode rendition.
-  return (
-    <Mark viewBox="0 0 24 24" color="#FFFFFF" title="OpenAI">
-      <path fill="var(--mark)" d={OPENAI_PATH} />
-    </Mark>
-  )
+  return <img className="brand-mark" src={chatgptUrl} alt="ChatGPT" />
 }
 
 export function XaiModelMark() {

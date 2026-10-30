@@ -100,7 +100,7 @@
 .pill-send:not(:disabled) {
   background: var(--accent);
   color: #fff;
-  box-shadow: 0 0 18px rgba(220, 162, 75, 0.25);  transition:
+  box-shadow: 0 0 18px rgba(122, 92, 255, 0.25);  transition:
     transform 0.12s cubic-bezier(0.2, 0, 0, 1),
     box-shadow 0.12s cubic-bezier(0.2, 0, 0, 1);
 }
@@ -110,8 +110,7 @@
 }
 
 .pill-send:not(:disabled):active {
-  transform: scale(0.8);
-  box-shadow: 0 0 62px rgba(220, 162, 75, 0.75);
+  transform: none;
 }
 
 .pill-send:disabled {
@@ -207,7 +206,7 @@ html[data-reduce-motion] .pill-send:not(:disabled) {
 .pt-card {
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 12px;
-  background: #171b21;
+  background: #1c1c1c;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
   padding: 12px 14px;
 }

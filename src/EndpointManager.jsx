@@ -292,12 +292,14 @@ export default function EndpointManager({ harness, deviceId = null, onChanged = 
           </div>
         </div>
       ) : (
-        <div className="pn-list pn-list--wide" data-stg={`models-key-${harness}`}>
+        <>
           {endpoints.length === 0 && !editing && (
-            <p className="pn-empty">
-              No custom endpoints yet - chats run through {harnessName(harness)}'s own provider.
+            <p className="pn-empty ep-empty">
+              No custom endpoints yet. Chats run through {harnessName(harness)}'s own provider.
             </p>
           )}
+          {endpoints.length > 0 && (
+          <div className="pn-list pn-list--wide" data-stg={`models-key-${harness}`}>
           {endpoints.map((entry) => (
             <div key={entry.id} className="pn-row pn-row--stack" data-stg={`endpoint-${harness}-${entry.id}`}>
               <div className="pn-row-main">
@@ -363,7 +365,9 @@ export default function EndpointManager({ harness, deviceId = null, onChanged = 
               </div>
             </div>
           ))}
-        </div>
+          </div>
+          )}
+        </>
       )}
       {endpoints.some((e) => e.is_default) && !editing && (
         <p className="pn-note">
@@ -374,7 +378,7 @@ export default function EndpointManager({ harness, deviceId = null, onChanged = 
         </p>
       )}
       {!editing ? (
-        <button type="button" className="pn-btn" data-stg="models-endpoint-add" onClick={startAdd}>
+        <button type="button" className="pn-btn ep-add" data-stg="models-endpoint-add" onClick={startAdd}>
           Add endpoint
         </button>
       ) : (

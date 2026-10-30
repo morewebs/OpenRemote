@@ -18,9 +18,9 @@
   z-index: -1;
   content: '';
   background:
-    radial-gradient(620px 420px at 78% 8%, rgba(122, 92, 255, 0.21), transparent 70%),
-    radial-gradient(520px 400px at 8% 92%, rgba(88, 56, 220, 0.145), transparent 70%),
-    radial-gradient(900px 520px at 50% 125%, rgba(64, 34, 170, 0.12), transparent 75%);
+    radial-gradient(620px 420px at 78% 8%, rgba(255, 255, 255, 0.035), transparent 70%),
+    radial-gradient(520px 400px at 8% 92%, rgba(255, 255, 255, 0.025), transparent 70%),
+    radial-gradient(900px 520px at 50% 125%, rgba(255, 255, 255, 0.02), transparent 75%);
   animation: nc-glow-in 0.8s ease-out both, nc-glow-breathe 9s ease-in-out 0.8s infinite;
 }
 
@@ -53,8 +53,15 @@
 
 /* The in-app switch, for someone who turned motion off in Settings: the
    glow lands without its fade and does not breathe. */
-html[data-reduce-motion] .newchat::before {
+html[data-reduce-motion] .newchat::before,
+html[data-reduce-motion] .nc-greeting {
   animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nc-greeting {
+    animation: none;
+  }
 }
 
 /* The page's own top row: the saved setups on the left, and the floating shortcut
@@ -88,6 +95,19 @@ html[data-reduce-motion] .newchat::before {
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-2);
+  animation: nc-greeting-in 0.28s cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+@keyframes nc-greeting-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .nc-box {
@@ -340,9 +360,9 @@ html[data-reduce-motion] .newchat::before {
   gap: 14px;
   margin: -8px 0 16px;
   padding: 10px 14px;
-  border: 1px solid rgba(220, 162, 75, 0.35);
+  border: 1px solid rgba(122, 92, 255, 0.35);
   border-radius: 10px;
-  background: rgba(220, 162, 75, 0.07);
+  background: rgba(122, 92, 255, 0.07);
 }
 
 .nc-signin-note {

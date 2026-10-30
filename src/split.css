@@ -112,7 +112,7 @@
 }
 
 .split-pane.focused {
-  box-shadow: inset 0 0 0 1px rgba(220, 162, 75, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(122, 92, 255, 0.35);
 }
 
 /* The pane header, VS Code's editor-group bar: the pane's title on the
@@ -255,8 +255,8 @@
   position: absolute;
   z-index: 4;
   pointer-events: none;
-  background: rgba(220, 162, 75, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(220, 162, 75, 0.55);
+  background: rgba(122, 92, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(122, 92, 255, 0.55);
 }
 
 .split-drop--center {

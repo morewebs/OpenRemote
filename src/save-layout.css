@@ -46,11 +46,11 @@
 /* Amber marks the primary interaction, and only the border and the label say
    so: no fill, no shadow - the console's own primary treatment. */
 .sl-save:not(:disabled) {
-  border-color: rgba(220, 162, 75, 0.45);
+  border-color: rgba(122, 92, 255, 0.45);
   color: var(--accent);
 }
 
 .sl-save:not(:disabled):hover {
-  background: rgba(220, 162, 75, 0.08);
+  background: rgba(122, 92, 255, 0.08);
   color: var(--accent);
 }

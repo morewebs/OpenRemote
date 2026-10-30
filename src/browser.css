@@ -60,7 +60,7 @@
 }
 
 .bw-tab.on {
-  background: #171b21;
+  background: #1c1c1c;
   color: var(--text-1);
 }
 
@@ -160,7 +160,7 @@
   gap: 2px;
   padding: 6px 8px;
   border-bottom: 1px solid var(--line);
-  background: #171b21;
+  background: #1c1c1c;
 }
 
 .bw-btn {
@@ -294,7 +294,7 @@
   gap: 6px;
   padding: 4px 10px;
   border-bottom: 1px solid var(--line);
-  background: #171b21;
+  background: #1c1c1c;
   font-size: 12.5px;
 }
 
@@ -472,7 +472,7 @@
   border: 1px solid var(--line);
   border-radius: 999px;
   outline: 0;
-  background: #171b21;
+  background: #1c1c1c;
   color: var(--text-1);
   font: inherit;
   font-size: 15px;

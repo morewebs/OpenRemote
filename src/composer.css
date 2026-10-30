@@ -83,6 +83,7 @@
   width: 100%;
   height: 100%;
   display: block;
+  object-fit: contain;
   /* optical balancing: solid-ink marks scale down, airy marks scale up,
      so the ink reads equal across the set */
   transform: scale(var(--mark-scale, 1));
@@ -195,7 +196,7 @@ html[data-reduce-motion] .nc-skeleton {
 .nc-send:not(:disabled) {
   background: var(--accent);
   color: #fff;
-  box-shadow: 0 0 18px rgba(220, 162, 75, 0.25);
+  box-shadow: 0 0 18px rgba(122, 92, 255, 0.25);
   transition:
     transform 0.12s cubic-bezier(0.2, 0, 0, 1),
     box-shadow 0.12s cubic-bezier(0.2, 0, 0, 1);
@@ -206,8 +207,7 @@ html[data-reduce-motion] .nc-skeleton {
 }
 
 .nc-send:not(:disabled):active {
-  transform: scale(0.8);
-  box-shadow: 0 0 62px rgba(220, 162, 75, 0.75);
+  transform: none;
 }
 
 .nc-send:disabled {

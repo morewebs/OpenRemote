@@ -15,7 +15,7 @@ colors:
   text-primary: "#E8EBEF"      # --text-1
   text-secondary: "#9AA3AE"    # --text-2
   text-muted: "#5F6873"        # --text-3
-  accent: "#DCA24B"            # amber - primary interactive accent
+  accent: "#A39BB8"            # grey-violet accent, not a blue wash
   green: "#4CB487"             # running / ok
   idle-dot: "#4A525C"
 typography:

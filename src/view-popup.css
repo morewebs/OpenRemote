@@ -10,7 +10,7 @@
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   padding: 28px;
-  background: rgba(4, 6, 9, 0.55);
+  background: rgba(0, 0, 0, 0.55);
   animation: vp-fade 0.12s ease-out;
 }
 

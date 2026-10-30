@@ -1,13 +1,13 @@
 :root {
-  --bg-app: #0a0c0f;
-  --bg-side: #0f1216;
-  --bg-hover: rgba(255, 255, 255, 0.045);
-  --bg-active: rgba(255, 255, 255, 0.07);
-  --line: rgba(255, 255, 255, 0.07);
-  --text-1: #e8ebef;
-  --text-2: #9aa3ae;
-  --text-3: #5f6873;
-  --accent: #dca24b;
+  --bg-app: #121212;
+  --bg-side: #171717;
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-active: rgba(255, 255, 255, 0.08);
+  --line: rgba(255, 255, 255, 0.08);
+  --text-1: #e8e8e8;
+  --text-2: #a3a3a3;
+  --text-3: #6e6e6e;
+  --accent: #a39bb8;
   --green: #4cb487;
   --red: #f87171;
   --dot-idle: #4a525c;
@@ -233,8 +233,9 @@ a:focus,
   background: rgba(255, 255, 255, 0.08);
 }
 
-button.side-tile:active {
-  transform: translateY(1px);
+button:active,
+.mode-switch button:active {
+  transform: none;
 }
 
 .search {
@@ -393,6 +394,8 @@ button.side-tile:active {
   display: flex;
   align-items: center;
   gap: 6px;
+  padding-left: 8px;
+  padding-right: 0;
 }
 
 .sb-projects-head .section-title-text,
@@ -403,14 +406,17 @@ button.side-tile:active {
 .sb-add-project {
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   padding: 0;
+  margin-left: auto;
+  margin-right: -4px;
   border: 0;
   border-radius: 5px;
   background: transparent;
   color: var(--text-3);
   cursor: pointer;
+  box-shadow: none;
 }
 
 .sb-add-project:hover {
@@ -418,8 +424,14 @@ button.side-tile:active {
   color: var(--text-1);
 }
 
+.sb-add-project:active {
+  transform: none;
+  background: transparent;
+}
+
 .sb-chats-title {
   margin-top: 14px;
+  padding-left: 8px;
 }
 
 /* The group of chats waiting on a person, above Projects. It takes no space
@@ -444,9 +456,9 @@ button.side-tile:active {
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
-  border: 1px solid rgba(220, 162, 75, 0.35);
+  border: 1px solid rgba(122, 92, 255, 0.35);
   border-radius: 9999px;
-  background: rgba(220, 162, 75, 0.07);
+  background: rgba(122, 92, 255, 0.07);
   color: var(--accent);
   font-size: 11px;
   font-weight: 500;

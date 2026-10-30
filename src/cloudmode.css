@@ -17,19 +17,17 @@
        feels like it comes from somewhere */
     radial-gradient(
       1100px 700px at 50% 88%,
-      rgba(64, 120, 220, 0.16),
+      rgba(255, 255, 255, 0.035),
       transparent 72%
     ),
-    /* a warmer core inside the breath, the light the cloud sits in */
     radial-gradient(
       520px 360px at 50% 76%,
-      rgba(110, 160, 230, 0.1),
+      rgba(255, 255, 255, 0.02),
       transparent 70%
     ),
-    /* the upper sky: cool and nearly gone by mid-screen */
     radial-gradient(
       900px 480px at 50% -12%,
-      rgba(38, 70, 140, 0.12),
+      rgba(255, 255, 255, 0.02),
       transparent 70%
     ),
     var(--bg-app);
@@ -62,7 +60,7 @@
   inset: -20%;
   background: radial-gradient(
     60% 46% at 50% 82%,
-    rgba(88, 140, 215, 0.05),
+    rgba(255, 255, 255, 0.03),
     transparent 70%
   );
   animation: cm-drift 52s ease-in-out infinite alternate;
@@ -266,7 +264,7 @@
 }
 
 .cm-back.primary:active {
-  transform: scale(0.985);
+  transform: none;
   background: #fff;
 }
 
