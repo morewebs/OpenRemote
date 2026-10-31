@@ -43,7 +43,7 @@ rounded:
 ## Overview
 
 A quiet, dense, machine-room dark UI: near-black canvas with a cool cast,
-one amber accent, and a single green for life. Chrome recedes; the content
+one cool accent, and a single green for life. Chrome recedes; the content
 (chats, tools, commands) is the surface. No shadows for depth - 1px
 `rgba(255,255,255,0.07)` lines and white-alpha tint steps define structure.
 Everything is small and calm: 11–14px type, 12–22px radii, generous but not airy
@@ -58,10 +58,10 @@ spacing.
   hover, so a mark never competes with the row's own states.
 - **Text tiers:** `#E8EBEF` primary, `#9AA3AE` secondary, `#5F6873` muted -
   cool greys, not warm.
-- **Amber `#DCA24B` is the one accent:** waiting dots, brand marks, the
+- **The accent `#A39BB8` is the one accent:** waiting dots, brand marks, the
   affirmative in a decision. Used sparingly - most chrome is grey. The send
-  button and the keyboard's focus ring are not amber: they are the one white
-  disc and the one white outline in the console.
+  button and the keyboard's focus ring are not the accent: they are the one
+  white disc and the one white outline in the console.
 - **Green `#4CB487` means running/ok:** the running dot (with a 2.4s breathe
   animation), agent activity. Never decorative.
 
@@ -114,7 +114,7 @@ spacing.
   together. Then Projects (every registered project, each with its collapse
   caret and a line saying what it holds: the chat count while the project is
   collapsed, and how many of its chats are waiting whenever any is - in the
-  status column's amber, counted from the same rows the Needs you group draws,
+  status column's accent, counted from the same rows the Needs you group draws,
   so the two can never disagree; the `+` in the section head, unregister on
   hover, which asks once before it acts; a project's chats grouped under it,
   and a project with none keeping its row with "0 chats" and one line saying it

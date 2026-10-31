@@ -122,8 +122,8 @@ an old process is still alive; find it before re-running).
 ## Conventions
 
 - Windows first. The frameless window, Segoe MDL2 titlebar glyphs, and
-  the dark theme (Inter, Geist Mono, amber/green accents) are contract
-  items, not preferences.
+  the dark theme (Inter, Geist Mono, one cool accent and one green) are
+  contract items, not preferences.
 - `PickerMenu.jsx` is the one dropdown engine. Modals share the
   `dv-modal` family (Esc / backdrop / X to close).
 - Harness vocabulary is the harness's own: its model names, its effort
@@ -243,7 +243,7 @@ an old process is still alive; find it before re-running).
 ## Checking this file
 
 Four commands check what this page claims, and a reader can run all of them
-from the repo root: `npm test` (prints a count; 1078 the last time this line
+from the repo root: `npm test` (prints a count; 1108 the last time this line
 was checked, and the run is the truth rather than this number), `node
 scripts/check-tab-acl.mjs` (says `tab acl ok: 2 capability file(s), every
 non-phone one scoped to the main webview, every declared command (33)
