@@ -3,7 +3,7 @@
 // review, release) appear when their connectors do - until then the form
 // offers only what can really fire.
 
-import { harnessName } from './harness-names.js'
+import { harnessLabel } from './harness-names.js'
 
 export const KINDS = ['schedule', 'webhook']
 
@@ -25,11 +25,13 @@ export { formDiffers } from './form-dirty.js'
 // The rules list draws every rule it has, and there is no second place to look
 // one up, so search is the list's only way in. It matches what a row prints:
 // the rule's name, the sentence its trigger shows (which carries the trigger's
-// own kind words and its time) and the harness's display name. It does not
-// match what a row does not show - the task text, the project, the machine -
-// because a result you cannot see is worse than no result, and it follows the
-// same rule the plugins Discover search follows: every whitespace-separated
-// word must appear somewhere in what the row shows.
+// own kind words and its time) and the harness's display name. The label is the
+// row's own, read from the daemon's harness list when the caller passes it, so
+// a rule on a plugin's harness prints the name that plugin ships and is found
+// by that name too. It does not match what a row does not show - the task text,
+// the project, the machine - because a result you cannot see is worse than no
+// result, and it follows the same rule the plugins Discover search follows:
+// every whitespace-separated word must appear somewhere in what the row shows.
 //
 // A rule's switch is not a word: a disabled rule is still a rule in the list,
 // and searching for its name finds it whatever its state.
@@ -49,9 +51,10 @@ export const RULE_SEARCH_HINT_FROM = 6
 
 /** The words the row puts on screen for this rule, one entry per field,
  *  lowercased. Kept apart rather than joined because a query word must not be
- *  able to match across the boundary between two fields. */
-export function ruleParts(rule) {
-  return [rule?.name, whenSentence(rule?.trigger), harnessName(rule?.harness)]
+ *  able to match across the boundary between two fields. `harnesses` is the
+ *  daemon's list, for a harness this build has no name of its own for. */
+export function ruleParts(rule, harnesses = null) {
+  return [rule?.name, whenSentence(rule?.trigger), harnessLabel(rule?.harness, harnesses)]
     .filter((part) => typeof part === 'string' && part.length > 0)
     .map((part) => part.toLowerCase())
 }
@@ -59,8 +62,8 @@ export function ruleParts(rule) {
 /** The words the row puts on screen for this rule, lowercased, as one string
  *  for anything that wants to show what was searched. Matching does not use it:
  *  see matchesRule. */
-export function ruleHaystack(rule) {
-  return ruleParts(rule).join(' ')
+export function ruleHaystack(rule, harnesses = null) {
+  return ruleParts(rule, harnesses).join(' ')
 }
 
 /** The query's words, trimmed and lowercased; [] means no filter. */
@@ -75,16 +78,16 @@ export function queryWords(query) {
 /** Whether one rule shows what the query asks for. Each word is tested against
  *  each field on its own: a joined string would answer "andu" for the name
  *  "Stand" and the harness "Up", a result the row does not visibly contain. */
-export function matchesRule(rule, query) {
+export function matchesRule(rule, query, harnesses = null) {
   const words = queryWords(query)
   if (!words.length) return true
-  const parts = ruleParts(rule)
+  const parts = ruleParts(rule, harnesses)
   return words.every((word) => parts.some((part) => part.includes(word)))
 }
 
 /** The rules to draw, in the order the list already had them. */
-export function searchRules(rules, query) {
-  return (Array.isArray(rules) ? rules : []).filter((rule) => matchesRule(rule, query))
+export function searchRules(rules, query, harnesses = null) {
+  return (Array.isArray(rules) ? rules : []).filter((rule) => matchesRule(rule, query, harnesses))
 }
 
 /** The quiet line under the field while a query is on: "3 of 12 rules". */

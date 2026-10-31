@@ -16,7 +16,7 @@ import { useConsole } from './state/console.jsx'
 import { chatAccess, deviceName, signedIn } from './cloud.js'
 import { railItems } from './state/reducer.js'
 import { quietRail, toolHint, workIsLive, workLabel } from './quiet-rail.js'
-import { harnessName } from './harness-names.js'
+import { harnessLabel } from './harness-names.js'
 import { findModel, modelDisplayName, prettyModelName } from './model-display.js'
 import { HarnessMark } from './brand-marks.jsx'
 import { pickable } from './harness-manager.js'
@@ -419,6 +419,10 @@ export default function ChatView({ chat, onBack, focused = true }) {
   const queue = chat.queue ?? []
   const canSend = text.trim().length > 0 && alive && !busy && reachable
   const harness = (capabilities?.harnesses ?? []).find((h) => h.id === chat.harness)
+  // What this window calls the chat's harness: the daemon's own name when the
+  // harness list has a row for it (a plugin harness is only named there),
+  // else the id the chat carries.
+  const harnessText = harnessLabel(harness ?? chat.harness)
   const live = LIVE_SETTINGS[chat.harness] ?? { model: false, effort: false, fast: false }
   // A stopped chat can change anything the harness accepts at start. A
   // running one only where the wire accepts it now - permission never:
@@ -905,7 +909,7 @@ export default function ChatView({ chat, onBack, focused = true }) {
         <p className="cv-facts">
           {chat.status !== 'idle' && <span className={`cv-dot cv-dot--${chat.status}`} />}
           <span className="cv-where pv">{chat.workspace}</span>
-          <span className="cv-fact">{harnessName(chat.harness)}</span>
+          <span className="cv-fact">{harnessText}</span>
           {elsewhere && <span className="cv-fact">on <span className="pv">{where}</span></span>}
           {chat.model && (
             <span className="cv-fact" title={chat.model}>
@@ -916,7 +920,7 @@ export default function ChatView({ chat, onBack, focused = true }) {
           {chat.permissionMode && (
             <span
               className="cv-fact"
-              title={`The harness's permission word for this chat (${harnessName(chat.harness)}'s own spelling)`}
+              title={`The harness's permission word for this chat (${harnessText}'s own spelling)`}
             >
               {chat.permissionMode}
             </span>
@@ -1412,7 +1416,7 @@ export default function ChatView({ chat, onBack, focused = true }) {
                 title="Harness"
               >
                 <HarnessMark harness={chat.harness} size={16} />
-                {harnessName(chat.harness)}
+                {harnessText}
               </button>
               {picker?.kind === 'harness' && (
                 <PickerMenu
@@ -1502,7 +1506,7 @@ export default function ChatView({ chat, onBack, focused = true }) {
                   chat.permissionMode && (
                     <span
                       className="nc-meta nc-static"
-                      title={`The harness's permission word for this chat (${harnessName(chat.harness)}'s own spelling)`}
+                      title={`The harness's permission word for this chat (${harnessText}'s own spelling)`}
                     >
                       {chat.permissionMode}
                     </span>
@@ -1526,7 +1530,7 @@ export default function ChatView({ chat, onBack, focused = true }) {
                   renderSubline={(item) =>
                     item.id === harness?.default_permission ? (
                       <span className="nc-item-sub">
-                        {harnessName(chat.harness)} runs this by default
+                        {harnessText} runs this by default
                       </span>
                     ) : null
                   }

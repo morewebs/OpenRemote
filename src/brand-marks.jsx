@@ -132,11 +132,31 @@ const MARKS = {
   agy: { M: AntigravityMark, optical: 1.08 },
 }
 
-// Renders a harness's brand mark at the given size, or null for an
-// unknown id.
+// A harness this build has no mark for - one an installed plugin provides -
+// gets a quiet monogram tile instead: the id's first letter, in the console's
+// own grey. A borrowed mark would claim an identity the harness does not have,
+// and no mark at all would leave the row looking broken.
+function MonogramMark({ harness, size }) {
+  const letter = String(harness ?? '').trim().slice(0, 1).toUpperCase()
+  if (!letter) return null
+  return (
+    <span
+      className="brand-mark-box brand-mark-mono"
+      style={{ width: size, height: size, fontSize: Math.max(8, Math.round(size * 0.58)) }}
+      aria-hidden="true"
+    >
+      {letter}
+    </span>
+  )
+}
+
+// Renders a harness's brand mark at the given size. An id with no mark here
+// (a plugin's) is a monogram tile; no id at all renders nothing.
 export function HarnessMark({ harness, size = 14 }) {
-  const mark = MARKS[harness]
-  if (!mark) return null
+  // hasOwn, not a plain lookup: a harness id is an arbitrary word, and one
+  // like "constructor" would otherwise resolve to Object's own member.
+  const mark = Object.hasOwn(MARKS, harness) ? MARKS[harness] : null
+  if (!mark) return <MonogramMark harness={harness} size={size} />
   return (
     <span
       className="brand-mark-box"

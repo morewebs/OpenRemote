@@ -12,7 +12,12 @@ test('one search field over the list, and the field and its hint arrive together
   const view = source('AutomationsView.jsx')
   assert.match(view, /import \{[\s\S]{0,220}ruleSearchHint,/)
   assert.match(view, /import \{[\s\S]{0,220}searchRules,/)
-  assert.match(view, /const shown = useMemo\(\(\) => searchRules\(rules, query\), \[rules, query\]\)/)
+  // The list, the query, and the daemon's harness list the labels come from:
+  // all three feed the search, so a plugin's harness name is matched too.
+  assert.match(
+    view,
+    /const shown = useMemo\(\(\) => searchRules\(rules, query, harnesses\), \[rules, query, harnesses\]\)/,
+  )
   // The threshold is the rule's: below it there is no field, so the box can
   // never be an icon with no words in it.
   assert.match(view, /\{rules\.length >= RULE_SEARCH_HINT_FROM && \(\s*<div className="am-toolbar">/)

@@ -5,7 +5,7 @@
 // the daemon's business: a missing row is its name, its status, and an
 // Install button.
 
-import { harnessName } from './harness-names.js'
+import { harnessLabel } from './harness-names.js'
 
 // The harnesses whose own login command the daemon can relay - the rest
 // sign in through their own setup.
@@ -23,7 +23,12 @@ export function harnessRows(capabilities, installable) {
   const specById =
     installable == null ? null : new Map(installable.map((spec) => [spec.harness_id, spec]))
   return (capabilities?.harnesses ?? []).map((h) => {
-    const name = harnessName(h.id)
+    const name = harnessLabel(h)
+    // The daemon's own reason a harness cannot be used - its CLI is not
+    // found, or a plugin speaks a harness API this build does not. The row
+    // shows that sentence where it would otherwise only say something is
+    // missing, which would leave the person guessing what.
+    const problem = typeof h.problem === 'string' && h.problem.trim() ? h.problem.trim() : null
     if (h.available) {
       // The daemon's own probe words: the version it read from the CLI
       // and the path it resolved - technical content, mono in the UI.
@@ -50,7 +55,7 @@ export function harnessRows(capabilities, installable) {
         name,
         statusLabel: 'Not installed',
         ready: false,
-        detail: null,
+        detail: problem,
         detailKind: 'note',
         // A harness that needs a runtime set up first waits for the
         // human's go-ahead; the daemon refuses it otherwise.
@@ -62,7 +67,7 @@ export function harnessRows(capabilities, installable) {
       name,
       statusLabel: 'Not installed',
       ready: false,
-      detail: specById ? 'No installer for this platform.' : null,
+      detail: problem ?? (specById ? 'No installer for this platform.' : null),
       detailKind: 'note',
       action: 'none',
     }

@@ -785,7 +785,10 @@ html[data-reduce-motion] .pg-stage {
   font-weight: 400;
 }
 
-.pg-badge-marketplace {
+/* The two badges beside a plugin's name share one look: the marketplace it
+   came from, and (when it declares one) the harness it provides. */
+.pg-badge-marketplace,
+.pg-badge-harness {
   margin-left: 6px;
   padding: 1px 6px;
   border: 1px solid var(--line);
