@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use openremote_core::Store;
 use openremote_daemon::app::{self, App, AppOptions};
+use openremote_daemon::plugins::HarnessSpec;
 use openremote_daemon::registry::HarnessRegistry;
 use openremote_daemon::supervisor::Supervisor;
 use serde_json::Value;
@@ -292,6 +293,25 @@ pub async fn start_cloud_daemon(
     overrides: &[(&str, PathBuf)],
     cloud: Option<openremote_cloud::CloudConfig>,
 ) -> TestDaemon {
+    start_daemon_over(overrides, cloud, &[]).await
+}
+
+/// The daemon with the harnesses an installed plugin declares. The specs are
+/// built by the test the way `App::new` builds them from the store; everything
+/// after that is the real daemon, the real supervisor and the real driver
+/// process.
+pub async fn start_daemon_with_plugins(
+    overrides: &[(&str, PathBuf)],
+    plugins: &[HarnessSpec],
+) -> TestDaemon {
+    start_daemon_over(overrides, None, plugins).await
+}
+
+async fn start_daemon_over(
+    overrides: &[(&str, PathBuf)],
+    cloud: Option<openremote_cloud::CloudConfig>,
+    plugins: &[HarnessSpec],
+) -> TestDaemon {
     // Every harness slot defaults to the fixture agent, so the registry's
     // probes stay hermetic and cheap (no real CLIs get spawned from a
     // suite); a suite overrides only the harness it drives. The
@@ -313,7 +333,10 @@ pub async fn start_cloud_daemon(
     let store = Arc::new(StdMutex::new(
         Store::open(data_dir.path().to_path_buf()).expect("store"),
     ));
-    let supervisor = Supervisor::new(store.clone(), HarnessRegistry::probe(&overrides).await);
+    let supervisor = Supervisor::new(
+        store.clone(),
+        HarnessRegistry::probe(&overrides, plugins).await,
+    );
     let app = App::assemble(
         AppOptions {
             data_dir: data_dir.path().to_path_buf(),

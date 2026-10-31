@@ -33,6 +33,15 @@ pub struct Harness {
     pub id: String,
     /// Human name as the harness itself spells it, e.g. `Claude Code`.
     pub name: String,
+    /// The plugin that provides this harness, as `name@marketplace` - how a
+    /// plugin's harness says where it came from. `None` for the built-in six.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<String>,
+    /// Why this harness cannot be used, when it cannot: its driver or CLI is
+    /// missing, or its plugin speaks a version this OpenRemote does not.
+    /// `None` on a usable harness.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub problem: Option<String>,
     /// Resolved executable path, when one was found.
     pub path: Option<String>,
     /// `claude --version` output, when probed.
@@ -527,10 +536,23 @@ pub struct InstalledPlugin {
     pub powers: Vec<PluginPower>,
     pub source: PluginSource,
     pub scope: PluginScope,
+    /// The harness this plugin provides, when it provides one. The record
+    /// keeps the id and name for the plugin list; the daemon re-reads the
+    /// folder's manifest when it probes the driver, so the folder stays the
+    /// one source of truth for the driver path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub harness: Option<PluginHarnessRef>,
     #[serde(default = "default_true")]
     pub enabled: bool,
     pub installed_at: i64,
     pub updated_at: i64,
+}
+
+/// The harness a plugin declares, as its install record remembers it.
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct PluginHarnessRef {
+    pub id: String,
+    pub name: String,
 }
 
 fn local_marketplace() -> String {

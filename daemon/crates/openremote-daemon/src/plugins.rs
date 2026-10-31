@@ -24,9 +24,11 @@ use std::time::Duration;
 use openremote_core::{
     ApprovedCommand, InstalledPlugin, LOCAL_MARKETPLACE, PluginPower, PluginRuntime, PluginSource,
 };
+use openremote_harness::ModelDescriptor;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::Digest;
+use std::path::Component;
 
 /// The `openremote.json` api this daemon speaks.
 pub const API_VERSION: u64 = 1;
@@ -81,6 +83,166 @@ pub struct Manifest {
     /// It runs programs as the user, outside any sandbox - said before the
     /// user approves (a JS or WASM plugin is sandboxed; a program is not).
     pub not_sandboxed: bool,
+    /// The harness this plugin provides, when it provides one.
+    pub harness: Option<HarnessManifest>,
+}
+
+/// The `harness` block of `openremote.json`: the seam that lets a plugin add
+/// a harness without a line of core code.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct HarnessManifest {
+    /// The seam's own version. A plugin with another number is refused, not
+    /// guessed at.
+    pub api: u64,
+    /// Stable harness id, the word the console and the routes use.
+    pub id: String,
+    /// The display name, verbatim.
+    pub name: String,
+    /// Driver path per OS (`windows`, `macos`, `linux`), plus `default`.
+    /// The Node spellings `win32` and `darwin` are accepted too.
+    #[serde(default)]
+    pub driver: HashMap<String, String>,
+    #[serde(default)]
+    pub args: Vec<String>,
+    /// A static model catalog, in the harness's own words. `None` means this
+    /// harness advertises nothing before a chat runs.
+    #[serde(default)]
+    pub models: Option<Vec<ModelDescriptor>>,
+    #[serde(default)]
+    pub default_model: Option<String>,
+}
+
+impl HarnessManifest {
+    /// The driver path this OS runs, when the plugin names one.
+    pub fn driver_path(&self) -> Option<&str> {
+        let os = std::env::consts::OS;
+        let exact = self.driver.get(os);
+        let alias = match os {
+            "windows" => self.driver.get("win32"),
+            "macos" => self.driver.get("darwin"),
+            _ => None,
+        };
+        exact
+            .or(alias)
+            .or_else(|| self.driver.get("default"))
+            .map(String::as_str)
+    }
+
+    /// The driver path, resolved inside the plugin folder. An absolute path
+    /// or one that climbs out with `..` is refused: a plugin may run programs,
+    /// but it runs them from its own folder.
+    pub fn resolved_driver(&self, dir: &Path) -> Result<PathBuf, String> {
+        let value = self.driver_path().ok_or_else(|| {
+            format!(
+                "names no driver for {} (add one, or a default)",
+                std::env::consts::OS
+            )
+        })?;
+        let relative = Path::new(value);
+        if relative.is_absolute()
+            || relative.components().any(|c| {
+                matches!(
+                    c,
+                    Component::ParentDir | Component::RootDir | Component::Prefix(_)
+                )
+            })
+        {
+            return Err(format!(
+                "driver '{value}' leaves the plugin folder; a driver is a relative path inside it"
+            ));
+        }
+        let full = dir.join(relative);
+        let canonical = full.canonicalize().map_err(|_| {
+            format!(
+                "driver '{value}' is not in the plugin folder (expected {})",
+                full.display()
+            )
+        })?;
+        let root = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+        if !canonical.starts_with(&root) {
+            return Err(format!("driver '{value}' leaves the plugin folder"));
+        }
+        Ok(canonical)
+    }
+}
+
+/// An installed plugin's harness, ready for the registry: everything the
+/// daemon needs to probe and spawn its driver, plus the reason it cannot when
+/// something is wrong.
+#[derive(Clone, Debug)]
+pub struct HarnessSpec {
+    pub id: String,
+    pub name: String,
+    /// `name@marketplace`, the plugin that provides it.
+    pub plugin: String,
+    pub dir: PathBuf,
+    /// The resolved driver path; empty when `problem` explains why there is
+    /// none.
+    pub driver: PathBuf,
+    pub args: Vec<String>,
+    pub models: Option<Vec<ModelDescriptor>>,
+    pub default_model: Option<String>,
+    pub enabled: bool,
+    /// Why this harness cannot be offered, in one sentence the console shows.
+    pub problem: Option<String>,
+}
+
+/// The harnesses the installed plugins on this machine declare. A plugin whose
+/// folder no longer reads gets a spec with the reason, so the console can say
+/// why the harness it used to offer is gone instead of hiding it.
+pub fn installed_harnesses(data_dir: &Path, installed: &[&InstalledPlugin]) -> Vec<HarnessSpec> {
+    let mut specs = Vec::new();
+    for plugin in installed {
+        let Some(recorded) = &plugin.harness else {
+            continue;
+        };
+        let dir = plugin_dir(data_dir, &plugin.marketplace, &plugin.name);
+        let (manifest, problem) = match read_manifest(&dir, &[]) {
+            Ok(manifest) => match manifest.harness {
+                Some(harness) => (Some(harness), None),
+                None => (
+                    None,
+                    Some("the plugin no longer declares a harness".to_string()),
+                ),
+            },
+            Err(err) => (
+                None,
+                Some(format!("the plugin folder no longer reads: {err}")),
+            ),
+        };
+        let Some(harness) = manifest else {
+            specs.push(HarnessSpec {
+                id: recorded.id.clone(),
+                name: recorded.name.clone(),
+                plugin: plugin.id(),
+                dir,
+                driver: PathBuf::new(),
+                args: Vec::new(),
+                models: None,
+                default_model: None,
+                enabled: plugin.enabled,
+                problem,
+            });
+            continue;
+        };
+        let (driver, problem) = match harness.resolved_driver(&dir) {
+            Ok(path) => (path, None),
+            Err(reason) => (PathBuf::new(), Some(reason)),
+        };
+        specs.push(HarnessSpec {
+            id: harness.id,
+            name: harness.name,
+            plugin: plugin.id(),
+            dir,
+            driver,
+            args: harness.args,
+            models: harness.models,
+            default_model: harness.default_model,
+            enabled: plugin.enabled,
+            problem,
+        });
+    }
+    specs
 }
 
 #[derive(Deserialize, Default)]
@@ -104,6 +266,55 @@ struct OpenRemoteManifest {
     runtime: Option<String>,
     #[serde(default)]
     powers: Vec<String>,
+    #[serde(default)]
+    harness: Option<HarnessManifest>,
+}
+
+/// The `harness` block's api this daemon speaks.
+pub const HARNESS_API_VERSION: u64 = 1;
+
+/// Check a harness block before its plugin may be installed. The same checks
+/// run when the folder is re-read at probe time, so a folder edited on disk
+/// cannot smuggle in a new id or a driver outside itself.
+fn validate_harness(
+    harness: &HarnessManifest,
+    builtin_ids: &[String],
+    plugin_name: &str,
+) -> Result<(), PluginError> {
+    if harness.api != HARNESS_API_VERSION {
+        return Err(PluginError::Invalid(format!(
+            "the plugin's harness says api {}; this OpenRemote speaks harness api {HARNESS_API_VERSION}",
+            harness.api
+        )));
+    }
+    if !valid_name(&harness.id) {
+        return Err(PluginError::Invalid(format!(
+            "'{}' is not a harness id: lowercase letters, digits and dashes, up to 64",
+            harness.id
+        )));
+    }
+    if builtin_ids.iter().any(|b| b == &harness.id) || RESERVED_NAMES.contains(&harness.id.as_str())
+    {
+        return Err(PluginError::Invalid(format!(
+            "harness id '{}' is taken by OpenRemote itself",
+            harness.id
+        )));
+    }
+    if harness.name.trim().is_empty() {
+        return Err(PluginError::Invalid(
+            "the plugin's harness names no display name".into(),
+        ));
+    }
+    if harness.driver_path().is_none() {
+        return Err(PluginError::Invalid(format!(
+            "the plugin's harness names no driver for {} (add one, or a default)",
+            std::env::consts::OS
+        )));
+    }
+    // The id and the plugin's own name may match (a plugin called freebuff
+    // provides harness freebuff); only the built-in ids are reserved.
+    let _ = plugin_name;
+    Ok(())
 }
 
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<Option<T>, PluginError> {
@@ -195,6 +406,10 @@ pub fn read_manifest(dir: &Path, builtin_ids: &[String]) -> Result<Manifest, Plu
             "'{name}' is taken by OpenRemote itself"
         )));
     }
+    let harness = ours.as_ref().and_then(|o| o.harness.clone());
+    if let Some(harness) = &harness {
+        validate_harness(harness, builtin_ids, &name)?;
+    }
 
     let has_hooks = claude.hooks.is_some() || dir.join("hooks").join("hooks.json").is_file();
     let has_mcp = claude.mcp_servers.is_some() || dir.join(".mcp.json").is_file();
@@ -255,6 +470,7 @@ pub fn read_manifest(dir: &Path, builtin_ids: &[String]) -> Result<Manifest, Plu
         powers,
         claude_parts,
         not_sandboxed,
+        harness,
     })
 }
 
@@ -2591,6 +2807,7 @@ mod tests {
                 from: "a command".into(),
             },
             scope: openremote_core::PluginScope::Machine,
+            harness: None,
             enabled: true,
             installed_at: 0,
             updated_at: 0,
@@ -2662,6 +2879,7 @@ mod tests {
                 from: "a command".into(),
             },
             scope: openremote_core::PluginScope::Machine,
+            harness: None,
             enabled: true,
             installed_at: 0,
             updated_at: 0,
@@ -2785,5 +3003,90 @@ mod tests {
             plugin_json(dir.path()),
             json!({"name": "greeter", "version": "1.0.0"})
         );
+    }
+
+    // ---- harness plugins ----
+
+    /// A minimal harness block, with the driver written where the current
+    /// OS looks for it.
+    fn harness_plugin(driver: &str) -> tempfile::TempDir {
+        let os = std::env::consts::OS;
+        let body = format!(
+            r#"{{"api":1,"name":"freebuff","runtime":"process","powers":["network"],"harness":{{"api":1,"id":"freebuff","name":"Freebuff","driver":{{"{os}":"{driver}","default":"bin/freebuff-driver"}}}}}}"#
+        );
+        folder(&[("openremote.json", &body), (driver, "driver")])
+    }
+
+    #[test]
+    fn a_plugin_can_declare_a_harness_and_its_driver_stays_inside() {
+        let os = std::env::consts::OS;
+        let driver = if os == "windows" {
+            "bin/windows-x64/freebuff-driver.exe"
+        } else {
+            "bin/freebuff-driver"
+        };
+        let dir = harness_plugin(driver);
+        let manifest = read_manifest(dir.path(), &builtins()).expect("a harness plugin reads");
+        let harness = manifest.harness.expect("the harness block");
+        assert_eq!(harness.id, "freebuff");
+        assert_eq!(harness.name, "Freebuff");
+        // A process harness runs programs, and the install screen says so.
+        assert!(manifest.powers.contains(&PluginPower::RunPrograms));
+        assert!(manifest.not_sandboxed);
+        let resolved = harness.resolved_driver(dir.path()).expect("driver inside");
+        assert!(
+            resolved.ends_with(if os == "windows" {
+                "freebuff-driver.exe"
+            } else {
+                "freebuff-driver"
+            }),
+            "{}",
+            resolved.display()
+        );
+
+        // A path that climbs out is refused, even when a file sits there.
+        let mut escaping = harness.clone();
+        escaping.driver = HashMap::from([("default".to_string(), "../evil.exe".to_string())]);
+        let err = escaping
+            .resolved_driver(dir.path())
+            .expect_err("a driver outside the folder");
+        assert!(err.contains("leaves the plugin folder"), "{err}");
+    }
+
+    #[test]
+    fn a_harness_id_cannot_take_a_builtin_and_a_foreign_api_is_refused() {
+        let os = std::env::consts::OS;
+        let dir = folder(&[(
+            "openremote.json",
+            &format!(
+                r#"{{"api":1,"name":"x","runtime":"process","harness":{{"api":1,"id":"claude","name":"X","driver":{{"{os}":"d"}}}}}}"#
+            ),
+        )]);
+        let err = read_manifest(dir.path(), &builtins()).expect_err("a built-in id is reserved");
+        assert!(err.to_string().contains("taken by OpenRemote"), "{err}");
+
+        let dir = folder(&[(
+            "openremote.json",
+            &format!(
+                r#"{{"api":1,"name":"x","runtime":"process","harness":{{"api":2,"id":"x","name":"X","driver":{{"{os}":"d"}}}}}}"#
+            ),
+        )]);
+        let err = read_manifest(dir.path(), &builtins()).expect_err("a newer seam");
+        assert!(err.to_string().contains("harness api"), "{err}");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_node_spelling_win32_is_accepted_for_a_hand_written_manifest() {
+        let dir = folder(&[
+            (
+                "openremote.json",
+                r#"{"api":1,"name":"x","runtime":"process","harness":{"api":1,"id":"x","name":"X","driver":{"win32":"bin/x.exe"}}}"#,
+            ),
+            ("bin/x.exe", "driver"),
+        ]);
+        let manifest = read_manifest(dir.path(), &builtins()).expect("reads");
+        let harness = manifest.harness.expect("harness");
+        assert_eq!(harness.driver_path(), Some("bin/x.exe"));
     }
 }
