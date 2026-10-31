@@ -20,16 +20,11 @@
 // the peer's own module keeps the device key, in its own store.
 
 import wasmUrl from '../peer/openremote-webpeer.wasm?url'
-
-/// The peer module, found through a glob: Vite includes it when it exists and
-/// answers with nothing when it does not, which keeps a build without the link
-/// green. Loaded once, because the socket and the key pair live inside it.
-///
-/// The call is bare on purpose. It is a build-time macro, not a property of
-/// `import.meta` at run time, so guarding it (`import.meta.glob ? ... : {}`)
-/// leaves the guard itself in the bundle, where it is always false and the
-/// link is never found.
-const modules = import.meta.glob('../peer/index.js')
+// The link itself. A plain import rather than a glob: the peer is part of this
+// build, and the glob wrapped it in Vite's preload helper, whose stylesheet
+// wait never settled on the deployed site and left the page on its "checking"
+// step for ever (measured 2026-10-31, the first production load).
+import * as peerModule from '../peer/index.js'
 
 function adapt(mod) {
   if (!mod || typeof mod.createWebPeer !== 'function') return null
@@ -78,13 +73,8 @@ export async function loadPeer() {
     loaded = injected
     return loaded
   }
-  const load = Object.values(modules)[0]
-  if (typeof load !== 'function') {
-    loaded = null
-    return loaded
-  }
   try {
-    loaded = adapt(await load())
+    loaded = adapt(peerModule)
   } catch {
     loaded = null
   }
