@@ -541,8 +541,8 @@ export default function Sidebar({
   const archive = (id) => {
     const row = rows.find((r) => r.id === id)
     setChatArchived(id, true)
-    // Both ways in come through here (the hover button and the row's menu),
-    // so the way back is offered whichever one the press came from.
+    // Both ways in come through here (the row's actions menu and its context
+    // menu), so the way back is offered whichever one the press came from.
     setUndo(row ? { id: row.id, title: row.title } : null)
     if (id === active) onSelect('new')
   }
@@ -790,9 +790,9 @@ export default function Sidebar({
       >
         {/* the harness's mark leads - every harness, one
             sidebar, the at-a-glance signal of which agent owns
-            each chat - sized to read from afar, then the title, with
-            the status dot at the right edge so every status scans in
-            one column */}
+            each chat - sized to read from afar, then the title. The
+            row's actions button sits at the right edge, beside the row
+            rather than inside it, so it stays out of the row's Tab stop. */}
         {row.harness && <HarnessMark harness={row.harness} size={15} />}
         <div className="chat-titles">
           <span className="chat-title pv">{row.title}</span>

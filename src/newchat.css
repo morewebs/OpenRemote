@@ -970,3 +970,28 @@ html[data-reduce-motion] .nc-label-out {
   font-size: 12.5px;
   line-height: 1.5;
 }
+
+/* Both motion switches reach every animation this file declares. This block
+   sits last on purpose: the effort panel's state rules carry two and three
+   classes (`.is-above`, `.is-out`), and the earlier, plainer entries cannot
+   outweigh them, so an exiting panel or a looping speck would still move for
+   someone who asked it not to. */
+@media (prefers-reduced-motion: reduce) {
+  .nc-effort,
+  .nc-effort.is-above,
+  .nc-effort.is-out,
+  .nc-effort.is-above.is-out,
+  .nc-effort-fast.on .nc-effort-bolt,
+  .nc-effort-speck {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion] .nc-effort,
+html[data-reduce-motion] .nc-effort.is-above,
+html[data-reduce-motion] .nc-effort.is-out,
+html[data-reduce-motion] .nc-effort.is-above.is-out,
+html[data-reduce-motion] .nc-effort-fast.on .nc-effort-bolt,
+html[data-reduce-motion] .nc-effort-speck {
+  animation: none;
+}

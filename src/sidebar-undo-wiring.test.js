@@ -1,5 +1,5 @@
-// Archive is a 22px hover button at the row's edge, over the status dot, so
-// an accidental press is easy and the only way back used to be Settings >
+// Archive is a press away in the row's own actions menu, so an accidental
+// press is easy and the only way back used to be Settings >
 // Archived chats, which a first-time user does not know exists. The sidebar
 // now offers the way back where the act happened: one line for eight seconds,
 // replaced rather than stacked, calling the same setChatArchived the Settings
@@ -15,9 +15,11 @@ import { readFileSync } from 'node:fs'
 const side = readFileSync(new URL('./Sidebar.jsx', import.meta.url), 'utf8')
 
 test('both ways into Archive offer the way back', () => {
-  // The hover button and the row's context menu are the two presses that can
-  // archive; both go through archive(), which is what raises the line.
-  assert.match(side, /onClick=\{\(\) => archive\(row\.id\)\}/, 'the hover button')
+  // The row's actions menu and its context menu are the two presses that can
+  // archive; both go through archive(), which is what raises the line. The
+  // hover button the row used to carry at its edge is this menu now.
+  assert.match(side, /className="chat-more"/, 'the row carries its actions button')
+  assert.match(side, /items: menuItems\(row\)/, 'and that button opens the row menu')
   assert.match(side, /label: 'Archive'[^\n]*archive\(row\.id\)/, 'the row menu')
   assert.match(side, /setUndo\(row \? \{ id: row\.id, title: row\.title \} : null\)/)
 })

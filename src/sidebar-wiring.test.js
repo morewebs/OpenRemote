@@ -104,10 +104,10 @@ test('the chat list is one Tab stop, and the arrows walk it', () => {
   assert.match(source, /tabIndex=\{rovingRow === row\.id \? 0 : -1\}/, 'exactly one row is in the Tab order')
   assert.match(source, /moveRoving\(row\.id, to\)/, 'the arrows move between rows')
   assert.match(source, /'ArrowDown' \? 1 : e\.key === 'ArrowUp' \? -1/, 'up and down walk the list')
-  // The hover archive button is a pointer shortcut: archiving from the
+  // The row's actions button is a pointer shortcut: archiving from the
   // keyboard is Mod+Shift+A or the palette's row, and leaving the button in
   // the order would double the cost of every row again.
-  assert.match(source, /className="chat-archive"[\s\S]{0,220}tabIndex=\{-1\}/, 'the archive button stays out of the Tab order')
+  assert.match(source, /className="chat-more"[\s\S]{0,220}tabIndex=\{-1\}/, 'the actions button stays out of the Tab order')
 })
 test('a row that vanishes under the keyboard hands its place to its neighbour', () => {
   // The roving stop already falls back to the first row; this is the person's

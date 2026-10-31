@@ -73,14 +73,15 @@ test('a chat name is its title, trimmed, or the one fallback', () => {
 
 test('no surface feeds the chat-title fallback by hand any more', () => {
   // The surfaces that print a chat's name. Each one used to write the sentence
-  // itself; if a new copy appears, this is where it shows up. ChatView.jsx and
-  // stop-everything.js are not listed because those two files are not this
-  // change's to edit; their lines are named in the hand-off note instead.
+  // itself; if a new copy appears, this is where it shows up. New chat is not
+  // listed: it hands the chat it just made straight to its pane and prints no
+  // chat name of its own. ChatView.jsx and stop-everything.js are not listed
+  // because those two files are not this change's to edit; their lines are
+  // named in the hand-off note instead.
   const surfaces = [
     'Sidebar.jsx',
     'CommandPalette.jsx',
     'App.jsx',
-    'NewChat.jsx',
     'SettingsView.jsx',
     'chat-markdown.js',
     'settings-search.js',

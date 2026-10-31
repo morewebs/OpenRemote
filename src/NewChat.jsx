@@ -101,6 +101,7 @@ export function EffortSlider({
   leaving,
   onEffort,
   onFast,
+  onClose = null,
   place = 'below',
 }) {
   const index = Math.max(0, tiers.indexOf(value ?? tiers[0]))
@@ -128,6 +129,19 @@ export function EffortSlider({
       })),
     )
   }, [fast, index])
+  // Escape is the panel's way out from the keyboard. It has no close button,
+  // and the outside press that closes it for a pointer is no help to someone
+  // who opened it with Enter on its chip.
+  useEffect(() => {
+    if (!onClose) return undefined
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onClose()
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => document.removeEventListener('keydown', onKey, true)
+  }, [onClose])
   const pctFrom = (e) => {
     const rect = trackRef.current?.getBoundingClientRect()
     if (!rect || rect.width <= 0) return snapped
@@ -145,7 +159,11 @@ export function EffortSlider({
   const panel = (
     <div
       className={`nc-effort${fast ? ' is-fast' : ''}${leaving ? ' is-out' : ''}${place === 'above' ? ' is-above' : ''}`}
-      role="dialog"
+      // A labelled group, not a dialog: this panel is not modal and traps
+      // nothing. It hangs off the chip that opened it and the composer behind
+      // it stays live, so the shared dialog plumbing would put the whole
+      // window inert behind a popover.
+      role="group"
       aria-label="Effort"
       style={spot ? { left: spot.left, top: spot.top } : undefined}
     >
@@ -1525,7 +1543,6 @@ export default function NewChat({
                   type="button"
                   className="nc-meta"
                   onClick={toggleEffort}
-                  aria-haspopup="dialog"
                   aria-expanded={picker?.kind === 'effort'}
                   data-picker="effort"
                   title={hintEffort("The harness's own effort tier")}
@@ -1542,6 +1559,7 @@ export default function NewChat({
                     fastSupported={currentHarness?.fast_supported === true}
                     onEffort={setEffort}
                     onFast={() => setFast((v) => !v)}
+                    onClose={leaveEffort}
                   />
                 )}
               </div>

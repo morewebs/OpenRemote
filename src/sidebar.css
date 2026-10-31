@@ -682,7 +682,7 @@ button:active,
    in the status column, so "not read" cannot be mistaken for "waiting"
    (the amber dot) or "running" (the green one). */
 .chat-row[data-unread='true'] {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .chat-row:hover {

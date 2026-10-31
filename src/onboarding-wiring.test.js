@@ -98,7 +98,8 @@ test('the ready screen can step back to the page before it', () => {
 
 test('the step body fades in, and both motion switches turn it off', () => {
   const view = source('Onboarding.jsx')
-  assert.match(view, /className="ob-stage" key=\{step\}/)
+  assert.match(view, /className=\{`ob-stage/, 'the stage is the frame the fade runs on')
+  assert.match(view, /key=\{step\}/, 'and it remounts per step, which restarts the fade')
   const css = source('onboarding.css')
   assert.match(css, /@keyframes ob-step-in/)
   // The contract asks for both switches, not one: the media query for the OS

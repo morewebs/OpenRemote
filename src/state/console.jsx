@@ -793,13 +793,23 @@ export function ConsoleProvider({ children }) {
       ensureChat(session)
       // The prompt can take a moment. The caller opens the chat from the id
       // as soon as the session exists, so a slow or failed send does not
-      // leave the person on New chat.
+      // leave the person on New chat. A send that fails is written into that
+      // chat rather than swallowed here: the person is already looking at it,
+      // and an agent that never answered without a word about why is the one
+      // failure this console must not ship.
       if (text.trim()) {
-        void api.prompt(session.id, text.trim(), mentionedChats).catch(() => {})
+        api.prompt(session.id, text.trim(), mentionedChats).catch((err) => {
+          queueEvent(session.id, {
+            type: 'daemon.error',
+            id: `send-failed-${Date.now()}`,
+            seq: null,
+            message: errorCopy(err),
+          })
+        })
       }
       return session.id
     },
-    [api, ensureChat],
+    [api, ensureChat, queueEvent],
   )
 
   // What a composer's / and @ menus offer, kept per chat (or per harness

@@ -255,13 +255,21 @@
   color: var(--text-1);
 }
 
-/* The menu's entrance; both motion switches open it in place instead. */
+/* The menu's entrance; both motion switches open it in place instead. The
+   state variants are named too: `.nc-menu.is-above.is-out` carries three
+   classes, so the plain entry alone would not outweigh it. */
 @media (prefers-reduced-motion: reduce) {
-  .nc-menu {
+  .nc-menu,
+  .nc-menu.is-above,
+  .nc-menu.is-out,
+  .nc-menu.is-above.is-out {
     animation: none;
   }
 }
 
-html[data-reduce-motion] .nc-menu {
+html[data-reduce-motion] .nc-menu,
+html[data-reduce-motion] .nc-menu.is-above,
+html[data-reduce-motion] .nc-menu.is-out,
+html[data-reduce-motion] .nc-menu.is-above.is-out {
   animation: none;
 }

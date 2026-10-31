@@ -35,7 +35,9 @@ typography:
 spacing:
   rhythm: 4px grid; paddings 6–16px; view gutters 32px
 rounded:
-  default: 12px      # --radius - cards, boxes, pickers
+  default: 12px      # --radius - cards, small controls
+  panel: 16px        # menus and the effort panel
+  composer: 22px     # the composer box, and the chat's reply box
   full: 9999px       # dots, send buttons, pills
 
 ## Overview
@@ -44,7 +46,7 @@ A quiet, dense, machine-room dark UI: near-black canvas with a cool cast,
 one amber accent, and a single green for life. Chrome recedes; the content
 (chats, tools, commands) is the surface. No shadows for depth - 1px
 `rgba(255,255,255,0.07)` lines and white-alpha tint steps define structure.
-Everything is small and calm: 11–14px type, 12px radii, generous but not airy
+Everything is small and calm: 11–14px type, 12–22px radii, generous but not airy
 spacing.
 
 ## Colors
@@ -56,8 +58,10 @@ spacing.
   hover, so a mark never competes with the row's own states.
 - **Text tiers:** `#E8EBEF` primary, `#9AA3AE` secondary, `#5F6873` muted -
   cool greys, not warm.
-- **Amber `#DCA24B` is the one accent:** primary buttons (send), waiting
-  dots, brand marks, focus. Used sparingly - most chrome is grey.
+- **Amber `#DCA24B` is the one accent:** waiting dots, brand marks, the
+  affirmative in a decision. Used sparingly - most chrome is grey. The send
+  button and the keyboard's focus ring are not amber: they are the one white
+  disc and the one white outline in the console.
 - **Green `#4CB487` means running/ok:** the running dot (with a 2.4s breathe
   animation), agent activity. Never decorative.
 
@@ -256,10 +260,11 @@ spacing.
   answering nothing. The floating chat
   composer publishes its measured height (`--cv-clear`) so the transcript's
   bottom padding keeps the last message above it, never under it.
-- **Send button:** 30px radius-8 rounded square; amber (`--accent`) with a
-  white arrow when ready, transparent with a muted arrow when empty. The
-  press pulses - a scale dip to 0.8 and an amber glow bloom - the one
-  recurring primary action, rewarded.
+- **Send button:** a 32px circle; a light grey disc (`#d4d4d8`) with a dark
+  arrow when ready, transparent with a muted arrow when empty. A hover
+  brightens it; the press holds still, with no scale dip and no glow. It is
+  still the one recurring primary action, and it no longer competes with the
+  amber that means "waiting".
 - **PickerMenu:** the one dropdown engine - opens at the cursor, searches,
   optional groups, keyboard-navigated, viewport-clamped.
 - **Command palette (`Ctrl+K`):** the one search over everything the console
@@ -512,10 +517,10 @@ Every screen the design specifies, backed by the real daemon:
   on Windows, macOS, and Linux - the command stays the daemon's, never
   shown; pi's Node.js is set up only after a calm go-ahead),
   model picker where the harness advertises (its own catalog, the model
-  names alone - each row led by its own maker's real mark: Claude's
-  starburst, OpenAI's hexapod, xAI's, Gemini, DeepSeek, Qwen, Kimi,
-  Mistral, Meta, each its owner's official path in its official color,
-  text alone where the maker is unknown - the effort picker offers the
+  names alone; the maker's mark rides the command palette's model rows
+  instead - Claude's starburst, OpenAI's hexapod, xAI's, Gemini, DeepSeek,
+  Qwen, Kimi, Mistral, Meta, each its owner's official path in its official
+  color, text alone where the maker is unknown - the effort picker offers the
   chosen model's own tiers
   right after, so the model rows carry no tier sublines), the permission
   picker where the harness has its own words (claude `--permission-mode`,
@@ -528,7 +533,7 @@ Every screen the design specifies, backed by the real daemon:
   project picker (the registered projects on the machine the chat runs
   on, "No project", and the picker's own Add project row - the one way
   in, which the in-app folder picker serves for every surface that asks:
-  the sidebar's +, the settings rows, itself), the In-progress list.
+  the sidebar's +, the settings rows, itself).
 - **Chat** - the rail transcript (user cards, agent text, notes, tool
   cards with In/Out, decisions in the harness's own words with its
   affirmative first), the facts row (workspace · harness · model ·
@@ -661,8 +666,8 @@ from the film's own components:
   of the send button, 2px stroke, track 0.12; claude rides a nominal
   200k window (the hover card says so) until its wire carries one.
 - **The facts dot breathes** (2.4s, all statuses).
-- **Sidebar rows** - the harness mark leads, the title follows, the
-  status dot at the row's right edge (one vertical column of statuses).
+- **Sidebar rows** - the harness mark leads, the title follows, and the
+  row's actions button sits at its right edge, outside the row's Tab stop.
 - **Press feedback on primaries** - both send buttons, the decision
   affirmative; all of it under `data-reduce-motion`.
 

@@ -1470,6 +1470,7 @@ export default function ChatView({ chat, onBack, focused = true }) {
                       fastSupported={canChange.fast && harness?.fast_supported === true}
                       onEffort={(tier) => applySettings({ effort: tier })}
                       onFast={() => applySettings({ fast: !chat.fast })}
+                      onClose={leaveEffort}
                     />
                   )}
                 </div>
