@@ -5,7 +5,7 @@
 // possible has to be present, and the rules it calls are unit tested in
 // presets.test.js. The one CSS rule is pinned too, because the ghost look
 // is a design decision, not a preference: a filled pill row would be a
-// regression against DESIGN.md.
+// regression.
 
 import assert from 'node:assert/strict'
 import test from 'node:test'

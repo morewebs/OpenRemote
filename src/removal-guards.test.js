@@ -108,11 +108,11 @@ test('the sync mark promises the setting, not a delivery', () => {
 })
 
 test('Escape keeps: an armed row is disarmed by the key, in every pane that uses the hook', () => {
-  // DESIGN.md promises it in one line ("the first press arms, the second press
-  // does it, and Escape or a click elsewhere keeps") and four panes were not
-  // doing it: the armed control took the focus and answered no key, so the only
-  // way out was to click something else. The listener lives in the shared hook,
-  // which is what makes it true for all four at once.
+  // The rule is one line ("the first press arms, the second press does it, and
+  // Escape or a click elsewhere keeps") and four panes were not doing it: the
+  // armed control took the focus and answered no key, so the only way out was
+  // to click something else. The listener lives in the shared hook, which is
+  // what makes it true for all four at once.
   const hook = source('use-armed-row.js')
   assert.match(hook, /addEventListener\('keydown', onKeyDown\)/, 'the armed control listens')
   assert.match(hook, /if \(event\.key !== 'Escape'\) return/, 'only Escape is taken')

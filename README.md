@@ -104,8 +104,8 @@ OpenRemote is licensed AGPL-3.0-only - see [LICENSE](LICENSE).
 ## Conventions
 
 - Windows first: frameless window with a custom titlebar (Segoe MDL2 glyphs).
-  Dark theme, Inter (+ Geist Mono for technical content), amber/green accents;
-  the design contract lives in [DESIGN.md](DESIGN.md).
+  Dark theme, Inter (+ Geist Mono for technical content), one cool accent and
+  one green.
 - `PickerMenu.jsx` is the one dropdown engine everywhere; modals all share the
   `dv-modal` family (Esc / backdrop / X to close).
 - Harness names and marks belong to their owners; OpenRemote is not

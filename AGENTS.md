@@ -44,8 +44,6 @@ the project's own map.
   names the capability that widened; `--self-test` checks the check itself,
   and `--root` points it at another tree. Not build tooling; the one build
   script is `sync-daemon.mjs`.
-- `DESIGN.md` - the design contract. The console transcribes it, never
-  improvises past it.
 - `Archive/` - measured-and-killed experiments. Consult before
   resurrecting anything; never delete from it.
 

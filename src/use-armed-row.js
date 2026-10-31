@@ -1,9 +1,9 @@
 // The browser half of an armed destructive row: the arm ends the moment the
 // row stops being the thing the user is looking at. Scrolling it out of view
 // disarms it (an IntersectionObserver on the armed button itself), and so does
-// losing focus (a tab, or a click somewhere else). Escape disarms it too, which
-// is what DESIGN.md promises ("Escape or a click elsewhere keeps") and what four
-// panes were not doing: the armed control took the focus but answered no key, so
+// losing focus (a tab, or a click somewhere else). Escape disarms it too:
+// Escape or a click elsewhere keeps the row, which is what four panes were not
+// doing: the armed control took the focus but answered no key, so
 // the only way out of an armed row was to click something else. The listener is
 // attached to the armed control here rather than in each pane, so the four cannot
 // drift apart. The rule is armAfter in row-confirm.js; this only supplies the

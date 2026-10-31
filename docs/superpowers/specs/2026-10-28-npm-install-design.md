@@ -89,7 +89,7 @@ the app drives.
   channel as the one host for binaries and the repo as source.
 - **C. Browser mode, no exe.** `openremote` runs the daemon and opens the
   console in a browser. Rejected: the frameless titlebar, native dialogs,
-  autostart and the sidecar are DESIGN.md contract items, and the console
+  autostart and the sidecar are console contract items, and the console
   calls Tauri APIs the browser does not have.
 
 ## What the change touches

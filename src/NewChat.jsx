@@ -284,7 +284,7 @@ export default function NewChat({
   const [presetEditing, setPresetEditing] = useState(null)
   // The chip whose delete control is armed: one row at a time, and the
   // same helper the plugins and MCP panes use. The helper's browser half comes
-  // with it: Escape disarms (DESIGN.md's "Escape or a click elsewhere keeps"),
+  // with it: Escape disarms, as the armed-row rule says,
   // and so does losing the control. Without the hook this row was armed until it
   // was pressed again: no key and no click anywhere else took the arm away.
   const [armedPreset, setArmedPreset] = useState(null)

@@ -500,7 +500,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   // lands a moment later into the same visit. A tab with no address (the new
   // tab page) has not been anywhere yet.
   useEffect(() => {
-    // A private tab is kept from this window's history (DESIGN.md): it is
+    // A private tab is kept from this window's history: it is
     // recorded nowhere, so the record cannot name a page the person read in
     // private, and the new tab page's recent list cannot either. The shell
     // says which tabs those are, and browser-store carries the flag.

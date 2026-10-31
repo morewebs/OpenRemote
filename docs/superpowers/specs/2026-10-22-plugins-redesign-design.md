@@ -23,7 +23,7 @@ The OpenRemote Plugins view currently feels disjointed, cramped, and unfinished:
 - Do not make the catalog cards feel like oversized marketing banners or generic SaaS cards. Keep the information density high, crisp, and machine-like.
 
 ## Constraints
-- Must adhere to OpenRemote's design system in `DESIGN.md` (no em dashes, Segoe MDL2 / Phosphor icon conventions, reduced motion support via `@media` and `html[data-reduce-motion]`).
+- Must adhere to OpenRemote's design system (no em dashes, Segoe MDL2 / Phosphor icon conventions, reduced motion support via `@media` and `html[data-reduce-motion]`).
 - Must operate cleanly within Tauri and browser environments.
 - Must preserve all existing plugin capabilities, powers disclosures, and clash warnings.
 

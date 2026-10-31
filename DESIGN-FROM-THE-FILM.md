@@ -4,7 +4,8 @@
 commit). Eight of the nine numbered items below ship; §4 (pill chips)
 was applied and then removed the same day on the founder's override -
 see its note. The file stays as the record of the delta and its values.
-`DESIGN.md` now carries the adopted rules as contract.
+The adopted rules were collected in `DESIGN.md`; that file has since been
+removed, so the record lives here and in the code.
 
 What the launch film's console mock does better than the app. During the
 film's polish pass (2026-10-08) the mock was first made byte-for-byte

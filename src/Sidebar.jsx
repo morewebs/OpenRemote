@@ -761,7 +761,7 @@ export default function Sidebar({
       <button
         className={`chat-row${row.id === active && !searchOn ? ' active' : ''}`}
         data-status={row.status}
-        // The quiet mark: one white-alpha tint step (DESIGN.md's ladder),
+        // The quiet mark: one white-alpha tint step,
         // not a colour and not a number. The status column keeps its own
         // language, so "not read" and "waiting" cannot be mistaken.
         data-unread={unread.has(row.id) ? 'true' : undefined}

@@ -104,7 +104,7 @@ export default function HarnessManagerModal({ onClose, onSignIn }) {
                   </span>
                 </div>
                 {row.detail &&
-                  // Mono is for technical content (DESIGN.md): the
+                  // Mono is for technical content: the
                   // daemon's probe words are mono, prose is plain text.
                   (row.detailKind === 'mono' ? (
                     <code className="dv-hm-detail pv" title={privacy ? undefined : row.detail}>

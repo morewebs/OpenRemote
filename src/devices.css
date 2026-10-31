@@ -839,7 +839,7 @@
   width: 380px;
 }
 
-/* amber marks the primary interaction (DESIGN.md) - no fill, no shadow */
+/* amber marks the primary interaction - no fill, no shadow */
 .dv-act.primary {
   border-color: rgba(122, 92, 255, 0.45);
   color: var(--accent);
