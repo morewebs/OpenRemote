@@ -1,0 +1,12 @@
+[package]
+name = "example-harness-driver"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "A template driver for an OpenRemote harness plugin"
+
+# A template lives on its own: it is not a member of OpenRemote's workspace.
+[workspace]
+
+[dependencies]
+serde_json = "1"
