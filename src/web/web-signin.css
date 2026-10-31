@@ -1,0 +1,118 @@
+/* The web console's front door. It borrows the Cloud sign-in surface's sky
+   (cloudmode.css) and adds only the panel's own rows: the mark, the machine
+   list, and one honest line when the link is not in this build. Every colour
+   is a token or a white alpha already in the app; no new palette, no
+   gradients the console does not already draw. */
+
+.web-signin-panel {
+  width: min(460px, calc(100vw - 48px));
+  text-align: left;
+}
+
+/* In the desktop this surface is a flex child of the app's column, and `flex:
+   1` is what fills the window with its sky. A browser tab has no such column,
+   so the page states its own height: without this the sky stops where the
+   panel does and the front door floats at the top of an empty page. */
+.web-signin {
+  min-height: 100dvh;
+}
+
+.web-signin-mark {
+  width: 84px;
+  height: 84px;
+  margin: 0 auto 18px;
+  display: block;
+}
+
+.web-signin .cm-title,
+.web-signin .cm-body {
+  text-align: center;
+}
+
+.web-signin-quiet {
+  color: var(--text-3);
+}
+
+.web-signin-sub {
+  margin-top: 14px;
+}
+
+/* The link sentence: a warning, not an error state, because a signed-in page
+   without the link is a working build with one part missing. */
+.web-signin-honest {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.web-signin-machines {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.web-signin-machine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.web-signin-machine-mark {
+  color: var(--text-3);
+  display: grid;
+  place-items: center;
+}
+
+.web-signin-machine-body {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+
+.web-signin-machine-name {
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.web-signin-machine-line {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.web-signin-machine-line.is-online {
+  color: var(--green);
+}
+
+.web-signin-problem {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 16px;
+  text-align: left;
+}
+
+.web-signin-problem svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* The surface's own motion is the sky's slow drift; the panel itself does not
+   animate, so there is nothing here to switch off beyond that. The drift is
+   covered in cloudmode.css under both switches, which is why this sheet adds
+   no keyframes of its own. */

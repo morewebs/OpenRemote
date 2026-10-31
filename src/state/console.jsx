@@ -10,10 +10,17 @@ import { samePayload } from './same.js'
 import { errorCopy } from '../error-copy.js'
 import { isMobile, openExternal } from '../platform.js'
 import { loadArchived, saveArchived, withArchived } from '../archive.js'
+import { webFetch } from '../web/transport.js'
 
 const ConsoleContext = createContext(null)
 
 const hasTauri = typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__
+
+// One place that builds a client, so the web build's link is used wherever a
+// client is made. The transport is installed by the web entry before the
+// console mounts; in the desktop and in a plain browser tab there is none,
+// webFetch() is null, and DaemonApi falls back to the global fetch.
+const dial = (url, token, prefix = '') => new DaemonApi(url, token, prefix, webFetch())
 
 // How many sign-in poll beats in a row (800 ms each, about 30 s) may
 // fail to read the relay's view before the relay is declared dead: one
@@ -48,7 +55,7 @@ export function ConsoleProvider({ children }) {
     // nothing listens on any more. Dialling it first would report a healthy
     // boot as a failure. Browser mode has only the saved address.
     const saved = hasTauri ? {} : loadConnection()
-    return new DaemonApi(saved.url, saved.token)
+    return dial(saved.url, saved.token)
   })
   // Which daemon an answer belongs to. A fetch that was in flight when the
   // connection changed comes back for the daemon that is no longer there,
@@ -196,7 +203,7 @@ export function ConsoleProvider({ children }) {
     setEndpointsByHarness({})
     resetDaemonData()
     saveConnection(url, token)
-    const next = new DaemonApi(url, token)
+    const next = dial(url, token)
     apiRef.current = next
     setApi(next)
     setConnection({ state: 'connecting', error: null })
@@ -210,7 +217,7 @@ export function ConsoleProvider({ children }) {
     setEndpointsByHarness({})
     resetDaemonData()
     clearConnection()
-    const next = new DaemonApi(null, null)
+    const next = dial(null, null)
     apiRef.current = next
     setApi(next)
     setConnection({ state: 'new', error: null })

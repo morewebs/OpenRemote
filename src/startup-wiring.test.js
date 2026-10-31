@@ -13,10 +13,14 @@ const source = (file) => readFileSync(new URL(`./${file}`, import.meta.url), 'ut
 test('the shell does not dial the address the last run saved', () => {
   // The saved address is the previous daemon's port. Building the client from
   // it made every launch fetch a dead port before the shell had answered, and
-  // the refusal was shown as a daemon failure.
+  // the refusal was shown as a daemon failure. The client is now built by the
+  // one helper that carries the web build's link fetch; the rule stands, so
+  // this keeps both halves: the desktop's empty saved address, and the helper
+  // staying the only place a client is made.
   const console = source('state/console.jsx')
   assert.match(console, /const saved = hasTauri \? \{\} : loadConnection\(\)/)
-  assert.match(console, /new DaemonApi\(saved\.url, saved\.token\)/)
+  assert.match(console, /return dial\(saved\.url, saved\.token\)/)
+  assert.match(console, /const dial = \(url, token, prefix = ''\) => new DaemonApi\(url, token, prefix, webFetch\(\)\)/)
   // And the connect effect has to stay guarded: an empty client never dials.
   assert.match(console, /if \(!api\.ready \|\| connection\.state === 'connected'\) return undefined/)
 })

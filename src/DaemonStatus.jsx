@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useConsole } from './state/console.jsx'
 import { daemonStatus } from './daemon-status.js'
-import { isMobile } from './platform.js'
+import { hasTauri, isMobile } from './platform.js'
 import './daemon-status.css'
 
 // How long the button says "Restarting..." after a press. A restart closes
@@ -56,7 +56,10 @@ export default function DaemonStatus({ onManualConnect = null }) {
             path - the person's home folder - so it blurs like the rest. */}
         {status.detail && <p className="ds-detail pv">{status.detail}</p>}
         <p className="ds-note">{booting ? BOOTING_NOTE : status.note}</p>
-        {status.action === 'try-now' && !booting && (
+        {/* The button restarts the shell's sidecar. A browser tab has no
+            shell and no daemon to restart, so the offer is left out there
+            rather than pressed into nothing. */}
+        {status.action === 'try-now' && !booting && hasTauri && (
           <button className="ds-cta" onClick={retryNow} disabled={retrying}>
             {retrying ? 'Restarting...' : 'Try now'}
           </button>

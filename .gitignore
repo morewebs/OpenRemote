@@ -1,5 +1,7 @@
 # build output
 dist/
+# the web console's build (npm run build:web copies it into the site repo)
+dist-web/
 # dependencies
 node_modules/
 # rust

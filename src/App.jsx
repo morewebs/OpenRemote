@@ -225,7 +225,14 @@ function Shell() {
   // window. The tabs live in the browser store, so the pane opens and
   // closes without losing them.
   const [browserOpen, setBrowserOpen] = useState(false)
-  const toggleBrowser = () => setBrowserOpen((v) => !v)
+  // The browser pane is the shell's: its pages are native views the shell
+  // owns and every control calls it, so a browser tab has nothing to open.
+  // The affordances below are hidden rather than shown dead.
+  const canBrowse = hasTauri
+  const toggleBrowser = () => {
+    if (!canBrowse) return
+    setBrowserOpen((v) => !v)
+  }
   // A chat asking for the browser, and this shell answering: the panes are the shell's,
   // so a chat (or its agent's tab) never needs to know the layout. The last request is
   // kept so the pane can be told which tab or address to show.
@@ -258,6 +265,10 @@ function Shell() {
   useEffect(
     () =>
       onBrowserRequest((request) => {
+        // A chat asking for the browser is asking for the shell's pane, and a
+        // browser tab has none: the request is dropped there instead of
+        // opening an empty pane whose every control is dead.
+        if (!canBrowse) return
         browserRequest.current = request
         setBrowserAsk(request)
         setBrowserOpen(true)
@@ -827,7 +838,7 @@ function Shell() {
     desk,
   )
   useShortcut('toggle-sidebar', () => setSidebarOpen((v) => !v), desk)
-  useShortcut('toggle-browser', toggleBrowser, desk)
+  useShortcut('toggle-browser', toggleBrowser, desk && canBrowse)
   // The agent of the chat in the primary pane opening a tab opens the browser beside it,
   // showing that tab. Another chat's agent never steals the view: its tab carries its
   // badge in the browser instead. A pane the person closed stays closed until the agent
@@ -929,7 +940,7 @@ function Shell() {
             setupSeed={setupSeed}
             focused={primaryFocused}
             onOpenPlugins={() => goView('plugins')}
-            topRight={<FloatingBar browserOn={browserOpen} onBrowser={toggleBrowser} />}
+            topRight={<FloatingBar browserOn={browserOpen} onBrowser={canBrowse ? toggleBrowser : null} />}
           />
         ))}
       {view === 'machines' && <MachinesView onOpenChat={openSession} openDevice={openDevice} />}
@@ -1081,7 +1092,7 @@ function Shell() {
       onAddProject={addProject}
       onNewChatIn={newChatIn}
       onReveal={() => setSidebarOpen(true)}
-      onBrowser={toggleBrowser}
+      onBrowser={canBrowse ? toggleBrowser : null}
       browserOpen={browserOpen}
       // The row menu's Rename opens the dialog hosted below; the overlay is
       // the name it shows until the console's own record catches up.
@@ -1205,7 +1216,7 @@ function Shell() {
               {/* The browser docked right: beside the chat, never instead
                   of it. The floating bar (on the homepage) and the sidebar
                   open and close it. */}
-              {browserOpen && (
+              {browserOpen && canBrowse && (
                 <>
                   {/* The pane is as wide as the person left it, and this grip is how they
                       leave it: drag to widen or narrow, double-click for the default.

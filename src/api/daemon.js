@@ -230,15 +230,28 @@ export function sameDaemon(current, url, token) {
 export class DaemonApi {
   // `prefix` points every call at another of the user's devices, through
   // this daemon (`/devices/<id>`): the same API, answered over there.
-  constructor(url, token, prefix = '') {
+  //
+  // `fetchImpl` is the one seam the web console needs: in the desktop the
+  // address is a loopback port and the global `fetch` dials it, while in a
+  // browser the same requests travel over an end-to-end encrypted link. The
+  // client never reaches for the global itself, so every request it makes -
+  // the ordinary calls and the live event stream - goes through this field.
+  //
+  // The default is a forwarder rather than the global itself: it reads
+  // `globalThis.fetch` when the request is made, so a page (or a test) that
+  // swaps the global between calls keeps working, which is the behaviour the
+  // desktop has always had and the suite relies on.
+  constructor(url, token, prefix = '', fetchImpl = null) {
     this.url = normaliseUrl(url)
     this.token = token
     this.prefix = prefix
+    this.fetch =
+      typeof fetchImpl === 'function' ? fetchImpl : (target, init) => globalThis.fetch(target, init)
   }
 
   /** The same client, aimed at another of the user's devices. */
   device(id) {
-    return id ? new DaemonApi(this.url, this.token, `/devices/${seg(id)}`) : this
+    return id ? new DaemonApi(this.url, this.token, `/devices/${seg(id)}`, this.fetch) : this
   }
 
   get ready() {
@@ -253,7 +266,7 @@ export class DaemonApi {
     // owns both listeners and takes them off however the request ends.
     const linked = linkAbort({ timeoutMs, signal })
     try {
-      response = await fetch(`${this.url}${this.prefix}${path}`, {
+      response = await this.fetch(`${this.url}${this.prefix}${path}`, {
         method,
         headers: {
           Authorization: `Bearer ${this.token}`,
@@ -897,7 +910,7 @@ export class DaemonApi {
       let reader = null
       try {
         const query = cursor == null ? '' : `?after=${cursor}`
-        const response = await fetch(`${this.url}${this.prefix}/sessions/${seg(id)}/events${query}`, {
+        const response = await this.fetch(`${this.url}${this.prefix}/sessions/${seg(id)}/events${query}`, {
           headers: { Authorization: `Bearer ${this.token}` },
           // No timeout: this connection's lifetime is the stream itself
           // (the stop handle and the poll decide when it ends).

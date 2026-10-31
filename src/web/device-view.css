@@ -1,0 +1,385 @@
+/* The web console's device view. The console's own tokens and its one dark
+   theme, not a new palette: this is the app seen through a link, so a chat
+   looks like a chat. Everything here is a token or a white alpha the rest of
+   the console already uses. */
+
+.dv {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-app);
+  color: var(--text-1);
+  font-family: var(--font-sans);
+}
+
+.dv-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dv-mark {
+  width: 26px;
+  height: 26px;
+  flex: none;
+}
+
+.dv-who {
+  display: grid;
+  min-width: 0;
+}
+
+.dv-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dv-sub {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.dv-sub.is-online {
+  color: var(--green);
+}
+
+.dv-spacer {
+  flex: 1;
+}
+
+.dv-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.dv-icon:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.dv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dv-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.dv-btn:disabled {
+  color: var(--text-3);
+  cursor: default;
+}
+
+/* The one sentence about what this view is: a note, not a banner. */
+.dv-honest {
+  margin: 0;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.5;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dv-problem {
+  margin: 10px 16px 0;
+  color: var(--red);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.dv-list,
+.dv-chat {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+  gap: 10px;
+}
+
+.dv-empty {
+  margin: 18px auto;
+  max-width: 420px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.dv-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.dv-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dv-row:hover {
+  background: var(--bg-hover);
+}
+
+.dv-row-body {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+
+.dv-row-name {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dv-row-line {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.dv-row-head {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.dv-chat-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dv-chat-title {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dv-live {
+  color: var(--green);
+  font-size: 11px;
+}
+
+.dv-transcript {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0 12px;
+}
+
+.dv-note {
+  margin: 4px 0;
+  color: var(--text-3);
+  font-size: 12px;
+  text-align: center;
+}
+
+.dv-msg {
+  max-width: min(760px, 100%);
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.dv-msg--user {
+  align-self: flex-end;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dv-msg--agent {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dv-msg.is-live {
+  border-style: dashed;
+}
+
+.dv-md > :first-child {
+  margin-top: 0;
+}
+
+.dv-md > :last-child {
+  margin-bottom: 0;
+}
+
+.dv-md pre {
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.dv-tool,
+.dv-reasoning {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.dv-tool summary,
+.dv-reasoning summary {
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+}
+
+.dv-tool.is-failed {
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+.dv-tool-name {
+  font-family: var(--font-mono);
+}
+
+.dv-tool-state {
+  color: var(--text-3);
+}
+
+.dv-pre {
+  margin: 8px 0 0;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.dv-pre--result {
+  color: var(--text-3);
+}
+
+.dv-decision {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.dv-decision.is-pending {
+  border-color: rgba(122, 92, 255, 0.35);
+}
+
+.dv-composer {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.dv-input {
+  flex: 1;
+  resize: vertical;
+  min-height: 40px;
+  max-height: 220px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-side);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.dv-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.dv-send {
+  border-color: var(--accent);
+}
+
+/* The view itself has no animation; the only transitions are the row and
+   button hovers, and they answer both reduced-motion switches so a person who
+   asked for stillness gets stillness. */
+@media (prefers-reduced-motion: reduce) {
+  .dv-row,
+  .dv-btn,
+  .dv-icon {
+    transition: none;
+  }
+}
+
+html[data-reduce-motion] .dv-row,
+html[data-reduce-motion] .dv-btn,
+html[data-reduce-motion] .dv-icon {
+  transition: none;
+}
+
+/* Decision rows: the harness's own options, one button each, and the label of
+   the choice once it is answered. */
+.dv-decision-line {
+  margin: 0 0 6px;
+}
+
+.dv-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.dv-answering {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+.dv-decision .dv-problem {
+  margin: 8px 0 0;
+}

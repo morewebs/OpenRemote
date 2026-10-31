@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenRemote</title>
+    <!--
+      A page may point this build at another gateway before the console
+      starts: the local end-to-end check runs the project's in-memory gateway
+      on a loopback port and sets `window.__OPENREMOTE_CLOUD__` to its address
+      and issuer, and `?api=` / `?issuer=` do the same without editing a file.
+      Nothing else reads it, and the peer link never does: a sealed request
+      carries a path and never an origin.
+    -->
+    <script>
+      window.__OPENREMOTE_WEB__ = true
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/web-main.jsx"></script>
+  </body>
+</html>

@@ -1,70 +1,7 @@
-:root {
-  --bg-app: #121212;
-  --bg-side: #171717;
-  --bg-hover: rgba(255, 255, 255, 0.05);
-  --bg-active: rgba(255, 255, 255, 0.08);
-  --line: rgba(255, 255, 255, 0.08);
-  --text-1: #e8e8e8;
-  --text-2: #a3a3a3;
-  --text-3: #6e6e6e;
-  --accent: #a39bb8;
-  --green: #4cb487;
-  --red: #f87171;
-  --dot-idle: #4a525c;
-  --radius: 12px;
-  --font-sans: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
-  /* The sheets already read var(--font-mono, 'Geist Mono', ...) and fell back
-     to the stack below; naming it here makes the fallback unreachable and the
-     contract's mono family one token, the way the sans family already is. */
-  --font-mono: 'Geist Mono', ui-monospace, Consolas, monospace;
-}
-
-* {
-  box-sizing: border-box;
-  /* The WebView paints a translucent square on every tap. A native
-     control does not. */
-  -webkit-tap-highlight-color: transparent;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-}
-
-html,
-body {
-  overflow: hidden;
-  overscroll-behavior: none;
-}
-
-body {
-  margin: 0;
-  background: var(--bg-app);
-  color: var(--text-1);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-}
-
-button,
-input,
-textarea,
-select {
-  font-family: var(--font-sans);
-}
-
-button {
-  font: inherit;
-  font-family: var(--font-sans);
-}
-
-/* A click focuses the control, and the WebView then draws its own blue
-   box. Keyboard focus still gets the ring below. */
-button:focus,
-a:focus,
-[role='button']:focus {
-  outline: none;
-}
+/* The design tokens, the reset and the body's own type, which every view
+   reads; they are separate because the web console mounts without this
+   sheet. */
+@import './base.css';
 
 .app {
   display: flex;

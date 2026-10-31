@@ -6,6 +6,9 @@ import { Globe } from '@phosphor-icons/react'
 import './floating-bar.css'
 
 export default function FloatingBar({ browserOn, onBrowser }) {
+  // A build without the shell has no embedded browser to open, so the bar
+  // offers nothing rather than a button that cannot act.
+  if (!onBrowser) return null
   return (
     <div className="fb-bar" role="toolbar" aria-label="Shortcuts">
       <button

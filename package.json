@@ -8,6 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "build:web": "vite build --config vite.web.config.js",
+    "preview:web": "vite preview --config vite.web.config.js --port 5177 --strictPort",
     "test": "node --test \"src/**/*.test.js\" \"npm/**/*.test.mjs\"",
     "daemon": "node scripts/sync-daemon.mjs",
     "tauri": "tauri",
