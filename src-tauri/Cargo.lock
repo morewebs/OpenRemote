@@ -2785,6 +2785,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "openremote-core",
+ "openremote-noise",
  "rustls",
  "serde",
  "serde_json",
@@ -2874,6 +2875,15 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "tokio",
+]
+
+[[package]]
+name = "openremote-noise"
+version = "0.4.0"
+dependencies = [
+ "curve25519-dalek",
+ "openremote-core",
+ "snow",
 ]
 
 [[package]]
