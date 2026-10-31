@@ -12,6 +12,8 @@ members = [
     "crates/openremote-agy",
     "crates/openremote-daemon",
     "crates/openremote-cloud",
+    "crates/openremote-noise",
+    "crates/openremote-webpeer",
     "crates/openremote-browser",
     "crates/fake-cloud",
     "crates/fixture-agent",

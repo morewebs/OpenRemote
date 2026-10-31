@@ -11,7 +11,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use openremote_core::DeviceId;
 use serde::{Deserialize, Serialize};
 
-pub const NOISE_PARAMS: &str = "Noise_KK_25519_ChaChaPoly_BLAKE2s";
+pub use openremote_noise::NOISE_PARAMS;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Identity {

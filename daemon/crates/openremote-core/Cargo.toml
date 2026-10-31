@@ -8,8 +8,18 @@ license.workspace = true
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
-uuid = { workspace = true }
 thiserror = { workspace = true }
+
+# A device, chat or rule id is randomly made on a desktop. The browser peer
+# compiles this crate to WebAssembly and only ever converts ids that already
+# exist, so the random source (and the operating system call behind it) is left
+# out there: a wasm module has no entropy to offer without a page import, and
+# nothing in that build needs to mint an id.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+uuid = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { version = "1", default-features = false, features = ["serde"] }
 
 [lints]
 workspace = true

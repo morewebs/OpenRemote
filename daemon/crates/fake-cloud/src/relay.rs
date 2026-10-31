@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use axum::extract::State;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::http::HeaderMap;
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
@@ -154,14 +155,45 @@ impl Hub {
     }
 }
 
+/// The credential a browser offers where it cannot offer a header: the
+/// `cred.<credential>` WebSocket subprotocol. `None` when none is offered.
+fn subprotocol_credential(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get(axum::http::header::SEC_WEBSOCKET_PROTOCOL)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|offered| {
+            offered
+                .split(',')
+                .map(str::trim)
+                .find_map(|one| one.strip_prefix("cred."))
+        })
+        .filter(|credential| !credential.trim().is_empty())
+}
+
 pub async fn relay_ws(
     State(cloud): State<FakeCloud>,
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Response {
+    // The header comes first, as it does on the real gateway, because the
+    // daemons have always sent it there. A browser cannot set it on a WebSocket,
+    // so the same credential may arrive as a subprotocol instead.
     let device = match cloud.device_of(&headers) {
-        Ok(d) => d,
+        Ok(device) => device,
+        Err(StatusCode::UNAUTHORIZED) => match subprotocol_credential(&headers) {
+            Some(credential) => match cloud.device_with_credential(credential) {
+                Ok(device) => device,
+                Err(status) => return status.into_response(),
+            },
+            None => return StatusCode::UNAUTHORIZED.into_response(),
+        },
         Err(status) => return status.into_response(),
+    };
+    // The selected subprotocol must be echoed back, or the browser closes the
+    // socket before a byte is read.
+    let ws = match subprotocol_credential(&headers) {
+        Some(credential) => ws.protocols([format!("cred.{credential}")]),
+        None => ws,
     };
     let hub = cloud.hub.clone();
     ws.on_upgrade(move |socket| run(hub, device.account, device.id, socket))
@@ -228,4 +260,34 @@ async fn run(hub: std::sync::Arc<Hub>, account: String, device: String, socket: 
     }
     hub.unregister(&account, &device, id);
     let _ = tokio::time::timeout(std::time::Duration::from_secs(1), writer).await;
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::header::SEC_WEBSOCKET_PROTOCOL;
+
+    fn offered(value: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(SEC_WEBSOCKET_PROTOCOL, value.parse().unwrap());
+        headers
+    }
+
+    #[test]
+    fn the_credential_may_ride_the_subprotocol_where_a_header_cannot() {
+        assert_eq!(
+            subprotocol_credential(&offered("cred.abc123")),
+            Some("abc123")
+        );
+        // A browser may offer more than one protocol; the credential is one of
+        // them, not necessarily the first.
+        assert_eq!(
+            subprotocol_credential(&offered("chat, cred.abc, x")),
+            Some("abc")
+        );
+        // Nothing offered, or a malformed offer, is no credential at all.
+        assert_eq!(subprotocol_credential(&HeaderMap::new()), None);
+        assert_eq!(subprotocol_credential(&offered("cred.")), None);
+        assert_eq!(subprotocol_credential(&offered("credential-abc")), None);
+        assert_eq!(subprotocol_credential(&offered("abc")), None);
+    }
 }

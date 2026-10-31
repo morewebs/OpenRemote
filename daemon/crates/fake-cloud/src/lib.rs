@@ -197,13 +197,22 @@ impl FakeCloud {
     }
 
     /// Ok(device) for a live credential, Err(status) otherwise.
+    /// A device by the credential in its Authorization header, if there is one.
     pub fn device_of(&self, headers: &HeaderMap) -> Result<Device, StatusCode> {
         let bearer = bearer(headers).ok_or(StatusCode::UNAUTHORIZED)?;
+        self.device_with_credential(bearer)
+    }
+
+    /// A device by the credential itself. The relay passes it here too: a
+    /// browser cannot set an Authorization header on a WebSocket, so it offers
+    /// the credential as the `cred.<credential>` subprotocol and the gateway
+    /// checks it after the header, exactly as the real relay does.
+    pub fn device_with_credential(&self, credential: &str) -> Result<Device, StatusCode> {
         let world = self.world();
         let device = world
             .devices
             .values()
-            .find(|d| d.credential == bearer)
+            .find(|d| d.credential == credential)
             .ok_or(StatusCode::UNAUTHORIZED)?;
         if device.revoked {
             return Err(StatusCode::GONE);
@@ -247,6 +256,34 @@ fn error(status: StatusCode, code: &str) -> Response {
     (status, Json(json!({"error": code, "message": code}))).into_response()
 }
 
+/// The real gateway answers CORS for the console's origin, because the console
+/// is a page on another origin that calls it. The stand-in must do the same or
+/// a browser cannot exercise a sign-in against it: the request is refused
+/// before the answer is read, and the page can only report that the gateway
+/// could not be reached.
+async fn cors(request: axum::extract::Request, next: axum::middleware::Next) -> Response {
+    let preflight = request.method() == axum::http::Method::OPTIONS;
+    let mut response = if preflight {
+        StatusCode::NO_CONTENT.into_response()
+    } else {
+        next.run(request).await
+    };
+    let headers = response.headers_mut();
+    headers.insert("access-control-allow-origin", "*".parse().unwrap());
+    if preflight {
+        headers.insert(
+            "access-control-allow-methods",
+            "GET, POST, PUT, PATCH, DELETE, OPTIONS".parse().unwrap(),
+        );
+        headers.insert(
+            "access-control-allow-headers",
+            "authorization, content-type".parse().unwrap(),
+        );
+        headers.insert("access-control-max-age", "600".parse().unwrap());
+    }
+    response
+}
+
 fn router(cloud: FakeCloud) -> Router {
     Router::new()
         .route("/v1/auth/oauth/authorize", get(authorize))
@@ -261,6 +298,7 @@ fn router(cloud: FakeCloud) -> Router {
         .route("/v1/openremote/enrollments/redeem", post(redeem))
         .route("/v1/openremote/prefs", get(get_prefs).put(put_prefs))
         .route("/v1/openremote/relay", get(relay::relay_ws))
+        .layer(axum::middleware::from_fn(cors))
         .with_state(cloud)
 }
 
@@ -274,8 +312,11 @@ struct AuthorizeQuery {
 }
 
 async fn authorize(State(cloud): State<FakeCloud>, Query(q): Query<AuthorizeQuery>) -> Response {
+    // The two redirects a loopback server may use: the desktop's daemon
+    // callback, and the web console's own page, which the dev and preview
+    // servers serve under `/app/` exactly as the shipped one is served.
     let loopback = q.redirect_uri.starts_with("http://127.0.0.1:")
-        && q.redirect_uri.ends_with("/cloud/callback");
+        && (q.redirect_uri.ends_with("/cloud/callback") || q.redirect_uri.ends_with("/app/"));
     // The Android app's private-use scheme, registered beside the loopback.
     let app = q.redirect_uri == "space.moreweb.openremote:/cloud/callback";
     if q.client_id != CLIENT_ID || !(loopback || app) || q.code_challenge_method != "S256" {

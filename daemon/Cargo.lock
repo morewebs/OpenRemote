@@ -806,6 +806,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "openremote-core",
+ "openremote-noise",
  "rustls",
  "serde",
  "serde_json",
@@ -902,6 +903,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "openremote-noise"
+version = "0.4.0"
+dependencies = [
+ "curve25519-dalek",
+ "openremote-core",
+ "snow",
+]
+
+[[package]]
 name = "openremote-opencode"
 version = "0.4.0"
 dependencies = [
@@ -922,6 +932,14 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "openremote-webpeer"
+version = "0.4.0"
+dependencies = [
+ "openremote-core",
+ "openremote-noise",
 ]
 
 [[package]]

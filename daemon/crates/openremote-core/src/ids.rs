@@ -12,6 +12,10 @@ macro_rules! id_newtype {
         pub struct $name(Uuid);
 
         impl $name {
+            /// A fresh random id. Absent in a WebAssembly build: a browser
+            /// peer converts ids that exist and never mints one, and the
+            /// random source would need an import the page does not offer.
+            #[cfg(not(target_arch = "wasm32"))]
             pub fn new() -> Self {
                 Self(Uuid::new_v4())
             }
@@ -25,6 +29,7 @@ macro_rules! id_newtype {
             }
         }
 
+        #[cfg(not(target_arch = "wasm32"))]
         impl Default for $name {
             fn default() -> Self {
                 Self::new()

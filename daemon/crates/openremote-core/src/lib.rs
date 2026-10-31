@@ -21,6 +21,10 @@ pub mod events;
 pub mod fsx;
 pub mod ids;
 pub mod model;
+// The store is the desktop daemon's on-disk memory: paths, files and random
+// ids. A browser peer only converts ids it already has, so this module is not
+// part of the WebAssembly build.
+#[cfg(not(target_arch = "wasm32"))]
 pub mod store;
 
 pub use events::{Event, EventPayload};
@@ -35,6 +39,8 @@ pub use model::{
     normalize_endpoint_base_url, normalize_endpoint_models_path, validate_endpoint_harness,
     validate_endpoint_name, validate_model_id,
 };
+// Same reason as mod store: the desktop's store type is not in a browser build.
+#[cfg(not(target_arch = "wasm32"))]
 pub use store::Store;
 
 /// This computer's name: COMPUTERNAME on Windows, HOSTNAME when it is

@@ -1,0 +1,43 @@
+[package]
+name = "openremote-noise"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "OpenRemote's Noise KK link: the end-to-end frames two of an account's devices exchange over the relay"
+
+[dependencies]
+openremote-core = { path = "../openremote-core" }
+# X25519's public key from a private one, the same curve snow uses.
+curve25519-dalek = { version = "4", default-features = false, features = [
+    "precomputed-tables",
+] }
+
+# On a desktop daemon the random source is the operating system's, as it always
+# was. In a browser there is no operating system to ask, so the wasm build takes
+# its random bytes from the page's own crypto.getRandomValues through one
+# imported function (see `browser_entropy`), and nothing else in the crypto
+# changes: the same X25519, ChaChaPoly and BLAKE2s the daemons run, which is
+# what makes the two ends agree byte for byte.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+snow = { version = "0.10", features = ["use-getrandom"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# No `std` here: that feature pulls snow's ring backend, which needs a C and
+# clang toolchain and would defeat the point of a wasm build. The pure-Rust
+# primitives below are the same ones the desktop resolvers use.
+snow = { version = "0.10", default-features = false, features = [
+    "use-curve25519",
+    "use-chacha20poly1305",
+    "use-blake2",
+] }
+
+# The wasm build declares one imported function (the page's random bytes), which
+# needs an unsafe extern block this crate cannot get from the workspace lint
+# table: a member either inherits that table or overrides it. So the two lints
+# the workspace sets are restated here with the one allowance this crate needs.
+[lints.rust]
+unsafe_code = "allow"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }

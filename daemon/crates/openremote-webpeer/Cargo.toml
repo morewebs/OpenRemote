@@ -1,0 +1,25 @@
+[package]
+name = "openremote-webpeer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "The browser half of OpenRemote's end-to-end link, compiled to WebAssembly"
+
+[lib]
+# The cdylib is what the browser loads; the rlib is what the crate's own tests
+# run against on the host.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+openremote-core = { path = "../openremote-core" }
+openremote-noise = { path = "../openremote-noise" }
+
+# This crate cannot inherit the workspace lint table: the C ABI is raw pointers
+# into linear memory, so `unsafe_code` has to be allowed here. Every entry point
+# is unsafe and carries a safety comment saying what its pointers must be.
+[lints.rust]
+unsafe_code = "allow"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
