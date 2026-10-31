@@ -182,8 +182,10 @@
   margin: 20px 0 0;
 }
 
-.pg-panel {
+.panel.pg-panel {
   width: 100%;
+  align-items: stretch;
+  padding: 24px 20px 40px;
 }
 
 .pg-head {
@@ -198,32 +200,113 @@
 }
 
 .pg-list-full,
-.pn-list.pg-list-full {
+.pn-list.pg-list-full,
+.pg-panel .pn-list {
   width: 100%;
   max-width: 100%;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.pg-panel .pn-row {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.pg-panel .pn-row + .pn-row {
+  border-top: 1px solid var(--line);
 }
 
 /* ---- the three tabs ---- */
 
 .pg-tabs {
-  display: flex;
-  gap: 2px;
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: repeat(3, 112px);
+  align-self: flex-start;
+  gap: 0;
+  width: auto;
   margin-top: 16px;
-  width: 100%;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pg-tabs-thumb {
+    transition: none;
+  }
+}
+
+html[data-reduce-motion] .pg-tabs-thumb {
+  transition: none;
+}
+
+.pg-tabs-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: 112px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pg-tabs[data-tab='installed'] .pg-tabs-thumb {
+  transform: translateX(112px);
+}
+
+.pg-tabs[data-tab='marketplaces'] .pg-tabs-thumb {
+  transform: translateX(224px);
 }
 
 .pg-tab {
-  margin-bottom: -1px;
-  padding: 8px 12px;
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 30px;
+  text-align: center;
+  margin: 0;
+  padding: 0 14px;
   border: 0;
-  border-bottom: 2px solid transparent;
+  border-radius: 999px;
   background: none;
   color: var(--text-3);
   font: inherit;
   font-size: 13px;
   font-weight: 500;
   cursor: default;
-  transition: color 120ms ease;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+
+.pg-stage {
+  animation: pg-in 0.22s ease;
+}
+
+@keyframes pg-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pg-stage {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion] .pg-stage {
+  animation: none;
 }
 
 .pg-tab:hover {
@@ -231,7 +314,7 @@
 }
 
 .pg-tab.on {
-  border-bottom-color: var(--text-1);
+  background: none;
   color: var(--text-1);
 }
 
@@ -286,22 +369,29 @@
 
 .pg-search-clear {
   position: absolute;
-  right: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
+  top: 50%;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: none;
-  border-radius: 4px;
+  border-radius: 999px;
   background: transparent;
   color: var(--text-3);
+  line-height: 0;
   cursor: default;
-  transition: color 120ms ease;
+  transform: translateY(-50%);
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.pg-search-clear svg {
+  display: block;
 }
 
 .pg-search-clear:hover {
+  background: var(--bg-hover);
   color: var(--text-1);
 }
 
@@ -549,12 +639,10 @@
 }
 
 .pg-card:hover {
-  border-color: rgba(255, 255, 255, 0.16);
   background: rgba(255, 255, 255, 0.05);
 }
 
 .pg-card:focus-visible {
-  border-color: rgba(255, 255, 255, 0.3);
   background: rgba(255, 255, 255, 0.06);
 }
 
@@ -744,8 +832,13 @@
   line-height: 1;
 }
 
-.pg-icon-svg {
+.pg-icon-svg,
+.pg-icon-img {
   display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
 }
 
 .pg-update {
@@ -878,9 +971,12 @@ html[data-reduce-motion] .pg-spin {
 }
 
 .pg-homepage-btn {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  width: 100%;
+  height: 34px;
   font-size: 12.5px;
 }
 
@@ -906,14 +1002,24 @@ html[data-reduce-motion] .pg-spin {
   font-size: 12px;
 }
 
+.pg-detail-modal-foot > button {
+  width: 100%;
+  justify-content: center;
+}
+
 .pg-detail-modal-foot {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-top: 4px;
   padding-top: 14px;
   border-top: 1px solid var(--line);
+}
+
+.pg-detail-modal-foot .dv-act {
+  justify-content: center;
+  background: #fff;
+  color: #1c1c1c;
 }
 
 /* A refresh that failed: the sentence and its retry on one row, so it

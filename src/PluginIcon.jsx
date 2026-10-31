@@ -2,6 +2,7 @@
 // official brand mark when recognized, a category fallback icon if no
 // monogram is available, or a clean 2-letter monogram.
 
+import { useState } from 'react'
 import {
   AmazonLogo,
   AndroidLogo,
@@ -84,20 +85,49 @@ const CATEGORY_ICONS = {
   utilities: Wrench,
 }
 
+function iconUrl(homepage) {
+  const text = String(homepage ?? '').trim()
+  const github = text.match(/github\.com\/([^/?#]+)/i)
+  if (github && github[1] && github[1] !== 'settings') {
+    return `https://github.com/${github[1]}.png?size=64`
+  }
+  try {
+    const host = new URL(text).hostname
+    if (host) return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`
+  } catch {
+    /* not a page */
+  }
+  return null
+}
+
 export function PluginIcon({
   name = '',
   id = '',
   category = '',
+  homepage = '',
   size = 36,
   className = '',
   style = {},
 }) {
   const brand = resolvePluginBrand(id, name)
   const iconSize = Math.max(14, Math.round(size * 0.52))
+  const remote = iconUrl(homepage)
+  const [remoteFailed, setRemoteFailed] = useState(false)
 
   let content = null
 
-  if (brand && BRAND_ICONS[brand]) {
+  if (remote && !remoteFailed) {
+    content = (
+      <img
+        className="pg-icon-img"
+        src={remote}
+        alt=""
+        width={size}
+        height={size}
+        onError={() => setRemoteFailed(true)}
+      />
+    )
+  } else if (brand && BRAND_ICONS[brand]) {
     const BrandComponent = BRAND_ICONS[brand]
     content = <BrandComponent size={iconSize} />
   } else {

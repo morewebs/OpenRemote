@@ -53,13 +53,32 @@
 
 /* The in-app switch, for someone who turned motion off in Settings: the
    glow lands without its fade and does not breathe. */
-html[data-reduce-motion] .newchat::before,
-html[data-reduce-motion] .nc-greeting {
+html[data-reduce-motion] .newchat::before {
+  animation: none;
+}
+
+html[data-reduce-motion] .nc-greeting,
+html[data-reduce-motion] .nc-provider,
+html[data-reduce-motion] .nc-effort,
+html[data-reduce-motion] .nc-effort-fill,
+html[data-reduce-motion] .nc-effort-thumb,
+html[data-reduce-motion] .nc-effort-slider.is-fast .nc-effort-fill,
+html[data-reduce-motion] .nc-label-in,
+html[data-reduce-motion] .nc-label-out {
+  transition: none;
   animation: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nc-greeting {
+  .nc-greeting,
+  .nc-provider,
+  .nc-effort,
+  .nc-effort-fill,
+  .nc-effort-thumb,
+  .nc-effort-slider.is-fast .nc-effort-fill,
+  .nc-label-in,
+  .nc-label-out {
+    transition: none;
     animation: none;
   }
 }
@@ -91,23 +110,17 @@ html[data-reduce-motion] .nc-greeting {
   align-self: end;
   margin: 0 0 28px;
   /* The contract's one 24px line: the New chat greeting. */
+  font-family: var(--font-sans);
   font-size: 24px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: var(--text-2);
-  animation: nc-greeting-in 0.28s cubic-bezier(0.2, 0, 0, 1) both;
+  color: #d4d4d4;
+  opacity: 1;
+  transition: opacity 0.32s ease;
 }
 
-@keyframes nc-greeting-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
+.nc-greeting.is-out {
+  opacity: 0;
 }
 
 .nc-box {
@@ -118,12 +131,12 @@ html[data-reduce-motion] .nc-greeting {
   max-width: 620px;
   padding: 14px 16px 10px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 22px;
   background: rgba(255, 255, 255, 0.04);
 }
 
 .nc-box:focus-within {
-  border-color: rgba(255, 255, 255, 0.14);
+  border-color: var(--line);
 }
 
 .nc-box textarea {
@@ -150,7 +163,402 @@ html[data-reduce-motion] .nc-greeting {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   margin-top: 10px;
+}
+
+.nc-box .nc-pickers {
+  min-width: 0;
+  flex: 1;
+}
+
+/* Permission stays on the footer's right edge, opposite the model chip,
+   and does not slide when the provider name changes width. */
+.nc-box .nc-send-group {
+  margin-left: auto;
+  flex: none;
+}
+
+.nc-provider {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  animation: nc-provider-in 0.22s ease;
+}
+
+.nc-effort-wrap {
+  position: relative;
+}
+
+.nc-effort-wrap > .nc-meta svg {
+  color: #fff;
+}
+
+.nc-effort {
+  position: fixed;
+  z-index: 30;
+  width: 264px;
+  padding: 12px 14px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 16px;
+  background: #1c1c1c;
+  box-shadow:
+    0 4px 10px rgba(0, 0, 0, 0.32),
+    0 16px 44px rgba(0, 0, 0, 0.44);
+  animation: nc-menu-in 0.18s ease;
+}
+
+@keyframes nc-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.nc-effort-head {
+  display: grid;
+  grid-template-columns: 22px 1fr 22px;
+  align-items: center;
+}
+
+.nc-effort-fast {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--text-3);
+  cursor: default;
+  outline: none;
+  box-shadow: none;
+  transition: color 0.22s ease, opacity 0.22s ease;
+}
+
+.nc-effort-fast:focus,
+.nc-effort-fast:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.nc-effort-fast.on,
+.nc-effort-fast.on svg {
+  color: #fff;
+  background: none;
+  box-shadow: none;
+}
+
+.nc-effort-bolt {
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.nc-effort-fast.on .nc-effort-bolt {
+  animation: nc-fast-in 0.22s ease;
+}
+
+@keyframes nc-fast-in {
+  from {
+    opacity: 0.35;
+    transform: scale(0.86);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.nc-effort-name {
+  justify-self: stretch;
+  width: auto;
+  justify-items: center;
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.nc-effort-cycle {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-3);
+  cursor: default;
+  outline: none;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.nc-effort-cycle:hover,
+.nc-effort-cycle:focus-visible {
+  color: var(--text-1);
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
+}
+
+.nc-effort-model {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: default;
+  transition: color 0.2s ease;
+}
+
+.nc-effort-model:hover {
+  color: var(--text-1);
+}
+
+.nc-label-swap {
+  display: grid;
+  justify-items: start;
+  width: 12ch;
+  white-space: nowrap;
+}
+
+.nc-effort-name.nc-label-swap {
+  width: auto;
+  justify-self: stretch;
+  justify-items: center;
+}
+
+.nc-effort-wrap .nc-label-swap {
+  width: auto;
+}
+
+.nc-label-swap > span {
+  grid-area: 1 / 1;
+}
+
+.nc-label-in {
+  animation: nc-label-in 0.32s ease;
+}
+
+.nc-label-out {
+  animation: nc-label-out 0.32s ease forwards;
+  pointer-events: none;
+}
+
+@keyframes nc-label-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes nc-label-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+.nc-effort-slider {
+  position: relative;
+  container-type: inline-size;
+  height: 32px;
+  margin: 16px 8px 2px;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+}
+
+.nc-effort-slider.is-drag {
+  cursor: grabbing;
+}
+
+.nc-effort-track,
+.nc-effort-fill,
+.nc-effort-dot,
+.nc-effort-thumb {
+  position: absolute;
+  top: 50%;
+  pointer-events: none;
+}
+
+.nc-effort-track,
+.nc-effort-fill {
+  left: 0;
+  border-radius: 999px;
+  transform: translateY(-50%);
+}
+
+.nc-effort-track {
+  left: 0;
+  right: 0;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.nc-effort-fill {
+  left: 0;
+  height: 16px;
+  overflow: hidden;
+  background: #4c8dff;
+  transition: width 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.nc-effort.is-out {
+  animation: nc-menu-out 0.16s ease forwards;
+}
+
+.nc-effort.is-above {
+  transform: translateY(calc(-100% - 8px));
+  animation: nc-menu-in-above 0.18s ease;
+}
+
+.nc-effort.is-above.is-out {
+  animation: nc-menu-out-above 0.16s ease forwards;
+}
+
+@keyframes nc-menu-in-above {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-100% - 4px));
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(calc(-100% - 8px));
+  }
+}
+
+@keyframes nc-menu-out-above {
+  from {
+    opacity: 1;
+    transform: translateY(calc(-100% - 8px));
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(calc(-100% - 4px));
+  }
+}
+
+.nc-effort-specks {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  height: 16px;
+  overflow: hidden;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.nc-effort-speck-lane {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: calc(11px + (100cqi - 22px));
+}
+
+.nc-effort-speck {
+  position: absolute;
+  left: -4px;
+  width: 2px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.75);
+  animation: nc-speck-loop 2.4s linear infinite;
+}
+
+.nc-effort-dot {
+  transition: opacity 0.28s ease;
+}
+
+.nc-effort-slider.is-fast .nc-effort-dot.on {
+  opacity: 0;
+}
+
+@keyframes nc-speck-loop {
+  from {
+    left: -4px;
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(var(--bob, 0));
+  }
+
+  to {
+    left: calc(100% + 4px);
+    transform: translateY(0);
+  }
+}
+
+.nc-effort-slider.is-drag .nc-effort-fill,
+.nc-effort-slider.is-drag .nc-effort-thumb {
+  transition: none;
+}
+
+.nc-effort-slider.is-fast .nc-effort-fill {
+  background-color: #4c8dff;
+}
+
+.nc-effort-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  transform: translate(-50%, -50%);
+}
+
+.nc-effort-dot.on {
+  background: #fff;
+}
+
+.nc-effort-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transform: translate(-50%, -50%);
+  transition: left 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes nc-fast-dots {
+  to {
+    background-position: 9px center;
+  }
+}
+
+@keyframes nc-provider-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .nc-right {
@@ -253,7 +661,7 @@ html[data-reduce-motion] .nc-greeting {
 }
 
 .nc-box--auth:focus-within {
-  border-color: rgba(255, 255, 255, 0.14);
+  border-color: var(--line);
 }
 
 .nc-auth {

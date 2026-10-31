@@ -1,6 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <!-- The placeholder app icon, at full resolution: the same dark circle
-       the 32-256px PNGs carry. `npx tauri icon src-tauri/icons/app-icon.svg`
-       regenerates every size from it; swap this file for the real mark. -->
-  <circle cx="512" cy="512" r="368" fill="#0f1216"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 200 200">
+  <rect width="200" height="200" fill="#ffffff"/>
+  <g transform="translate(100 100) scale(0.86) translate(-100 -100)">
+    <path d="M117.8 26.11A76 76 0 0 1 139.66 35.17" stroke="#FF5A2C" stroke-width="24" stroke-linecap="round" fill="none"/>
+    <path d="M164.83 60.34A76 76 0 0 1 173.89 82.2" stroke="#FFC324" stroke-width="24" stroke-linecap="round" fill="none"/>
+    <path d="M173.89 117.8A76 76 0 0 1 117.8 173.89" stroke="#4AD295" stroke-width="24" stroke-linecap="round" fill="none"/>
+    <path d="M82.2 173.89A76 76 0 0 1 60.34 164.83" stroke="#42C6FF" stroke-width="24" stroke-linecap="round" fill="none"/>
+    <path d="M35.17 139.66A76 76 0 0 1 26.11 117.8" stroke="#5983FC" stroke-width="24" stroke-linecap="round" fill="none"/>
+    <circle cx="26.85" cy="79.37" r="12" fill="#C65CE0"/>
+    <circle cx="46.26" cy="46.26" r="12" fill="#5983FC"/>
+    <circle cx="79.37" cy="26.85" r="12" fill="#42C6FF"/>
+  </g>
 </svg>

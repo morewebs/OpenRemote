@@ -19,7 +19,7 @@ import {
   FileCode,
   FloppyDisk,
   FolderOpen,
-  GearSix,
+  Gear,
   Globe,
   HardDrives,
   Keyboard,
@@ -92,13 +92,13 @@ import {
 import './keyboard.css'
 
 const VIEW_ICONS = {
-  'view-settings': <GearSix size={15} />,
-  'view-automations': <Lightning size={15} />,
-  'view-plugins': <PuzzlePiece size={15} />,
-  'view-machines': <HardDrives size={15} />,
-  'view-account': <UserCircle size={15} />,
-  'view-mobile': <DeviceMobile size={15} />,
-  'view-metrics': <ChartBar size={15} />,
+  'view-settings': <Gear size={16} weight="duotone" />,
+  'view-automations': <Lightning size={16} weight="duotone" />,
+  'view-plugins': <PuzzlePiece size={16} weight="duotone" />,
+  'view-machines': <HardDrives size={16} weight="duotone" />,
+  'view-account': <UserCircle size={16} weight="duotone" />,
+  'view-mobile': <DeviceMobile size={16} weight="duotone" />,
+  'view-metrics': <ChartBar size={16} weight="duotone" />,
 }
 
 // The lists an action opens inside the palette, and what each is called.

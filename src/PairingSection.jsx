@@ -275,7 +275,7 @@ export default function PairingSection() {
           {phones.map((phone) => (
             <li key={phone.id} className="qr-phone">
               <span className="qr-phone-icon">
-                <DeviceMobile size={17} weight="light" />
+                <DeviceMobile size={18} weight="duotone" />
               </span>
               <span className="qr-phone-name pv">{phoneName(phone.name)}</span>
               <span className="qr-phone-when">{pairedLabel(phone, now)}</span>

@@ -110,11 +110,11 @@ export default function MachinesView({ onOpenChat, openDevice = null }) {
           >
             <span className="dv-icon">
               {isPhone(device) ? (
-                <DeviceMobile size={19} weight="light" />
+                <DeviceMobile size={20} weight="duotone" />
               ) : device.kind === 'machine' ? (
-                <HardDrives size={19} weight="light" />
+                <HardDrives size={20} weight="duotone" />
               ) : (
-                <Desktop size={19} weight="light" />
+                <Desktop size={20} weight="duotone" />
               )}
             </span>
             <span className="dv-name">
@@ -139,7 +139,7 @@ export default function MachinesView({ onOpenChat, openDevice = null }) {
         ))}
         <button className="dv-add" title="Add a machine" onClick={() => setAdding(true)}>
           <span className="dv-add-plus">
-            <Plus size={19} weight="light" />
+            <Plus size={20} weight="bold" />
           </span>
           <span className="dv-add-label">Add a machine</span>
         </button>

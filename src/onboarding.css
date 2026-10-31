@@ -23,17 +23,21 @@
 
 .ob-title {
   margin: 0;
+  font-family: var(--font-sans);
   font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-1);
+  text-wrap: balance;
 }
 
 .ob-sub {
   margin: 0 0 6px;
   color: var(--text-2);
+  font-family: var(--font-sans);
   font-size: 13.5px;
   line-height: 1.6;
+  text-wrap: balance;
 }
 
 .ob-cta {
@@ -58,6 +62,7 @@
 }
 
 .ob-cta--primary {
+  width: 100%;
   background: var(--text-1);
   color: #10131a;
 }
@@ -209,6 +214,12 @@
    so the card reads as one page turning rather than a new panel. */
 .ob-stage {
   animation: ob-step-in 0.22s cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+/* The welcome card is one centered column: the title, the sentence, and a
+   button that fills the row, so the dots under it sit on the same axis. */
+.ob-stage.is-welcome {
+  text-align: center;
 }
 
 @keyframes ob-step-in {

@@ -35,7 +35,7 @@ typography:
 spacing:
   rhythm: 4px grid; paddings 6–16px; view gutters 32px
 rounded:
-  default: 7px       # --radius - cards, boxes, pickers
+  default: 12px      # --radius - cards, boxes, pickers
   full: 9999px       # dots, send buttons, pills
 
 ## Overview
@@ -44,7 +44,7 @@ A quiet, dense, machine-room dark UI: near-black canvas with a cool cast,
 one amber accent, and a single green for life. Chrome recedes; the content
 (chats, tools, commands) is the surface. No shadows for depth - 1px
 `rgba(255,255,255,0.07)` lines and white-alpha tint steps define structure.
-Everything is small and calm: 11–14px type, 7px radii, generous but not airy
+Everything is small and calm: 11–14px type, 12px radii, generous but not airy
 spacing.
 
 ## Colors
@@ -522,7 +522,7 @@ Every screen the design specifies, backed by the real daemon:
   codex `approvalPolicy`, grok `--permission-mode` - the vocabulary rides
   /capabilities, the harness's own default row marked "runs this by
   default", unset sends nothing so the default holds; agy/pi/opencode
-  offer no words, so no chip), the Fast toggle
+  offer no words, so no chip), the Fast toggle on the effort panel
   where the harness's own fast mode is usable
   (claude `fastMode` ≥ 2.1.205, codex `fast` service tier ≥ 0.110), the
   project picker (the registered projects on the machine the chat runs
@@ -536,7 +536,8 @@ Every screen the design specifies, backed by the real daemon:
   status - the permission word shown in the harness's own spelling,
   changeable only while stopped: start-time on every harness, so a
   stopped chat's change lands on resume), stop/resume, the floating
-  composer with the ContextRing where the harness reports its window
+  composer with the same effort panel as New chat, opened above the box,
+  and the ContextRing where the harness reports its window
   (codex; claude reports usage but no window on the wire). A harness that needs
   its own sign-in gets a sheet rather than a wall of log: the login command runs
   on the machine and its words stream in, the address it prints is the sheet's

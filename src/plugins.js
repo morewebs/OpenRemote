@@ -26,6 +26,16 @@ export const POWER_SHORT = {
   microphone: 'Microphone',
 }
 
+// Catalog ids are often "browser-use". The card should read "Browser Use".
+export function pluginTitle(name) {
+  const text = String(name ?? '').trim()
+  if (!text) return ''
+  if (/[A-Z]/.test(text) && !/[-_]/.test(text)) return text
+  return text
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b[a-z]/g, (letter) => letter.toUpperCase())
+}
+
 export const CLAUDE_PART_LABEL = {
   skills: 'skills',
   agents: 'agents',

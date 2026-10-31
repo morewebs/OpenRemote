@@ -131,7 +131,7 @@ export default function MobileView({ onOpenChat }) {
               title={privacy ? undefined : device.name}
             >
               <span className="dv-icon">
-                <DeviceMobile size={19} weight="light" />
+                <DeviceMobile size={20} weight="duotone" />
               </span>
               <span className="dv-name">
                 <span className="pv">{device.name}</span>

@@ -68,6 +68,13 @@
   color: var(--text-2);
 }
 
+.nc-meta:focus,
+.nc-meta:focus-visible,
+.nc-meta:active {
+  outline: none;
+  box-shadow: none;
+}
+
 /* A harness's brand mark: the real logo, verbatim geometry in its own
    official color (set by the mark component), sitting in a box next to
    the name. The colors are fixed brand values, not currentColor - a
@@ -132,18 +139,14 @@ html[data-reduce-motion] .nc-skeleton {
   animation: none;
 }
 
-/* The harness's own fast mode, toggled on per chat. Off sits with the other
-   chips; on goes green - the running/ok language, never decorative. */
+/* Fast is a switch, not a status. Off stays quiet; on is white. */
 .nc-fast {
   cursor: default;
 }
 
-.nc-fast.on {
-  color: var(--green);
-}
-
+.nc-fast.on,
 .nc-fast.on svg {
-  color: var(--green);
+  color: #fff;
 }
 
 .nc-device {
@@ -180,10 +183,10 @@ html[data-reduce-motion] .nc-skeleton {
 .nc-send {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 999px;
   background: transparent;
   color: var(--text-3);
   cursor: default;
@@ -194,9 +197,9 @@ html[data-reduce-motion] .nc-skeleton {
    glow pulse, the round trip ~0.24s on the house curve. Empty stays
    quiet: transparent, muted arrow. */
 .nc-send:not(:disabled) {
-  background: var(--accent);
-  color: #fff;
-  box-shadow: 0 0 18px rgba(122, 92, 255, 0.25);
+  background: #d4d4d8;
+  color: #1c1c1c;
+  box-shadow: none;
   transition:
     transform 0.12s cubic-bezier(0.2, 0, 0, 1),
     box-shadow 0.12s cubic-bezier(0.2, 0, 0, 1);

@@ -292,11 +292,15 @@ function Shell() {
   const chatInMode = (id) =>
     !STATIC_VIEWS.includes(id) &&
     sessionsForMode(sessions, mode, thisDevice).some((s) => s.id === id)
+  // A chat just created is in the console before the session list catches
+  // up. Treating that gap as "the other mode" bounced the view back to New
+  // chat, so sending never landed in the chat it had just made.
+  const listed = stored != null && (sessions ?? []).some((s) => s.id === stored)
   const view =
     OTHER_MODE[mode].includes(stored) ||
     POPUP_VIEWS.includes(stored) ||
     stored === 'browser' ||
-    (stored != null && chats[stored] && !chatInMode(stored))
+    (listed && chats[stored] && !chatInMode(stored))
       ? 'new'
       : stored
   const chat = STATIC_VIEWS.includes(view) ? null : chats[view] ?? null
@@ -984,7 +988,9 @@ function Shell() {
         setLayout((l) => focusLeaf(setLeafView(l, leaf.id, 'new'), leaf.id))
       }}
     >
-      {paneContent(leaf)}
+      <div key={leaf.view ?? view} className="pane-switch">
+        {paneContent(leaf)}
+      </div>
     </ViewBoundary>
   )
 

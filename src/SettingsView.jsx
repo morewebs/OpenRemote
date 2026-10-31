@@ -131,6 +131,8 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
   const [defaults, setDefaults] = useState(() => loadDefaults())
   const [models, setModels] = useState([])
   const [picker, setPicker] = useState(null)
+  const [pickerLeaving, setPickerLeaving] = useState(false)
+  const pickerLeavingRef = useRef(false)
   const [managingEndpoints, setManagingEndpoints] = useState(false)
   const [about, setAbout] = useState(false)
   const [signInFor, setSignInFor] = useState(null)
@@ -210,7 +212,16 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
       return
     }
     modelsFor(defaultHarness.id).then((list) => {
-      if (!cancelled) setModels(list ?? [])
+      if (cancelled) return
+      const rows = list ?? []
+      setModels(rows)
+      const current = loadDefaults()
+      const known = rows.some((m) => m.model === current.model)
+      const first = rows.find((m) => m.is_default)?.model ?? rows[0]?.model ?? null
+      if (!known && first) {
+        saveDefaults({ model: first })
+        setDefaults(loadDefaults())
+      }
     })
     return () => {
       cancelled = true
@@ -261,7 +272,34 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
     return landed
   }
 
-  const openPicker = (kind) => (e) => setPicker({ kind, x: e.clientX, y: e.clientY })
+  const hidePicker = () => {
+    if (!picker || pickerLeavingRef.current) return
+    pickerLeavingRef.current = true
+    setPickerLeaving(true)
+    setTimeout(() => {
+      pickerLeavingRef.current = false
+      setPickerLeaving(false)
+      setPicker(null)
+    }, 160)
+  }
+
+  const openPicker = (kind) => (e) => {
+    if (picker?.kind === kind) {
+      hidePicker()
+      return
+    }
+    if (pickerLeavingRef.current) return
+    const btn = e.currentTarget.getBoundingClientRect()
+    if (btn.width > 0) {
+      setPicker({
+        kind,
+        x: Math.max(8, Math.round(btn.right - 264)),
+        y: Math.round(btn.bottom + 4),
+      })
+      return
+    }
+    setPicker({ kind, x: e.clientX, y: e.clientY })
+  }
 
   // The document attribute follows the stored preference, never ahead of it: a
   // switch that reads on while the app is not is worse than one that stayed
@@ -629,6 +667,16 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
     if (panelRef.current) panelRef.current.scrollTop = 0
   }, [active, query])
 
+  // Restart the fade when the visible section changes. Removing `hidden`
+  // does not replay a CSS animation on its own.
+  useEffect(() => {
+    const panel = panelRef.current
+    if (!panel) return
+    panel.classList.remove('stg-switch')
+    void panel.offsetWidth
+    panel.classList.add('stg-switch')
+  }, [active, query])
+
   useEffect(() => {
     const panel = panelRef.current
     if (!panel) return
@@ -875,7 +923,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                   type="button"
                   className="pn-btn"
                   data-unset={!defaultHarness || undefined}
-                  onClick={openPicker('harness')}
+                  data-picker="settings" onClick={openPicker('harness')}
                   aria-haspopup="listbox"
                   aria-expanded={picker?.kind === 'harness'}
                 >
@@ -889,7 +937,8 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                     groups={null}
                     selectedId={defaultHarness?.id ?? ''}
                     onChoose={(id) => set({ harness: id, model: null })}
-                    onClose={() => setPicker(null)}
+                    leaving={pickerLeaving}
+                      onClose={hidePicker}
                     anchor={{ left: picker.x, top: picker.y }}
                   />
                 )}
@@ -903,7 +952,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                   <button
                     type="button"
                     className="pn-btn"
-                    onClick={openPicker('model')}
+                    data-picker="settings" onClick={openPicker('model')}
                     aria-haspopup="listbox"
                     aria-expanded={picker?.kind === 'model'}
                   >
@@ -935,7 +984,8 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                       groups={null}
                       selectedId={defaults.model ?? ''}
                       onChoose={(id) => set({ model: id })}
-                      onClose={() => setPicker(null)}
+                      leaving={pickerLeaving}
+                      onClose={hidePicker}
                       anchor={{ left: picker.x, top: picker.y }}
                       renderIcon={(m) => (
                         <ModelMark maker={modelMaker(defaultHarness?.id, m.id, m.resolved_model)} size={14} />
@@ -966,7 +1016,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                   <button
                     type="button"
                     className="pn-btn"
-                    onClick={openPicker('effort')}
+                    data-picker="settings" onClick={openPicker('effort')}
                     aria-haspopup="listbox"
                     aria-expanded={picker?.kind === 'effort'}
                   >
@@ -982,7 +1032,8 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                       onChoose={(id) =>
                         set({ efforts: { ...defaults.efforts, [defaultHarness.id]: id } })
                       }
-                      onClose={() => setPicker(null)}
+                      leaving={pickerLeaving}
+                      onClose={hidePicker}
                       anchor={{ left: picker.x, top: picker.y }}
                     />
                   )}
@@ -999,7 +1050,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                   <button
                     type="button"
                     className="pn-btn"
-                    onClick={openPicker('permission')}
+                    data-picker="settings" onClick={openPicker('permission')}
                     aria-haspopup="listbox"
                     aria-expanded={picker?.kind === 'permission'}
                   >
@@ -1015,7 +1066,8 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                       onChoose={(id) =>
                         set({ permissions: { ...defaults.permissions, [defaultHarness.id]: id } })
                       }
-                      onClose={() => setPicker(null)}
+                      leaving={pickerLeaving}
+                      onClose={hidePicker}
                       anchor={{ left: picker.x, top: picker.y }}
                       renderSubline={(item) =>
                         item.id === defaultHarness?.default_permission ? (
@@ -1189,7 +1241,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                 <button
                   type="button"
                   className="pn-btn"
-                  onClick={openPicker('startup')}
+                  data-picker="settings" onClick={openPicker('startup')}
                   aria-haspopup="listbox"
                   aria-expanded={picker?.kind === 'startup'}
                 >
@@ -1206,7 +1258,8 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                     groups={null}
                     selectedId={prefs.startup_view}
                     onChoose={(id) => setPref({ startup_view: id })}
-                    onClose={() => setPicker(null)}
+                    leaving={pickerLeaving}
+                      onClose={hidePicker}
                     anchor={{ left: picker.x, top: picker.y }}
                   />
                 )}
@@ -1582,7 +1635,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                     </button>
                   ) : (
                     <span className={`pn-btn${h.available && h.signed_in !== false ? ' on' : ''}`}>
-                      {!h.available ? 'Missing' : h.signed_in === false ? 'Not signed in' : h.signed_in ? 'Signed in' : 'Ready'}
+                      {!h.available ? 'Missing' : h.signed_in === false ? 'Not signed in' : 'Ready'}
                     </span>
                   )}
                 </div>

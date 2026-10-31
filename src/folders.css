@@ -26,12 +26,17 @@
 
 /* the same quiet scrollbar as the pickers */
 .fb-list::-webkit-scrollbar {
-  width: 8px;
+  width: 4px;
 }
 
 .fb-list::-webkit-scrollbar-thumb {
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.08);
+}
+
+.fb-modal,
+.fb-row {
+  font-family: var(--font-sans);
 }
 
 .fb-row {
@@ -44,6 +49,7 @@
   background: transparent;
   color: var(--text-2);
   font: inherit;
+  font-family: var(--font-sans);
   font-size: 13px;
   text-align: left;
   cursor: default;
@@ -68,9 +74,36 @@
 
 .fb-foot {
   display: flex;
-  justify-content: flex-end;
   gap: 8px;
   margin-top: 14px;
+}
+
+.fb-foot .dv-act {
+  flex: 1;
+  justify-content: center;
+  border: 0;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-family: var(--font-sans);
+}
+
+.fb-foot .dv-act:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+.fb-modal .dv-act.primary {
+  border: 0;
+  background: #fff;
+  color: #111;
+}
+
+.fb-modal .dv-act.primary:hover,
+.fb-modal .dv-act.primary:focus-visible {
+  background: #f3f3f3;
+  border: 0;
+  color: #111;
+  outline-color: #fff;
 }
 
 @media (max-width: 639px) {

@@ -109,7 +109,7 @@ export default function TitleBar({
           title="About OpenRemote"
           aria-label="About OpenRemote"
         >
-          <Info size={18} />
+          <Info size={18} weight="duotone" />
         </button>
         {about && <AboutModal onClose={() => setAbout(false)} daemonVersion={capabilities?.daemon ?? null} />}
       </header>
@@ -125,14 +125,14 @@ export default function TitleBar({
             onClick={onToggleSidebar}
             title={hintSidebar(sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar')}
           >
-            <SidebarSimple size={15} />
+            <SidebarSimple size={16} weight="duotone" />
           </button>
         )}
         <button className="tb-toggle" onClick={onBack} disabled={!canBack} title="Back">
-          <ArrowLeft size={15} />
+          <ArrowLeft size={16} weight="bold" />
         </button>
         <button className="tb-toggle" onClick={onForward} disabled={!canForward} title="Forward">
-          <ArrowRight size={15} />
+          <ArrowRight size={16} weight="bold" />
         </button>
       </div>
       <div className="tb-title" data-tauri-drag-region>
@@ -143,7 +143,7 @@ export default function TitleBar({
           title="About OpenRemote"
           aria-label="About OpenRemote"
         >
-          <Info size={12} />
+          <Info size={14} weight="duotone" />
         </button>
       </div>
       {/* The split sits at the bar's right end, where VS Code keeps its own

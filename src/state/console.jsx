@@ -791,7 +791,12 @@ export function ConsoleProvider({ children }) {
         harness, workspace, model, effort, fast, permissionMode, endpointId, deviceId, synced,
       })
       ensureChat(session)
-      if (text.trim()) await api.prompt(session.id, text.trim(), mentionedChats)
+      // The prompt can take a moment. The caller opens the chat from the id
+      // as soon as the session exists, so a slow or failed send does not
+      // leave the person on New chat.
+      if (text.trim()) {
+        void api.prompt(session.id, text.trim(), mentionedChats).catch(() => {})
+      }
       return session.id
     },
     [api, ensureChat],

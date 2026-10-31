@@ -11,7 +11,7 @@
   --green: #4cb487;
   --red: #f87171;
   --dot-idle: #4a525c;
-  --radius: 7px;
+  --radius: 12px;
   --font-sans: 'Inter', -apple-system, 'Segoe UI', system-ui, sans-serif;
   /* The sheets already read var(--font-mono, 'Geist Mono', ...) and fell back
      to the stack below; naming it here makes the fallback unreachable and the
@@ -46,8 +46,16 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+button,
+input,
+textarea,
+select {
+  font-family: var(--font-sans);
+}
+
 button {
   font: inherit;
+  font-family: var(--font-sans);
 }
 
 /* A click focuses the control, and the WebView then draws its own blue
@@ -75,6 +83,41 @@ a:focus,
   flex: 1;
   display: flex;
   min-height: 0;
+}
+
+.pane-switch {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  animation: pane-in 0.28s ease;
+}
+
+@keyframes pane-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.sb-mode-fade {
+  animation: pane-in 0.28s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pane-switch,
+  .sb-mode-fade {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion] .pane-switch,
+html[data-reduce-motion] .sb-mode-fade {
+  animation: none;
 }
 
 .main {
@@ -140,23 +183,43 @@ a:focus,
 }
 
 .mode-switch {
+  position: relative;
   display: flex;
   gap: 2px;
   margin-bottom: 14px;
-  padding: 2px;
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.035);
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+/* The selected half is one pill that slides, rather than a fill that pops. */
+.mode-switch-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 8px) / 2);
+  border-radius: 999px;
+  background: var(--bg-active);
+  pointer-events: none;
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mode-switch[data-mode='cloud'] .mode-switch-thumb {
+  transform: translateX(calc(100% + 2px));
 }
 
 .mode-switch button {
+  position: relative;
+  z-index: 1;
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 28px;
+  height: 32px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 999px;
   background: transparent;
   color: var(--text-2);
   font-size: 12px;
@@ -169,7 +232,7 @@ a:focus,
 }
 
 .mode-switch button.on {
-  background: var(--bg-active);
+  background: transparent;
   color: var(--text-1);
 }
 
@@ -178,10 +241,10 @@ a:focus,
   align-items: center;
   gap: 14px;
   width: 100%;
-  height: 34px;
+  height: 36px;
   padding: 0 12px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 12px;
   background: transparent;
   color: var(--text-1);
   font-size: 14px;
@@ -242,8 +305,9 @@ button:active,
   cursor: text;
 }
 
+.search:hover,
 .search:focus-within {
-  background: var(--bg-hover);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .search input {
@@ -251,10 +315,12 @@ button:active,
   min-width: 0;
   border: 0;
   outline: none;
-  background: none;
+  box-shadow: none;
+  appearance: none;
+  background: transparent;
   color: var(--text-1);
-  font-family: inherit;
-  font-size: 13px;
+  font-family: var(--font-sans);
+  font-size: 14px;
   font-weight: 500;
 }
 
@@ -271,15 +337,20 @@ button:active,
 .search-clear {
   display: grid;
   place-items: center;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   flex: none;
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: 999px;
   background: transparent;
   color: var(--text-3);
+  line-height: 0;
   cursor: pointer;
+}
+
+.search-clear svg {
+  display: block;
 }
 
 .search-clear:hover {
@@ -611,7 +682,7 @@ button:active,
    in the status column, so "not read" cannot be mistaken for "waiting"
    (the amber dot) or "running" (the green one). */
 .chat-row[data-unread='true'] {
-  background: rgba(255, 255, 255, 0.03);
+  background: transparent;
 }
 
 .chat-row:hover {
@@ -761,13 +832,12 @@ button:active,
   border-top: 1px solid var(--line);
 }
 
-/* The footer's icon row: account, mobile, metrics, settings - square ghost
-   buttons packed left with a tight gap, so the row stays compact no
-   matter how many icons it holds. */
+/* The footer's icon row: account, mobile, metrics, settings. Evenly
+   spaced round buttons, large enough to hit without aiming. */
 .sb-foot-row {
   display: flex;
-  justify-content: flex-start;
-  gap: 2px;
+  justify-content: space-evenly;
+  gap: 4px;
 }
 
 .sb-icon-btn {
@@ -775,11 +845,11 @@ button:active,
   align-items: center;
   justify-content: center;
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   border: 0;
-  border-radius: var(--radius);
+  border-radius: 14px;
   background: transparent;
   color: var(--text-2);
   cursor: pointer;
@@ -821,6 +891,7 @@ html[data-reduce-motion] .sidebar {
 }
 
 html[data-reduce-motion] .app-frame.is-mobile .app-sheet,
+html[data-reduce-motion] .mode-switch-thumb,
 html[data-reduce-motion] .sidebar,
 html[data-reduce-motion] .sidebar.collapsed,
 html[data-reduce-motion] .machines-reveal,
@@ -835,7 +906,7 @@ html[data-reduce-motion] .ab-bar span {
 }
 
 button:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid #fff;
   outline-offset: 1px;
 }
 
@@ -848,6 +919,7 @@ button:focus-visible {
     animation: none;
   }
 
+  .mode-switch-thumb,
   .machines-reveal,
   .machines-reveal > *,
   .sb-project-new,
@@ -1056,7 +1128,7 @@ of the list rather than as a banner that arrived from somewhere else. */
   position: relative;
 }
 
-.chat-archive {
+.chat-more {
   position: absolute;
   top: 50%;
   right: 6px;
@@ -1066,20 +1138,30 @@ of the list rather than as a banner that arrived from somewhere else. */
   height: 22px;
   padding: 0;
   border: 0;
-  border-radius: 5px;
-  background: var(--bg-active);
-  color: var(--text-2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-3);
   opacity: 0;
   pointer-events: none;
   transform: translateY(-50%);
   cursor: pointer;
-  transition: opacity 0.12s ease;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
 
-.chat-item:hover .chat-archive,
-.chat-item:focus-within .chat-archive {
+.chat-item:hover .chat-more,
+.chat-item:focus-within .chat-more {
   opacity: 1;
   pointer-events: auto;
+}
+
+.chat-more:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-1);
+}
+
+.chat-more:focus,
+.chat-more:focus-visible {
+  outline: none;
 }
 
 .chat-archive:hover {

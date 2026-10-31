@@ -568,6 +568,7 @@ html[data-reduce-motion] .am-row-actions {
 
 .am-search-clear {
   position: absolute;
+  top: 50%;
   right: 6px;
   display: grid;
   place-items: center;
@@ -575,10 +576,12 @@ html[data-reduce-motion] .am-row-actions {
   height: 22px;
   padding: 0;
   border: 0;
-  border-radius: 5px;
+  border-radius: 999px;
   background: transparent;
   color: var(--text-3);
+  line-height: 0;
   cursor: default;
+  transform: translateY(-50%);
 }
 
 .am-search-clear:hover {

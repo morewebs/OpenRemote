@@ -25,6 +25,9 @@ export default function PickerMenu({
   wide, // room for sublines without cramped trailing text
   footer, // a pinned action row under the list; renders in the empty state too
   note, // one line under the search field, for a list the caller knows is stale
+  hideSearch = false,
+  leaving = false,
+  place = 'below',
 }) {
   const [query, setQuery] = useState('')
   const [cursor, setCursor] = useState(0)
@@ -58,13 +61,17 @@ export default function PickerMenu({
   useEffect(() => {
     // On a phone the keyboard would cover the list it's searching; the
     // search field is a tap away.
-    if (!isMobile) searchRef.current?.focus()
+    if (!hideSearch && !isMobile) searchRef.current?.focus()
+    else ref.current?.focus()
     // The trigger is what held focus when this menu opened (see the comment above):
     // without this, closing the menu left focus on the document body, so a person who
     // chose with Enter had lost their place in the page.
     const returnTo = triggerRef.current
     const close = (e) => {
       if (ref.current && ref.current.contains(e.target)) return
+      // The chip that opened this menu handles a second press itself. Closing
+      // here would run first, and the click would open the menu again.
+      if (e.target.closest?.('[data-picker]')) return
       // In the capture phase, because React delegates its handlers at the root: a
       // dialog's backdrop close ran before a bubble-phase window listener in the same
       // press, so clicking the backdrop to dismiss this menu also closed the dialog
@@ -90,12 +97,23 @@ export default function PickerMenu({
     const el = ref.current
     // A function, run again on a resize: the clamp used to run per render only, so a
     // menu open while the window shrank hung past the edge with no scroll to reach the
-    // rest of it.
-    const place = () => {
+    // rest of it. It is named apart from the `place` prop it reads, which decides
+    // whether the menu hangs above its trigger or below it.
+    const keepInView = () => {
       if (!el.isConnected) return
       const vw = window.innerWidth
       const vh = window.innerHeight
       const rect = el.getBoundingClientRect()
+      // Above the box the menu is shifted with a transform, so the layout rect
+      // is already the visual one. Rewriting top from that rect would drop it
+      // back onto the field.
+      if (place === 'above') {
+        let left = spot.left
+        if (rect.right > vw - 8) left = Math.max(8, vw - rect.width - 8)
+        el.style.left = `${left}px`
+        if (rect.top < 8) el.style.top = `${Math.round(spot.top + (8 - rect.top))}px`
+        return
+      }
       let { left, top } = rect
       let maxHeight = ''
       if (rect.bottom > vh - 8) {
@@ -110,9 +128,9 @@ export default function PickerMenu({
       el.style.top = `${top}px`
       el.style.maxHeight = maxHeight
     }
-    place()
-    window.addEventListener('resize', place)
-    return () => window.removeEventListener('resize', place)
+    keepInView()
+    window.addEventListener('resize', keepInView)
+    return () => window.removeEventListener('resize', keepInView)
   })
 
   useEffect(() => {
@@ -130,7 +148,7 @@ export default function PickerMenu({
       onClose()
       return
     }
-    if (e.target !== searchRef.current) return
+    if (!hideSearch && e.target !== searchRef.current) return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       setCursor((c) => Math.min(filtered.length - 1, c + 1))
@@ -175,13 +193,14 @@ export default function PickerMenu({
   return (
     <div
       ref={ref}
-      className={`nc-menu${wide ? ' nc-menu--wide' : ''}`}
+      className={`nc-menu${wide ? ' nc-menu--wide' : ''}${leaving ? ' is-out' : ''}${place === 'above' ? ' is-above' : ''}`}
       role="listbox"
+      tabIndex={-1}
       aria-label={label}
       style={spot}
       onKeyDown={onKeyDown}
     >
-      <label className="nc-search">
+      {!hideSearch && <label className="nc-search">
         <MagnifyingGlass size={13} />
         <input
           ref={searchRef}
@@ -193,7 +212,7 @@ export default function PickerMenu({
           placeholder={searchPlaceholder}
           spellCheck={false}
         />
-      </label>
+      </label>}
       {note && <p className="nc-note">{note}</p>}
       <div className="nc-items">
         {grouped.map((group) => (

@@ -39,9 +39,10 @@ export function webLink(url) {
 export async function openExternal(url, { signIn = false } = {}) {
   const page = webLink(url)
   if (!page) throw new Error(`${JSON.stringify(String(url ?? ''))} is not a web address`)
-  if (isMobile && hasTauri) {
+  if (hasTauri) {
     const { invoke } = await import('@tauri-apps/api/core')
-    await invoke('open_url', { url: page, signIn })
+    if (isMobile) await invoke('open_url', { url: page, signIn })
+    else await invoke('browser_open_external', { url: page })
     return true
   }
   return window.open(page, '_blank', 'noopener,noreferrer') !== null

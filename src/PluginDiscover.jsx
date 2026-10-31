@@ -2,9 +2,8 @@
 // read from their cached catalogs. Opening it fetches any catalog over a
 // day old - nothing refreshes in the background.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowClockwise,
   CaretDown,
   CaretUp,
   MagnifyingGlass,
@@ -36,8 +35,37 @@ export default function PluginDiscover({ onInstall }) {
   // nothing still says something here.
   const [refreshError, setRefreshError] = useState(null)
   const [picker, setPicker] = useState(null)
+  const [pickerLeaving, setPickerLeaving] = useState(false)
+  const pickerLeavingRef = useRef(false)
 
-  const openPicker = (kind) => (e) => setPicker({ kind, x: e.clientX, y: e.clientY })
+  const hidePicker = () => {
+    if (!picker || pickerLeavingRef.current) return
+    pickerLeavingRef.current = true
+    setPickerLeaving(true)
+    setTimeout(() => {
+      pickerLeavingRef.current = false
+      setPickerLeaving(false)
+      setPicker(null)
+    }, 160)
+  }
+
+  const openPicker = (kind) => (e) => {
+    if (picker?.kind === kind) {
+      hidePicker()
+      return
+    }
+    if (pickerLeavingRef.current) return
+    const btn = e.currentTarget.getBoundingClientRect()
+    if (btn.width > 0) {
+      setPicker({
+        kind,
+        x: Math.max(8, Math.round(btn.right - 264)),
+        y: Math.round(btn.bottom + 4),
+      })
+      return
+    }
+    setPicker({ kind, x: e.clientX, y: e.clientY })
+  }
 
   const refreshOne = async (name) => {
     setFetching((curr) => (curr.includes(name) ? curr : [...curr, name]))
@@ -78,15 +106,6 @@ export default function PluginDiscover({ onInstall }) {
   const all = catalog?.entries ?? []
   const on = (marketplaces ?? []).filter((m) => m.enabled)
   const failed = on.filter((m) => m.error && !dismissedErrors.has(m.name))
-
-  const handleRefresh = () => {
-    if (fetching.length > 0) return
-    const stale = on.filter((m) => isStale(m))
-    const targets = stale.length > 0 ? stale : on
-    for (const m of targets) {
-      refreshOne(m.name)
-    }
-  }
 
   const handleRetry = (name) => {
     setDismissedErrors((prev) => {
@@ -170,6 +189,7 @@ export default function PluginDiscover({ onInstall }) {
         <button
           type="button"
           className="pg-select"
+          data-picker="plugins"
           onClick={openPicker('category')}
           aria-label="Category"
           aria-haspopup="listbox"
@@ -192,7 +212,8 @@ export default function PluginDiscover({ onInstall }) {
               setCategory(id)
               setPicker(null)
             }}
-            onClose={() => setPicker(null)}
+            leaving={pickerLeaving}
+            onClose={hidePicker}
             anchor={{ left: picker.x, top: picker.y }}
           />
         )}
@@ -200,6 +221,7 @@ export default function PluginDiscover({ onInstall }) {
         <button
           type="button"
           className="pg-select"
+          data-picker="plugins"
           onClick={openPicker('market')}
           aria-label="Marketplace"
           aria-haspopup="listbox"
@@ -222,25 +244,12 @@ export default function PluginDiscover({ onInstall }) {
               setMarket(id)
               setPicker(null)
             }}
-            onClose={() => setPicker(null)}
+            leaving={pickerLeaving}
+            onClose={hidePicker}
             anchor={{ left: picker.x, top: picker.y }}
           />
         )}
 
-        <button
-          type="button"
-          className="pn-btn pg-refresh-btn"
-          onClick={handleRefresh}
-          disabled={fetching.length > 0}
-          title={fetching.length > 0 ? `Fetching ${fetching.join(', ')}...` : 'Refresh catalogs'}
-          aria-label="Refresh catalogs"
-        >
-          <ArrowClockwise
-            size={15}
-            weight="bold"
-            className={fetching.length > 0 ? 'pg-spin' : ''}
-          />
-        </button>
       </div>
 
       {refreshError && (

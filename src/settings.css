@@ -28,7 +28,7 @@
   height: 32px;
   padding: 0 9px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 999px;
   background: transparent;
   cursor: text;
 }
@@ -72,10 +72,15 @@
   flex: none;
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: 999px;
   background: transparent;
   color: var(--text-3);
+  line-height: 0;
   cursor: pointer;
+}
+
+.stg-search-clear svg {
+  display: block;
 }
 
 .stg-search-clear:hover {
@@ -184,10 +189,11 @@
 
 /* ── panel ── */
 
-.stg-panel {
+.panel.stg-panel {
   min-height: 0;
-  padding: 28px 36px 40px;
   align-items: stretch;
+  padding: 24px 20px 40px;
+  scrollbar-gutter: stable;
 }
 
 .stg-panel:focus {
@@ -197,6 +203,33 @@
 .stg-results-view,
 .stg-section {
   width: 100%;
+}
+
+.stg-panel.stg-switch .stg-section:not([hidden]),
+.stg-panel.stg-switch .stg-results-view:not([hidden]) {
+  animation: stg-section-in 0.22s ease;
+}
+
+@keyframes stg-section-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stg-panel.stg-switch .stg-section:not([hidden]),
+  .stg-panel.stg-switch .stg-results-view:not([hidden]) {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion] .stg-panel.stg-switch .stg-section:not([hidden]),
+html[data-reduce-motion] .stg-panel.stg-switch .stg-results-view:not([hidden]) {
+  animation: none;
 }
 
 .stg-head {
@@ -212,7 +245,6 @@
 
 .stg-lead {
   margin: 5px 0 0;
-  max-width: 62ch;
   color: var(--text-3);
   font-size: 12.5px;
   line-height: 1.5;
@@ -232,7 +264,6 @@
 
 .ep-empty {
   margin: 0;
-  max-width: 62ch;
 }
 
 .ep-add {
@@ -241,8 +272,9 @@
 
 /* ── grouped rows: one hairline card per list, dividers between rows ── */
 
-.stg-panel .pn-list {
-  width: min(620px, 100%);
+.stg-panel .pn-list,
+.stg-panel .pn-list--wide {
+  width: 100%;
   gap: 0;
   margin-top: 12px;
   border: 1px solid var(--line);
@@ -251,15 +283,16 @@
   overflow: hidden;
 }
 
-.stg-panel .pn-list--wide {
-  width: min(740px, 100%);
-}
-
 .stg-panel .pn-row {
   padding: 13px 16px;
   border: 0;
   border-radius: 0;
   background: transparent;
+}
+
+.stg-panel .pn-row > div:first-child {
+  flex: 1;
+  min-width: 0;
 }
 
 .stg-panel .pn-row + .pn-row {
@@ -293,6 +326,11 @@
   background: transparent;
 }
 
+.stg-panel button:focus,
+.stg-panel button:focus-visible {
+  outline: none;
+}
+
 /* The empty sentence lives in the add card. No second hairline above it. */
 .stg-panel .mcp-add {
   border: 0;
@@ -318,7 +356,7 @@
 /* ── search results ── */
 
 .stg-results-view {
-  max-width: 740px;
+  width: 100%;
 }
 
 .stg-result-list {
@@ -415,7 +453,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  width: min(620px, 100%);
+  width: 100%;
 }
 
 .stg-kb-filter {

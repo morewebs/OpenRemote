@@ -21,6 +21,7 @@ import {
   installedEmptyLine,
   installedSearchHint,
   notSandboxed,
+  pluginTitle,
   searchInstalled,
   sourceLabel,
 } from './plugins.js'
@@ -83,7 +84,8 @@ export default function PluginsView() {
         </button>
       </header>
 
-      <div className="pg-tabs" role="tablist" aria-label="Plugins">
+      <div className="pg-tabs" data-tab={tab} role="tablist" aria-label="Plugins">
+        <span className="pg-tabs-thumb" aria-hidden="true" />
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -111,11 +113,19 @@ export default function PluginsView() {
           its search, its two filters and its expanded sections are view
           state the user typed, and going to Installed to check something
           and coming back used to empty all of it. */}
-      <div hidden={tab !== 'discover'}>
+      <div className="pg-stage" hidden={tab !== 'discover'}>
         <PluginDiscover onInstall={(entry) => setInstalling({ entry })} />
       </div>
-      {tab === 'installed' && <InstalledPlugins onUpdate={(entry) => setInstalling({ entry })} />}
-      {tab === 'marketplaces' && <PluginMarketplaces />}
+      {tab === 'installed' && (
+        <div className="pg-stage">
+          <InstalledPlugins onUpdate={(entry) => setInstalling({ entry })} />
+        </div>
+      )}
+      {tab === 'marketplaces' && (
+        <div className="pg-stage">
+          <PluginMarketplaces />
+        </div>
+      )}
 
       {installing && <InstallPluginModal entry={installing.entry} onClose={() => setInstalling(null)} />}
     </div>
@@ -254,11 +264,12 @@ function InstalledPlugins({ onUpdate }) {
                     name={p.name}
                     id={p.id}
                     category={entry?.category}
+                    homepage={entry?.homepage}
                     size={36}
                   />
                   <div>
                     <div className="pn-name">
-                      {p.name}
+                      {pluginTitle(p.name)}
                       {p.version && <span className="pg-version">{p.version}</span>}
                       {author && <span className="pg-author-badge">by {author}</span>}
                       <span className="pg-badge-marketplace">@{p.marketplace}</span>
