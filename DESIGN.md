@@ -264,7 +264,7 @@ spacing.
   arrow when ready, transparent with a muted arrow when empty. A hover
   brightens it; the press holds still, with no scale dip and no glow. It is
   still the one recurring primary action, and it no longer competes with the
-  amber that means "waiting".
+  accent that means "waiting".
 - **PickerMenu:** the one dropdown engine - opens at the cursor, searches,
   optional groups, keyboard-navigated, viewport-clamped.
 - **Command palette (`Ctrl+K`):** the one search over everything the console
