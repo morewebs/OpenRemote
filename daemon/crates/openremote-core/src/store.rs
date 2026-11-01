@@ -2016,7 +2016,7 @@ mod tests {
         let record = MarketplaceRecord {
             name: "openremote".into(),
             source: crate::model::MarketplaceSource::Github {
-                repo: "morewebs/OpenRemote".into(),
+                repo: "morewebs/OpenRemote-plugins".into(),
                 reference: None,
             },
             enabled: true,

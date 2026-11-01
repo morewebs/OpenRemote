@@ -23,7 +23,7 @@ use crate::plugins::{self, Fetch, PluginError};
 
 /// OpenRemote's own marketplace, and where it lives.
 pub const OFFICIAL: &str = "openremote";
-pub const OFFICIAL_REPO: &str = "morewebs/OpenRemote";
+pub const OFFICIAL_REPO: &str = "morewebs/OpenRemote-plugins";
 /// Anthropic's directory of Claude Code plugins, added out of the box.
 pub const ANTHROPIC: &str = "claude-plugins-official";
 pub const ANTHROPIC_REPO: &str = "anthropics/claude-plugins-official";
@@ -1016,7 +1016,7 @@ mod tests {
         assert!(check_name("my-tools", &elsewhere).is_ok());
 
         let official = MarketplaceSource::Git {
-            url: "https://github.com/morewebs/OpenRemote.git".into(),
+            url: "https://github.com/morewebs/OpenRemote-plugins.git".into(),
             reference: None,
         };
         assert!(check_name("openremote", &official).is_ok());

@@ -83,12 +83,12 @@ impl App {
             if let Ok(record) = store.marketplace(crate::marketplace::OFFICIAL) {
                 let stale = match &record.source {
                     openremote_core::MarketplaceSource::Github { repo, .. } => {
-                        repo.eq_ignore_ascii_case("morewebs/openremote-plugins")
+                        !repo.eq_ignore_ascii_case(crate::marketplace::OFFICIAL_REPO)
                     }
                     openremote_core::MarketplaceSource::Git { url, .. } => {
                         url.to_ascii_lowercase().contains("openremote-plugins")
                     }
-                    _ => false,
+                    _ => true,
                 };
                 if stale {
                     let mut updated = record.clone();
@@ -374,7 +374,7 @@ mod tests {
             let stale = openremote_core::MarketplaceRecord {
                 name: crate::marketplace::OFFICIAL.to_string(),
                 source: openremote_core::MarketplaceSource::Github {
-                    repo: "morewebs/openremote-plugins".into(),
+                    repo: "morewebs/OpenRemote".into(),
                     reference: None,
                 },
                 enabled: true,
@@ -385,7 +385,7 @@ mod tests {
                 added_at: 100,
                 refreshed_at: None,
                 error: Some(
-                    "git could not fetch https://github.com/morewebs/openremote-plugins.git".into(),
+                    "git could not fetch https://github.com/morewebs/OpenRemote.git".into(),
                 ),
                 heads: Default::default(),
             };
