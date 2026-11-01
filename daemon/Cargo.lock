@@ -413,6 +413,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fixture-driver"
+version = "0.4.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "flate2"
 version = "1.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"

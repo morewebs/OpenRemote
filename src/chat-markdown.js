@@ -13,7 +13,7 @@
 // said, and it is the one part of the transcript a reader never quotes.
 
 import { decisionText } from './question-line.js'
-import { harnessName } from './harness-names.js'
+import { harnessLabel } from './harness-names.js'
 import { chatTitle } from './shape.js'
 
 // One tool's input or output is capped: a chat that pasted a whole log should
@@ -113,13 +113,16 @@ function decisionItem(item, out) {
  *
  * Returns `{ text, lines, shortened }`: the markdown, how many lines it is
  * (what the palette answers with), and how many tool sections were cut to
- * the cap. `harness` names the speaker for the harness's own turns.
+ * the cap. `harness` names the speaker for the harness's own turns;
+ * `harnesses` is the daemon's list, which names a harness whose id this
+ * build has no name for - so a chat on a plugin's harness is signed with
+ * the name that plugin ships, not with its raw id.
  */
-export function chatMarkdown(chat, { harness = null } = {}) {
+export function chatMarkdown(chat, { harness = null, harnesses = null } = {}) {
   const items = Array.isArray(chat?.timeline) ? chat.timeline : []
   const out = []
   out.shortened = 0
-  const speaker = harnessName(harness ?? chat?.harness ?? null) || 'The harness'
+  const speaker = harnessLabel(harness ?? chat?.harness ?? null, harnesses) || 'The harness'
   let wrote = false
   for (const item of items) {
     if (!item || typeof item !== 'object') continue

@@ -875,7 +875,9 @@ export default function CommandPalette({ recentChatIds, onClose, onOpenChat, onO
       // is read from this window's own state, so nothing is fetched and no
       // export dialog exists.
       const chat = chats?.[r.markdown] ?? null
-      const file = chat ? chatMarkdown(chat) : null
+      // The same harness list the rest of the palette reads, so a plugin
+      // harness's chat is signed with the name the daemon gave it.
+      const file = chat ? chatMarkdown(chat, { harnesses: capabilities?.harnesses }) : null
       if (!file) {
         setCopied('Nothing to copy in this chat.')
         return

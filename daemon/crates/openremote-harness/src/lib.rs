@@ -199,8 +199,10 @@ pub struct SessionSettings {
 }
 
 /// A model a harness advertises, in the harness's own words. Backs the
-/// console's model slot; empty means the slot stays reserved.
-#[derive(Clone, Debug, serde::Serialize)]
+/// console's model slot; empty means the slot stays reserved. A plugin's
+/// manifest declares a static catalog in the same shape, so the daemon
+/// deserializes it as well as serializing it.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ModelDescriptor {
     /// The pick word the harness's own picker takes (`opus`) or the full
     /// id when the harness offers no alias (`claude-fable-5-1[1m]`).

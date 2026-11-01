@@ -129,7 +129,10 @@ an old process is still alive; find it before re-running).
 - Harness ids (`claude`, `codex`, `grok`, `pi`, `opencode`, `agy`) are
   stable. Display names live in `src/harness-names.js`; brand marks in
   `src/brand-marks.jsx` (verbatim geometry from each owner's own
-  published asset - identification use only, no redraws).
+  published asset - identification use only, no redraws). An installed
+  plugin can add a harness of its own: its id and name come from the
+  plugin's manifest, and `docs/harness-plugins.md` is that contract.
+  Those ids are not in the six above, and a plugin may not take one.
 - No em dashes anywhere; write around them or use a spaced hyphen.
 - Reduced motion is respected twice: `@media (prefers-reduced-motion)`
   and `html[data-reduce-motion]` (the in-app toggle). Every new

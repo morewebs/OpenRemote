@@ -11,7 +11,7 @@ import SignInModal from './SignInModal.jsx'
 import HarnessManagerModal from './HarnessManagerModal.jsx'
 import { EndpointManagerModal } from './EndpointManager.jsx'
 import { useConsole } from './state/console.jsx'
-import { harnessName } from './harness-names.js'
+import { harnessLabel } from './harness-names.js'
 import { findModel, modelDisplayName, prettyModelName } from './model-display.js'
 import { modelMaker } from './model-maker.js'
 import { ModelMark } from './model-marks.jsx'
@@ -466,8 +466,12 @@ export default function NewChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target, targetOnline, connection.state])
 
+  // Every harness the daemon reports, installed or not: a preset or a saved
+  // default still names its harness, and a plugin's harness has a name that
+  // only the daemon knows.
+  const harnessList = (target ? targetCaps : capabilities)?.harnesses ?? null
   // Only what the machine reports installed - no dead UI.
-  const available = ((target ? targetCaps : capabilities)?.harnesses ?? []).filter(pickable)
+  const available = (harnessList ?? []).filter(pickable)
   const currentHarness = available.find((h) => h.id === harness) ?? available[0] ?? null
   // The picked harness's own sign-in fact: a harness that isn't signed in
   // says so right here - the task is about to run on it.
@@ -691,12 +695,12 @@ export default function NewChat({
   const presetLabels = (preset) => {
     const row = preset.projectId ? targetProjects.find((p) => p.id === preset.projectId) ?? null : null
     return {
-      harnessLabel: harnessName(preset.harness),
+      harnessLabel: harnessLabel(preset.harness, harnessList),
       modelLabel: preset.model ? prettyModelName(preset.model) : null,
       effortLabel: preset.effort,
       permissionLabel: preset.permission,
       projectLabel: row ? projectName(row) : null,
-      currentHarnessLabel: currentHarness ? harnessName(currentHarness.id) : null,
+      currentHarnessLabel: currentHarness ? harnessLabel(currentHarness) : null,
     }
   }
   const chipLabel = (preset) => {
@@ -715,7 +719,7 @@ export default function NewChat({
     const row = targetProjects.find((p) => p.id === projectId) ?? null
     return suggestedPresetName({
       modelLabel: model ? (shownModelName ?? prettyModelName(model)) : null,
-      harnessLabel: currentHarness ? harnessName(currentHarness.id) : null,
+      harnessLabel: currentHarness ? harnessLabel(currentHarness) : null,
       effort: chosenEffort,
       projectLabel: row ? projectName(row) : null,
     })
@@ -1590,7 +1594,7 @@ export default function NewChat({
                 renderSubline={(item) =>
                   item.id === currentHarness?.default_permission ? (
                     <span className="nc-item-sub">
-                      {harnessName(currentHarness?.id)} runs this by default
+                      {harnessLabel(currentHarness)} runs this by default
                     </span>
                   ) : null
                 }
@@ -1619,7 +1623,7 @@ export default function NewChat({
           <div className="nc-auth">
             <HarnessMark harness={currentHarness.id} size={16} />
             <p className="nc-auth-note">
-              <span className="nc-auth-name">{harnessName(currentHarness.id)}</span>
+              <span className="nc-auth-name">{harnessLabel(currentHarness)}</span>
               {SIGNIN_HARNESSES.has(currentHarness.id) ? (
                 <> isn’t signed in on {targetItem?.name ?? 'this computer'}.</>
               ) : (

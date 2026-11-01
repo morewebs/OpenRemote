@@ -66,6 +66,12 @@ sessions.
 | `GET /model-endpoints` | Machine | list custom model endpoints: names, harnesses, base URLs, model ids | see their API keys: the store hands metadata only (`http.rs`, `list_model_endpoints`) |
 | `GET /model-endpoints/{id}/models` | Machine | make this machine fetch the endpoint's live model list (a network call with the stored key, the result and the key are not returned) | read the key, or use it against another address |
 
+A harness a plugin provides is a machine harness like any other: once the
+plugin is installed here, `GET /capabilities` lists it and a peer may start a
+chat on it through `POST /sessions`. Installing a harness plugin is therefore
+also a choice about what this computer will run for every device of the
+account.
+
 ### Chat tier (13)
 
 All 13 require a machine, and a chat that is synced and executing here. What they share: none of them

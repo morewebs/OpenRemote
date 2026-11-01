@@ -116,7 +116,7 @@ export default function Sidebar({
   onRenameChat = null,
   renamedTitles = NO_TITLES,
 }) {
-  const { connection, sessions, chats, devices, thisDevice, projects, projectsAnswered, sessionsAnswered, removeProject, archived, setChatArchived, deleteChat, api, reconnecting } = useConsole()
+  const { connection, sessions, chats, devices, thisDevice, projects, projectsAnswered, sessionsAnswered, capabilities, removeProject, archived, setChatArchived, deleteChat, api, reconnecting } = useConsole()
   const privacy = usePrivacyMode()
   const [query, setQuery] = useState('')
   const [searchOn, setSearchOn] = useState(false)
@@ -562,7 +562,9 @@ export default function Sidebar({
   // leaving the row silently unchanged.
   const copyChat = (id) => {
     const chat = chats?.[id] ?? null
-    const file = chat ? chatMarkdown(chat) : null
+    // The capabilities carry the daemon's own name for a harness this build
+    // has none for, so a plugin harness's turns are not signed with a raw id.
+    const file = chat ? chatMarkdown(chat, { harnesses: capabilities?.harnesses }) : null
     if (!file) {
       setCopyNote('Nothing to copy in this chat.')
       return

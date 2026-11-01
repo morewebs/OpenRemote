@@ -270,6 +270,10 @@ function InstalledPlugins({ onUpdate }) {
                     <div className="pn-name">
                       {pluginTitle(p.name)}
                       {p.version && <span className="pg-version">{p.version}</span>}
+                      {/* The daemon lists this plugin's harness among the
+                          installed plugins when the plugin declares one; the
+                          chip says which list's row it also fills. */}
+                      {p.harness && <span className="pg-badge-harness">Harness</span>}
                       {author && <span className="pg-author-badge">by {author}</span>}
                       <span className="pg-badge-marketplace">@{p.marketplace}</span>
                     </div>

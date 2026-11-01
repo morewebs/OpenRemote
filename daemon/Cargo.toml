@@ -17,6 +17,7 @@ members = [
     "crates/openremote-browser",
     "crates/fake-cloud",
     "crates/fixture-agent",
+    "crates/fixture-driver",
 ]
 
 [workspace.package]

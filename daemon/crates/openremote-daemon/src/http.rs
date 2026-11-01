@@ -1158,10 +1158,14 @@ fn builtin_ids(app: &App) -> Vec<String> {
 /// The six built-in harness plugins and what the user installed, each
 /// installed one with its id (`name@marketplace`).
 async fn list_plugins(State(app): State<Arc<App>>) -> Response {
+    // The built-in section is the six the daemon carries. A plugin-provided
+    // harness is listed under Installed, with the plugin that provides it,
+    // so the same harness never appears twice on the page.
     let builtin: Vec<Value> = app
         .supervisor
         .harnesses()
         .into_iter()
+        .filter(|h| h.plugin.is_none())
         .map(|h| {
             json!({
                 "id": h.id,
@@ -1353,6 +1357,19 @@ async fn install_staged(
                 )
             })?;
             let plugin_id = staged.id();
+            // A plugin update replaces the folder its driver runs from. On
+            // Windows a live chat holds that folder open, so refuse with the
+            // chats named instead of an access-denied from the filesystem.
+            let chats = app.supervisor.plugin_chats(&plugin_id).await;
+            if !chats.is_empty() {
+                return Err((
+                    StatusCode::CONFLICT,
+                    format!(
+                        "stop {} running on this plugin's harness before updating it",
+                        chats.join(", ")
+                    ),
+                ));
+            }
             let manifest = staged.manifest.clone();
             let source = staged.source.clone();
             let name = staged.name.clone();
@@ -1361,26 +1378,37 @@ async fn install_staged(
             let command = staged.command.clone();
             app.plugins.install(staged).map_err(plugin_failure)?;
             let now = openremote_core::now_ms();
-            let mut store = crate::supervisor::lock_recovering(&app.store);
-            let before = store.installed_plugin(&plugin_id).ok().cloned();
-            let plugin = openremote_core::InstalledPlugin {
-                name,
-                marketplace,
-                resolved,
-                command,
-                version: manifest.version,
-                description: manifest.description,
-                runtime: manifest.runtime,
-                powers: manifest.powers,
-                source,
-                scope: openremote_core::PluginScope::Machine,
-                enabled: before.as_ref().is_none_or(|p| p.enabled),
-                installed_at: before.as_ref().map_or(now, |p| p.installed_at),
-                updated_at: now,
+            let plugin = {
+                let mut store = crate::supervisor::lock_recovering(&app.store);
+                let before = store.installed_plugin(&plugin_id).ok().cloned();
+                let plugin = openremote_core::InstalledPlugin {
+                    name,
+                    marketplace,
+                    resolved,
+                    command,
+                    version: manifest.version,
+                    description: manifest.description,
+                    runtime: manifest.runtime,
+                    powers: manifest.powers,
+                    source,
+                    scope: openremote_core::PluginScope::Machine,
+                    harness: manifest.harness.as_ref().map(|harness| {
+                        openremote_core::PluginHarnessRef {
+                            id: harness.id.clone(),
+                            name: harness.name.clone(),
+                        }
+                    }),
+                    enabled: before.as_ref().is_none_or(|p| p.enabled),
+                    installed_at: before.as_ref().map_or(now, |p| p.installed_at),
+                    updated_at: now,
+                };
+                store
+                    .put_installed_plugin(plugin.clone())
+                    .map_err(store_failure)?;
+                plugin
             };
-            store
-                .put_installed_plugin(plugin.clone())
-                .map_err(store_failure)?;
+            // The plugin's harness appears (or changes) without a restart.
+            app.supervisor.reprobe_harnesses().await;
             Ok(installed_json(&plugin))
         }
     };
@@ -1435,7 +1463,11 @@ async fn set_plugin_enabled(
             }
         }
     };
-    receipted_plain(&app, body.request_id, task).await
+    let response = receipted_plain(&app, body.request_id, task).await;
+    // A plugin's harness follows its plugin's on/off switch without a
+    // restart. The store moved first; the probe reads it fresh.
+    app.supervisor.reprobe_harnesses().await;
+    response
 }
 
 /// Uninstall: its folder and its record go. A built-in can only be off.
@@ -1461,11 +1493,27 @@ async fn remove_plugin(
                     .cloned()
                     .map_err(store_failure)?
             };
+            // A removal deletes the folder its driver runs from; a live chat
+            // holds that folder open on Windows. Name the chats instead of
+            // failing later with an access-denied.
+            let chats = app.supervisor.plugin_chats(&id).await;
+            if !chats.is_empty() {
+                return Err((
+                    StatusCode::CONFLICT,
+                    format!(
+                        "stop {} running on this plugin's harness before removing it",
+                        chats.join(", ")
+                    ),
+                ));
+            }
             app.plugins
                 .uninstall(&plugin.marketplace, &plugin.name)
                 .map_err(plugin_failure)?;
-            let mut store = crate::supervisor::lock_recovering(&app.store);
-            store.remove_installed_plugin(&id).map_err(store_failure)?;
+            {
+                let mut store = crate::supervisor::lock_recovering(&app.store);
+                store.remove_installed_plugin(&id).map_err(store_failure)?;
+            }
+            app.supervisor.reprobe_harnesses().await;
             Ok(json!({"removed": id}))
         }
     };

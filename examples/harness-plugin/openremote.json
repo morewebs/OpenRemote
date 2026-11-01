@@ -1,0 +1,22 @@
+{
+  "api": 1,
+  "name": "example-harness",
+  "version": "0.1.0",
+  "description": "A template that adds a harness to OpenRemote",
+  "runtime": "process",
+  "powers": ["run_programs"],
+  "harness": {
+    "api": 1,
+    "id": "example-harness",
+    "name": "Example Harness",
+    "driver": {
+      "windows": "bin/windows-x64/example-harness-driver.exe",
+      "macos": "bin/macos-arm64/example-harness-driver",
+      "linux": "bin/linux-x64/example-harness-driver",
+      "default": "bin/example-harness-driver"
+    },
+    "args": [],
+    "models": null,
+    "default_model": null
+  }
+}

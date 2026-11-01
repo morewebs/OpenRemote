@@ -302,15 +302,20 @@ const STDERR_REASON_LINES: usize = 4;
 const STDERR_LINE_BOUND: usize = 300;
 
 /// The resolved CLI behind a backend - every variant holds one, and the
-/// sign-in relay drives it with the same resolution the sessions do.
-fn backend_resolution(backend: &crate::registry::Backend) -> &openremote_harness::Resolution {
+/// sign-in relay drives it with the same resolution the sessions do. A
+/// plugin's harness has no CLI the daemon resolved; it signs in through its
+/// own setup, so the relay has nothing to drive.
+fn backend_resolution(
+    backend: &crate::registry::Backend,
+) -> Option<&openremote_harness::Resolution> {
     match backend {
-        crate::registry::Backend::Claude(r) => r,
-        crate::registry::Backend::Codex(r) => r,
-        crate::registry::Backend::Grok(r) => r,
-        crate::registry::Backend::Pi(r) => r,
-        crate::registry::Backend::Opencode(r) => r,
-        crate::registry::Backend::Agy(r) => r,
+        crate::registry::Backend::Claude(r) => Some(r),
+        crate::registry::Backend::Codex(r) => Some(r),
+        crate::registry::Backend::Grok(r) => Some(r),
+        crate::registry::Backend::Pi(r) => Some(r),
+        crate::registry::Backend::Opencode(r) => Some(r),
+        crate::registry::Backend::Agy(r) => Some(r),
+        crate::registry::Backend::Plugin(_) => None,
     }
 }
 
@@ -415,7 +420,12 @@ impl Supervisor {
         let mut list = self.registry.read().expect("registry lock").harnesses();
         self.with_store(|s| {
             for harness in &mut list {
-                harness.enabled = s.builtin_enabled(&harness.id);
+                // The store remembers the on/off switch of the six built-in
+                // harness plugins. A plugin-provided harness follows its own
+                // plugin's record, which the registry probe already applied.
+                if harness.plugin.is_none() {
+                    harness.enabled = s.builtin_enabled(&harness.id);
+                }
             }
         });
         list
@@ -712,7 +722,11 @@ impl Supervisor {
             let backend = registry.backend(harness_id).ok_or_else(|| {
                 SupervisorError::Harness(format!("'{harness_id}' is not available to the daemon"))
             })?;
-            backend_resolution(backend).clone()
+            backend_resolution(backend).cloned().ok_or_else(|| {
+                SupervisorError::Harness(format!(
+                    "'{harness_id}' signs in through its own setup, in a terminal"
+                ))
+            })?
         };
         // A settled relay makes room for the fresh one: the old run's view
         // stays answerable (the console may still be showing its last
@@ -801,17 +815,74 @@ impl Supervisor {
     }
 
     /// Fresh facts after the machine changed underneath us - an install
-    /// landed, a login finished. The guard is never held across the
-    /// await: clone the overrides, probe, then swap the whole registry in.
+    /// landed, a login finished, a plugin was installed, toggled or removed.
+    /// The guard is never held across the await: the overrides and the
+    /// installed plugins' harness specs are cloned first, then the whole
+    /// registry is swapped in.
     async fn swap_in_fresh_registry(&self) {
+        let plugins = self.plugin_harnesses();
         let overrides = self
             .registry
             .read()
             .expect("registry lock")
             .overrides()
             .clone();
-        let fresh = HarnessRegistry::probe(&overrides).await;
+        let fresh = HarnessRegistry::probe(&overrides, &plugins).await;
         *self.registry.write().expect("registry lock") = fresh;
+    }
+
+    /// The harness specs the installed plugins declare, read from their
+    /// folders. Called at probe time and after any plugin change.
+    fn plugin_harnesses(&self) -> Vec<crate::plugins::HarnessSpec> {
+        self.with_store(|store| {
+            let data_dir = store.dir().to_path_buf();
+            crate::plugins::installed_harnesses(&data_dir, &store.installed_plugins())
+        })
+    }
+
+    /// Re-probe after a plugin changed what it provides. Called by the
+    /// plugin routes; chats already running keep their driver process.
+    pub async fn reprobe_harnesses(&self) {
+        self.swap_in_fresh_registry().await;
+    }
+
+    /// The live chats running a plugin's harnesses, by session id. A plugin
+    /// update or removal replaces the folder its driver runs from, and
+    /// Windows will not rename or delete a folder holding a running image,
+    /// so the caller refuses with these instead of a bare access error.
+    pub async fn plugin_chats(&self, plugin_id: &str) -> Vec<String> {
+        let harnesses: Vec<String> = self
+            .registry
+            .read()
+            .expect("registry lock")
+            .harnesses()
+            .into_iter()
+            .filter(|harness| harness.plugin.as_deref() == Some(plugin_id))
+            .map(|harness| harness.id)
+            .collect();
+        if harnesses.is_empty() {
+            return Vec::new();
+        }
+        let ids: Vec<SessionId> = self.sessions.lock().await.keys().cloned().collect();
+        let mut chats = Vec::new();
+        for id in ids {
+            let Ok(session) = self.session(&id) else {
+                continue;
+            };
+            if !harnesses.iter().any(|harness| harness == &session.harness) {
+                continue;
+            }
+            if matches!(
+                session.status,
+                openremote_core::SessionStatus::Starting
+                    | openremote_core::SessionStatus::Working
+                    | openremote_core::SessionStatus::Waiting
+                    | openremote_core::SessionStatus::Idle
+            ) {
+                chats.push(session.id.to_string());
+            }
+        }
+        chats
     }
 
     // ---- MCP servers ----
@@ -1869,7 +1940,14 @@ impl Supervisor {
             let Some(backend) = registry.backend(harness) else {
                 return;
             };
-            backend_resolution(backend).clone()
+            match backend_resolution(backend) {
+                Some(resolution) => resolution.clone(),
+                // A plugin harness's driver lives inside its plugin folder;
+                // removing or updating the plugin already re-probes, so a
+                // failed spawn here is not a file that went missing under a
+                // registry that still points at it.
+                None => return,
+            }
         };
         let gone = match &resolution {
             // An unavailable slot is already evicted; nothing to do.

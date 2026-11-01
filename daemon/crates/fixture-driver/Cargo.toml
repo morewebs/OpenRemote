@@ -1,0 +1,13 @@
+[package]
+name = "fixture-driver"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "A plugin harness driver fixture: answers --probe and plays one scripted turn"
+
+[dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

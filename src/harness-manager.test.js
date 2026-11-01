@@ -76,3 +76,52 @@ test('while the machines list has not answered, a missing row stays quiet', () =
   assert.equal(row.action, 'none')
   assert.equal(row.detail, null)
 })
+
+test('a plugin harness is named by the daemon and rows like a built-in one', () => {
+  const [row] = harnessRows(
+    cap([
+      {
+        id: 'freebuff',
+        name: 'Freebuff',
+        plugin: 'freebuff@local',
+        available: true,
+        signed_in: true,
+        version: '0.2.35',
+      },
+    ]),
+    [],
+  )
+  assert.equal(row.name, 'Freebuff')
+  assert.equal(row.statusLabel, 'Ready')
+  assert.equal(row.detail, '0.2.35')
+})
+
+test('the daemon\'s reason a harness is unusable is the row\'s detail', () => {
+  // A harness the daemon reports with a problem is not usable, and the
+  // sentence it sent says why: "not installed" alone would leave the person
+  // guessing at a missing CLI or an API this build does not speak.
+  const [row] = harnessRows(
+    cap([{ id: 'freebuff', name: 'Freebuff', available: false, problem: 'Freebuff CLI not found' }]),
+    [],
+  )
+  assert.equal(row.name, 'Freebuff')
+  assert.equal(row.statusLabel, 'Not installed')
+  assert.equal(row.detail, 'Freebuff CLI not found')
+  assert.equal(row.detailKind, 'note')
+  assert.equal(row.action, 'none')
+})
+
+test('a problem does not take away a missing harness\'s install button', () => {
+  const [row] = harnessRows(
+    cap([{ id: 'claude', available: false, problem: 'The claude CLI is not on this computer.' }]),
+    [spec('claude')],
+  )
+  assert.equal(row.action, 'install')
+  assert.equal(row.detail, 'The claude CLI is not on this computer.')
+  assert.equal(row.detailKind, 'note')
+})
+
+test('an empty problem is no problem', () => {
+  const [row] = harnessRows(cap([{ id: 'claude', available: false, problem: '   ' }]), [])
+  assert.equal(row.detail, 'No installer for this platform.')
+})

@@ -18,7 +18,7 @@ import {
 import AutomationForm from './AutomationForm.jsx'
 import PillComposer from './PillComposer.jsx'
 import { useConsole } from './state/console.jsx'
-import { harnessName } from './harness-names.js'
+import { harnessLabel } from './harness-names.js'
 import {
   CONNECTOR_KINDS,
   RULE_EMPTY_NONE,
@@ -99,9 +99,12 @@ export default function AutomationsView({ onOpenChat }) {
   }, [])
 
   const rules = automations ?? []
+  // The daemon's own harness list, so a rule on a plugin's harness prints the
+  // name that plugin ships. The list and the search read the same one.
+  const harnesses = capabilities?.harnesses ?? null
   // What the list draws: every rule, or the ones the query matches. The
   // search narrows; it never sorts.
-  const shown = useMemo(() => searchRules(rules, query), [rules, query])
+  const shown = useMemo(() => searchRules(rules, query, harnesses), [rules, query, harnesses])
   const filtering = query.trim().length > 0
   const availableIds = new Set(
     (capabilities?.harnesses ?? []).filter(pickable).map((h) => h.id),
@@ -412,7 +415,7 @@ export default function AutomationsView({ onOpenChat }) {
                   <div className="am-name pv">{rule.name}</div>
                   <div className="am-line">
                     {blockedReason ? blockedReason + ' · ' : ''}
-                    {whenSentence(rule.trigger)} · {harnessName(rule.harness)}
+                    {whenSentence(rule.trigger)} · {harnessLabel(rule.harness, harnesses)}
                     {oneMachine ? '' : (
                       <>
                         {' '}on{' '}
@@ -502,7 +505,7 @@ export default function AutomationsView({ onOpenChat }) {
                 </div>
               </div>
               {rule.enabled && missing && machineHere && (
-                <p className="am-note">{harnessName(rule.harness)} is not installed.</p>
+                <p className="am-note">{harnessLabel(rule.harness, harnesses)} is not installed.</p>
               )}
             </div>
           )
@@ -554,7 +557,7 @@ export default function AutomationsView({ onOpenChat }) {
                 </div>
                 <div className="pt-card-name pv">{draft.name}</div>
                 <div className="pt-card-chips">
-                  <span className="pt-chip">{harnessName(draft.harness)}</span>
+                  <span className="pt-chip">{harnessLabel(draft.harness, harnesses)}</span>
                   {!oneMachine && <span className="pt-chip"><span className="pv">{machineName(draft.machineId)}</span></span>}
                   <span className="pt-chip">
                     {hookKind ? 'webhook' : `every day at ${draft.trigger.time}`}

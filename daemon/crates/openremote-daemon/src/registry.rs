@@ -13,6 +13,9 @@ use openremote_harness::{
 use serde_json::Value;
 use tokio::sync::mpsc;
 
+use crate::plugin_driver::{self, PluginDriver};
+use crate::plugins::HarnessSpec;
+
 // The harness-neutral answer semantics live with the driver vocabulary;
 // the per-harness filling happens in `SessionDriver::answer` below.
 pub use openremote_harness::AnswerOutcome;
@@ -26,6 +29,15 @@ pub enum Backend {
     Pi(openremote_pi::Resolution),
     Opencode(openremote_opencode::Resolution),
     Agy(openremote_agy::Resolution),
+    /// A harness an installed plugin provides. Its spec names the driver to
+    /// spawn; the plugin owns everything the driver does.
+    Plugin(PluginBackend),
+}
+
+/// The plugin side of a backend: the harness spec, as the plugin declared it.
+#[derive(Clone)]
+pub struct PluginBackend {
+    pub spec: HarnessSpec,
 }
 
 /// A live session's driver, dispatch-only - every method reaches the
@@ -37,6 +49,7 @@ pub enum SessionDriver {
     Pi(openremote_pi::Driver),
     Opencode(openremote_opencode::Driver),
     Agy(openremote_agy::Driver),
+    Plugin(PluginDriver),
 }
 
 impl SessionDriver {
@@ -48,6 +61,7 @@ impl SessionDriver {
             SessionDriver::Pi(driver) => driver.send_prompt(text).await,
             SessionDriver::Opencode(driver) => driver.send_prompt(text).await,
             SessionDriver::Agy(driver) => driver.send_prompt(text).await,
+            SessionDriver::Plugin(driver) => driver.send_prompt(text).await,
         }
     }
 
@@ -73,6 +87,10 @@ impl SessionDriver {
                 "this harness applies model and effort when the chat starts - stop it and resume to change them".into(),
             )),
             SessionDriver::Pi(driver) => driver.apply_settings(settings).await,
+            // The seam has no live-settings wire in v1: a plugin applies its
+            // stored facts when the chat starts, and the supervisor restarts
+            // a stopped chat onto a changed word.
+            SessionDriver::Plugin(driver) => driver.apply_settings(settings).await,
         }
     }
 
@@ -84,6 +102,7 @@ impl SessionDriver {
             SessionDriver::Pi(driver) => driver.interrupt().await,
             SessionDriver::Opencode(driver) => driver.interrupt().await,
             SessionDriver::Agy(driver) => driver.interrupt().await,
+            SessionDriver::Plugin(driver) => driver.interrupt().await,
         }
     }
 
@@ -135,6 +154,10 @@ impl SessionDriver {
                 driver.answer(harness_ref, choice, request).await?;
                 Ok(AnswerOutcome::default())
             }
+            SessionDriver::Plugin(driver) => {
+                driver.answer(harness_ref, choice, request).await?;
+                Ok(AnswerOutcome::default())
+            }
         }
     }
 
@@ -146,6 +169,7 @@ impl SessionDriver {
             SessionDriver::Pi(driver) => driver.shutdown().await,
             SessionDriver::Opencode(driver) => driver.shutdown().await,
             SessionDriver::Agy(driver) => driver.shutdown().await,
+            SessionDriver::Plugin(driver) => driver.shutdown().await,
         }
     }
 
@@ -157,7 +181,10 @@ impl SessionDriver {
     /// (harness audit F8) - the driver advertises its own semantics, so no
     /// call site matches harness ids.
     pub fn per_prompt_process(&self) -> bool {
-        matches!(self, SessionDriver::Grok(_) | SessionDriver::Agy(_))
+        matches!(
+            self,
+            SessionDriver::Grok(_) | SessionDriver::Agy(_) | SessionDriver::Plugin(_)
+        )
     }
 
     /// Whether a message sent while a turn is working lands inside that
@@ -212,6 +239,10 @@ impl Backend {
                 let (driver, rx) = openremote_agy::Driver::spawn(resolution, opts)?;
                 Ok((SessionDriver::Agy(driver), rx))
             }
+            Backend::Plugin(plugin) => {
+                let (driver, rx) = PluginDriver::spawn(&plugin.spec, opts).await?;
+                Ok((SessionDriver::Plugin(driver), rx))
+            }
         }
     }
 
@@ -253,7 +284,7 @@ impl Backend {
             Backend::Opencode(resolution) => openremote_opencode::commands(resolution, cwd)
                 .await
                 .map(Some),
-            Backend::Grok(_) | Backend::Agy(_) => Ok(None),
+            Backend::Grok(_) | Backend::Agy(_) | Backend::Plugin(_) => Ok(None),
         }
     }
 
@@ -289,6 +320,9 @@ impl Backend {
             }
             // Antigravity's `agy models` prints its own catalog (TSV).
             Backend::Agy(resolution) => openremote_agy::driver::models(resolution).await.map(Some),
+            // A plugin declares its catalog in the manifest, in the harness's
+            // own words. `None` keeps the slot reserved.
+            Backend::Plugin(plugin) => Ok(plugin.spec.models.clone()),
         }
     }
 
@@ -318,6 +352,7 @@ impl Backend {
             // Antigravity's own settings file - the same source its
             // banner shows, verbatim (the effort rides inside the name).
             Backend::Agy(_) => openremote_agy::config::default_model().map(|m| (m, None)),
+            Backend::Plugin(plugin) => plugin.spec.default_model.clone().map(|model| (model, None)),
         }
     }
 }
@@ -340,6 +375,8 @@ fn harness_from(id: &str, name: &str, resolution: &Resolution, version: Option<&
     Harness {
         id: id.to_string(),
         name: name.to_string(),
+        plugin: None,
+        problem: None,
         path: match resolution {
             Resolution::Executable(p) => Some(p.display().to_string()),
             Resolution::NodeScript { node, script } => {
@@ -374,10 +411,10 @@ impl HarnessRegistry {
 
     /// Probe every supported harness. `overrides` maps harness ids to
     /// binaries (e2e points them at fixture agents) and is authoritative
-    /// where given. One bounded `--version` per harness runs in parallel -
-    /// a CLI that doesn't answer just stays unprobed, never a startup
-    /// gate.
-    pub async fn probe(overrides: &HashMap<String, PathBuf>) -> Self {
+    /// where given. `plugins` are the harnesses installed plugins declare.
+    /// One bounded probe per harness runs in parallel - a CLI that doesn't
+    /// answer just stays unprobed, never a startup gate.
+    pub async fn probe(overrides: &HashMap<String, PathBuf>, plugins: &[HarnessSpec]) -> Self {
         let claude =
             openremote_claude::resolve_claude(overrides.get("claude").map(|p| p.as_path()));
         let codex = openremote_codex::resolve_codex(overrides.get("codex").map(|p| p.as_path()));
@@ -460,6 +497,47 @@ impl HarnessRegistry {
             }
         }
 
+        // Plugin harnesses: their drivers answer one bounded `--probe`
+        // each, in parallel, and that answer is the row. A duplicate id
+        // never shadows a built-in or an earlier plugin; the later one is
+        // listed with the reason instead of silently disappearing.
+        let answers = probe_plugin_drivers(plugins).await;
+        for (index, spec) in plugins.iter().enumerate() {
+            let answer = answers.get(index).cloned().unwrap_or_default();
+            let duplicate = entries.iter().any(|entry| entry.harness.id == spec.id);
+            let mut problem = spec.problem.clone().or_else(|| answer.reason.clone());
+            if duplicate {
+                problem = Some(format!(
+                    "another harness on this machine already uses the id '{}'",
+                    spec.id
+                ));
+            } else if !answer.available && problem.is_none() {
+                problem = Some("the plugin's harness driver is not usable".into());
+            }
+            let available = answer.available && !duplicate;
+            entries.push(RegistryEntry {
+                harness: Harness {
+                    id: spec.id.clone(),
+                    name: spec.name.clone(),
+                    plugin: Some(spec.plugin.clone()),
+                    problem,
+                    path: available.then(|| spec.driver.display().to_string()),
+                    version: answer.version,
+                    available,
+                    enabled: spec.enabled,
+                    fast_supported: false,
+                    signed_in: answer.signed_in,
+                    using_api_key: false,
+                    default_model: spec.default_model.clone(),
+                    default_effort: None,
+                    custom_endpoint_supported: false,
+                    permission_modes: Vec::new(),
+                    default_permission: None,
+                },
+                backend: available.then(|| Backend::Plugin(PluginBackend { spec: spec.clone() })),
+            });
+        }
+
         Self {
             entries,
             overrides: overrides.clone(),
@@ -469,8 +547,8 @@ impl HarnessRegistry {
 
     /// Re-run the probe with the same overrides - after an install
     /// changed what's on this machine.
-    pub async fn reprobe(&self) -> Self {
-        Self::probe(&self.overrides).await
+    pub async fn reprobe(&self, plugins: &[HarnessSpec]) -> Self {
+        Self::probe(&self.overrides, plugins).await
     }
 
     /// The overrides this registry was probed with.
@@ -636,6 +714,26 @@ fn version_at_least(version: &str, min: (u64, u64, u64)) -> bool {
         .collect();
     let at = |i: usize| parts.get(i).copied().unwrap_or(0);
     (at(0), at(1), at(2)) >= min
+}
+
+/// One bounded `--probe` per plugin harness driver, in parallel. A task that
+/// panicked leaves the default answer, and the caller reads that as "no
+/// answer" rather than as a usable harness.
+async fn probe_plugin_drivers(plugins: &[HarnessSpec]) -> Vec<plugin_driver::ProbeAnswer> {
+    let mut set = tokio::task::JoinSet::new();
+    for (index, spec) in plugins.iter().enumerate() {
+        let spec = spec.clone();
+        set.spawn(async move { (index, plugin_driver::probe(&spec).await) });
+    }
+    let mut answers = vec![plugin_driver::ProbeAnswer::default(); plugins.len()];
+    while let Some(joined) = set.join_next().await {
+        if let Ok((index, answer)) = joined {
+            if let Some(slot) = answers.get_mut(index) {
+                *slot = answer;
+            }
+        }
+    }
+    answers
 }
 
 /// One bounded `--version` run against the resolved CLI - a catalog fact,

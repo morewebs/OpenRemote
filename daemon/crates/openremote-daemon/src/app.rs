@@ -43,9 +43,16 @@ impl App {
     pub async fn new(options: AppOptions) -> Arc<Self> {
         let store = Store::open(options.data_dir.clone()).expect("store opens");
         let store = Arc::new(StdMutex::new(store));
+        // The harnesses installed plugins declare are probed beside the six
+        // built-ins. The store is the source: a plugin installed in an
+        // earlier run is here before anything else starts.
+        let plugins = {
+            let store = crate::supervisor::lock_recovering(&store);
+            crate::plugins::installed_harnesses(&options.data_dir, &store.installed_plugins())
+        };
         let supervisor = Supervisor::new(
             store.clone(),
-            HarnessRegistry::probe(&registry::env_overrides()).await,
+            HarnessRegistry::probe(&registry::env_overrides(), &plugins).await,
         );
         Self::assemble(options, store, supervisor)
     }
