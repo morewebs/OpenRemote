@@ -194,6 +194,8 @@ test('resolvePluginBrand identifies recognized brands from id and name or return
   assert.equal(resolvePluginBrand('jupyter-lab', 'Jupyter Notebooks'), 'jupyter')
   assert.equal(resolvePluginBrand('python-runner', 'Python Linter'), 'python')
   assert.equal(resolvePluginBrand('figma-sync', 'Figma Exporter'), 'figma')
+  assert.equal(resolvePluginBrand('freebuff', 'Freebuff'), 'freebuff')
+  assert.equal(resolvePluginBrand('morewebs/freebuff', 'freebuff-tool'), 'freebuff')
 
   // Case insensitive and partial / token matching
   assert.equal(resolvePluginBrand('GITHUB', 'tool'), 'github')

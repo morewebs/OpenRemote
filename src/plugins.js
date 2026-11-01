@@ -131,7 +131,7 @@ export function pluginInitials(name) {
 }
 
 // Recognized tool and author brand keys mapped from plugin id or name.
-// Maps github, gitlab, docker, android, aws, slack, pdf, jupyter, python, figma
+// Maps github, gitlab, docker, android, aws, slack, pdf, jupyter, python, figma, freebuff
 // to canonical brand keys, or returns null.
 export function resolvePluginBrand(id, name) {
   const text = `${id ?? ''} ${name ?? ''}`.toLowerCase()
@@ -145,6 +145,7 @@ export function resolvePluginBrand(id, name) {
   if (text.includes('jupyter')) return 'jupyter'
   if (text.includes('python')) return 'python'
   if (text.includes('figma')) return 'figma'
+  if (text.includes('freebuff')) return 'freebuff'
   if (/(?:^|[^a-z0-9])aws(?:[^a-z0-9]|$)/.test(text)) return 'aws'
   if (/(?:^|[^a-z0-9])pdf(?:[^a-z0-9]|$)/.test(text)) return 'pdf'
 

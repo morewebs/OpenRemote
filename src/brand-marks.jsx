@@ -14,6 +14,7 @@
 //              logo-auto.svg, its three color paths verbatim
 //   opencode   OpenCode's mark - simple-icons' official path
 //   agy        Antigravity's wave - the shape path from its own favicon
+//   freebuff   Freebuff's mark - two green geometric polygons
 
 import { siClaudecode, siOpencode } from 'simple-icons'
 import chatgptUrl from './assets/chatgpt.png'
@@ -32,6 +33,11 @@ export const XAI_POLYGONS = [
   '0 516.92 104.08 516.92 156.08 442.67 104.04 368.34 0 516.92',
   '466.04 0 361.96 0 182.1 256.86 234.15 331.18 466.04 0',
   '380.78 516.92 466.04 516.92 466.04 37.16 380.78 158.92 380.78 516.92',
+]
+
+export const FREEBUFF_POLYGONS = [
+  '77.18 12.74 77.18 32.04 19.3 32.04 19.3 89.93 0 89.93 0 12.74 77.18 12.74',
+  '63.62 37.63 63.62 56.93 44.32 56.93 44.32 89.93 25.03 89.93 25.03 37.63 63.62 37.63',
 ]
 
 // One mark: full-bleed svg that fills the box the parent sizes. The
@@ -115,6 +121,18 @@ export function AntigravityMark() {
   return <ImageMark src={antigravityUrl} title="Antigravity" />
 }
 
+export function FreebuffMark() {
+  return (
+    <Mark viewBox="0 12.74 77.18 77.19" color="#7CFF3F" title="Freebuff">
+      <g fill="var(--mark)">
+        {FREEBUFF_POLYGONS.map((points) => (
+          <polygon key={points} points={points} />
+        ))}
+      </g>
+    </Mark>
+  )
+}
+
 // The registry: harness id -> its real mark, plus an optical size
 // factor. The boxes are equal; the ink is not - solid-ink marks (pi's
 // blocks, the hexapod) read bigger than airy ones (Antigravity's wave,
@@ -130,6 +148,7 @@ const MARKS = {
   pi: { M: PiMark, optical: 0.9 },
   opencode: { M: OpencodeMark, optical: 1 },
   agy: { M: AntigravityMark, optical: 1.08 },
+  freebuff: { M: FreebuffMark, optical: 1.0 },
 }
 
 // A harness this build has no mark for - one an installed plugin provides -

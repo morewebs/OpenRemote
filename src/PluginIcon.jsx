@@ -27,6 +27,7 @@ import {
 } from '@phosphor-icons/react'
 import { siDocker, siJupyter, siPython } from 'simple-icons'
 import { pluginInitials, resolvePluginBrand } from './plugins.js'
+import { FREEBUFF_POLYGONS } from './brand-marks.jsx'
 
 const BRAND_ICONS = {
   github: ({ size }) => <GithubLogo size={size} />,
@@ -75,6 +76,21 @@ const BRAND_ICONS = {
     </svg>
   ),
   figma: ({ size }) => <FigmaLogo size={size} />,
+  freebuff: ({ size }) => (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 12.74 77.18 77.19"
+      fill="currentColor"
+      role="img"
+      aria-label="Freebuff"
+      className="pg-icon-svg"
+    >
+      {FREEBUFF_POLYGONS.map((points) => (
+        <polygon key={points} points={points} />
+      ))}
+    </svg>
+  ),
 }
 
 const CATEGORY_ICONS = {
