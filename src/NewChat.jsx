@@ -49,25 +49,15 @@ import { errorCopy } from './error-copy.js'
 import { messageBound } from './send-bound.js'
 
 
-// The harnesses whose own login command the daemon can relay - the
-// sign-in prompt offers the relay only there; the others say their own
-// honest words.
-
-
-const EFFORT_LABELS = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  xhigh: 'Extra High',
-  extrahigh: 'Extra High',
-  max: 'Max',
-  maximum: 'Max',
-}
-
+// The harness's own effort word, exactly as the harness spells it: `xhigh`
+// stays `xhigh`. Mapping it to "Extra High" put two names on one tier - the
+// facts row, a saved preset and the harness itself all say the harness's own
+// word - and a renamed tier is the console inventing a vocabulary its
+// harness does not have. The chip passes the word through, it does not
+// translate it.
 export function effortLabel(tier) {
   if (!tier) return 'Effort'
-  const key = tier.toLowerCase().replace(/[\s_-]+/g, '')
-  return EFFORT_LABELS[key] ?? tier.charAt(0).toUpperCase() + tier.slice(1)
+  return tier
 }
 
 export function FadingLabel({ text, className }) {

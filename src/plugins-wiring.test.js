@@ -142,3 +142,30 @@ test('an armed row ends when it leaves the viewport or loses focus', () => {
     assert.match(source(pane), /useArmedRow\(/, `${pane} must watch its armed row`)
   }
 })
+
+test('a plugin tile is drawn from local marks, and fetches nothing', () => {
+  const icon = source('PluginIcon.jsx')
+  // The tile resolved a plugin's homepage into a github.com avatar or a Google
+  // favicon request, so simply listing plugins told those hosts which ones this
+  // computer had. The desktop shell's CSP refused the request; the shipped web
+  // console has no CSP, so it went out. Identity is local now, and the three
+  // fallbacks the catalog relies on stay in order: brand mark, category,
+  // monogram.
+  assert.doesNotMatch(icon, /https?:\/\//)
+  assert.doesNotMatch(icon, /<img/)
+  assert.doesNotMatch(icon, /const remote =/)
+  assert.match(icon, /if \(brand && BRAND_ICONS\[brand\]\)/)
+  assert.match(icon, /const CategoryIcon = catKey \? CATEGORY_ICONS\[catKey\] : null/)
+  assert.match(icon, /className="pg-icon-monogram"/)
+  // No caller hands the tile a homepage any more: the prop is gone from its
+  // signature, so a caller that still passed one would be dead code waiting to
+  // be believed.
+  const signature = icon.match(/export function PluginIcon\(\{[\s\S]*?\}\)/)
+  assert.ok(signature, 'PluginIcon has a props signature')
+  assert.doesNotMatch(signature[0], /homepage/)
+  for (const caller of ['PluginCard.jsx', 'PluginDetailModal.jsx', 'PluginsView.jsx']) {
+    const element = source(caller).match(/<PluginIcon[\s\S]*?\/>/)
+    assert.ok(element, `${caller} draws a plugin tile`)
+    assert.doesNotMatch(element[0], /homepage/, `${caller} still passes a homepage`)
+  }
+})

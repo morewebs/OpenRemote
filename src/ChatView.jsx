@@ -19,7 +19,6 @@ import { quietRail, toolHint, workIsLive, workLabel } from './quiet-rail.js'
 import { harnessName } from './harness-names.js'
 import { findModel, modelDisplayName, prettyModelName } from './model-display.js'
 import { HarnessMark } from './brand-marks.jsx'
-import { pickable } from './harness-manager.js'
 import HarnessManagerModal from './HarnessManagerModal.jsx'
 import SignInModal from './SignInModal.jsx'
 import { editRows, isFileEdit, writeRows } from './diff.js'
@@ -1402,46 +1401,26 @@ export default function ChatView({ chat, onBack, focused = true }) {
                   }
                 />
               )}
+              {/* The harness is the one this chat already runs: the daemon
+                  takes a harness when it starts a session, not as a setting,
+                  so a list of the installed harnesses here could only look
+                  like a choice while choosing did nothing. The chip opens the
+                  harness manager instead - the one thing beside it that acts,
+                  and on a phone the only route to it, since the picker this
+                  replaced had no footer there. */}
               <button
                 type="button"
                 className="nc-meta"
-                onClick={togglePicker('harness')}
-                aria-haspopup="listbox"
-                aria-expanded={picker?.kind === 'harness'}
-                data-picker="harness"
-                title="Harness"
+                onClick={() => {
+                  hidePicker()
+                  setManagingHarnesses(true)
+                }}
+                aria-haspopup="dialog"
+                title={`Harness - ${harnessName(chat.harness)}; this opens the harness manager`}
               >
                 <HarnessMark harness={chat.harness} size={16} />
                 {harnessName(chat.harness)}
               </button>
-              {picker?.kind === 'harness' && (
-                <PickerMenu
-                  label="Harness"
-                  searchPlaceholder="Search harnesses"
-                  leaving={pickerLeaving}
-                  place="above"
-                  items={(capabilities?.harnesses ?? []).filter(pickable).map((h) => ({ id: h.id, name: h.name }))}
-                  renderIcon={(h) => <HarnessMark harness={h.id} size={16} />}
-                  groups={null}
-                  selectedId={chat.harness}
-                  onChoose={() => hidePicker()}
-                  onClose={hidePicker}
-                  anchor={{ left: picker.x, top: picker.y }}
-                  footer={
-                    isMobile ? null : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPicker(null)
-                          setManagingHarnesses(true)
-                        }}
-                      >
-                        Manage harnesses…
-                      </button>
-                    )
-                  }
-                />
-              )}
               {canChange.effort && efforts.length > 0 && (
                 <div className="nc-effort-wrap">
                   <button

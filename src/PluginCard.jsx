@@ -37,7 +37,6 @@ export function PluginCard({ entry, onInstall, onInspect }) {
         name={displayName}
         id={entry.id}
         category={entry.category}
-        homepage={entry.homepage}
         size={36}
       />
       <div className="pg-card-body">

@@ -64,7 +64,6 @@ export function PluginDetailModal({ entry, onClose, onInstall }) {
               name={displayName}
               id={technicalId}
               category={entry.category}
-              homepage={entry.homepage}
               size={40}
             />
             <div className="pg-detail-modal-header-info">

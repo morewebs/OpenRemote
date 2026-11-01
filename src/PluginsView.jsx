@@ -264,7 +264,6 @@ function InstalledPlugins({ onUpdate }) {
                     name={p.name}
                     id={p.id}
                     category={entry?.category}
-                    homepage={entry?.homepage}
                     size={36}
                   />
                   <div>

@@ -241,7 +241,7 @@ an old process is still alive; find it before re-running).
 ## Checking this file
 
 Four commands check what this page claims, and a reader can run all of them
-from the repo root: `npm test` (prints a count; 1108 the last time this line
+from the repo root: `npm test` (prints a count; 1155 the last time this line
 was checked, and the run is the truth rather than this number), `node
 scripts/check-tab-acl.mjs` (says `tab acl ok: 2 capability file(s), every
 non-phone one scoped to the main webview, every declared command (33)

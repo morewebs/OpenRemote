@@ -29,6 +29,21 @@ only for now - `openremote --help` says so, and names the installer for
 macOS and Linux. The package itself is [npm/](npm); `docs/release-channels.md`
 says how a release publishes it.
 
+Every release carries the same file names on every platform, so
+`releases/latest/download/<name>` keeps working across versions:
+
+| Platform | What to download | State |
+| --- | --- | --- |
+| Windows 10+ | `OpenRemote-Setup-x64.exe` (NSIS) or `OpenRemote-Setup-x64.msi`; `OpenRemote-windows-x64.exe` is the portable build the npm launcher fetches | Supported, and the platform the desktop shell is developed on |
+| Linux x64 | `OpenRemote-x86_64.AppImage` or `OpenRemote-amd64.deb`; `openremote-daemon-linux-x86_64` is the daemon a Cloud machine runs | Supported |
+| macOS, Apple silicon and Intel | `OpenRemote-universal.dmg` | Early: ad-hoc signed, not notarized |
+| Android | `OpenRemote-universal.apk`, also shipped as `OpenRemote_<version>_universal.apk` | The phone app |
+
+None of it is signed by a certificate anyone pays for. Windows shows
+SmartScreen (More info > Run anyway), macOS wants Open Anyway, and no Linux
+distribution packages it yet. Each file's hash is in `SHA256SUMS`, and the
+Windows portable pair has its own `SHA256SUMS-portable-windows-x64`.
+
 ## Layout
 
 - `src/` + `src-tauri/` - the console (Vite + React 19), frameless Tauri 2 shell
@@ -66,7 +81,7 @@ bearer token lives in `~/.openremote/token`.
 Tests:
 
 ```sh
-npm test               # console tests: 279 when this line was last checked
+npm test               # console tests: 1155 when this line was last checked
 node scripts/check-tab-acl.mjs   # what the desktop webview's capabilities grant
 cd daemon && cargo test --locked   # unit + e2e (drives the fixture agent)
 ```

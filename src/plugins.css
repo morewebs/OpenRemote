@@ -832,8 +832,7 @@ html[data-reduce-motion] .pg-stage {
   line-height: 1;
 }
 
-.pg-icon-svg,
-.pg-icon-img {
+.pg-icon-svg {
   display: block;
   width: 100%;
   height: 100%;
