@@ -73,7 +73,7 @@ export default function FolderPickerModal({ api, where, start, onChoose, onClose
             <X size={14} weight="bold" />
           </button>
         </div>
-        <p className="dv-modal-hint">The folder on <span className="pv">{where}</span> the harness will work in.</p>
+        <p className="dv-modal-hint">The folder on <span className="pv">{where}</span> the app will work in.</p>
         <div className="fb-path pv" title={privacy ? undefined : listing?.path}>
           {listing?.path ?? ' '}
         </div>

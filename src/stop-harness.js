@@ -22,7 +22,7 @@ import { harnessName } from './harness-names.js'
 import { stopSummary, stopTargets } from './stop-everything.js'
 
 /** The palette row that opens the page. */
-export const HARNESS_STOP_NAME = "Stop one harness's chats"
+export const HARNESS_STOP_NAME = "Stop one app's chats"
 
 /** The page's own line, above the list: the scope, said before the press. */
 export const HARNESS_PICK_LINE = 'Only chats running on this computer can stop; the rest keep running.'
@@ -72,7 +72,7 @@ export function harnessStopSub(rows) {
   if (list.length === 0) return ''
   const total = list.reduce((sum, row) => sum + row.count, 0)
   if (list.length === 1) return `${chats(total)} in ${list[0].name}`
-  return `${chats(total)} in ${list.length} harnesses`
+  return `${chats(total)} in ${list.length} apps`
 }
 
 /** The confirm, naming the harness and the count: the two facts to read. */

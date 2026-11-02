@@ -92,13 +92,13 @@ test('the root row says how much work the page would end', () => {
       { id: 'codex', name: 'Codex', count: 3 },
       { id: 'claude', name: 'Claude Code', count: 2 },
     ]),
-    '5 chats in 2 harnesses',
+    '5 chats in 2 apps',
   )
   assert.equal(harnessStopSub([]), '')
 })
 
 test('the page and the confirm say the scope and the count', () => {
-  assert.equal(HARNESS_STOP_NAME, "Stop one harness's chats")
+  assert.equal(HARNESS_STOP_NAME, "Stop one app's chats")
   assert.equal(
     HARNESS_PICK_LINE,
     'Only chats running on this computer can stop; the rest keep running.',

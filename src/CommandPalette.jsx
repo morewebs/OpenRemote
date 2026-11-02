@@ -435,7 +435,7 @@ export default function CommandPalette({ recentChatIds, onClose, onOpenChat, onO
       {
         key: 'action:race',
         section: 'Actions',
-        name: 'Race a prompt across harnesses',
+        name: 'Race a prompt across apps',
         ...(raceShort ? { sub: 'No free pane' } : {}),
         icon: <Repeat size={15} />,
         run: { race: true },

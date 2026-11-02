@@ -69,9 +69,9 @@ export default function HarnessManagerModal({ onClose, onSignIn }) {
         if (e.target === e.currentTarget) closeOrWait()
       }}
     >
-      <div className="dv-modal dv-devmodal" ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Harnesses">
+      <div className="dv-modal dv-devmodal" ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Apps">
         <div className="dv-modal-head">
-          <h2 className="dv-modal-title">Harnesses</h2>
+          <h2 className="dv-modal-title">Apps</h2>
           <button
             className="dv-modal-close"
             onClick={closeOrWait}
@@ -128,7 +128,7 @@ export default function HarnessManagerModal({ onClose, onSignIn }) {
                   // installed", with the reason nowhere on screen.
                   title={
                     busy != null && busy !== row.id
-                      ? 'One install at a time: another harness is installing'
+                      ? 'One install at a time: another app is installing'
                       : undefined
                   }
                   onClick={() =>

@@ -40,7 +40,7 @@ test('the list draws what the query matched, and the built-in section is untouch
   assert.doesNotMatch(view, /\{installed\.map\(\(p\) => \{/)
   // The six built-in harness rows keep their own section and its switch.
   assert.match(view, /<h2 className="pn-section">Built in<\/h2>/)
-  assert.match(view, /Off hides a harness from every picker\. Its chats keep working\./)
+  assert.match(view, /Off hides an app from every picker\. Its chats keep working\./)
 })
 
 test('the count appears while filtering, and the two empty answers stay apart', () => {

@@ -14,7 +14,7 @@ const modal = read('RaceModal.jsx')
 
 test('the palette offers the race and says why when there is no room', () => {
   assert.ok(
-    palette.includes("name: 'Race a prompt across harnesses'"),
+    palette.includes("name: 'Race a prompt across apps'"),
     'Ctrl+K has the action',
   )
   assert.ok(palette.includes('run: { race: true }'), 'and it is its own kind of row')

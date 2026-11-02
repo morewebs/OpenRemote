@@ -28,8 +28,8 @@ function refusalText(refusal) {
   if (!refusal) return null
   // The list below already says this one, where the harnesses would be.
   if (refusal.code === 'no-harnesses') return null
-  if (refusal.code === 'too-few' || refusal.code === 'too-many') return 'Pick two to four harnesses.'
-  if (refusal.code === 'no-prompt') return 'Write the prompt every harness should answer.'
+  if (refusal.code === 'too-few' || refusal.code === 'too-many') return 'Pick two to four apps.'
+  if (refusal.code === 'no-prompt') return 'Write the prompt every app should answer.'
   if (refusal.code === 'no-panes') {
     return refusal.free === 1
       ? 'Only one pane is free, so a race cannot open a second chat. Close a pane first.'
@@ -120,10 +120,10 @@ export default function RaceModal({ free, onClose, onStarted }) {
       const name = plan.offerable.find((h) => h.id === stoppedAt.harness)?.name ?? stoppedAt.harness
       const opened =
         started.length === 0
-          ? 'Nothing else opened, and every harness stays switched on.'
+          ? 'Nothing else opened, and every app stays switched on.'
           : started.length === 1
-            ? 'The one chat that opened is behind this dialog, and only the harnesses that did not start stay switched on.'
-            : `The ${started.length} chats that opened are behind this dialog, and only the harnesses that did not start stay switched on.`
+            ? 'The one chat that opened is behind this dialog, and only the apps that did not start stay switched on.'
+            : `The ${started.length} chats that opened are behind this dialog, and only the apps that did not start stay switched on.`
       setChosen((current) => raceRetry(current, raced))
       setBusy(false)
       setFailure(`${name} could not start: ${stoppedAt.message}. ${opened}`)
@@ -146,16 +146,16 @@ export default function RaceModal({ free, onClose, onStarted }) {
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
-        aria-label="Race a prompt across harnesses"
+        aria-label="Race a prompt across apps"
       >
         <div className="dv-modal-head">
-          <h2 className="dv-modal-title">Race a prompt across harnesses</h2>
+          <h2 className="dv-modal-title">Race a prompt across apps</h2>
           <button className="dv-modal-close" onClick={onClose} disabled={busy} title="Close">
             <X size={14} weight="bold" />
           </button>
         </div>
         <p className="dv-modal-hint">
-          One prompt, one chat per harness, side by side, so the answers compare at a glance.
+          One prompt, one chat per app, side by side, so the answers compare at a glance.
           {workspace ? ` Each starts in ${workspaceName(workspace)}.` : ' Each starts in your home folder.'}
         </p>
 
@@ -165,7 +165,7 @@ export default function RaceModal({ free, onClose, onStarted }) {
             className="race-prompt"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="What should every harness answer?"
+            placeholder="What should every app answer?"
             rows={3}
             autoFocus
             disabled={busy}
@@ -174,14 +174,14 @@ export default function RaceModal({ free, onClose, onStarted }) {
         </label>
 
         <div className="race-label-row">
-          <span>Harnesses</span>
+          <span>Apps</span>
           <span className="race-label-val">
             {plan.count} of {plan.offerable.length} chosen
           </span>
         </div>
         <div className="race-list">
           {plan.offerable.length === 0 && (
-            <p className="race-empty">No harness is installed on this machine yet.</p>
+            <p className="race-empty">No app is installed on this machine yet.</p>
           )}
           {plan.offerable.map((harness) => (
             <div key={harness.id} className="race-row">

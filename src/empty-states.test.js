@@ -16,7 +16,7 @@ test('New chat says there is nothing to run a task on, and where the installer i
   // is "not yet", not "nothing installed".
   assert.match(newchat, /connection\.state === 'connected' && !available\.length/)
   assert.match(newchat, /No agent is installed on this computer yet, so a chat has nowhere to run\./)
-  assert.match(newchat, /Install one from\s+the harness picker under the box/)
+  assert.match(newchat, /Install one from\s+the app picker under the box/)
   // A calm row: no border, no tint, and no button in it.
   assert.match(newchat, /className="nc-first-run"/)
   assert.match(source('newchat.css'), /\.nc-first-run \{/)

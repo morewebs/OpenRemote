@@ -234,7 +234,7 @@ export default function SignInSurface({ onLinked }) {
         {step === 'devices' && (
           <>
             <p className="cm-body web-signin-sub">
-              Choose the computer to reach. Its chats, its files and its harnesses stay there.
+              Choose the computer to reach. Its chats, its files and its apps stay there.
             </p>
             {!linking && <p className="cm-error web-signin-honest">{LINKS_MISSING}</p>}
             {machines.length === 0 ? (

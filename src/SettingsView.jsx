@@ -967,7 +967,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
             <div className="pn-list pn-list--tight">
               <div className="pn-row" data-stg="new-tasks-harness">
                 <div>
-                  <div className="pn-name">Harness</div>
+                  <div className="pn-name">App</div>
                   <div className="pn-detail">What a new chat starts on.</div>
                 </div>
                 <button
@@ -978,12 +978,12 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                   aria-haspopup="listbox"
                   aria-expanded={picker?.kind === 'harness'}
                 >
-                  {defaultHarness?.name ?? 'No harness installed'}
+                  {defaultHarness?.name ?? 'No app installed'}
                 </button>
                 {picker?.kind === 'harness' && (
                   <PickerMenu
-                    label="Harness"
-                    searchPlaceholder="Search harnesses"
+                    label="App"
+                    searchPlaceholder="Search apps"
                     items={available.map((h) => ({ id: h.id, name: h.name }))}
                     groups={null}
                     selectedId={defaultHarness?.id ?? ''}
@@ -1588,15 +1588,15 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
             hidden={!!query || active !== 'harnesses'}
           >
             <header className="stg-head">
-              <h2 className="stg-title">Harnesses</h2>
-              <p className="stg-lead">What the daemon can drive on this machine. Install a harness's own CLI and it appears here.</p>
+              <h2 className="stg-title">Apps</h2>
+              <p className="stg-lead">The apps OpenRemote can drive on this machine. Install an app's own CLI and it appears here.</p>
             </header>
             <div className="pn-list pn-list--tight">
               {harnessList.map((h) => (
                 <div className="pn-row" key={h.id} data-stg={`harness-${h.id}`}>
                   <div>
                     <div className="pn-name">{harnessName(h.id)}</div>
-                    <div className="pn-detail">{h.available ? <span className="pv">{h.path}</span> : 'This harness is not installed on this machine.'}</div>
+                    <div className="pn-detail">{h.available ? <span className="pv">{h.path}</span> : 'This app is not installed on this machine.'}</div>
                   </div>
                   {h.available && h.using_api_key && h.signed_in !== true ? (
                     <span className="pn-btn">Using API key</span>
@@ -1653,7 +1653,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
               <div className="pn-list pn-list--tight">
                 <div className="pn-row">
                   <div>
-                    <div className="pn-name">No supported harness</div>
+                    <div className="pn-name">No supported app</div>
                     <div className="pn-detail">Custom endpoints arrive with claude - install it to add one.</div>
                   </div>
                 </div>

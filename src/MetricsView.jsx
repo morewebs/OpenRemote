@@ -114,7 +114,7 @@ export default function MetricsView() {
 
           {harnesses.length > 0 && (
             <>
-              <h2 className="pn-section">By harness</h2>
+              <h2 className="pn-section">By app</h2>
               <div className="pn-list pn-list--tight">
                 {harnesses.map((h) => (
                   <div className="pn-row" key={h.harness}>

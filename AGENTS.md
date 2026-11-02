@@ -129,6 +129,13 @@ an old process is still alive; find it before re-running).
   `dv-modal` family (Esc / backdrop / X to close).
 - Harness vocabulary is the harness's own: its model names, its effort
   tiers, its approval words. Never invent OpenRemote substitutes.
+- In everything a person reads, a harness is an **App**: the tab, the
+  pickers, the manager dialog, the plugin badges, the machine and race
+  dialogs, and the sentences around them. The code, the routes, the ids
+  and `docs/harness-plugins.md` keep `harness`, because that is what the
+  daemon's API and the plugin contract call it. `src/app-naming.test.js`
+  reads for a surface that says the old word again; the search index keeps
+  `harness` as a term so the old name still finds the row.
 - Harness ids (`claude`, `codex`, `grok`, `pi`, `opencode`, `agy`) are
   stable. Display names live in `src/harness-names.js`; brand marks in
   `src/brand-marks.jsx` (verbatim geometry from each owner's own
@@ -247,7 +254,7 @@ an old process is still alive; find it before re-running).
 ## Checking this file
 
 Four commands check what this page claims, and a reader can run all of them
-from the repo root: `npm test` (prints a count; 1172 the last time this line
+from the repo root: `npm test` (prints a count; 1174 the last time this line
 was checked, and the run is the truth rather than this number), `node
 scripts/check-tab-acl.mjs` (says `tab acl ok: 2 capability file(s), every
 non-phone one scoped to the main webview, every declared command (35)

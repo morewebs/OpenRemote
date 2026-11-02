@@ -601,7 +601,7 @@ export default function NewChat({
       if (!cancelled) {
         setModels([])
         setModelsPending(false)
-        setCarryNote('The model list did not load: the harness may still be starting.')
+        setCarryNote('The model list did not load: the app may still be starting.')
       }
     })
     // The custom rows ride beside the catalog: the records, then what
@@ -871,7 +871,7 @@ export default function NewChat({
   ]
   const defaultEndpoint = endpoints.find((e) => e.is_default) ?? null
   const chosenEndpoint = endpointId ? endpoints.find((e) => e.id === endpointId) ?? null : null
-  const endpointWord = chosenEndpoint?.name ?? (defaultEndpoint ? `Default (${defaultEndpoint.name})` : "Harness provider")
+  const endpointWord = chosenEndpoint?.name ?? (defaultEndpoint ? `Default (${defaultEndpoint.name})` : "App provider")
   const shownModelName = model
     ? (modelDisplayName(models, model) !== model
       ? modelDisplayName(models, model)
@@ -1327,7 +1327,7 @@ export default function NewChat({
       {connection.state === 'connected' && !available.length && (
         <p className="nc-first-run" key="no-agent">
           No agent is installed on this computer yet, so a chat has nowhere to run. Install one from
-          the harness picker under the box; it scans this computer each time it opens.
+          the app picker under the box; it scans this computer each time it opens.
         </p>
       )}
       <div className={`nc-box${needsSignIn || usingApiKey ? ' nc-box--auth' : ''}${fast ? ' is-fast' : ''}`} ref={boxRef}>
@@ -1394,7 +1394,7 @@ export default function NewChat({
                   // No catalog to pick from, but the harness's own config
                   // says what a fresh chat runs - its words, shown as the
                   // fact it is. The wire's first-turn truth replaces it.
-                  <span className="nc-meta nc-static" title="The model this harness runs, from its own config">
+                  <span className="nc-meta nc-static" title="The model this app runs, from its own config">
                     {defaultLabel}
                   </span>
                 )}
@@ -1448,7 +1448,7 @@ export default function NewChat({
                     items={[
                       {
                         id: '',
-                        name: defaultEndpoint ? `Harness default (${defaultEndpoint.name})` : 'Harness provider',
+                        name: defaultEndpoint ? `App default (${defaultEndpoint.name})` : 'App provider',
                       },
                       ...endpoints.filter((e) => e.enabled).map((e) => ({ id: e.id, name: e.name })),
                     ]}
@@ -1463,7 +1463,7 @@ export default function NewChat({
                     renderSubline={(item) =>
                       item.id === '' ? (
                         <span className="nc-item-sub">
-                          {defaultEndpoint ? "This harness's own default" : "This harness's own provider"}
+                          {defaultEndpoint ? "This app's own default" : "This app's own provider"}
                         </span>
                       ) : null
                     }
@@ -1490,17 +1490,17 @@ export default function NewChat({
               aria-haspopup="listbox"
               aria-expanded={picker?.kind === 'harness'}
               data-picker="harness"
-              title={hintHarness('Harness')}
+              title={hintHarness('App')}
             >
               <span className="nc-provider" key={currentHarness?.id ?? 'none'}>
                 <HarnessMark harness={currentHarness?.id} size={16} />
-                {currentHarness?.name ?? 'No harness installed'}
+                {currentHarness?.name ?? 'No app installed'}
               </span>
             </button>
             {(picker?.kind === 'harness' || harnessLeaving) && (
               <PickerMenu
-                label="Harness"
-                searchPlaceholder="Search harnesses"
+                label="App"
+                searchPlaceholder="Search apps"
                 leaving={harnessLeaving}
                 items={available.map((h) => ({ id: h.id, name: h.name }))}
                 renderIcon={(h) => <HarnessMark harness={h.id} size={16} />}
@@ -1526,7 +1526,7 @@ export default function NewChat({
                     type="button"
                     onClick={() => leaveHarness('manage')}
                   >
-                    Manage harnesses…
+                    Manage apps…
                   </button>
                 }
               />
@@ -1539,7 +1539,7 @@ export default function NewChat({
                   onClick={toggleEffort}
                   aria-expanded={picker?.kind === 'effort'}
                   data-picker="effort"
-                  title={hintEffort("The harness's own effort tier")}
+                  title={hintEffort("The app's own effort tier")}
                 >
                   <FadingLabel text={effortLabel(chosenEffort)} />
                 </button>
@@ -1572,7 +1572,7 @@ export default function NewChat({
                 aria-haspopup="listbox"
                 aria-expanded={picker?.kind === 'permission'}
                 data-picker="permission"
-                title={hintPermission('What the harness may do without asking')}
+                title={hintPermission('What the app may do without asking')}
               >
                 {permissionWords.find((w) => (w.w ?? w) === chosenPermission)?.l ?? chosenPermission ?? 'Permission'}
               </button>

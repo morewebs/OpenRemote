@@ -74,7 +74,7 @@ test('every row the palette had is still offered', () => {
   for (const name of [
     "name: 'Stop all running chats'",
     'name: HARNESS_STOP_NAME',
-    "name: 'Race a prompt across harnesses'",
+    "name: 'Race a prompt across apps'",
     "name: 'Since your last look'",
     "name: 'Changes in this chat'",
     "name: 'Turn this chat into a recurring job'",

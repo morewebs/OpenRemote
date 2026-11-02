@@ -187,10 +187,10 @@ export function settlePreset(preset, world = {}) {
   const notes = []
   const harnessOk = preset?.harness && (world.harnesses ?? []).includes(preset.harness)
   const labels = world.labels ?? {}
-  const harnessWord = labels.harnessLabel ?? preset?.harness ?? 'that harness'
+  const harnessWord = labels.harnessLabel ?? preset?.harness ?? 'that app'
   if (!preset) return { slots: null, notes: [] }
   if (!harnessOk) {
-    notes.push(`Its harness is not installed on this computer any more, so this chat stays on ${labels.currentHarnessLabel ?? 'the one selected'}.`)
+    notes.push(`Its app is not installed on this computer any more, so this chat stays on ${labels.currentHarnessLabel ?? 'the one selected'}.`)
   }
 
   const models = harnessOk ? (world.models ?? []) : []
@@ -210,7 +210,7 @@ export function settlePreset(preset, world = {}) {
     const tiers = model ? (models.find((m) => m.model === model)?.reasoning_efforts ?? []) : []
     if (model && tiers.includes(preset.effort)) effort = preset.effort
     else if (model && harnessOk) {
-      notes.push(`${labels.effortLabel ?? preset.effort} effort is not one that model offers any more, so the chat runs at the harness's own effort.`)
+      notes.push(`${labels.effortLabel ?? preset.effort} effort is not one that model offers any more, so the chat runs at the app's own effort.`)
     }
   }
 
@@ -219,7 +219,7 @@ export function settlePreset(preset, world = {}) {
     const words = harnessOk ? (world.permissions ?? []) : []
     if (words.some((w) => w.w === preset.permission)) permission = preset.permission
     else if (harnessOk) {
-      notes.push(`The approval word ${labels.permissionLabel ?? preset.permission} is not one ${harnessWord} offers any more, so the harness's own default holds.`)
+      notes.push(`The approval word ${labels.permissionLabel ?? preset.permission} is not one ${harnessWord} offers any more, so the app's own default holds.`)
     }
   }
 
@@ -280,8 +280,8 @@ export function settlePreset(preset, world = {}) {
 /** Why a chat cannot become a preset, in one plain sentence each. */
 export const PRESET_REFUSALS = {
   'no-chat': 'No chat is on screen to take a setup from.',
-  'no-harness': 'That chat has no harness, so there is no setup to save.',
-  'not-installed': 'Its harness is not installed on this computer, so a setup could not start a chat here.',
+  'no-harness': 'That chat has no app, so there is no setup to save.',
+  'not-installed': 'Its app is not installed on this computer, so a setup could not start a chat here.',
   full: `This computer already keeps ${PRESET_LIMIT} setups; delete one to save another.`,
 }
 

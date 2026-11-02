@@ -919,7 +919,7 @@ export default function ChatView({ chat, onBack, focused = true }) {
           {chat.permissionMode && (
             <span
               className="cv-fact"
-              title={`The harness's permission word for this chat (${harnessText}'s own spelling)`}
+              title={`The app's permission word for this chat (${harnessText}'s own spelling)`}
             >
               {chat.permissionMode}
             </span>
@@ -1364,7 +1364,7 @@ export default function ChatView({ chat, onBack, focused = true }) {
                     data-picker="endpoint"
                     title="Which model server this chat runs through - lands when the chat next starts"
                   >
-                    {chatEndpointName ?? (defaultEndpoint ? `Default (${defaultEndpoint.name})` : 'Harness provider')}
+                    {chatEndpointName ?? (defaultEndpoint ? `Default (${defaultEndpoint.name})` : 'App provider')}
                   </button>
                 ) : (
                   chatEndpointName && (
@@ -1381,7 +1381,7 @@ export default function ChatView({ chat, onBack, focused = true }) {
                   items={[
                     {
                       id: '',
-                      name: defaultEndpoint ? `Harness default (${defaultEndpoint.name})` : 'Harness provider',
+                      name: defaultEndpoint ? `App default (${defaultEndpoint.name})` : 'App provider',
                     },
                     ...endpoints.filter((e) => e.enabled).map((e) => ({ id: e.id, name: e.name })),
                   ]}
@@ -1420,7 +1420,7 @@ export default function ChatView({ chat, onBack, focused = true }) {
                   setManagingHarnesses(true)
                 }}
                 aria-haspopup="dialog"
-                title={`Harness - ${harnessText}; this opens the harness manager`}
+                title={`App - ${harnessText}; this opens the Apps dialog`}
               >
                 <HarnessMark harness={chat.harness} size={16} />
                 {harnessText}
@@ -1434,7 +1434,7 @@ export default function ChatView({ chat, onBack, focused = true }) {
                     aria-haspopup="dialog"
                     aria-expanded={picker?.kind === 'effort'}
                     data-picker="effort"
-                    title={hintEffort("The harness's own effort")}
+                    title={hintEffort("The app's own effort")}
                   >
                     <FadingLabel text={effortLabel(chat.effort)} />
                   </button>
@@ -1477,7 +1477,7 @@ export default function ChatView({ chat, onBack, focused = true }) {
                     aria-haspopup="listbox"
                     aria-expanded={picker?.kind === 'permission'}
                     data-picker="permission"
-                    title={hintPermission('What the harness may do without asking - lands when the chat next starts')}
+                    title={hintPermission('What the app may do without asking - lands when the chat next starts')}
                   >
                     {chat.permissionMode ?? 'Permission'}
                   </button>
@@ -1485,7 +1485,7 @@ export default function ChatView({ chat, onBack, focused = true }) {
                   chat.permissionMode && (
                     <span
                       className="nc-meta nc-static"
-                      title={`The harness's permission word for this chat (${harnessText}'s own spelling)`}
+                      title={`The app's permission word for this chat (${harnessText}'s own spelling)`}
                     >
                       {chat.permissionMode}
                     </span>

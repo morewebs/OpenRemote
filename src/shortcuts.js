@@ -54,7 +54,7 @@ export const ACTIONS = [
   { id: 'pick-model', group: 'pickers', label: 'Model', keys: 'Mod+M' },
   { id: 'pick-effort', group: 'pickers', label: 'Effort', keys: 'Mod+E' },
   { id: 'pick-permission', group: 'pickers', label: 'Permission', keys: 'Mod+P' },
-  { id: 'pick-harness', group: 'pickers', label: 'Harness (new chat)', keys: 'Mod+H' },
+  { id: 'pick-harness', group: 'pickers', label: 'App (new chat)', keys: 'Mod+H' },
   { id: 'toggle-fast', group: 'pickers', label: 'Fast on or off', keys: 'Mod+Shift+F' },
   ...modelSwitches,
   { id: 'toggle-sidebar', group: 'layout', label: 'Show or hide the sidebar', keys: 'Mod+B' },

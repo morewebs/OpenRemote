@@ -28,7 +28,7 @@ export const SECTIONS = [
   { id: 'startup', label: 'Startup', icon: 'power', group: 'general', phone: false },
   { id: 'keyboard', label: 'Keyboard', icon: 'keyboard', group: 'general', phone: false },
   { id: 'cloud', label: 'Cloud', icon: 'cloud', group: 'system', phone: true },
-  { id: 'harnesses', label: 'Harnesses', icon: 'robot', group: 'system', phone: false },
+  { id: 'harnesses', label: 'Apps', icon: 'robot', group: 'system', phone: false },
   { id: 'mcp-servers', label: 'MCP servers', icon: 'plugs', group: 'system', phone: false },
   { id: 'models', label: 'Models', icon: 'shapes', group: 'system', phone: false },
   { id: 'browser', label: 'Browser', icon: 'globe', group: 'system', phone: false },
@@ -44,7 +44,7 @@ const BLURBS = {
   startup: 'What the app does when it opens.',
   keyboard: 'Keys for every action.',
   cloud: 'Your account and this device.',
-  harnesses: 'What the daemon can drive on this machine.',
+  harnesses: 'The apps OpenRemote can drive on this machine.',
   'mcp-servers': 'Tools a session can call.',
   models: 'Custom model endpoints on this computer, which a chat can run through.',
   browser: 'What the built-in browser keeps on this computer, and where to clear it.',
@@ -58,10 +58,10 @@ const GROUP_LABEL = Object.fromEntries(GROUPS.map((g) => [g.id, g.label]))
 const row = (key, section, label, detail, terms) => ({ key, section, label, detail, terms })
 
 const ROWS = [
-  row('new-tasks-harness', 'new-tasks', 'Harness', 'What a new chat starts on.', ['default', 'agent', 'cli', 'start']),
-  row('new-tasks-model', 'new-tasks', 'Model', "The harness's own catalog.", ['default', 'catalog']),
+  row('new-tasks-harness', 'new-tasks', 'App', 'What a new chat starts on.', ['default', 'agent', 'cli', 'start', 'harness', 'app']),
+  row('new-tasks-model', 'new-tasks', 'Model', "The app's own catalog.", ['default', 'catalog']),
   row('new-tasks-effort', 'new-tasks', 'Effort', "The model's own reasoning tiers.", ['reasoning', 'tier', 'thinking', 'depth']),
-  row('new-tasks-permission', 'new-tasks', 'Permission', 'What the harness may do without asking.', ['approval', 'ask', 'mode']),
+  row('new-tasks-permission', 'new-tasks', 'Permission', 'What the app may do without asking.', ['approval', 'ask', 'mode']),
   row('new-tasks-projects', 'new-tasks', 'Projects', 'The folders whose chats group under their project.', ['folder', 'workspace', 'group', 'remove', 'unregister', 'delete']),
 
   row('appearance-density', 'appearance', 'Compact density', 'Pulls the rows and gutters in.', ['spacing', 'layout', 'comfortable']),
@@ -171,8 +171,8 @@ export function dynamicEntries({
       key: `harness-${h.id}`,
       section: 'harnesses',
       label: harnessName(h.id),
-      detail: h.available ? 'Installed on this machine.' : 'This harness is not installed on this machine.',
-      terms: ['harness', 'cli', 'install', 'agent', h.id],
+      detail: h.available ? 'Installed on this machine.' : 'This app is not installed on this machine.',
+      terms: ['harness', 'app', 'apps', 'cli', 'install', 'agent', h.id],
     })),
     ...servers.map((p) => ({
       key: `mcp-${p.id}`,
@@ -219,7 +219,7 @@ export function dynamicEntries({
         key: `models-${h.id}`,
         section: 'models',
         label: `Model endpoints for ${name}`,
-        detail: 'Model endpoints this harness can run through.',
+        detail: 'Model endpoints this app can run through.',
         terms: ['endpoint', 'gateway', 'custom', 'model', 'relay', h.id],
       },
     )

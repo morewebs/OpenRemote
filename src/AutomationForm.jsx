@@ -440,12 +440,12 @@ export default function AutomationForm({ rule, onClose }) {
                 aria-haspopup="listbox"
                 aria-expanded={picker?.kind === 'harness'}
               >
-                {currentHarness?.name ?? 'No harness installed'}
+                {currentHarness?.name ?? 'No app installed'}
               </button>
               {picker?.kind === 'harness' && (
                 <PickerMenu
-                  label="Harness"
-                  searchPlaceholder="Search harnesses"
+                  label="App"
+                  searchPlaceholder="Search apps"
                   items={available.map((h) => ({ id: h.id, name: h.name }))}
                   groups={null}
                   selectedId={harness ?? ''}
@@ -466,7 +466,7 @@ export default function AutomationForm({ rule, onClose }) {
                   onClick={openPicker('permission')}
                   aria-haspopup="listbox"
                   aria-expanded={picker?.kind === 'permission'}
-                  title="What the harness may do without asking when the rule fires"
+                  title="What the app may do without asking when the rule fires"
                 >
                   {permission ?? 'Permission'}
                 </button>
@@ -588,7 +588,7 @@ export default function AutomationForm({ rule, onClose }) {
           </div>
           {(carryNote || modelsUnavailable) && (
             <p className="af-when-note" role="status">
-              {carryNote ?? 'The model list did not load: the harness may still be starting.'}
+              {carryNote ?? 'The model list did not load: the app may still be starting.'}
             </p>
           )}
           {machineGone && (

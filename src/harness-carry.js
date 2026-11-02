@@ -74,6 +74,6 @@ export function droppedLine(dropped, harnessName) {
   const words = keys.map((key) => NOUN[key])
   const joined =
     words.length === 1 ? words[0] : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`
-  const who = harnessName ? `${harnessName} ` : 'This harness '
+  const who = harnessName ? `${harnessName} ` : 'This app '
   return `${who}does not use that ${joined}: the switch cleared it, so pick again below.`
 }

@@ -176,7 +176,7 @@ export default function MachineModal({ device, onOpenChat, onClose }) {
         {reachable && view && (
           <>
             <div className="dv-label-row">
-              <span>Harnesses</span>
+              <span>Apps</span>
               <span className="dv-label-val">{installed.length}</span>
             </div>
             <div className="dv-installs">
@@ -224,7 +224,7 @@ export default function MachineModal({ device, onOpenChat, onClose }) {
           </>
         )}
         {!reachable && device.kind === 'machine' && (
-          <p className="dv-empty">Its harnesses show here while it's online.</p>
+          <p className="dv-empty">Its apps show here while it's online.</p>
         )}
 
         {error && <p className="dv-error">{error}</p>}

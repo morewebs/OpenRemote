@@ -73,7 +73,7 @@ export default function PluginsView() {
         <div>
           <h1 className="dv-title">Plugins</h1>
           <p className="dv-meta">
-            The harnesses OpenRemote drives, and what you add to it. Each one is on this computer.
+            The apps OpenRemote drives, and what you add to it. Each one is on this computer.
           </p>
         </div>
         {/* The dialog's own title, so the door and the panel agree: the dialog
@@ -174,7 +174,7 @@ function InstalledPlugins({ onUpdate }) {
       ))}
 
       <h2 className="pn-section">Built in</h2>
-      <p className="pn-lead">Off hides a harness from every picker. Its chats keep working.</p>
+      <p className="pn-lead">Off hides an app from every picker. Its chats keep working.</p>
       <div className="pn-list pg-list-full pn-list--tight">
         {builtin.map((p) => (
           <div className="pn-row" key={p.id}>
@@ -185,7 +185,7 @@ function InstalledPlugins({ onUpdate }) {
               <div>
                 <div className="pn-name">{p.name}</div>
                 <div className="pn-detail">
-                  {p.available ? `Harness${p.version ? ` · ${p.version}` : ''}` : 'Harness · not installed'}
+                  {p.available ? `App${p.version ? ` · ${p.version}` : ''}` : 'App · not installed'}
                 </div>
               </div>
             </div>
@@ -273,7 +273,7 @@ function InstalledPlugins({ onUpdate }) {
                       {/* The daemon lists this plugin's harness among the
                           installed plugins when the plugin declares one; the
                           chip says which list's row it also fills. */}
-                      {p.harness && <span className="pg-badge-harness">Harness</span>}
+                      {p.harness && <span className="pg-badge-harness">App</span>}
                       {author && <span className="pg-author-badge">by {author}</span>}
                       <span className="pg-badge-marketplace">@{p.marketplace}</span>
                     </div>

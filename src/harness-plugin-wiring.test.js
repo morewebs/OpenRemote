@@ -32,7 +32,7 @@ test('an unknown harness id gets a quiet monogram, never another owner\'s mark',
 
 test('the installed list marks a plugin that provides a harness, and stays quiet without one', () => {
   const view = source('PluginsView.jsx')
-  assert.match(view, /\{p\.harness && <span className="pg-badge-harness">Harness<\/span>\}/)
+  assert.match(view, /\{p\.harness && <span className="pg-badge-harness">App<\/span>\}/)
   // The chip takes the badge's existing styling; it adds no accent of its own.
   assert.match(source('plugins.css'), /\.pg-badge-marketplace,\s*\n\.pg-badge-harness \{/)
 })

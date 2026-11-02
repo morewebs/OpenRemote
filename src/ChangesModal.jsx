@@ -143,7 +143,7 @@ export default function ChangesModal({ chat }) {
   if (!open || !chat) return null
 
   const title = chat.title ?? 'this chat'
-  const harness = harnessName(chat.harness) || 'the harness'
+  const harness = harnessName(chat.harness) || 'the app'
 
   return (
     <div
@@ -260,7 +260,7 @@ export default function ChangesModal({ chat }) {
           <p className="chg-empty">
             {folded.unread > 0
               ? `No file changes this console could read. ${folded.unread === 1 ? 'One report named a file' : `${folded.unread} reports named files`} in a shape it does not recognise, so this says what this window could show, not that the chat changed nothing.`
-              : 'No file changes in this chat. A harness that edits from a shell command or a script reports no file list at all, so this is what it reported rather than everything a turn did.'}
+              : 'No file changes in this chat. An app that edits from a shell command or a script reports no file list at all, so this is what it reported rather than everything a turn did.'}
           </p>
         )}
         {folded.empty === 'no-transcript' && (

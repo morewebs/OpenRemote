@@ -122,7 +122,7 @@ export function chatMarkdown(chat, { harness = null, harnesses = null } = {}) {
   const items = Array.isArray(chat?.timeline) ? chat.timeline : []
   const out = []
   out.shortened = 0
-  const speaker = harnessLabel(harness ?? chat?.harness ?? null, harnesses) || 'The harness'
+  const speaker = harnessLabel(harness ?? chat?.harness ?? null, harnesses) || 'The app'
   let wrote = false
   for (const item of items) {
     if (!item || typeof item !== 'object') continue

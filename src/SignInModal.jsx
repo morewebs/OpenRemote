@@ -148,11 +148,11 @@ export default function SignInModal({ harnessId, onDone, deviceId = null }) {
             <p className="si-hint">
               {settled
                 ? settled.ok
-                  ? 'The harness answered with its own sign-in words.'
+                  ? 'The app answered with its own sign-in words.'
                   : `The login command finished on its own: ${settled.text}`
                 : read.address
-                  ? 'Finish this in your browser. The harness opened a page; this button opens it again.'
-                  : 'The harness’s own login command is running - its words appear below.'}
+                  ? 'Finish this in your browser. The app opened a page; this button opens it again.'
+                  : 'The app’s own login command is running - its words appear below.'}
             </p>
 
             {read.address && (
@@ -184,8 +184,8 @@ export default function SignInModal({ harnessId, onDone, deviceId = null }) {
                 onClick={() => setShowWords(!wordsOpen)}
               >
                 {wordsOpen
-                  ? 'Hide what the harness said'
-                  : `What the harness said (${read.words.length} line${read.words.length === 1 ? '' : 's'})`}
+                  ? 'Hide what the app said'
+                  : `What the app said (${read.words.length} line${read.words.length === 1 ? '' : 's'})`}
               </button>
             )}
 
@@ -210,7 +210,7 @@ export default function SignInModal({ harnessId, onDone, deviceId = null }) {
                       submit()
                     }
                   }}
-                  placeholder="Paste the code the harness asked for"
+                  placeholder="Paste the code the app asked for"
                   spellCheck={false}
                   autoFocus
                   disabled={closing}

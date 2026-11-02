@@ -33,7 +33,7 @@ test('the chat harness chip opens the manager, not a listbox that chose nothing'
   // is the one the chip prints: `harnessText` already resolved it, which also
   // keeps a plugin-provided harness reading as its own name rather than a bare
   // lowercase id.
-  assert.match(view, /aria-haspopup="dialog"\s*\n\s*title=\{`Harness - \$\{harnessText\}/)
+  assert.match(view, /aria-haspopup="dialog"\s*\n\s*title=\{`App - \$\{harnessText\}/)
   assert.doesNotMatch(view, /aria-expanded=\{picker\?\.kind === 'harness'\}/)
   // The manager it opens is still rendered by this view.
   assert.match(view, /\{managingHarnesses && \(/)
