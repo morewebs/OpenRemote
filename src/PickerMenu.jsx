@@ -9,6 +9,10 @@ import './pickermenu.css'
  * The cozy dropdown engine shared by the model / harness / device pickers.
  * Opens at the cursor, searches, groups (optional), keyboard-navigates,
  * clamps to the viewport, scrolls internally.
+ *
+ * A row may carry the catalog's own two extra facts, both rendered as the
+ * harness sent them: `detail`, a muted second line under the name (a model's
+ * cost tier), and `note`, the row's hover sentence.
  */
 export default function PickerMenu({
   label,
@@ -229,11 +233,12 @@ export default function PickerMenu({
               return (
                 <button
                   key={item.id}
-                  className={`nc-item${item.id === selectedId ? ' selected' : ''}${
-                    i === cursor ? ' cursor' : ''
-                  }`}
+                  className={`nc-item${item.detail ? ' has-detail' : ''}${
+                    item.id === selectedId ? ' selected' : ''
+                  }${i === cursor ? ' cursor' : ''}`}
                   role="option"
                   aria-selected={item.id === selectedId}
+                  title={item.note || undefined}
                   onClick={() => onChoose(item.id)}
                   onMouseEnter={() => setCursor(i)}
                 >
@@ -242,6 +247,10 @@ export default function PickerMenu({
                     {/* an item marked veiled carries the user's own name for a thing
                         (a project, a machine): privacy mode blurs it */}
                     <span className={item.veiled ? 'nc-item-name pv' : 'nc-item-name'}>{item.name}</span>
+                    {/* the catalog's second fact about the row (a model's cost
+                        tier): ordered after the marks so it takes the full
+                        width under them, see nc-item-detail */}
+                    {item.detail && <span className="nc-item-detail">{item.detail}</span>}
                     {renderTrailing?.(item)}
                     {item.id === selectedId && <Check size={13} className="nc-check" />}
                   </span>

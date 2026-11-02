@@ -771,6 +771,22 @@ export class DaemonApi {
     return this.call('GET', `/harnesses/${seg(harnessId)}/models`, null, { timeoutMs: BOOT_TIMEOUT_MS })
   }
 
+  // Capture this harness's catalog again through the plugin's own driver.
+  // The daemon refuses with 409 while a chat on the harness is alive and
+  // with 503 carrying the driver's sentence when the capture fails; both
+  // arrive as error.message. The answer rides the receipt envelope, so the
+  // fresh harness row is under `result`. The budget covers the daemon's own
+  // 60 s capture deadline plus the handshake around it.
+  async catalogRefresh(harnessId) {
+    const reply = await this.call(
+      'POST',
+      `/harnesses/${seg(harnessId)}/catalog/refresh`,
+      { request_id: newRequestId() },
+      { timeoutMs: 90_000 },
+    )
+    return reply?.result ?? reply
+  }
+
   // ---- custom model endpoints (machine-local, secret-safe) ----
 
   // The endpoint records on the machine that answers, metadata only -

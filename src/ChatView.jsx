@@ -422,7 +422,15 @@ export default function ChatView({ chat, onBack, focused = true }) {
   // harness list has a row for it (a plugin harness is only named there),
   // else the id the chat carries.
   const harnessText = harnessLabel(harness ?? chat.harness)
-  const live = LIVE_SETTINGS[chat.harness] ?? { model: false, effort: false, fast: false }
+  // A harness that takes a setting while a turn works: the built-ins whose
+  // drivers do, and any installed plugin whose own row says its settings are
+  // live. The row's word is the fact; this map is not the list of harnesses
+  // that can change anything.
+  const live =
+    LIVE_SETTINGS[chat.harness]
+    ?? (harness?.settings_live
+      ? { model: true, effort: false, fast: false }
+      : { model: false, effort: false, fast: false })
   // A stopped chat can change anything the harness accepts at start. A
   // running one only where the wire accepts it now - permission never:
   // every harness takes the word at process start only, so a running
@@ -450,6 +458,10 @@ export default function ChatView({ chat, onBack, focused = true }) {
       id: m.model,
       name: prettyModelName(m.display_name ?? m.model),
       resolved_model: m.resolved_model,
+      // The harness's own two extra facts, where its catalog carries them:
+      // the second line and the hover sentence, as sent.
+      detail: m.detail ?? null,
+      note: m.note ?? null,
     })),
     ...customItems,
   ]
