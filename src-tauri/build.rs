@@ -7,6 +7,8 @@ const COMMANDS: &[&str] = &[
     "daemon_restart",
     "tray_prefs",
     "set_tray_prefs",
+    "window_prefs",
+    "set_window_prefs",
     "open_url",
     "browser_open",
     "browser_features",

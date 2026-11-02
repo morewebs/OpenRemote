@@ -25,6 +25,8 @@
     "allow-daemon-restart",
     "allow-tray-prefs",
     "allow-set-tray-prefs",
+    "allow-window-prefs",
+    "allow-set-window-prefs",
     "allow-browser-open",
     "allow-browser-features",
     "allow-browser-tabs",

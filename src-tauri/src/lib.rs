@@ -23,6 +23,10 @@ mod mobile;
 mod signin;
 #[cfg(desktop)]
 mod tray;
+// Whether the window stays in front of other apps. Desktop only, like the
+// window itself.
+#[cfg(desktop)]
+mod window_prefs;
 
 /// What the shell knows about the running daemon. The console asks for
 /// this on boot and while it has no connection, and the shell pushes it

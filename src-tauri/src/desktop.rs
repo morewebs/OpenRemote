@@ -13,7 +13,10 @@ use tauri::{Emitter, Manager, State, WindowEvent};
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 
-use crate::{browser, geometry, tray, DaemonFailure, DaemonFailureKind, DaemonInfo, DaemonState};
+use crate::{
+    browser, geometry, tray, window_prefs, DaemonFailure, DaemonFailureKind, DaemonInfo,
+    DaemonState,
+};
 
 const DAEMON_NAME: &str = "openremote-daemon";
 
@@ -217,12 +220,15 @@ pub fn run() {
         .manage(DaemonState::default())
         .manage(Sidecar::default())
         .manage(tray::TrayState::default())
+        .manage(window_prefs::WindowPrefsState::default())
         .manage(browser::Browser::default())
         .invoke_handler(tauri::generate_handler![
             crate::daemon_info,
             daemon_restart,
             tray::tray_prefs,
             tray::set_tray_prefs,
+            window_prefs::window_prefs,
+            window_prefs::set_window_prefs,
             browser::browser_open,
             browser::browser_features,
             browser::browser_tabs,
@@ -261,6 +267,11 @@ pub fn run() {
             // larger than some laptop screens, and the part that would fall
             // off is the titlebar's own close button.
             geometry::open(app.handle());
+            // The window's z-order is the shell's to hold, not something it
+            // inherits from whatever set it last: the stored choice is written
+            // on every launch, so a flag left behind is corrected here.
+            window_prefs::load(app.handle());
+            window_prefs::apply(app.handle());
             // The console's webview gets no engine context menu: every action
             // on the console is a control the app draws (browser/mod.rs has
             // the longer reason). Tab pages keep theirs on purpose.
