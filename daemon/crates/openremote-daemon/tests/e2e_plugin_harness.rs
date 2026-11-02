@@ -279,3 +279,107 @@ async fn installing_a_harness_plugin_adds_its_harness_without_a_restart() {
     .await;
     assert_eq!(created.status, 201, "raw: {}", created.raw);
 }
+
+/// A harness plugin whose name is also its harness id - which is the shape
+/// every official plugin has, freebuff included - can be installed and then
+/// staged again for an update.
+///
+/// The reserved ids are OpenRemote's own six. Once the plugin is installed its
+/// harness is in the registry, and treating that as reserved made the daemon
+/// refuse the plugin its own name: the first install worked, and every update
+/// after it failed with "'name' is taken by OpenRemote itself", with Discover
+/// showing the entry as uninstallable.
+#[tokio::test]
+async fn a_harness_plugin_whose_name_is_its_harness_id_can_be_updated() {
+    let driver = fixture_driver();
+
+    // A fresh copy of the plugin folder, so an update stages the same manifest
+    // after the plugin is already installed.
+    fn plugin_folder(driver: &Path) -> tempfile::TempDir {
+        let windows = "bin/windows-x64/fixture-driver.exe";
+        let default = "bin/fixture-driver";
+        let folder = tempfile::tempdir().expect("plugin folder");
+        std::fs::create_dir_all(folder.path().join("bin/windows-x64")).expect("driver folder");
+        std::fs::copy(driver, folder.path().join(windows)).expect("windows driver");
+        std::fs::copy(driver, folder.path().join(default)).expect("default driver");
+        std::fs::write(
+            folder.path().join("openremote.json"),
+            json!({
+                "api": 1,
+                "name": "fixture-self",
+                "version": "0.1.0",
+                "description": "A harness plugin named like its harness",
+                "runtime": "process",
+                "powers": ["run_programs"],
+                "harness": {
+                    "api": 1,
+                    "id": "fixture-self",
+                    "name": "Fixture Self",
+                    "driver": {"windows": windows, "default": default},
+                    "args": []
+                }
+            })
+            .to_string(),
+        )
+        .expect("manifest");
+        folder
+    }
+
+    let daemon = start_daemon_with_plugins(&[], &[]).await;
+
+    let first = plugin_folder(&driver);
+    let staged = call(
+        &daemon,
+        "POST",
+        "/plugins/stage",
+        Some(json!({
+            "request_id": "self-stage-1",
+            "source": {"kind": "folder", "path": first.path()}
+        })),
+    )
+    .await;
+    assert_eq!(staged.status, 200, "first stage: {}", staged.raw);
+    let stage_id = staged.body["result"]["stage_id"]
+        .as_str()
+        .expect("stage id")
+        .to_string();
+    let installed = call(
+        &daemon,
+        "POST",
+        &format!("/plugins/stage/{stage_id}/install"),
+        Some(json!({"request_id": "self-install-1"})),
+    )
+    .await;
+    assert_eq!(installed.status, 200, "first install: {}", installed.raw);
+
+    // The harness is now in the registry under the plugin's own name.
+    let capabilities = call(&daemon, "GET", "/capabilities", None).await;
+    assert!(
+        capabilities.body["harnesses"]
+            .as_array()
+            .expect("harnesses")
+            .iter()
+            .any(|harness| harness["id"] == "fixture-self"
+                && harness["plugin"] == "fixture-self@local"),
+        "{}",
+        capabilities.raw
+    );
+
+    // Staging it again is an update, and must be allowed.
+    let second = plugin_folder(&driver);
+    let again = call(
+        &daemon,
+        "POST",
+        "/plugins/stage",
+        Some(json!({
+            "request_id": "self-stage-2",
+            "source": {"kind": "folder", "path": second.path()}
+        })),
+    )
+    .await;
+    assert_eq!(
+        again.status, 200,
+        "staging a harness plugin whose name is its harness id must not be refused: {}",
+        again.raw
+    );
+}

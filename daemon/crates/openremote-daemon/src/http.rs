@@ -1147,10 +1147,19 @@ fn store_failure(err: openremote_core::store::StoreError) -> PluginFailure {
     }
 }
 
+/// The harness ids OpenRemote itself carries: the six built-ins, never one an
+/// installed plugin provides.
+///
+/// This list is what a plugin may not take as its name or its harness id. It
+/// has to be the built-ins alone: an installed plugin's own harness is in the
+/// registry too, and reading it back as "taken by OpenRemote" refused the
+/// plugin its own name - so a harness plugin could be installed once and never
+/// staged again for an update, and Discover showed it as uninstallable.
 fn builtin_ids(app: &App) -> Vec<String> {
     app.supervisor
         .harnesses()
         .into_iter()
+        .filter(|h| h.plugin.is_none())
         .map(|h| h.id)
         .collect()
 }
