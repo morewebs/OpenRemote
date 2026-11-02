@@ -426,6 +426,45 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
     }
   }
 
+  // The window's z-order: the shell's own setting, off until the person turns
+  // it on. The shell writes the flag at launch and at every change, so this
+  // row is the whole of the choice. Absent in the browser, and on a phone.
+  const [above, setAbove] = useState(null)
+  useEffect(() => {
+    if (!hasTauri || isMobile) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core')
+        const view = await invoke('window_prefs')
+        if (!cancelled) setAbove(view)
+      } catch {
+        /* the row stays absent, or keeps the value it had */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  const toggleAbove = async () => {
+    if (!above) return
+    const wanted = !above.keep_above
+    setStartupNote(null)
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      const next = await invoke('set_window_prefs', { keepAbove: wanted })
+      setAbove(next)
+      // The shell answers with the setting it holds. One that comes back the
+      // other way round means the change did not take, and the row must not
+      // look as though it did.
+      if (next && typeof next.keep_above === 'boolean' && next.keep_above !== wanted) {
+        setStartupNote('Keep above other windows is unchanged: the shell did not take the change.')
+      }
+    } catch (err) {
+      setStartupNote(errorCopy(err))
+    }
+  }
+
   // The shell restart: this side is a single invoke; the console heals
   const [restarting, setRestarting] = useState(false)
   const restartDaemon = async () => {
@@ -574,6 +613,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
     if (!permissionWords.length) keys.add('new-tasks-permission')
     if (autoStart == null) keys.add('startup-launch')
     if (!tray?.available) keys.add('startup-tray')
+    if (!above) keys.add('startup-above')
     if (!daemonDetail?.url) keys.add('daemon-address')
     if (!hasTauri) keys.add('daemon-restart')
     // The connect row renders only while nothing is connected and only where
@@ -586,7 +626,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
     if (!(Object.keys(kb?.overrides ?? {}).length > 0)) keys.add('keyboard-reset')
     if (isMobile) keys.add('install-first-run')
     return keys
-  }, [models, effortTiers, permissionWords, autoStart, tray, daemonDetail, onManualConnect, connection.state, kb])
+  }, [models, effortTiers, permissionWords, autoStart, tray, above, daemonDetail, onManualConnect, connection.state, kb])
 
   const searchable = useMemo(() => {
     const ids = new Set(tabs.map((s) => s.id))
@@ -1290,6 +1330,21 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                     checked={tray.keep_running}
                     onChange={toggleTray}
                     label="Keep running in the tray"
+                  />
+                </div>
+              )}
+              {above && (
+                <div className="pn-row" data-stg="startup-above">
+                  <div>
+                    <div className="pn-name">Keep above other windows</div>
+                    <div className="pn-detail">
+                      The window stays in front of other apps while OpenRemote is open.
+                    </div>
+                  </div>
+                  <Toggle
+                    checked={above.keep_above}
+                    onChange={toggleAbove}
+                    label="Keep above other windows"
                   />
                 </div>
               )}

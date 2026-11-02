@@ -15,7 +15,10 @@ the project's own map.
 - `src/` - the console (Vite + React 19). One CSS file per view; shared
   chip styles in `composer.css`.
 - `src-tauri/` - the desktop shell (frameless, custom titlebar) and the
-  app version (`tauri.conf.json`).
+  app version (`tauri.conf.json`). The window settings it owns are three
+  JSON files in the app's config dir, each named for its module: the
+  geometry (`window.json`), the tray (`tray.json`), and whether the window
+  stays above other apps (`window_prefs.json`, off unless chosen).
 - `daemon/` - the Rust workspace (axum HTTP API, one crate per harness,
   `fixture-agent` for e2e). Independently versioned from the app.
   `openremote-cloud` is Cloud mode on a device (moreweb sign-in, the
@@ -40,7 +43,7 @@ the project's own map.
   `npm run tauri:dev` running in another terminal), plus `check-tab-acl.mjs`,
   the capability-scope guard CI runs. Run bare it prints
   `tab acl ok: 2 capability file(s), every non-phone one scoped to the main
-  webview, every declared command (33) granted` and exits 0, or exits 1 and
+  webview, every declared command (35) granted` and exits 0, or exits 1 and
   names the capability that widened; `--self-test` checks the check itself,
   and `--root` points it at another tree. Not build tooling; the one build
   script is `sync-daemon.mjs`.
@@ -244,10 +247,10 @@ an old process is still alive; find it before re-running).
 ## Checking this file
 
 Four commands check what this page claims, and a reader can run all of them
-from the repo root: `npm test` (prints a count; 1155 the last time this line
+from the repo root: `npm test` (prints a count; 1171 the last time this line
 was checked, and the run is the truth rather than this number), `node
 scripts/check-tab-acl.mjs` (says `tab acl ok: 2 capability file(s), every
-non-phone one scoped to the main webview, every declared command (33)
+non-phone one scoped to the main webview, every declared command (35)
 granted`), `cd daemon && cargo fmt --all --check` and
 `cd daemon && cargo clippy --all-targets --locked -- -D warnings` (both print
 nothing and exit 0 on the committed tree). The route and tier claims in "Cloud's

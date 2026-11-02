@@ -73,6 +73,7 @@ const ROWS = [
   row('startup-reopen', 'startup', 'Reopen', 'The view you left, or always New chat.', ['startup', 'last view', 'new chat', 'boot']),
   row('startup-launch', 'startup', 'Launch at login', 'Starts OpenRemote when you sign in to this computer.', ['autostart', 'boot', 'windows']),
   row('startup-tray', 'startup', 'Keep running in the tray', 'Closing the window leaves OpenRemote running.', ['background', 'close', 'quit', 'tray']),
+  row('startup-above', 'startup', 'Keep above other windows', 'The window stays in front of other apps while OpenRemote is open.', ['always on top', 'topmost', 'above', 'front', 'z-order', 'window']),
 
   row('cloud-account', 'cloud', 'Account', "Your moreweb account and this device's place in it.", ['sign in', 'sign out', 'email', 'sync', 'device']),
 

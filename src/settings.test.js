@@ -317,13 +317,14 @@ test('a preference the storage refused says it did not land, and keeps the old v
 const viewSource = readFileSync(new URL('./SettingsView.jsx', import.meta.url), 'utf8')
 
 test('the startup rows and the preference toggles say when a write did not land', () => {
-  // Both startup catches speak, instead of the comments that used to sit there.
+  // Every startup catch speaks, instead of the comments that used to sit there.
   const said = viewSource.match(/setStartupNote\(errorCopy\(err\)\)/g) ?? []
-  assert.equal(said.length, 2, 'Launch at login and the tray both report a refusal')
+  assert.equal(said.length, 3, 'Launch at login, the tray and the z-order row all report a refusal')
   assert.doesNotMatch(viewSource, /\{\s*\/\* the fact stays what it was \*\/\s*\}/)
   // A startup call that answers "still what it was" is surfaced too.
   assert.match(viewSource, /if \(enabled !== wanted\) \{/)
   assert.match(viewSource, /if \(next && typeof next\.keep_running === 'boolean' && next\.keep_running !== wanted\) \{/)
+  assert.match(viewSource, /if \(next && typeof next\.keep_above === 'boolean' && next\.keep_above !== wanted\) \{/)
   // The preference write's answer is returned, and a failed one sets the line.
   assert.match(viewSource, /const landed = savePrefs\(partial\)/)
   assert.match(
