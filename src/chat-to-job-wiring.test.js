@@ -89,12 +89,13 @@ test('an untouched prefilled form is not dirty: nothing clears a rule value on m
   // person switched to, or the form would open dirty with nothing touched.
   // What a switch does has moved: it no longer blanks both fields (a rule then
   // saved silently on the harness default) but asks harness-carry.js what the
-  // new harness can actually carry, and says once what it could not.
+  // new harness can actually carry. It does not narrate the drop: clearing a
+  // field is the whole message, and a sentence about it read as an error.
   const form = source('AutomationForm.jsx')
   assert.match(form, /const harnessAtOpen = useRef\(harness\)/)
   assert.match(form, /if \(harness !== harnessAtOpen\.current\) \{/)
   assert.match(form, /carrySetup\(\s*\n?\s*\{ model, permission \},/)
-  assert.match(form, /droppedLine\(dropped, /)
+  assert.doesNotMatch(form, /droppedLine/)
   assert.match(form, /restoreFromCatalog\(pendingCarry\.current, list \?\? \[\]\)/)
   assert.match(form, /harnessAtOpen\.current = harness/)
   // And the snapshot is still taken once, over every field.

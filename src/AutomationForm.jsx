@@ -12,7 +12,7 @@ import { modelMaker } from './model-maker.js'
 import { ModelMark } from './model-marks.jsx'
 import { projectName } from './projects.js'
 import { formDiffers } from './form-dirty.js'
-import { carrySetup, droppedLine, restoreFromCatalog } from './harness-carry.js'
+import { carrySetup, restoreFromCatalog } from './harness-carry.js'
 import { ruleMachineState } from './rule-run.js'
 import { jobSourceLine } from './chat-to-job.js'
 import './devices.css'
@@ -122,7 +122,6 @@ export default function AutomationForm({ rule, onClose }) {
       pendingCarry.current = dropped.includes('model') ? model : null
       droppedAtSwitch.current = dropped
       carryHarnessName.current = next?.name ?? harness
-      setCarryNote(droppedLine(dropped, carryHarnessName.current))
       harnessAtOpen.current = harness
     }
     if (!harness) {
@@ -133,14 +132,13 @@ export default function AutomationForm({ rule, onClose }) {
       .then((list) => {
         if (cancelled) return
         setModels(list ?? [])
-        // The catalog arrived: a model the switch had to drop comes back if
-        // this harness carries the same row, and the note stops naming it.
+        // The catalog arrived: a model the setup change had to drop comes
+        // back if this harness carries the same row.
         const back = restoreFromCatalog(pendingCarry.current, list ?? [])
         if (back) {
           pendingCarry.current = null
           setModel(back)
           droppedAtSwitch.current = droppedAtSwitch.current.filter((key) => key !== 'model')
-          setCarryNote(droppedLine(droppedAtSwitch.current, carryHarnessName.current))
         }
       })
       .catch(() => {

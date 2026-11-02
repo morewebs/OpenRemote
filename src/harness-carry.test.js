@@ -13,7 +13,7 @@
 
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { carrySetup, droppedLine, permissionWords, restoreFromCatalog } from './harness-carry.js'
+import { carrySetup, permissionWords, restoreFromCatalog } from './harness-carry.js'
 
 const rows = (words) => words.map((w) => ({ w, l: `Label for ${w}` }))
 
@@ -82,19 +82,13 @@ test('a permission word survives exactly where the harness speaks it', () => {
   assert.equal(carrySetup({ permission: 'plan' }, { models: [], permissionModes: ['default', 'plan'] }).kept.permission, 'plan')
 })
 
-test('both fields can be named at once, in one sentence', () => {
+test('both fields are dropped together', () => {
   const out = carrySetup({ model: 'opus', permission: 'plan' }, { models: [], permissionModes: CODEX_WORDS })
   assert.deepEqual(out.dropped, ['model', 'permission'])
-  assert.equal(
-    droppedLine(out.dropped, 'Codex'),
-    'Codex does not use that model and permission word: the switch cleared it, so pick again below.',
-  )
 })
 
 test('nothing set, or everything carried, says nothing', () => {
   assert.deepEqual(carrySetup({}, { models, permissionModes: CLAUDE_WORDS }), { kept: { model: null, permission: null }, dropped: [] })
-  assert.equal(droppedLine([], 'Claude'), null)
-  assert.equal(droppedLine(undefined, 'Claude'), null)
   const carried = carrySetup({ model: 'opus', permission: 'plan' }, { models, permissionModes: CLAUDE_WORDS })
   assert.deepEqual(carried.dropped, [])
   assert.equal(carried.kept.model, 'opus')
