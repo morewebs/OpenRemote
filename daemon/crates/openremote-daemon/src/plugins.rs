@@ -110,6 +110,17 @@ pub struct HarnessManifest {
     pub models: Option<Vec<ModelDescriptor>>,
     #[serde(default)]
     pub default_model: Option<String>,
+    /// The catalog file the driver writes beside itself (`models.json`). Read
+    /// when the machine re-probes, which is cheap, and it wins over `models`
+    /// when it holds a usable list. A missing or malformed file is not an
+    /// error: the manifest's list is the shipped answer.
+    #[serde(default)]
+    pub models_file: Option<String>,
+    /// `"live"` when this harness's driver can change the model on a running
+    /// chat. The only word this daemon knows; anything else is refused at
+    /// install rather than quietly treated as start-time.
+    #[serde(default)]
+    pub settings: Option<String>,
 }
 
 impl HarnessManifest {
@@ -182,6 +193,11 @@ pub struct HarnessSpec {
     pub args: Vec<String>,
     pub models: Option<Vec<ModelDescriptor>>,
     pub default_model: Option<String>,
+    /// When the catalog above was captured, when it came from the driver's
+    /// own file. `None` means the list is the manifest's, unmeasured.
+    pub models_captured_at: Option<u64>,
+    /// Whether the driver can change the model on a running chat.
+    pub settings_live: bool,
     pub enabled: bool,
     /// Why this harness cannot be offered, in one sentence the console shows.
     pub problem: Option<String>,
@@ -220,6 +236,8 @@ pub fn installed_harnesses(data_dir: &Path, installed: &[&InstalledPlugin]) -> V
                 args: Vec::new(),
                 models: None,
                 default_model: None,
+                models_captured_at: None,
+                settings_live: false,
                 enabled: plugin.enabled,
                 problem,
             });
@@ -229,6 +247,16 @@ pub fn installed_harnesses(data_dir: &Path, installed: &[&InstalledPlugin]) -> V
             Ok(path) => (path, None),
             Err(reason) => (PathBuf::new(), Some(reason)),
         };
+        // A catalog the driver captured wins over the manifest's list: it is
+        // the machine's own answer and it carries the moment it was read. An
+        // absent, malformed or escaping file falls back to the manifest.
+        let (models, models_captured_at) = match harness.models_file.as_deref() {
+            Some(name) => match read_catalog(&dir, name) {
+                Some((captured_at, models)) => (Some(models), Some(captured_at)),
+                None => (harness.models, None),
+            },
+            None => (harness.models, None),
+        };
         specs.push(HarnessSpec {
             id: harness.id,
             name: harness.name,
@@ -236,13 +264,54 @@ pub fn installed_harnesses(data_dir: &Path, installed: &[&InstalledPlugin]) -> V
             dir,
             driver,
             args: harness.args,
-            models: harness.models,
+            models,
             default_model: harness.default_model,
+            models_captured_at,
+            settings_live: harness.settings.as_deref() == Some(SETTINGS_LIVE),
             enabled: plugin.enabled,
             problem,
         });
     }
     specs
+}
+
+/// The one word a harness may declare for live settings.
+const SETTINGS_LIVE: &str = "live";
+
+/// Read a catalog file the driver wrote inside the plugin folder.
+///
+/// The file is a capture, not source: it is rewritten by the driver and can be
+/// missing, half written, written by an older build or pointed somewhere else.
+/// Every one of those answers `None` and leaves the manifest's list in place,
+/// because a harness with no models is worse than one with a shipped list.
+fn read_catalog(dir: &Path, name: &str) -> Option<(u64, Vec<ModelDescriptor>)> {
+    let relative = Path::new(name);
+    if relative.is_absolute()
+        || relative.components().any(|c| {
+            matches!(
+                c,
+                Component::ParentDir | Component::RootDir | Component::Prefix(_)
+            )
+        })
+    {
+        return None;
+    }
+    let full = dir.join(relative);
+    let canonical = full.canonicalize().ok()?;
+    let root = dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf());
+    if !canonical.starts_with(&root) {
+        return None;
+    }
+    let bytes = std::fs::read(&canonical).ok()?;
+    let value: Value = serde_json::from_slice(&bytes).ok()?;
+    let captured_at = value.get("captured_at")?.as_u64()?;
+    let mut models: Vec<ModelDescriptor> =
+        serde_json::from_value(value.get("models")?.clone()).ok()?;
+    models.retain(|model| !model.model.trim().is_empty());
+    if models.is_empty() {
+        return None;
+    }
+    Some((captured_at, models))
 }
 
 #[derive(Deserialize, Default)]
@@ -310,6 +379,14 @@ fn validate_harness(
             "the plugin's harness names no driver for {} (add one, or a default)",
             std::env::consts::OS
         )));
+    }
+    if let Some(word) = harness.settings.as_deref() {
+        if word != SETTINGS_LIVE {
+            return Err(PluginError::Invalid(format!(
+                "the plugin's harness says settings '{word}'; the only word OpenRemote \
+                 knows is '{SETTINGS_LIVE}'"
+            )));
+        }
     }
     // The id and the plugin's own name may match (a plugin called freebuff
     // provides harness freebuff); only the built-in ids are reserved.
@@ -3073,6 +3150,155 @@ mod tests {
         )]);
         let err = read_manifest(dir.path(), &builtins()).expect_err("a newer seam");
         assert!(err.to_string().contains("harness api"), "{err}");
+    }
+
+    /// The plugin's own harness manifest, with `extra` keys spliced into the
+    /// harness block and the driver path for this OS.
+    fn harness_manifest_json(driver: &str, extra: &str) -> String {
+        let os = std::env::consts::OS;
+        format!(
+            r#"{{"api":1,"name":"freebuff","runtime":"process","harness":{{"api":1,"id":"freebuff","name":"Freebuff","driver":{{"{os}":"{driver}"}}{extra}}}}}"#
+        )
+    }
+
+    /// An installed plugin's record for a folder the test wrote at
+    /// `<data dir>/plugins/local/<name>`, which is where
+    /// `installed_harnesses` looks.
+    fn installed_record(data_dir: &Path, name: &str, harness_id: &str) -> InstalledPlugin {
+        InstalledPlugin {
+            name: name.into(),
+            marketplace: "local".into(),
+            resolved: None,
+            command: None,
+            version: None,
+            description: None,
+            runtime: PluginRuntime::Process,
+            powers: Vec::new(),
+            source: openremote_core::PluginSource::Folder {
+                path: data_dir
+                    .join("plugins/local")
+                    .join(name)
+                    .display()
+                    .to_string(),
+            },
+            scope: openremote_core::PluginScope::Machine,
+            harness: Some(openremote_core::PluginHarnessRef {
+                id: harness_id.into(),
+                name: "Freebuff".into(),
+            }),
+            enabled: true,
+            installed_at: 0,
+            updated_at: 0,
+        }
+    }
+
+    /// The driver path this OS runs in the tests' plugin folder.
+    fn driver_path() -> &'static str {
+        if std::env::consts::OS == "windows" {
+            "bin/freebuff-driver.exe"
+        } else {
+            "bin/freebuff-driver"
+        }
+    }
+
+    #[test]
+    fn a_models_file_inside_the_plugin_folder_wins_over_the_manifest() {
+        let data = tempfile::tempdir().unwrap();
+        let dir = data.path().join("plugins/local/freebuff");
+        std::fs::create_dir_all(dir.join("bin")).unwrap();
+        std::fs::write(dir.join(driver_path()), "driver").unwrap();
+        std::fs::write(
+            dir.join("openremote.json"),
+            harness_manifest_json(
+                driver_path(),
+                r#","models":[{"model":"shipped"}],"models_file":"models.json""#,
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("models.json"),
+            r#"{"captured_at":1700000000000,"default":"captured","models":[{"model":"captured","display_name":"Captured"}]}"#,
+        )
+        .unwrap();
+
+        let record = installed_record(data.path(), "freebuff", "freebuff");
+        let specs = installed_harnesses(data.path(), &[&record]);
+        let spec = specs.first().expect("one harness");
+        assert_eq!(spec.models_captured_at, Some(1_700_000_000_000));
+        let models = spec.models.as_ref().expect("the captured list");
+        assert_eq!(models.len(), 1, "the manifest's list is replaced");
+        assert_eq!(models[0].model, "captured");
+        assert_eq!(models[0].display_name.as_deref(), Some("Captured"));
+    }
+
+    #[test]
+    fn a_models_file_that_escapes_the_folder_is_ignored() {
+        let data = tempfile::tempdir().unwrap();
+        let dir = data.path().join("plugins/local/freebuff");
+        std::fs::create_dir_all(dir.join("bin")).unwrap();
+        std::fs::write(dir.join(driver_path()), "driver").unwrap();
+        std::fs::write(
+            dir.join("openremote.json"),
+            harness_manifest_json(
+                driver_path(),
+                r#","models":[{"model":"shipped"}],"models_file":"../models.json""#,
+            ),
+        )
+        .unwrap();
+        // A real file sits one folder up: the escape is refused, not just
+        // missed because nothing was there.
+        std::fs::write(
+            data.path().join("plugins/local/models.json"),
+            r#"{"captured_at":1700000000000,"models":[{"model":"outside"}]}"#,
+        )
+        .unwrap();
+
+        let record = installed_record(data.path(), "freebuff", "freebuff");
+        let specs = installed_harnesses(data.path(), &[&record]);
+        let spec = specs.first().expect("one harness");
+        assert_eq!(spec.models_captured_at, None);
+        let models = spec.models.as_ref().expect("the manifest's list");
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].model, "shipped");
+    }
+
+    #[test]
+    fn a_malformed_models_file_falls_back_to_the_manifest() {
+        let data = tempfile::tempdir().unwrap();
+        let dir = data.path().join("plugins/local/freebuff");
+        std::fs::create_dir_all(dir.join("bin")).unwrap();
+        std::fs::write(dir.join(driver_path()), "driver").unwrap();
+        std::fs::write(
+            dir.join("openremote.json"),
+            harness_manifest_json(
+                driver_path(),
+                r#","models":[{"model":"shipped"}],"models_file":"models.json""#,
+            ),
+        )
+        .unwrap();
+        std::fs::write(dir.join("models.json"), "{not json").unwrap();
+
+        let record = installed_record(data.path(), "freebuff", "freebuff");
+        let specs = installed_harnesses(data.path(), &[&record]);
+        let spec = specs.first().expect("one harness");
+        assert_eq!(spec.models_captured_at, None);
+        let models = spec.models.as_ref().expect("the manifest's list");
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].model, "shipped");
+    }
+
+    #[test]
+    fn an_unknown_settings_word_is_refused_at_install() {
+        let os = std::env::consts::OS;
+        let dir = folder(&[(
+            "openremote.json",
+            &format!(
+                r#"{{"api":1,"name":"x","runtime":"process","harness":{{"api":1,"id":"x","name":"X","driver":{{"{os}":"d"}},"settings":"sometimes"}}}}"#
+            ),
+        )]);
+        let err = read_manifest(dir.path(), &builtins()).expect_err("an unknown word");
+        assert!(err.to_string().contains("live"), "{err}");
+        assert!(err.to_string().contains("sometimes"), "{err}");
     }
 
     #[cfg(windows)]

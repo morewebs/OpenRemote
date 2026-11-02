@@ -108,6 +108,9 @@ pub fn catalog_in(home: &std::path::Path) -> Vec<ModelDescriptor> {
                 resolved_model: None,
                 reasoning_efforts: efforts,
                 is_default: false,
+                // Grok's config names models and nothing else.
+                detail: None,
+                note: None,
             })
         })
         .collect()

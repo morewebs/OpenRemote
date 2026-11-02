@@ -54,6 +54,12 @@ pub enum DriverEvent {
     ModelReported {
         model: String,
     },
+    /// The harness refused a live settings change, in one sentence. A
+    /// driver that cannot apply the change says so instead of pretending,
+    /// and the sentence is what the user reads.
+    SettingsRefused {
+        message: String,
+    },
     AssistantText {
         text: String,
     },

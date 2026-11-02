@@ -690,6 +690,9 @@ fn catalog_entry(entry: &Value) -> Option<openremote_harness::ModelDescriptor> {
             .map(String::from),
         reasoning_efforts: efforts,
         is_default: value == "default",
+        // Claude's catalog has no cost line and no notice to show.
+        detail: None,
+        note: None,
     })
 }
 

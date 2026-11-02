@@ -133,6 +133,9 @@ pub(crate) fn descriptors(value: &Value) -> Vec<ModelDescriptor> {
                 resolved_model: Some(id.to_string()),
                 reasoning_efforts,
                 is_default: false,
+                // OpenCode's catalog has no second line or notice to show.
+                detail: None,
+                note: None,
             })
         })
         .collect()

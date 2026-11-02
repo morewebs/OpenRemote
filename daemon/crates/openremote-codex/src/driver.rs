@@ -1031,6 +1031,9 @@ pub async fn models(
                 // Its own marker for the entry a fresh thread runs -
                 // the pre-send fact its config.toml never says.
                 is_default: entry.get("isDefault").and_then(Value::as_bool) == Some(true),
+                // Codex's catalog carries no cost line and no notice.
+                detail: None,
+                note: None,
             });
         }
         let next = page.get("nextCursor").cloned().unwrap_or(Value::Null);
