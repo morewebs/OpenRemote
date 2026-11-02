@@ -1420,7 +1420,7 @@ export default function ChatView({ chat, onBack, focused = true }) {
                   setManagingHarnesses(true)
                 }}
                 aria-haspopup="dialog"
-                title={`Harness - ${harnessName(chat.harness)}; this opens the harness manager`}
+                title={`Harness - ${harnessText}; this opens the harness manager`}
               >
                 <HarnessMark harness={chat.harness} size={16} />
                 {harnessText}

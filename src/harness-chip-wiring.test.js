@@ -29,12 +29,37 @@ test('the chat harness chip opens the manager, not a listbox that chose nothing'
     /onClick=\{\(\) => \{\s*\n\s*hidePicker\(\)\s*\n\s*setManagingHarnesses\(true\)\s*\n\s*\}\}/,
   )
   // It announces a dialog rather than a listbox, and its title names the mark
-  // before the action, so the harness stays the fact the chip shows.
-  assert.match(view, /aria-haspopup="dialog"\s*\n\s*title=\{`Harness - \$\{harnessName\(chat\.harness\)\}/)
+  // before the action, so the harness stays the fact the chip shows. The name
+  // is the one the chip prints: `harnessText` already resolved it, which also
+  // keeps a plugin-provided harness reading as its own name rather than a bare
+  // lowercase id.
+  assert.match(view, /aria-haspopup="dialog"\s*\n\s*title=\{`Harness - \$\{harnessText\}/)
   assert.doesNotMatch(view, /aria-expanded=\{picker\?\.kind === 'harness'\}/)
   // The manager it opens is still rendered by this view.
   assert.match(view, /\{managingHarnesses && \(/)
   assert.match(view, /<HarnessManagerModal/)
+})
+
+// The wiring checks read source text, and source text does not care whether a
+// name is bound. This one did not: the chip's title called `harnessName` while
+// the view imported only `harnessLabel`, so the suite stayed green and the app
+// threw `ReferenceError: harnessName is not defined` the moment a chat with a
+// harness rendered. Every harness-names helper a view calls has to be imported
+// by that view.
+test('a view imports every harness-names helper it calls', () => {
+  const view = read('ChatView.jsx')
+  const imported = view.match(/import \{([^}]*)\} from '\.\/harness-names\.js'/)
+  assert.ok(imported, 'ChatView.jsx imports from harness-names.js')
+  const bound = imported[1].split(',').map((name) => name.trim())
+  for (const helper of ['harnessLabel', 'harnessName']) {
+    const called = new RegExp(`\\b${helper}\\s*\\(`).test(view)
+    if (called) {
+      assert.ok(
+        bound.includes(helper),
+        `ChatView.jsx calls ${helper}() but does not import it - that is a ReferenceError at render time`,
+      )
+    }
+  }
 })
 
 test('the daemon cannot take a harness on a running session, which is why the listbox went', () => {
