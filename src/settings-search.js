@@ -28,7 +28,6 @@ export const SECTIONS = [
   { id: 'startup', label: 'Startup', icon: 'power', group: 'general', phone: false },
   { id: 'keyboard', label: 'Keyboard', icon: 'keyboard', group: 'general', phone: false },
   { id: 'cloud', label: 'Cloud', icon: 'cloud', group: 'system', phone: true },
-  { id: 'daemon', label: 'Daemon', icon: 'terminal', group: 'system', phone: false },
   { id: 'harnesses', label: 'Harnesses', icon: 'robot', group: 'system', phone: false },
   { id: 'mcp-servers', label: 'MCP servers', icon: 'plugs', group: 'system', phone: false },
   { id: 'models', label: 'Models', icon: 'shapes', group: 'system', phone: false },
@@ -45,13 +44,12 @@ const BLURBS = {
   startup: 'What the app does when it opens.',
   keyboard: 'Keys for every action.',
   cloud: 'Your account and this device.',
-  daemon: 'The local process chats run through.',
   harnesses: 'What the daemon can drive on this machine.',
   'mcp-servers': 'Tools a session can call.',
   models: 'Custom model endpoints on this computer, which a chat can run through.',
   browser: 'What the built-in browser keeps on this computer, and where to clear it.',
   archived: 'Chats hidden on this computer.',
-  'this-install': 'The build you are running and the first-run steps.',
+  'this-install': 'The build you are running, its daemon, and the first-run steps.',
 }
 
 const SECTION_LABEL = Object.fromEntries(SECTIONS.map((s) => [s.id, s.label]))
@@ -77,12 +75,6 @@ const ROWS = [
 
   row('cloud-account', 'cloud', 'Account', "Your moreweb account and this device's place in it.", ['sign in', 'sign out', 'email', 'sync', 'device']),
 
-  row('daemon-connection', 'daemon', 'Daemon connection', 'The local process the chats run through.', ['connect', 'connection', 'token', 'local']),
-  row('daemon-connect', 'daemon', 'Connect by address', 'The address and token of a daemon you run yourself.', ['connect', 'address', 'token', 'manual', 'elsewhere']),
-  row('daemon-chats', 'daemon', 'Chats on record', 'Sessions survive daemon restarts; stopped ones can resume.', ['sessions', 'record', 'history', 'resume']),
-  row('daemon-address', 'daemon', 'Daemon address', 'The local address the console talks to.', ['url', 'port', 'data', 'folder', 'path']),
-  row('daemon-restart', 'daemon', 'Restart', 'Stops running chats and starts a fresh daemon.', ['stop', 'start', 'daemon']),
-
   row('keyboard-stale', 'keyboard', 'Saved shortcut for an action this build no longer has', 'A key saved for an action that is gone, and the button that clears it.', ['shortcut', 'stale', 'unused', 'clear', 'saved']),
   // The bar's one button, and the only control in the section that changes
   // everything at once. It is on screen only while some key has been changed,
@@ -92,7 +84,15 @@ const ROWS = [
   row('mcp-add', 'mcp-servers', 'Add an MCP server', 'Its launch command, as the machine would start it.', ['tool', 'add', 'command', 'server']),
   row('models-endpoint-add', 'models', 'Add a model endpoint', 'A base URL on this machine or network that lists models.', ['endpoint', 'gateway', 'custom', 'model', 'base url', 'relay', 'self-hosted']),
 
+  // The daemon is part of this install, not a tab of its own: the rows read in
+  // the section that says which build and which process are running, in the
+  // order the section draws them.
   row('install-version', 'this-install', 'OpenRemote version', 'The build and the daemon it talks to.', ['about', 'build', 'release', 'update', 'daemon']),
+  row('daemon-connection', 'this-install', 'Daemon connection', 'The local process the chats run through.', ['connect', 'connection', 'token', 'local']),
+  row('daemon-connect', 'this-install', 'Connect by address', 'The address and token of a daemon you run yourself.', ['connect', 'address', 'token', 'manual', 'elsewhere']),
+  row('daemon-chats', 'this-install', 'Chats on record', 'Sessions survive daemon restarts; stopped ones can resume.', ['sessions', 'record', 'history', 'resume']),
+  row('daemon-address', 'this-install', 'Daemon address', 'The local address the console talks to.', ['url', 'port', 'data', 'folder', 'path']),
+  row('daemon-restart', 'this-install', 'Restart', 'Stops running chats and starts a fresh daemon.', ['stop', 'start', 'daemon']),
   row('install-first-run', 'this-install', 'First-run steps', 'Shows them again. The chats stay.', ['onboarding', 'setup', 'replay', 'welcome']),
 
   // The built-in browser keeps four things on this computer. The facts come
@@ -124,6 +124,9 @@ const KEYBOARD = ACTIONS.map((a) =>
 // Browser tab before it reaches a row inside it.
 const SECTION_TERMS = {
   browser: ['history', 'cookies', 'bookmarks', 'downloads', 'clear', 'profile'],
+  // The daemon lives inside This install now: someone typing "daemon" should
+  // not have to know that the tab it moved into is named after the build.
+  'this-install': ['daemon', 'sidecar', 'build', 'update', 'first-run', 'onboarding'],
 }
 
 // The section's own result points at the tab's element (data-stg="<id>").

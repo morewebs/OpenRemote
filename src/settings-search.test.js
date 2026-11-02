@@ -34,6 +34,25 @@ test('every section sits in a declared group and no group is empty', () => {
   }
 })
 
+test('the daemon lives inside This install, not in a tab of its own', () => {
+  assert.equal(
+    SECTIONS.some((section) => section.id === 'daemon'),
+    false,
+    'there is no Daemon tab to keep in step',
+  )
+  for (const key of [
+    'daemon-connection',
+    'daemon-connect',
+    'daemon-chats',
+    'daemon-address',
+    'daemon-restart',
+  ]) {
+    const entry = SETTINGS_ENTRIES.find((e) => e.key === key)
+    assert.ok(entry, `${key} is indexed`)
+    assert.equal(entry.section, 'this-install', `${key} points into This install`)
+  }
+})
+
 test('an empty or whitespace query matches nothing', () => {
   assert.deepEqual(searchSettings(''), [])
   assert.deepEqual(searchSettings('   '), [])
@@ -52,8 +71,16 @@ test('a synonym finds the row that means it', () => {
 })
 
 test('a section name opens that section first', () => {
-  assert.equal(searchSettings('daemon')[0].key, 'daemon')
   assert.equal(searchSettings('archived')[0].key, 'archived')
+  // The daemon is not a tab any more: its rows live in This install, so the
+  // word lands on the connection row there rather than on a tab that is gone.
+  const daemon = searchSettings('daemon')
+  assert.ok(daemon.length > 0, 'the word still finds something')
+  assert.equal(daemon[0].section, 'this-install', 'and it sits in This install')
+  assert.ok(
+    daemon.some((entry) => entry.section === 'this-install' && entry.key === 'this-install'),
+    'the tab itself answers "daemon" too',
+  )
 })
 
 test('nonsense matches nothing rather than guessing', () => {

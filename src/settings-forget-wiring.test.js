@@ -1,10 +1,11 @@
-// The Daemon row used to draw a disabled button whose label was a dash when
-// nothing was connected. A dash in a button reads as a rendering fault, and a
-// control that cannot be pressed is a dead control in the one row whose job is
-// to say where the connection stands. The row now draws Forget only when there
-// is a connection to forget, and the detail line under the name carries the
-// reason while it is absent. This pins both halves, because the row is the
-// first thing a user sees when the daemon will not answer.
+// The daemon connection row (in This install since the Daemon tab folded into
+// it) used to draw a disabled button whose label was a dash when nothing was
+// connected. A dash in a button reads as a rendering fault, and a control that
+// cannot be pressed is a dead control in the one row whose job is to say where
+// the connection stands. The row now draws Forget only when there is a
+// connection to forget, and the detail line under the name carries the reason
+// while it is absent. This pins both halves, because the row is the first thing
+// a user sees when the daemon will not answer.
 
 import assert from 'node:assert/strict'
 import test from 'node:test'

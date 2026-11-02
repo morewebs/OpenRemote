@@ -14,7 +14,6 @@ import {
   Robot,
   Shapes,
   Sparkle,
-  TerminalWindow,
   X,
 } from '@phosphor-icons/react'
 import AboutModal from './AboutModal.jsx'
@@ -70,7 +69,6 @@ const SECTION_ICONS = {
   startup: Power,
   keyboard: KeyboardIcon,
   cloud: Cloud,
-  daemon: TerminalWindow,
   harnesses: Robot,
   'mcp-servers': Plugs,
   models: Shapes,
@@ -624,7 +622,20 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
     // "Reset every shortcut" is in the bar only while some key has been
     // changed with the defaults gone, there is nothing to reset.
     if (!(Object.keys(kb?.overrides ?? {}).length > 0)) keys.add('keyboard-reset')
-    if (isMobile) keys.add('install-first-run')
+    // This install is a phone tab, but the daemon rows and the first-run step
+    // are drawn on the desktop only: a result that lands nowhere is dead UI.
+    if (isMobile) {
+      for (const key of [
+        'install-first-run',
+        'daemon-connection',
+        'daemon-connect',
+        'daemon-chats',
+        'daemon-address',
+        'daemon-restart',
+      ]) {
+        keys.add(key)
+      }
+    }
     return keys
   }, [models, effortTiers, permissionWords, autoStart, tray, above, daemonDetail, onManualConnect, connection.state, kb])
 
@@ -1570,101 +1581,6 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
           <>
           <section
             className="stg-section"
-            id="stg-daemon"
-            role="tabpanel"
-            aria-labelledby="stg-tab-daemon"
-            data-stg="daemon"
-            hidden={!!query || active !== 'daemon'}
-          >
-            <header className="stg-head">
-              <h2 className="stg-title">Daemon</h2>
-              <p className="stg-lead">The local process the chats run through.</p>
-            </header>
-            <div className="pn-list pn-list--tight">
-              <div className="pn-row" data-stg="daemon-connection">
-                <div>
-                  <div className="pn-name">{connection.state === 'connected' ? 'Connected' : 'Not connected'}</div>
-                  <div className="pn-detail">
-                  {connection.state === 'connected'
-                    ? confirmDisconnect
-                      ? 'The saved address and token are forgotten; your chats, plugins and settings stay.'
-                      : 'Bearer token accepted.'
-                    : connection.error ?? 'Start the app, or use Connect by address below.'}
-                </div>
-                </div>
-                {/* A disabled button labelled with a dash read as a rendering
-                    fault rather than as "nothing to forget". The detail line
-                    above says why there is nothing to do, so the control is
-                    absent until there is something to forget. */}
-                {confirmDisconnect ? (
-                  <div className="pn-actions">
-                    <button type="button" className="pn-btn" onClick={() => setConfirmDisconnect(false)}>Cancel</button>
-                    <button type="button" className="pn-btn" onClick={disconnect}>Disconnect</button>
-                  </div>
-                ) : connection.state === 'connected' ? (
-                  <button
-                    type="button"
-                    className="pn-btn"
-                    onClick={() => setConfirmDisconnect(true)}
-                  >
-                    Forget
-                  </button>
-                ) : null}
-              </div>
-              {/* Only while nothing is connected: the form it opens says the
-                  daemon did not answer, which is not true of a connection
-                  that works. Forget is the row above. */}
-              {onManualConnect && connection.state !== 'connected' && (
-                <div className="pn-row" data-stg="daemon-connect">
-                  <div>
-                    <div className="pn-name">Connect by address</div>
-                    <div className="pn-detail">Type the address and token of a daemon you run yourself.</div>
-                  </div>
-                  <button type="button" className="pn-btn" onClick={onManualConnect}>
-                    Connect
-                  </button>
-                </div>
-              )}
-              <div className="pn-row" data-stg="daemon-chats">
-                <div>
-                  <div className="pn-name">{(sessions ?? []).length} {(sessions ?? []).length === 1 ? 'chat' : 'chats'} on record</div>
-                  <div className="pn-detail">Sessions survive daemon restarts; stopped ones can resume.</div>
-                </div>
-              </div>
-              {daemonDetail?.url && (
-                <div className="pn-row" data-stg="daemon-address">
-                  <div>
-                    <div className="pn-name">{daemonDetail.url.replace(/^https?:\/\//, '')}</div>
-                    <div className="pn-detail">
-                      {daemonDetail.data_dir ? <span className="pv">{daemonDetail.data_dir}</span> : 'The local address the console talks to.'}
-                    </div>
-                  </div>
-                </div>
-              )}
-              {hasTauri && (
-                <div className="pn-row" data-stg="daemon-restart">
-                  <div>
-                    <div className="pn-name">Restart</div>
-                    <div className="pn-detail">
-                      {restarting
-                        ? 'The daemon is coming back; the console reconnects on its own.'
-                        : 'Stops running chats (stopped ones can resume) and starts a fresh daemon.'}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="pn-btn"
-                    onClick={restartDaemon}
-                    disabled={restarting}
-                  >
-                    {restarting ? 'Restarting' : 'Restart'}
-                  </button>
-                </div>
-              )}
-            </div>
-          </section>
-          <section
-            className="stg-section"
             id="stg-harnesses"
             role="tabpanel"
             aria-labelledby="stg-tab-harnesses"
@@ -1984,7 +1900,9 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
         >
           <header className="stg-head">
             <h2 className="stg-title">This install</h2>
-            <p className="stg-lead">The build you're running and the first-run steps.</p>
+            <p className="stg-lead">
+              The build you're running, the daemon behind it, and the first-run steps.
+            </p>
           </header>
           <div className="pn-list pn-list--tight">
             <div className="pn-row" data-stg="install-version">
@@ -1994,14 +1912,100 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
               </div>
               <button type="button" className="pn-btn" onClick={() => setAbout(true)}>About</button>
             </div>
+            {/* The daemon is this install's own process, not a tab of its own:
+                its rows read here, beside the build they belong to. All of
+                them are desktop-only - a phone runs no local daemon, and this
+                tab stays readable there. */}
             {!isMobile && (
-              <div className="pn-row" data-stg="install-first-run">
-                <div>
-                  <div className="pn-name">First-run steps</div>
-                  <div className="pn-detail">Shows them again. The chats stay.</div>
+              <>
+                <div className="pn-row" data-stg="daemon-connection">
+                  <div>
+                    <div className="pn-name">{connection.state === 'connected' ? 'Connected' : 'Not connected'}</div>
+                    <div className="pn-detail">
+                      {connection.state === 'connected'
+                        ? confirmDisconnect
+                          ? 'The saved address and token are forgotten; your chats, plugins and settings stay.'
+                          : 'Bearer token accepted.'
+                        : connection.error ?? 'Start the app, or use Connect by address below.'}
+                    </div>
+                  </div>
+                  {/* A disabled button labelled with a dash read as a rendering
+                      fault rather than as "nothing to forget". The detail line
+                      above says why there is nothing to do, so the control is
+                      absent until there is something to forget. */}
+                  {confirmDisconnect ? (
+                    <div className="pn-actions">
+                      <button type="button" className="pn-btn" onClick={() => setConfirmDisconnect(false)}>Cancel</button>
+                      <button type="button" className="pn-btn" onClick={disconnect}>Disconnect</button>
+                    </div>
+                  ) : connection.state === 'connected' ? (
+                    <button
+                      type="button"
+                      className="pn-btn"
+                      onClick={() => setConfirmDisconnect(true)}
+                    >
+                      Forget
+                    </button>
+                  ) : null}
                 </div>
-                <button type="button" className="pn-btn" onClick={onReplay}>Show</button>
-              </div>
+                {/* Only while nothing is connected: the form it opens says the
+                    daemon did not answer, which is not true of a connection
+                    that works. Forget is the row above. */}
+                {onManualConnect && connection.state !== 'connected' && (
+                  <div className="pn-row" data-stg="daemon-connect">
+                    <div>
+                      <div className="pn-name">Connect by address</div>
+                      <div className="pn-detail">Type the address and token of a daemon you run yourself.</div>
+                    </div>
+                    <button type="button" className="pn-btn" onClick={onManualConnect}>
+                      Connect
+                    </button>
+                  </div>
+                )}
+                <div className="pn-row" data-stg="daemon-chats">
+                  <div>
+                    <div className="pn-name">{(sessions ?? []).length} {(sessions ?? []).length === 1 ? 'chat' : 'chats'} on record</div>
+                    <div className="pn-detail">Sessions survive daemon restarts; stopped ones can resume.</div>
+                  </div>
+                </div>
+                {daemonDetail?.url && (
+                  <div className="pn-row" data-stg="daemon-address">
+                    <div>
+                      <div className="pn-name">{daemonDetail.url.replace(/^https?:\/\//, '')}</div>
+                      <div className="pn-detail">
+                        {daemonDetail.data_dir ? <span className="pv">{daemonDetail.data_dir}</span> : 'The local address the console talks to.'}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {hasTauri && (
+                  <div className="pn-row" data-stg="daemon-restart">
+                    <div>
+                      <div className="pn-name">Restart</div>
+                      <div className="pn-detail">
+                        {restarting
+                          ? 'The daemon is coming back; the console reconnects on its own.'
+                          : 'Stops running chats (stopped ones can resume) and starts a fresh daemon.'}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="pn-btn"
+                      onClick={restartDaemon}
+                      disabled={restarting}
+                    >
+                      {restarting ? 'Restarting' : 'Restart'}
+                    </button>
+                  </div>
+                )}
+                <div className="pn-row" data-stg="install-first-run">
+                  <div>
+                    <div className="pn-name">First-run steps</div>
+                    <div className="pn-detail">Shows them again. The chats stay.</div>
+                  </div>
+                  <button type="button" className="pn-btn" onClick={onReplay}>Show</button>
+                </div>
+              </>
             )}
           </div>
         </section>
