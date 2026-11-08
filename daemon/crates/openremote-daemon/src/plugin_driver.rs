@@ -194,17 +194,21 @@ impl PluginDriver {
         ))
     }
 
-    /// A plugin that declares no approvals never receives an answer; refusing
-    /// is honest, where a fake allow would be a lie.
+    /// A plugin that asked for an approval gets the answer on the same pipe,
+    /// in the command shape the contract documents. The daemon's own outcome
+    /// stays the default: the driver's follow-up events say what happened.
     pub async fn answer(
         &mut self,
-        _harness_ref: &str,
-        _choice: &str,
+        harness_ref: &str,
+        choice: &str,
         _request: &Value,
     ) -> Result<(), DriverError> {
-        Err(DriverError::Harness(
-            "this harness asks for no approvals".into(),
-        ))
+        self.write(&json!({
+            "type": "answer",
+            "harness_ref": harness_ref,
+            "choice": choice,
+        }))
+        .await
     }
 
     pub async fn shutdown(&mut self) -> Result<Option<i32>, DriverError> {

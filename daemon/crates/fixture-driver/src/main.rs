@@ -16,6 +16,10 @@ fn main() {
         return;
     }
 
+    // The e2e's HarnessSpec passes args through the plugin seam. The
+    // approval scenario asks once and waits; plain stays the default.
+    let approval_scenario = std::env::args().any(|argument| argument == "approval");
+
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
     for line in stdin.lock().lines() {
@@ -38,6 +42,23 @@ fn main() {
                     "permission_mode": null
                 }),
             ),
+            "prompt" if approval_scenario => {
+                emit(
+                    &mut stdout,
+                    serde_json::json!({
+                        "type": "approval_requested",
+                        "harness_ref": "fixture-approval-1",
+                        "tool_name": "write_file",
+                        "summary": "Write a.py",
+                        "kind": "approval",
+                        "options": [
+                            {"id": "allow", "label": "Allow"},
+                            {"id": "deny", "label": "Deny"}
+                        ],
+                        "request": {"path": "a.py"}
+                    }),
+                );
+            }
             "prompt" => {
                 let text = value
                     .get("text")
@@ -93,6 +114,29 @@ fn main() {
                 }),
             ),
             "settings" => eprintln!("fixture-driver: settings are not applied live"),
+            "answer" if approval_scenario => {
+                let choice = value
+                    .get("choice")
+                    .and_then(|choice| choice.as_str())
+                    .unwrap_or_default();
+                emit(
+                    &mut stdout,
+                    serde_json::json!({
+                        "type": "text",
+                        "text": format!("fixture answered: {choice}")
+                    }),
+                );
+                emit(
+                    &mut stdout,
+                    serde_json::json!({
+                        "type": "turn_completed",
+                        "subtype": "finished",
+                        "coarse": "completed",
+                        "is_error": false,
+                        "error_message": null
+                    }),
+                );
+            }
             "answer" => eprintln!("fixture-driver: asks no approvals"),
             "shutdown" => break,
             other => eprintln!("fixture-driver: unknown command '{other}'"),

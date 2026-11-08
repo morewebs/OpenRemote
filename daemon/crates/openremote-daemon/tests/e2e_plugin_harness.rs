@@ -383,3 +383,98 @@ async fn a_harness_plugin_whose_name_is_its_harness_id_can_be_updated() {
         again.raw
     );
 }
+
+/// A third-party driver may ask for an approval. The contract documents
+/// `approval_requested` and `answer`; this drives both through the real
+/// seam, with the fixture's own scenario choosing to ask.
+#[tokio::test]
+async fn a_plugin_harness_approval_can_be_answered() {
+    let folder = tempfile::tempdir().expect("plugin folder");
+    let mut with_approval = spec(folder.path());
+    with_approval.args = vec!["approval".into()];
+    let daemon = start_daemon_with_plugins(&[], &[with_approval]).await;
+
+    let workspace = tempfile::tempdir().expect("workspace");
+    let created = call(
+        &daemon,
+        "POST",
+        "/sessions",
+        Some(json!({
+            "request_id": "ph-approval-create",
+            "harness": "fixture-harness",
+            "workspace": workspace.path(),
+        })),
+    )
+    .await;
+    assert_eq!(created.status, 201, "raw: {}", created.raw);
+    let id = created.body["id"].as_str().expect("session id").to_string();
+
+    call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "ph-approval-p1", "text": "write it"})),
+    )
+    .await;
+
+    let events = until_kinds(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        &["decision.requested", "session.status_changed"],
+    )
+    .await;
+    let decision = events
+        .iter()
+        .find(|(_, payload)| kind(payload) == "decision.requested")
+        .expect("the driver's approval arrives");
+    let decision_id = decision.1["decision"]["id"]
+        .as_str()
+        .expect("decision id")
+        .to_string();
+    assert_eq!(
+        decision.1["decision"]["options"][0]["id"],
+        "allow",
+        "the driver's own words ride the card: {}",
+        dump(&events)
+    );
+
+    let answered = call(
+        &daemon,
+        "POST",
+        &format!("/decisions/{decision_id}/answer"),
+        Some(json!({"request_id": "ph-approval-answer", "choice": "allow"})),
+    )
+    .await;
+    assert_eq!(answered.status, 200, "raw: {}", answered.raw);
+    assert_eq!(
+        answered.body["answer"]["choice"], "allow",
+        "{}",
+        answered.raw
+    );
+
+    let events = until_kinds(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        &["message.added", "turn.completed"],
+    )
+    .await;
+    let assistant = events
+        .iter()
+        .find(|(_, payload)| {
+            kind(payload) == "message.added" && payload["message"]["role"] == "assistant"
+        })
+        .expect("an assistant message");
+    assert!(
+        assistant.1["message"]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("fixture answered: allow"),
+        "the driver received the answer: {}",
+        dump(&events)
+    );
+    let completed = events
+        .iter()
+        .find(|(_, payload)| kind(payload) == "turn.completed")
+        .expect("the turn completes");
+    assert_eq!(completed.1["coarse"], "completed");
+}
