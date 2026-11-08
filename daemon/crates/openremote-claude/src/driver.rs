@@ -752,6 +752,13 @@ fn build_argv(opts: &SpawnOptions) -> Result<Vec<std::ffi::OsString>, DriverErro
         argv.push("--plugin-dir".into());
         argv.push(dir.as_os_str().to_owned());
     }
+    if !opts.allowed_tools.is_empty() {
+        // The browser's read-only tools, in the MCP names the CLI enforces.
+        // `--allowedTools` takes the comma-joined list; click, type,
+        // evaluate and upload stay out, so they still ask.
+        argv.push("--allowedTools".into());
+        argv.push(opts.allowed_tools.join(",").into());
+    }
     if let Some(id) = &opts.resume {
         // A chat whose harness never named a conversation carries an empty
         // ref. Passing it on builds `--resume=`, which the CLI reads as a
@@ -1375,5 +1382,37 @@ mod tests {
         });
         let list = catalog_list(&body).expect("the flat catalog is found");
         assert_eq!(list.len(), 1);
+    }
+
+    #[test]
+    fn browser_reads_ride_allowed_tools_and_absent_means_none() {
+        let opts = SpawnOptions {
+            cwd: std::path::PathBuf::from("/w"),
+            allowed_tools: vec![
+                "mcp__openremote__browser_tabs".into(),
+                "mcp__openremote__browser_snapshot".into(),
+            ],
+            ..Default::default()
+        };
+        let argv: Vec<String> = build_argv(&opts)
+            .expect("argv builds")
+            .iter()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+        let at = argv
+            .iter()
+            .position(|s| s == "--allowedTools")
+            .expect("the read tools pass --allowedTools");
+        assert_eq!(
+            argv[at + 1],
+            "mcp__openremote__browser_tabs,mcp__openremote__browser_snapshot"
+        );
+
+        let plain = build_argv(&SpawnOptions::default()).expect("argv builds");
+        assert!(
+            !plain
+                .iter()
+                .any(|s| *s == std::ffi::OsStr::new("--allowedTools"))
+        );
     }
 }

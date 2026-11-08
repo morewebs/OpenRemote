@@ -232,6 +232,16 @@ fn build_args(
     if let Some(mode) = &opts.permission_mode {
         push_word(&mut args, "--permission-mode", mode)?;
     }
+    if let Some(effort) = &opts.effort {
+        // The harness's own effort word, verbatim. The console offers the
+        // tiers grok's catalog names; before this flag the pick did nothing.
+        push_word(&mut args, "--reasoning-effort", effort)?;
+    }
+    if opts.include_deltas {
+        // Grok emits text and thinking deltas only with this flag; without
+        // it the reply arrives whole and the delta branches are dead code.
+        args.push("--include-partial-messages".into());
+    }
     if let Some(resume) = resume {
         // grok's own UUID session id - value form, no flag surface.
         push_word(&mut args, "--resume", resume)?;
@@ -603,5 +613,53 @@ mod tests {
             std::fs::read_to_string(&stale).expect("stale kept"),
             "from a daemon that died"
         );
+    }
+
+    #[test]
+    fn grok_effort_and_deltas_ride_the_argv_when_set() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("prompt.txt");
+        write_prompt(&path, "hi").expect("prompt file");
+
+        let mut with_effort = opts(Some("grok-4.7"), None);
+        with_effort.effort = Some("high".into());
+        with_effort.include_deltas = true;
+        let words: Vec<String> = build_args(&with_effort, None, &path)
+            .expect("args build")
+            .iter()
+            .map(|word| word.to_string_lossy().into_owned())
+            .collect();
+        let at = words
+            .iter()
+            .position(|word| word == "--reasoning-effort")
+            .expect("effort passes the harness's own flag");
+        assert_eq!(words[at + 1], "high");
+        assert!(
+            words
+                .iter()
+                .any(|word| word == "--include-partial-messages")
+        );
+
+        // Unset: neither flag appears, so the harness's own default holds.
+        let plain = opts(Some("grok-4.7"), None);
+        let words: Vec<String> = build_args(&plain, None, &path)
+            .expect("args build")
+            .iter()
+            .map(|word| word.to_string_lossy().into_owned())
+            .collect();
+        assert!(!words.iter().any(|word| word == "--reasoning-effort"));
+        assert!(
+            !words
+                .iter()
+                .any(|word| word == "--include-partial-messages")
+        );
+    }
+
+    #[test]
+    fn a_dash_leading_effort_is_refused_like_every_other_word() {
+        let path = std::path::PathBuf::from("/tmp/openremote.prompt");
+        let mut opts = opts(Some("grok-4.7"), None);
+        opts.effort = Some("--dangerously-skip-permissions".into());
+        assert!(build_args(&opts, None, &path).is_err());
     }
 }
