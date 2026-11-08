@@ -731,6 +731,11 @@ pub struct AutomationRule {
     pub harness: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// The harness's own effort word the rule's chat opens with, carried
+    /// the way a chat's effort is (claude `--effort`, codex
+    /// `model_reasoning_effort`). Unset means the harness's own default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
     /// The harness's own permission word the rule's chat opens with
     /// (claude `--permission-mode`, codex `approvalPolicy`). Unset means
     /// the harness's own default holds.

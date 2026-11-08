@@ -615,3 +615,58 @@ async fn the_clock_fires_schedules_on_the_machines_own_wall_time() {
         sessions.raw
     );
 }
+
+/// An effort picked on the rule rides into the chat it fires. Codex's own
+/// fixture records the word it was handed on thread/start, so the assertion
+/// is the harness's side, not the rule's echo.
+#[tokio::test]
+async fn a_rules_effort_reaches_the_chat_it_fires() {
+    let daemon = start_daemon(&[]).await;
+    let machine = this_machine_id(&daemon).await;
+    let ws = workspace(Some("plain"));
+
+    let saved = call(
+        &daemon,
+        "POST",
+        "/automations",
+        Some(rule_body(
+            &machine,
+            &ws,
+            json!({"harness": "codex", "effort": "high"}),
+        )),
+    )
+    .await;
+    assert_eq!(saved.status, 201, "raw: {}", saved.raw);
+    assert_eq!(
+        saved.body["effort"], "high",
+        "the rule keeps its own pick: {}",
+        saved.raw
+    );
+    let rule_id = saved.body["id"].as_str().expect("rule id").to_string();
+
+    let run = call(
+        &daemon,
+        "POST",
+        &format!("/automations/{rule_id}/run"),
+        Some(json!({"request_id": uuid::Uuid::new_v4().to_string()})),
+    )
+    .await;
+    assert_eq!(run.status, 200, "raw: {}", run.raw);
+    let chat = run.body["id"].as_str().expect("chat id").to_string();
+    until_count(
+        &daemon,
+        &format!("/sessions/{chat}/events"),
+        "turn.completed",
+        1,
+    )
+    .await;
+
+    let starts = std::fs::read_to_string(ws.path().join("fixture-codex-starts"))
+        .expect("the codex fixture's start ledger");
+    assert!(
+        starts
+            .lines()
+            .any(|line| line == "thread/start effort=high"),
+        "the rule's effort reaches codex: {starts}"
+    );
+}

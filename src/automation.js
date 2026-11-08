@@ -15,6 +15,16 @@ export function whenSentence(trigger) {
   return `Every day at ${trigger?.time ?? '09:00'}`
 }
 
+/**
+ * The effort a rule should save for the model it picked: only a tier that
+ * model's own catalog offers. A model switch that leaves the word behind
+ * would save a pick the harness cannot run, so it is dropped instead.
+ */
+export function chosenEffort(effort, tiers) {
+  if (!effort) return undefined
+  return (Array.isArray(tiers) ? tiers : []).includes(effort) ? effort : undefined
+}
+
 // The dirty test lives in form-dirty.js now, because the endpoint editor asks
 // the same question and a second copy would drift. Re-exported here so the
 // rule editor's import keeps reading as automation's own.

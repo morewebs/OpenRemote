@@ -12,6 +12,7 @@ import { modelMaker } from './model-maker.js'
 import { ModelMark } from './model-marks.jsx'
 import { projectName } from './projects.js'
 import { formDiffers } from './form-dirty.js'
+import { chosenEffort } from './automation.js'
 import { carrySetup, restoreFromCatalog } from './harness-carry.js'
 import { ruleMachineState } from './rule-run.js'
 import { jobSourceLine } from './chat-to-job.js'
@@ -69,6 +70,9 @@ export default function AutomationForm({ rule, onClose }) {
   const [time, setTime] = useState(rule?.trigger?.time ?? (fromChat ? '' : '09:00'))
   const [harness, setHarness] = useState(rule?.harness ?? available[0]?.id ?? null)
   const [model, setModel] = useState(rule?.model ?? null)
+  // The rule's effort tier - the picked model's own word, carried to the
+  // chat the rule fires. Unset means the model's own default holds.
+  const [effort, setEffort] = useState(rule?.effort ?? null)
   // The rule's permission word - the harness's own vocabulary, carried to
   // the chat the rule fires. Unset means the harness's default holds.
   const [permission, setPermission] = useState(rule?.permission_mode ?? null)
@@ -155,15 +159,22 @@ export default function AutomationForm({ rule, onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [harness])
 
+  // A model switch can leave an effort word the new row does not offer.
+  // Drop it rather than save a tier the harness cannot run.
+  useEffect(() => {
+    if (effort && !efforts.includes(effort)) setEffort(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model, models])
+
   // The fields as they were when the form opened, taken once on the first
   // render. `dirty` is then a comparison, not a flag each setter has to
   // remember to raise: a field added later is covered by adding it here.
   const opened = useRef(null)
   if (opened.current === null) {
-    opened.current = { name, kind, time, harness, model, permission, machineId, workspace, task, enabled }
+    opened.current = { name, kind, time, harness, model, effort, permission, machineId, workspace, task, enabled }
   }
   const dirty = formDiffers(
-    { name, kind, time, harness, model, permission, machineId, workspace, task, enabled },
+    { name, kind, time, harness, model, effort, permission, machineId, workspace, task, enabled },
     opened.current,
   )
   const [closeHint, setCloseHint] = useState(false)
@@ -189,6 +200,12 @@ export default function AutomationForm({ rule, onClose }) {
   useDialog(panelRef, requestClose, { esc: !picker })
 
   const currentHarness = available.find((h) => h.id === harness)
+  // The picked model's own effort tiers. The picker exists only when the
+  // model offers tiers, and a saved word the model no longer carries is
+  // neither shown nor saved.
+  const currentModel =
+    (model ? findModel(models, model) : models.find((m) => m.is_default)) ?? null
+  const efforts = currentModel?.reasoning_efforts ?? []
   const currentMachine = online.find((m) => m.machine.id === machineId)
   // What the picker shows for the current choice: the online machine's own
   // name, or the saved machine's words when it is asleep or gone (never an id),
@@ -254,6 +271,7 @@ export default function AutomationForm({ rule, onClose }) {
         },
         harness,
         model: model ?? undefined,
+        effort: chosenEffort(effort, efforts),
         permission_mode: permission ?? undefined,
         workspace: workspace.trim(),
         machine: machineId,
@@ -491,6 +509,35 @@ export default function AutomationForm({ rule, onClose }) {
                         </span>
                       ) : null
                     }
+                  />
+                )}
+              </div>
+            )}
+            {efforts.length > 0 && (
+              <div className="af-then-cell">
+                <button
+                  className="af-pick"
+                  data-unset={!chosenEffort(effort, efforts) || undefined}
+                  onClick={openPicker('effort')}
+                  aria-haspopup="listbox"
+                  aria-expanded={picker?.kind === 'effort'}
+                  title="How hard the app should think when the rule fires"
+                >
+                  {chosenEffort(effort, efforts) ?? 'Effort'}
+                </button>
+                {picker?.kind === 'effort' && (
+                  <PickerMenu
+                    label="Effort"
+                    searchPlaceholder="Search effort tiers"
+                    items={efforts.map((tier) => ({ id: tier, name: tier }))}
+                    groups={null}
+                    selectedId={chosenEffort(effort, efforts) ?? ''}
+                    onChoose={(id) => {
+                      setEffort(id)
+                      setPicker(null)
+                    }}
+                    onClose={() => setPicker(null)}
+                    anchor={{ left: picker.x, top: picker.y }}
                   />
                 )}
               </div>

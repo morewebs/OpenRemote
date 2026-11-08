@@ -84,7 +84,7 @@ test('the source line is one line, and it rewrites itself as the person works', 
 
 test('an untouched prefilled form is not dirty: nothing clears a rule value on mount', () => {
   // The dirty guard compares every field against the snapshot taken on the
-  // first render. The model and the permission word are part of that
+  // first render. The model, effort and permission word are part of that
   // snapshot, so the effect that settles them must run only on a harness the
   // person switched to, or the form would open dirty with nothing touched.
   // What a switch does has moved: it no longer blanks both fields (a rule then
@@ -99,5 +99,5 @@ test('an untouched prefilled form is not dirty: nothing clears a rule value on m
   assert.match(form, /restoreFromCatalog\(pendingCarry\.current, list \?\? \[\]\)/)
   assert.match(form, /harnessAtOpen\.current = harness/)
   // And the snapshot is still taken once, over every field.
-  assert.match(form, /opened\.current = \{ name, kind, time, harness, model, permission, machineId, workspace, task, enabled \}/)
+  assert.match(form, /opened\.current = \{ name, kind, time, harness, model, effort, permission, machineId, workspace, task, enabled \}/)
 })

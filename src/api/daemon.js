@@ -706,6 +706,7 @@ export class DaemonApi {
       trigger: rule.trigger,
       harness: rule.harness,
       ...(rule.model ? { model: rule.model } : {}),
+      ...(rule.effort ? { effort: rule.effort } : {}),
       ...(rule.permission_mode ? { permission_mode: rule.permission_mode } : {}),
       workspace: rule.workspace,
       machine: rule.machine,

@@ -19,6 +19,7 @@ import {
   ruleSearchHint,
   searchRules,
   whenSentence,
+  chosenEffort,
 } from './automation.js'
 
 // A rule as the daemon stores it, plus the fields the list draws.
@@ -39,6 +40,13 @@ test('a rule reads as the sentence a person wrote it in', () => {
   assert.equal(whenSentence({ kind: 'webhook' }), 'A webhook arrives')
   // A rule saved without a time still reads as the default it will run at.
   assert.equal(whenSentence({ kind: 'schedule' }), 'Every day at 09:00')
+})
+
+test("a rule's effort survives only when the picked model offers it", () => {
+  assert.equal(chosenEffort('high', ['low', 'high']), 'high')
+  assert.equal(chosenEffort('high', ['low']), undefined)
+  assert.equal(chosenEffort(null, ['high']), undefined)
+  assert.equal(chosenEffort('high', null), undefined)
 })
 
 test('an untouched form is not dirty, whatever the snapshot holds', () => {
