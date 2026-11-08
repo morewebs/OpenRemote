@@ -112,6 +112,24 @@ fn current_local_minute() -> (String, String) {
     )
 }
 
+/// Whether a schedule is due at `now_ms` and `now_time`. A daily rule
+/// matches its own HH:MM; an interval rule is due once its cadence has
+/// passed since the run it last recorded, or since it was created. The
+/// clock's arming map still stops a second fire inside one tick.
+fn schedule_due(rule: &AutomationRule, now_ms: i64, now_time: &str) -> bool {
+    if !rule.enabled || rule.trigger.kind != TriggerKind::Schedule {
+        return false;
+    }
+    match (rule.trigger.time.as_deref(), rule.trigger.every_minutes) {
+        (Some(time), _) => time == now_time,
+        (None, Some(minutes)) => {
+            let since = rule.last_run.unwrap_or(rule.created_at);
+            now_ms.saturating_sub(since) >= i64::from(minutes) * 60_000
+        }
+        (None, None) => false,
+    }
+}
+
 /// Drops arming entries from days other than `today` (the `YYYY-MM-DD`
 /// prefix of the day-minute key). An entry from an earlier day can never
 /// match again - the engine arms per day - so it is garbage the moment
@@ -1055,11 +1073,33 @@ impl Supervisor {
         }
         match rule.trigger.kind {
             TriggerKind::Schedule => {
-                rule.trigger.time = Some(validate_time(rule.trigger.time.as_deref())?);
+                match (rule.trigger.time.as_deref(), rule.trigger.every_minutes) {
+                    (Some(time), None) => {
+                        rule.trigger.time = Some(validate_time(Some(time))?);
+                    }
+                    (None, Some(minutes)) => {
+                        if !(5..=1440).contains(&minutes) {
+                            return Err(SupervisorError::Conflict(
+                                "a schedule's interval is 5 to 1440 minutes".into(),
+                            ));
+                        }
+                    }
+                    (Some(_), Some(_)) => {
+                        return Err(SupervisorError::Conflict(
+                            "a schedule picks a time or an interval, not both".into(),
+                        ));
+                    }
+                    (None, None) => {
+                        return Err(SupervisorError::Conflict(
+                            "a schedule needs a time (HH:MM) or an interval".into(),
+                        ));
+                    }
+                }
                 rule.trigger.key = None;
             }
             TriggerKind::Webhook => {
                 rule.trigger.time = None;
+                rule.trigger.every_minutes = None;
                 // A webhook keeps the key it was born with - the hook
                 // URLs already in the wild must keep working.
                 rule.trigger.key = Some(
@@ -1271,15 +1311,12 @@ impl Supervisor {
             loop {
                 tick.tick().await;
                 let (now_minute, now_time) = current_local_minute();
+                let now = now_ms();
                 let due: Vec<AutomationRule> = supervisor
                     .with_store(|s| {
                         s.rules()
                             .into_iter()
-                            .filter(|r| {
-                                r.enabled
-                                    && r.trigger.kind == TriggerKind::Schedule
-                                    && r.trigger.time.as_deref() == Some(now_time.as_str())
-                            })
+                            .filter(|r| schedule_due(r, now, &now_time))
                             .cloned()
                             .collect::<Vec<AutomationRule>>()
                     })
@@ -2925,6 +2962,7 @@ mod tests {
             trigger: openremote_core::Trigger {
                 kind: TriggerKind::Schedule,
                 time: Some("09:00".into()),
+                every_minutes: None,
                 key: None,
             },
             harness: "claude".into(),
@@ -2941,6 +2979,66 @@ mod tests {
             updated_at: 0,
         };
         supervisor.save_rule(rule, None).expect("rule saves").id
+    }
+
+    fn interval_rule(every: u32, last_run: Option<i64>, created_at: i64) -> AutomationRule {
+        AutomationRule {
+            id: RuleId::new(),
+            name: "an interval".into(),
+            trigger: openremote_core::Trigger {
+                kind: TriggerKind::Schedule,
+                time: None,
+                every_minutes: Some(every),
+                key: None,
+            },
+            harness: "claude".into(),
+            model: None,
+            effort: None,
+            permission_mode: None,
+            workspace: std::env::temp_dir(),
+            machine: MachineId::new(),
+            task: "a task".into(),
+            enabled: true,
+            last_chat: None,
+            last_run,
+            created_at,
+            updated_at: 0,
+        }
+    }
+
+    #[test]
+    fn an_interval_schedule_is_due_exactly_one_cadence_after_its_last_run() {
+        let now = 1_000_000_000i64;
+        let minute = 60_000i64;
+        assert!(schedule_due(
+            &interval_rule(30, Some(now - 30 * minute), 0),
+            now,
+            "00:00"
+        ));
+        assert!(!schedule_due(
+            &interval_rule(30, Some(now - 29 * minute - 59_999), 0),
+            now,
+            "00:00"
+        ));
+        // No recorded run: the cadence counts from creation, not from zero.
+        assert!(schedule_due(
+            &interval_rule(30, None, now - 30 * minute),
+            now,
+            "00:00"
+        ));
+        assert!(!schedule_due(
+            &interval_rule(30, None, now - 29 * minute),
+            now,
+            "00:00"
+        ));
+        // The daily path is unchanged, and a disabled rule is never due.
+        let mut daily = interval_rule(30, None, 0);
+        daily.trigger.every_minutes = None;
+        daily.trigger.time = Some("09:00".into());
+        assert!(schedule_due(&daily, now, "09:00"));
+        assert!(!schedule_due(&daily, now, "09:01"));
+        daily.enabled = false;
+        assert!(!schedule_due(&daily, now, "09:00"));
     }
 
     /// A deleted rule leaves nothing behind in the clock's arming map:

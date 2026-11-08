@@ -670,3 +670,67 @@ async fn a_rules_effort_reaches_the_chat_it_fires() {
         "the rule's effort reaches codex: {starts}"
     );
 }
+
+/// An interval schedule is a second cadence beside the daily time: the two
+/// are exclusive, and the range is the one the form offers.
+#[tokio::test]
+async fn an_interval_schedule_saves_and_reads_back() {
+    let daemon = start_daemon(&[]).await;
+    let machine = this_machine_id(&daemon).await;
+    let ws = workspace(Some("plain"));
+
+    let saved = call(
+        &daemon,
+        "POST",
+        "/automations",
+        Some(rule_body(
+            &machine,
+            &ws,
+            json!({"trigger": {"kind": "schedule", "every_minutes": 30}}),
+        )),
+    )
+    .await;
+    assert_eq!(saved.status, 201, "raw: {}", saved.raw);
+    assert_eq!(
+        saved.body["trigger"]["every_minutes"], 30,
+        "the rule keeps its cadence: {}",
+        saved.raw
+    );
+    assert_eq!(
+        saved.body["trigger"]["time"],
+        serde_json::Value::Null,
+        "an interval is not a time: {}",
+        saved.raw
+    );
+
+    // A time and an interval at once is ambiguous; neither is no schedule.
+    for trigger in [
+        json!({"kind": "schedule", "time": "09:00", "every_minutes": 30}),
+        json!({"kind": "schedule"}),
+    ] {
+        let refused = call(
+            &daemon,
+            "POST",
+            "/automations",
+            Some(rule_body(&machine, &ws, json!({ "trigger": trigger }))),
+        )
+        .await;
+        assert_eq!(refused.status, 409, "raw: {}", refused.raw);
+    }
+
+    // The range is 5 to 1440 minutes.
+    for minutes in [0, 4, 1441] {
+        let refused = call(
+            &daemon,
+            "POST",
+            "/automations",
+            Some(rule_body(
+                &machine,
+                &ws,
+                json!({"trigger": {"kind": "schedule", "every_minutes": minutes}}),
+            )),
+        )
+        .await;
+        assert_eq!(refused.status, 409, "{minutes}: {}", refused.raw);
+    }
+}

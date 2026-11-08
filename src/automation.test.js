@@ -20,6 +20,7 @@ import {
   searchRules,
   whenSentence,
   chosenEffort,
+  scheduleTrigger,
 } from './automation.js'
 
 // A rule as the daemon stores it, plus the fields the list draws.
@@ -40,6 +41,23 @@ test('a rule reads as the sentence a person wrote it in', () => {
   assert.equal(whenSentence({ kind: 'webhook' }), 'A webhook arrives')
   // A rule saved without a time still reads as the default it will run at.
   assert.equal(whenSentence({ kind: 'schedule' }), 'Every day at 09:00')
+})
+
+test('an interval schedule reads as its own cadence', () => {
+  assert.equal(whenSentence({ kind: 'schedule', every_minutes: 30 }), 'Every 30 minutes')
+  assert.equal(whenSentence({ kind: 'schedule', every_minutes: 1 }), 'Every 1 minute')
+  assert.equal(whenSentence({ kind: 'schedule', every_minutes: 60 }), 'Every 60 minutes')
+  // A saved daily time still wins its own sentence.
+  assert.equal(
+    whenSentence({ kind: 'schedule', time: '07:30', every_minutes: 30 }),
+    'Every day at 07:30',
+  )
+})
+
+test('the form builds the trigger its chosen cadence names', () => {
+  assert.deepEqual(scheduleTrigger('daily', '07:30'), { kind: 'schedule', time: '07:30' })
+  assert.deepEqual(scheduleTrigger('30', '07:30'), { kind: 'schedule', every_minutes: 30 })
+  assert.deepEqual(scheduleTrigger(60, ''), { kind: 'schedule', every_minutes: 60 })
 })
 
 test("a rule's effort survives only when the picked model offers it", () => {

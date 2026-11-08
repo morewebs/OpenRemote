@@ -715,6 +715,10 @@ pub struct Trigger {
     /// `HH:MM` local, for schedules.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub time: Option<String>,
+    /// A repeating cadence in minutes, for schedules. Exactly one of
+    /// `time` and `every_minutes` is set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub every_minutes: Option<u32>,
     /// The webhook's own key - every hook URL carries one; a request
     /// without the matching key does not fire the rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]

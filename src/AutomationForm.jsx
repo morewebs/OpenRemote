@@ -12,7 +12,7 @@ import { modelMaker } from './model-maker.js'
 import { ModelMark } from './model-marks.jsx'
 import { projectName } from './projects.js'
 import { formDiffers } from './form-dirty.js'
-import { chosenEffort } from './automation.js'
+import { chosenEffort, scheduleTrigger, whenSentence } from './automation.js'
 import { carrySetup, restoreFromCatalog } from './harness-carry.js'
 import { ruleMachineState } from './rule-run.js'
 import { jobSourceLine } from './chat-to-job.js'
@@ -31,6 +31,13 @@ const TRIGGERS = [
 
 const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0'))
 const MINUTES = ['00', '15', '30', '45']
+
+const CADENCES = [
+  { id: 'daily', name: 'Every day' },
+  { id: '15', name: 'Every 15 minutes' },
+  { id: '30', name: 'Every 30 minutes' },
+  { id: '60', name: 'Every 60 minutes' },
+]
 
 // A saved time is "HH:MM". Anything else falls back to 09:00.
 function splitTime(value) {
@@ -68,6 +75,11 @@ export default function AutomationForm({ rule, onClose }) {
   const [name, setName] = useState(rule?.name ?? '')
   const [kind, setKind] = useState(rule?.trigger?.kind ?? 'schedule')
   const [time, setTime] = useState(rule?.trigger?.time ?? (fromChat ? '' : '09:00'))
+  // A schedule fires daily at its time, or on an interval. The two are
+  // exclusive in the body; the form shows one at a time.
+  const [cadence, setCadence] = useState(
+    rule?.trigger?.every_minutes ? String(rule.trigger.every_minutes) : 'daily',
+  )
   const [harness, setHarness] = useState(rule?.harness ?? available[0]?.id ?? null)
   const [model, setModel] = useState(rule?.model ?? null)
   // The rule's effort tier - the picked model's own word, carried to the
@@ -171,10 +183,10 @@ export default function AutomationForm({ rule, onClose }) {
   // remember to raise: a field added later is covered by adding it here.
   const opened = useRef(null)
   if (opened.current === null) {
-    opened.current = { name, kind, time, harness, model, effort, permission, machineId, workspace, task, enabled }
+    opened.current = { name, kind, time, cadence, harness, model, effort, permission, machineId, workspace, task, enabled }
   }
   const dirty = formDiffers(
-    { name, kind, time, harness, model, effort, permission, machineId, workspace, task, enabled },
+    { name, kind, time, cadence, harness, model, effort, permission, machineId, workspace, task, enabled },
     opened.current,
   )
   const [closeHint, setCloseHint] = useState(false)
@@ -206,6 +218,10 @@ export default function AutomationForm({ rule, onClose }) {
   const currentModel =
     (model ? findModel(models, model) : models.find((m) => m.is_default)) ?? null
   const efforts = currentModel?.reasoning_efforts ?? []
+  // A saved interval outside the form's four choices still shows itself.
+  const cadenceOptions = CADENCES.some((option) => option.id === cadence)
+    ? CADENCES
+    : [...CADENCES, { id: cadence, name: `Every ${cadence} minutes` }]
   const currentMachine = online.find((m) => m.machine.id === machineId)
   // What the picker shows for the current choice: the online machine's own
   // name, or the saved machine's words when it is asleep or gone (never an id),
@@ -252,7 +268,7 @@ export default function AutomationForm({ rule, onClose }) {
     harness &&
     machineId &&
     !machineGone &&
-    (kind !== 'schedule' || time.trim())
+    (kind !== 'schedule' || cadence !== 'daily' || time.trim())
 
   const openPicker = (kind_) => (e) => setPicker({ kind: kind_, x: e.clientX, y: e.clientY })
 
@@ -264,11 +280,13 @@ export default function AutomationForm({ rule, onClose }) {
       const saved = await saveAutomation({
         ...(editing ? { id: rule.id, enabled } : {}),
         name: name.trim(),
-        trigger: {
-          kind,
-          ...(kind === 'schedule' ? { time: time.trim() } : {}),
-          ...(kind === 'webhook' && rule?.trigger?.key ? { key: rule.trigger.key } : {}),
-        },
+        trigger:
+          kind === 'schedule'
+            ? scheduleTrigger(cadence, time.trim())
+            : {
+                kind,
+                ...(rule?.trigger?.key ? { key: rule.trigger.key } : {}),
+              },
         harness,
         model: model ?? undefined,
         effort: chosenEffort(effort, efforts),
@@ -358,6 +376,38 @@ export default function AutomationForm({ rule, onClose }) {
               ))}
             </div>
             {kind === 'schedule' && (
+              <div className="af-then-cell">
+                <button
+                  type="button"
+                  className="af-pick"
+                  aria-haspopup="listbox"
+                  aria-expanded={picker?.kind === 'cadence'}
+                  onClick={openPicker('cadence')}
+                  title="How often the rule fires"
+                >
+                  {cadence === 'daily'
+                    ? 'Every day'
+                    : whenSentence({ kind: 'schedule', every_minutes: Number(cadence) })}
+                  <CaretDown size={10} />
+                </button>
+                {picker?.kind === 'cadence' && (
+                  <PickerMenu
+                    label="Cadence"
+                    searchPlaceholder="Search cadences"
+                    items={cadenceOptions}
+                    groups={null}
+                    selectedId={cadence}
+                    onChoose={(id) => {
+                      setCadence(id)
+                      setPicker(null)
+                    }}
+                    onClose={() => setPicker(null)}
+                    anchor={{ left: picker.x, top: picker.y }}
+                  />
+                )}
+              </div>
+            )}
+            {kind === 'schedule' && cadence === 'daily' && (
               <span className="af-time">
                 {/* Two pickers, one kind each: an hour open on the clock
                     never answers for the minute beside it. A draft read off

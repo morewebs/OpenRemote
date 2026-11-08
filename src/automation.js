@@ -12,7 +12,22 @@ export const CONNECTOR_KINDS = ['pipeline', 'errors', 'review', 'release']
 
 export function whenSentence(trigger) {
   if (trigger?.kind === 'webhook') return 'A webhook arrives'
-  return `Every day at ${trigger?.time ?? '09:00'}`
+  if (trigger?.time) return `Every day at ${trigger.time}`
+  if (trigger?.every_minutes) {
+    const minutes = trigger.every_minutes
+    return `Every ${minutes} minute${minutes === 1 ? '' : 's'}`
+  }
+  return 'Every day at 09:00'
+}
+
+/**
+ * The trigger a schedule saves for the cadence the form shows. `daily`
+ * keeps the picked HH:MM; a number of minutes is an interval, and the
+ * daily time is deliberately absent so the two can never both be stored.
+ */
+export function scheduleTrigger(cadence, time) {
+  if (cadence === 'daily') return { kind: 'schedule', time }
+  return { kind: 'schedule', every_minutes: Number(cadence) }
 }
 
 /**

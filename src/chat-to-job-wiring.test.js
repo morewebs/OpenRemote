@@ -99,5 +99,5 @@ test('an untouched prefilled form is not dirty: nothing clears a rule value on m
   assert.match(form, /restoreFromCatalog\(pendingCarry\.current, list \?\? \[\]\)/)
   assert.match(form, /harnessAtOpen\.current = harness/)
   // And the snapshot is still taken once, over every field.
-  assert.match(form, /opened\.current = \{ name, kind, time, harness, model, effort, permission, machineId, workspace, task, enabled \}/)
+  assert.match(form, /opened\.current = \{ name, kind, time, cadence, harness, model, effort, permission, machineId, workspace, task, enabled \}/)
 })
