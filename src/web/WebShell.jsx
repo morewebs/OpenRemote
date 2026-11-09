@@ -69,6 +69,13 @@ function Shell({ onSignOut }) {
     go(id)
   }
 
+  // The sidebar names static views and chats with the same callback: a chat
+  // must pass through open, which ensures its record, before the view changes.
+  const select = (next) => {
+    if (STATIC.has(next)) go(next)
+    else open(next)
+  }
+
   const back = () => {
     if (index <= 0) return
     setIndex(index - 1)
@@ -98,7 +105,7 @@ function Shell({ onSignOut }) {
             mode="cloud"
             web
             onMode={() => {}}
-            onSelect={go}
+            onSelect={select}
             onSplit={null}
             onAddProject={null}
             onNewChatIn={() => go('new')}

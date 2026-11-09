@@ -349,7 +349,7 @@ export default function NewChat({
     if (!machinesOnly || !defaultTarget || target) return
     if (machineOptions.some((m) => m.id === defaultTarget)) setTarget(defaultTarget)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [machinesOnly, defaultTarget, target])
+  }, [machinesOnly, defaultTarget, target, devices])
 
   // The sidebar's + opens the same Add project flow the home screen's
   // button opens - one way in, whichever surface asked.
