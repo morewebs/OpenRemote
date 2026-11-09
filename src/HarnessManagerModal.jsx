@@ -113,6 +113,23 @@ export default function HarnessManagerModal({ onClose, onSignIn }) {
                   ) : (
                     <span className="dv-hm-detail dv-hm-note">{row.detail}</span>
                   ))}
+                {row.caps && (
+                  <div className="dv-hm-caps">
+                    {row.caps.map((cap) => (
+                      <span
+                        key={cap.key}
+                        className={`dv-hm-cap${cap.on ? '' : ' off'}`}
+                        title={
+                          cap.on
+                            ? `${row.name} honors ${cap.label.toLowerCase()}`
+                            : `${row.name} does not honor ${cap.label.toLowerCase()}`
+                        }
+                      >
+                        {cap.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {error?.harnessId === row.id && (
                   <div className="dv-error dv-hm-error">
                     <pre>{error.message}</pre>

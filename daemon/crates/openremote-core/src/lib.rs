@@ -31,11 +31,11 @@ pub use events::{Event, EventPayload};
 pub use ids::{DecisionId, DeviceId, MachineId, ProjectId, RuleId, SessionId};
 pub use model::{
     ApprovedCommand, AutomationRule, ChatMessage, Decision, DecisionKind, DecisionOption,
-    DecisionState, EndpointAuthKind, EndpointModel, EndpointSecret, Harness, InstallSpec,
-    InstalledPlugin, LOCAL_MARKETPLACE, Machine, MachineStatus, MachineView, MarketplaceRecord,
-    MarketplaceSource, McpServerEntry, MessageRole, ModelEndpoint, ModelEndpointView,
-    PluginHarnessRef, PluginPower, PluginRuntime, PluginScope, PluginSource, Project,
-    QueuedMessage, Receipt, ReceiptStatus, Session, SessionStatus, Trigger, TriggerKind,
+    DecisionState, EndpointAuthKind, EndpointModel, EndpointSecret, Harness, HarnessHonors,
+    InstallSpec, InstalledPlugin, LOCAL_MARKETPLACE, Machine, MachineStatus, MachineView,
+    MarketplaceRecord, MarketplaceSource, McpServerEntry, MessageRole, ModelEndpoint,
+    ModelEndpointView, PluginHarnessRef, PluginPower, PluginRuntime, PluginScope, PluginSource,
+    Project, QueuedMessage, Receipt, ReceiptStatus, Session, SessionStatus, Trigger, TriggerKind,
     TurnOutcome, endpoint_models_url, normalize_endpoint_base_url, normalize_endpoint_models_path,
     validate_endpoint_harness, validate_endpoint_name, validate_model_id,
 };

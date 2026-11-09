@@ -371,6 +371,56 @@ pub struct HarnessRegistry {
     /// install needs a runtime set up first.
     node_version: Option<String>,
 }
+/// What each built-in driver actually reads. Fast is the version's fact;
+/// the rest are the driver's own code paths, not a guess from the console.
+fn honors(id: &str, version: Option<&str>) -> openremote_core::HarnessHonors {
+    let fast = fast_supported(id, version);
+    match id {
+        "claude" => openremote_core::HarnessHonors {
+            effort: true,
+            fast,
+            mcp: true,
+            plugins: true,
+            tools: true,
+            attachments: false,
+        },
+        "codex" => openremote_core::HarnessHonors {
+            effort: true,
+            fast,
+            mcp: true,
+            plugins: false,
+            tools: false,
+            attachments: false,
+        },
+        "grok" | "pi" => openremote_core::HarnessHonors {
+            effort: true,
+            fast,
+            mcp: false,
+            plugins: false,
+            tools: false,
+            attachments: false,
+        },
+        // OpenCode's permission word is still dropped, Antigravity's effort
+        // rides in the model id: neither driver honors an OpenRemote control.
+        _ => openremote_core::HarnessHonors::default(),
+    }
+}
+
+/// A plugin harness declares no honors object yet. Its models' own effort
+/// tiers are the only fact the seam carries, and an effort picker exists
+/// only when one of those tiers does.
+fn plugin_honors(spec: &HarnessSpec) -> openremote_core::HarnessHonors {
+    let effort = spec.models.as_ref().is_some_and(|models| {
+        models
+            .iter()
+            .any(|model| !model.reasoning_efforts.is_empty())
+    });
+    openremote_core::HarnessHonors {
+        effort,
+        ..Default::default()
+    }
+}
+
 fn harness_from(id: &str, name: &str, resolution: &Resolution, version: Option<&str>) -> Harness {
     Harness {
         id: id.to_string(),
@@ -388,6 +438,7 @@ fn harness_from(id: &str, name: &str, resolution: &Resolution, version: Option<&
         available: resolution.is_available(),
         enabled: true,
         fast_supported: fast_supported(id, version),
+        honors: honors(id, version),
         signed_in: None,
         using_api_key: false,
         default_model: None,
@@ -526,6 +577,7 @@ impl HarnessRegistry {
                     available,
                     enabled: spec.enabled,
                     fast_supported: false,
+                    honors: plugin_honors(spec),
                     signed_in: answer.signed_in,
                     using_api_key: false,
                     default_model: spec.default_model.clone(),
@@ -987,5 +1039,64 @@ mod tests {
                 "{id}'s default {default} is not one of its words"
             );
         }
+    }
+
+    #[test]
+    fn each_harness_advertises_what_its_driver_honors() {
+        let honors = |id: &str, version: Option<&str>| {
+            harness_from(id, id, &Resolution::Unavailable, version).honors
+        };
+        let claude = honors("claude", Some("2.1.287"));
+        assert!(
+            claude.effort && claude.mcp && claude.plugins && claude.tools && claude.fast,
+            "claude honors effort, fast, mcp, plugins and tools: {claude:?}"
+        );
+        assert!(!claude.attachments);
+        let codex = honors("codex", Some("0.160.0"));
+        assert!(codex.effort && codex.mcp && codex.fast);
+        assert!(!codex.plugins && !codex.tools && !codex.attachments);
+        let grok = honors("grok", None);
+        assert!(grok.effort);
+        assert!(!grok.fast && !grok.mcp && !grok.plugins && !grok.tools && !grok.attachments);
+        let pi = honors("pi", None);
+        assert!(pi.effort && !pi.mcp && !pi.plugins && !pi.tools);
+        for id in ["opencode", "agy"] {
+            let row = honors(id, None);
+            assert!(
+                !row.effort && !row.fast && !row.mcp && !row.plugins && !row.tools,
+                "{id} does not honor a control its driver ignores: {row:?}"
+            );
+        }
+        // Fast is the version's fact on the two harnesses that have it.
+        assert!(!honors("claude", Some("2.1.204")).fast);
+        assert!(!honors("codex", Some("0.109.9")).fast);
+    }
+
+    #[test]
+    fn a_plugin_harness_advertises_only_the_effort_its_manifest_models_name() {
+        let mut spec = HarnessSpec {
+            id: "toy".into(),
+            name: "Toy".into(),
+            plugin: "toy@local".into(),
+            dir: std::path::PathBuf::new(),
+            driver: std::path::PathBuf::new(),
+            args: Vec::new(),
+            models: Some(vec![ModelDescriptor {
+                model: "toy-1".into(),
+                display_name: None,
+                resolved_model: None,
+                reasoning_efforts: vec!["high".into()],
+                is_default: true,
+            }]),
+            default_model: Some("toy-1".into()),
+            enabled: true,
+            problem: None,
+        };
+        let row = plugin_honors(&spec);
+        assert!(row.effort, "a manifest with effort tiers honors the pick");
+        assert!(!row.fast && !row.mcp && !row.plugins && !row.tools && !row.attachments);
+        // No catalog means no effort picker, so the row must not claim one.
+        spec.models = None;
+        assert!(!plugin_honors(&spec).effort);
     }
 }

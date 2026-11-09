@@ -15,6 +15,27 @@ export const SIGNIN_HARNESSES = new Set(['claude', 'codex', 'grok'])
 // (Plugins). One turned off keeps its chats; it just isn't offered.
 export const pickable = (h) => Boolean(h.available) && h.enabled !== false
 
+// The control words the Apps row states, in the console's own vocabulary.
+const HONORS = [
+  ['effort', 'Effort'],
+  ['fast', 'Fast'],
+  ['mcp', 'MCP'],
+  ['plugins', 'Plugins'],
+  ['tools', 'Browser tools'],
+  ['attachments', 'Attachments'],
+]
+
+/**
+ * What one harness honors, as words the manager prints. Null when the daemon
+ * did not send the object (an older build): unknown is not "none", and a row
+ * must not call a capability off on no evidence.
+ */
+export function capabilityWords(row) {
+  const honors = row?.honors
+  if (!honors || typeof honors !== 'object') return null
+  return HONORS.map(([key, label]) => ({ key, label, on: honors[key] === true }))
+}
+
 // One row per harness the daemon knows, always: the manager is the
 // inventory of all six, not just the installed ones. `installable` is
 // null while the machines list hasn't answered yet - a missing row then
@@ -46,6 +67,7 @@ export function harnessRows(capabilities, installable) {
         detail: signedOut && !relayable ? `${name} signs in through its own setup, in a terminal.` : probe,
         detailKind: signedOut && !relayable ? 'note' : 'mono',
         action: relayable ? 'signin' : 'none',
+        caps: capabilityWords(h),
       }
     }
     const spec = specById?.get(h.id)
@@ -60,6 +82,7 @@ export function harnessRows(capabilities, installable) {
         // A harness that needs a runtime set up first waits for the
         // human's go-ahead; the daemon refuses it otherwise.
         action: spec.needs_runtime ? 'install-runtime' : 'install',
+        caps: capabilityWords(h),
       }
     }
     return {
@@ -70,6 +93,7 @@ export function harnessRows(capabilities, installable) {
       detail: problem ?? (specById ? 'No installer for this platform.' : null),
       detailKind: 'note',
       action: 'none',
+      caps: capabilityWords(h),
     }
   })
 }

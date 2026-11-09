@@ -26,6 +26,19 @@ impl PermissionWord {
     }
 }
 
+/// What a harness's driver actually reads, in the console's control terms.
+/// Absence of a control used to be the only signal; this says which fields
+/// the driver honors, so a capability can be stated rather than inferred.
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug, Default)]
+pub struct HarnessHonors {
+    pub effort: bool,
+    pub fast: bool,
+    pub mcp: bool,
+    pub plugins: bool,
+    pub tools: bool,
+    pub attachments: bool,
+}
+
 /// An installed agent CLI the daemon can drive (`claude`, `codex`, …).
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Harness {
@@ -55,6 +68,10 @@ pub struct Harness {
     /// `fastMode` headless ≥ 2.1.205, codex service tier `fast` ≥ 0.110.0).
     #[serde(default)]
     pub fast_supported: bool,
+    /// What this driver actually honors. A missing object means an older
+    /// daemon did not say, which is unknown rather than false.
+    #[serde(default)]
+    pub honors: HarnessHonors,
     /// Whether this CLI is signed in, in its own words. `None` means this
     /// harness has no status command we can ask - the row stays Ready or
     /// Missing, never a guessed sign-in.

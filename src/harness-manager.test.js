@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-const { harnessRows } = await import('./harness-manager.js')
+const { harnessRows, capabilityWords } = await import('./harness-manager.js')
 
 const cap = (harnesses) => ({ harnesses })
 const spec = (harnessId, extra = {}) => ({
@@ -11,6 +11,42 @@ const spec = (harnessId, extra = {}) => ({
   source: 'official',
   needs_runtime: false,
   ...extra,
+})
+
+test('a harness advertises what it honors, and a missing answer stays unknown', () => {
+  const caps = capabilityWords({
+    honors: { effort: true, fast: false, mcp: true, plugins: false, tools: true, attachments: false },
+  })
+  assert.deepEqual(
+    caps.map((cap) => [cap.key, cap.on]),
+    [
+      ['effort', true],
+      ['fast', false],
+      ['mcp', true],
+      ['plugins', false],
+      ['tools', true],
+      ['attachments', false],
+    ],
+  )
+  // An older daemon that did not send the object has not said "false".
+  assert.equal(capabilityWords({}), null)
+  assert.equal(capabilityWords(null), null)
+})
+
+test('the manager row carries the capability words, or null when the daemon did not say', () => {
+  const [row] = harnessRows(
+    cap([
+      {
+        id: 'grok',
+        available: true,
+        honors: { effort: true, fast: false, mcp: false, plugins: false, tools: false, attachments: false },
+      },
+    ]),
+    [],
+  )
+  assert.equal(row.caps.length, 6)
+  const [unknown] = harnessRows(cap([{ id: 'grok', available: true }]), [])
+  assert.equal(unknown.caps, null)
 })
 
 test('an available signed-in harness is Ready with the daemon probe words', () => {

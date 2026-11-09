@@ -817,6 +817,26 @@
   white-space: normal;
 }
 
+/* the capability words: what a driver honors, and what it does not -
+   dimmed, never hidden, so the rows can be compared across apps */
+.dv-hm-caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.dv-hm-cap {
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.dv-hm-cap.off {
+  color: var(--text-3);
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
 /* an installer's own last words, scrollable - they are its output, mono */
 .dv-hm-error pre {
   overflow: auto;
