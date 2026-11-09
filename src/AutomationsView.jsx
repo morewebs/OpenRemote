@@ -42,6 +42,7 @@ import './automations.css'
 import './pill.css'
 import { pickable } from './harness-manager.js'
 import { ranLabel } from './ran-label.js'
+import { nextRunLabel } from './next-run.js'
 import { errorCopy } from './error-copy.js'
 import { chatTitle } from './shape.js'
 import { RULE_GONE, registerRuleRun, ruleBlockedRowLine, ruleCannotRun, ruleCannotRunTitle, ruleControl, ruleMachineState } from './rule-run.js'
@@ -408,6 +409,7 @@ export default function AutomationsView({ onOpenChat }) {
           // last run, and the tooltip below still carries the long version.
           const blockedReason = ruleBlockedRowLine(blocked)
           const machine = ruleMachineState(rule, machines)
+          const nextRun = nextRunLabel(rule)
           return (
             <div key={rule.id} className={`am-rule${rule.enabled ? '' : ' off'}`}>
               <div className="am-rule-main">
@@ -426,6 +428,7 @@ export default function AutomationsView({ onOpenChat }) {
                         )}
                       </>
                     )} · {ranLabel(rule)}
+                    {nextRun ? ` · ${nextRun}` : ''}
                   </div>
                   {rule.trigger.kind === 'webhook' && api?.url && (
                     <code className="am-hook pv">
