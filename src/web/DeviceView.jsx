@@ -8,7 +8,7 @@
 // one: the log is read again on a short timer while the chat is open.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, PaperPlaneRight, ArrowClockwise } from '@phosphor-icons/react'
+import { ArrowLeft, CaretRight, PaperPlaneRight, ArrowClockwise } from '@phosphor-icons/react'
 import { DaemonApi, newRequestId } from '../api/daemon.js'
 import { chatFromSession, foldEvents } from '../state/reducer.js'
 import { renderMarkdown } from '../markdown.js'
@@ -25,17 +25,22 @@ import {
   canSend,
   chatRefusal,
   decisionOptions,
+  groupByDay,
   headOf,
+  hydrateTitles,
   pageSize,
   promptRequest,
+  relativeWhen,
   rowLine,
+  rowTitle,
+  shortId,
   summaryList,
 } from './sync-view.js'
 import './device-view.css'
 
 // What this view is, once, so nobody reads the list as cloud-side chats.
 const WHAT_THIS_IS =
-  'These are the chats synced from this computer, and each one keeps running there. This page reads the latest events every second or so; it is not a live token-by-token stream.'
+  'These chats live on this computer and keep running there. This page reads the latest events every few seconds; it is not a live token-by-token stream.'
 
 const when = (ms) => {
   if (!ms) return ''
@@ -132,6 +137,8 @@ export default function DeviceView({ machine, peer, onLeave }) {
   const [answerProblems, setAnswerProblems] = useState({})
 
   const sessions = useMemo(() => summaryList(raw, titles), [raw, titles])
+  const groups = useMemo(() => groupByDay(sessions), [sessions])
+  const openRow = sessions.find((row) => row.id === openId) ?? null
 
   // The polling state lives in refs: the loop must not restart on a render,
   // and two polls at once would fold the same page into the transcript twice.
@@ -180,6 +187,50 @@ export default function DeviceView({ machine, peer, onLeave }) {
   useEffect(() => {
     void loadSummary()
   }, [loadSummary])
+
+  // The summary carries no title. Read the first twelve chats' own logs once
+  // per summary, three at a time, and stop when the page leaves or a refresh
+  // replaces the list. A failed read leaves that row "Untitled chat".
+  const hydrateEpoch = useRef(0)
+  useEffect(() => {
+    if (!raw || sessions.length === 0) return
+    const epoch = ++hydrateEpoch.current
+    const cancelled = () => epoch !== hydrateEpoch.current
+    void hydrateTitles(
+      sessions,
+      async (row) => {
+        const page = await client.call(
+          'GET',
+          `/sync/sessions/${encodeURIComponent(row.id)}/events?from=0`,
+          null,
+          { timeoutMs: 20000 },
+        )
+        const record = chatFromSession({
+          id: row.id,
+          title: null,
+          status: 'idle',
+          updated_at: row.updatedAt,
+          executor: row.executor,
+          events: [],
+        })
+        foldEvents(record, page?.events ?? [])
+        return record.title
+      },
+      {
+        isCancelled: cancelled,
+        onTitle: (id, title) => {
+          if (!cancelled()) {
+            setTitles((known) => (known[id] === title ? known : { ...known, [id]: title }))
+          }
+        },
+      },
+    )
+    return () => {
+      hydrateEpoch.current += 1
+    }
+    // The summary is the trigger; titles changing must not restart the reads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [raw, client])
 
   const fold = useCallback((page) => {
     const record = chatRef.current
@@ -383,111 +434,175 @@ export default function DeviceView({ machine, peer, onLeave }) {
   return (
     <div className="dv">
       <header className="dv-head">
-        <button
-          type="button"
-          className="dv-icon"
-          onClick={onLeave}
-          title="Choose another machine"
-          aria-label="Choose another machine"
-        >
-          <ArrowLeft size={16} weight="bold" />
-        </button>
-        <SplashMark className="dv-mark" />
-        <div className="dv-who">
-          <h1 className="dv-title">{machine.name}</h1>
-          {/* The device list this page was handed was read before the link was
-              opened, so its "online" may already be out of date. Once the
-              machine has answered, that answer is the true state, and saying
-              "Offline" beside a chat list that just arrived would be a lie. */}
-          <p className={`dv-sub${raw || machine.online ? ' is-online' : ''}`}>
+        <div className="dv-head-inner">
+          <button
+            type="button"
+            className="dv-icon"
+            onClick={onLeave}
+            title="Choose another machine"
+            aria-label="Choose another machine"
+          >
+            <ArrowLeft size={16} weight="bold" />
+          </button>
+          <SplashMark className="dv-mark" />
+          <span className="dv-brand">OpenRemote</span>
+          <span className="dv-divider" aria-hidden="true" />
+          <span className="dv-machine">{machine.name}</span>
+          <span className="dv-spacer" />
+          <span className={`dv-status${raw || machine.online ? ' is-online' : ''}`}>
+            <span className="dv-dot" aria-hidden="true" />
             {raw ? 'Linked' : machine.online ? 'Online' : 'Offline'}
-          </p>
+          </span>
+          <button
+            type="button"
+            className="dv-icon"
+            onClick={() => loadSummary()}
+            title="Read the synced chats again"
+            aria-label="Refresh"
+          >
+            <ArrowClockwise size={15} />
+          </button>
         </div>
-        <span className="dv-spacer" />
-        <button type="button" className="dv-btn" onClick={() => loadSummary()} title="Read the synced chats again">
-          <ArrowClockwise size={14} /> Refresh
-        </button>
       </header>
 
-      <p className="dv-honest">{WHAT_THIS_IS}</p>
-
-      {listProblem && <p className="dv-problem">{listProblem}</p>}
-
-      {openId ? (
-        <section className="dv-chat" aria-label="Chat">
-          <div className="dv-chat-head">
-            <button
-              type="button"
-              className="dv-icon"
-              onClick={closeChat}
-              title="Back to the chat list"
-              aria-label="Back to the chat list"
-            >
-              <ArrowLeft size={15} />
-            </button>
-            <span className="dv-chat-title">{chat?.title ?? 'Chat'}</span>
-            <span className="dv-spacer" />
-            {chat?.running && <span className="dv-live">reading</span>}
-          </div>
-          <div className="dv-transcript">
-            {loadingChat && !chat?.timeline?.length && <p className="dv-note">Reading the log from the computer.</p>}
-            {chat?.timeline?.length === 0 && !loadingChat && !chatProblem && (
-              <p className="dv-note">This chat has no messages this page can read yet.</p>
-            )}
-            {chat?.timeline?.map((item, i) => (
-              <Item
-                key={item.id ?? `${item.kind}-${i}`}
-                item={item}
-                onAnswer={answer}
-                answers={answers}
-                answeringId={answeringId}
-                answerProblems={answerProblems}
-              />
-            ))}
-            {chatProblem && <p className="dv-problem">{chatProblem}</p>}
-          </div>
-          <div className="dv-composer">
-            {sendProblem && <p className="dv-problem">{sendProblem}</p>}
-            <textarea
-              className="dv-input"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  void send()
-                }
-              }}
-              placeholder="Send a message to this chat"
-              rows={2}
-              disabled={closed}
-            />
-            <button type="button" className="dv-btn dv-send" onClick={() => send()} disabled={!canSend(draft) || sending || closed}>
-              <PaperPlaneRight size={15} weight="bold" /> {sending ? 'Sending' : 'Send'}
-            </button>
-          </div>
-        </section>
-      ) : (
-        <section className="dv-list" aria-label="Synced chats">
-          {sessions.length === 0 && !listProblem ? (
-            <p className="dv-empty">{EMPTY_SUMMARY}</p>
-          ) : (
-            <ul className="dv-rows">
-              {sessions.map((row) => (
-                <li key={row.id}>
-                  <button type="button" className="dv-row" onClick={() => openChat(row)}>
-                    <span className="dv-row-body">
-                      <span className="dv-row-name">{row.title ?? `Chat ${row.id.slice(0, 8)}`}</span>
-                      <span className="dv-row-line">{rowLine(row, { when })}</span>
-                    </span>
-                    <span className="dv-row-head">{row.head} updates</span>
-                  </button>
-                </li>
+      <main className="dv-main">
+        {openId ? (
+          <section className="dv-chat" aria-label="Chat">
+            <div className="dv-chat-head">
+              <button
+                type="button"
+                className="dv-icon"
+                onClick={closeChat}
+                title="Back to the chat list"
+                aria-label="Back to the chat list"
+              >
+                <ArrowLeft size={15} />
+              </button>
+              <span className="dv-chat-title">{chat?.title ?? 'Chat'}</span>
+              {chat?.running && (
+                <span className="dv-live">
+                  <span className="dv-dot" aria-hidden="true" />
+                  reading
+                </span>
+              )}
+              <span className="dv-spacer" />
+              <span className="dv-chat-facts">
+                {openRow?.head ?? chat?.head ?? 0} events
+                {when(openRow?.updatedAt ?? chat?.updatedAt)
+                  ? ` · ${when(openRow?.updatedAt ?? chat?.updatedAt)}`
+                  : ''}
+              </span>
+            </div>
+            <div className="dv-transcript">
+              {loadingChat && !chat?.timeline?.length && (
+                <p className="dv-note">Reading the log from the computer.</p>
+              )}
+              {chat?.timeline?.length === 0 && !loadingChat && !chatProblem && (
+                <p className="dv-note">This chat has no messages this page can read yet.</p>
+              )}
+              {chat?.timeline?.map((item, i) => (
+                <Item
+                  key={item.id ?? `${item.kind}-${i}`}
+                  item={item}
+                  onAnswer={answer}
+                  answers={answers}
+                  answeringId={answeringId}
+                  answerProblems={answerProblems}
+                />
               ))}
-            </ul>
-          )}
-        </section>
-      )}
+              {chatProblem && <p className="dv-problem">{chatProblem}</p>}
+            </div>
+            <div className="dv-composer">
+              {sendProblem && <p className="dv-problem">{sendProblem}</p>}
+              <div className="dv-composer-box">
+                <textarea
+                  className="dv-input"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      void send()
+                    }
+                  }}
+                  placeholder="Message this chat"
+                  rows={1}
+                  disabled={closed}
+                />
+                <button
+                  type="button"
+                  className="dv-send"
+                  onClick={() => send()}
+                  disabled={!canSend(draft) || sending || closed}
+                  title={sending ? 'Sending' : 'Send'}
+                  aria-label={sending ? 'Sending' : 'Send'}
+                >
+                  <PaperPlaneRight size={15} weight="bold" />
+                </button>
+              </div>
+              <p className="dv-hint">Enter to send, Shift+Enter for a new line</p>
+            </div>
+          </section>
+        ) : (
+          <div className="dv-home">
+            <div className="dv-title-block">
+              <h1 className="dv-page-title">Chats</h1>
+              <p className="dv-page-sub" title={WHAT_THIS_IS}>
+                From {machine.name}. Read every few seconds, not a live stream.
+              </p>
+            </div>
+            {listProblem && (
+              <p className="dv-problem dv-list-problem">
+                {listProblem}
+                <button type="button" className="dv-retry" onClick={() => loadSummary()}>
+                  Try again
+                </button>
+              </p>
+            )}
+            {sessions.length === 0 && !listProblem && raw == null ? (
+              <div className="dv-skeleton" aria-hidden="true">
+                {[0, 1, 2].map((n) => (
+                  <div className="dv-skeleton-row" key={n}>
+                    <span className="dv-skeleton-title" />
+                    <span className="dv-skeleton-line" />
+                  </div>
+                ))}
+              </div>
+            ) : sessions.length === 0 && !listProblem ? (
+              <div className="dv-empty">
+                <p className="dv-empty-title">No synced chats yet</p>
+                <p className="dv-empty-line">{EMPTY_SUMMARY}</p>
+              </div>
+            ) : (
+              <div className="dv-groups">
+                {groups.map((group) => (
+                  <section className="dv-group" key={group.label} aria-label={group.label}>
+                    <h2 className="dv-group-label">{group.label}</h2>
+                    <ul className="dv-rows">
+                      {group.rows.map((row) => (
+                        <li key={row.id}>
+                          <button type="button" className="dv-row" onClick={() => openChat(row)}>
+                            <span className="dv-row-body">
+                              <span className="dv-row-name">{rowTitle(row, titles)}</span>
+                              <span className="dv-row-line">
+                                {rowLine(row, {
+                                  when: (ms) => relativeWhen(ms),
+                                  id: rowTitle(row, titles) === 'Untitled chat' ? shortId(row.id) : null,
+                                })}
+                              </span>
+                            </span>
+                            <CaretRight className="dv-row-caret" size={12} />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </main>
     </div>
   )
 }

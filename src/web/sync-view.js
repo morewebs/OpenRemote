@@ -36,16 +36,100 @@ export function summaryList(payload, titles = {}) {
     .sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
-/// The line under a row's name, before the chat is opened: what the summary
-/// can say, which is that it is synced and when it last changed. The executor
-/// it names is a device id, and this page is already showing that machine, so
-/// the id itself is noise here.
+/// The line under a row's name: when it last changed. A named row does not
+/// repeat where it is synced from; that fact belongs to the page, once. An
+/// untitled row keeps its short id so two unreadable rows are still distinct.
 export function rowLine(row, formats = {}) {
   if (!row) return ''
   const when = formats.when ? formats.when(row.updatedAt) : ''
-  const parts = ['synced from this computer']
-  if (when) parts.push(`last changed ${when}`)
-  return parts.join(' · ')
+  if (formats.id) return when ? `${formats.id} · last changed ${when}` : formats.id
+  return when
+}
+
+/// The first eight characters of a chat id, the most a person needs to tell
+/// two untitled rows apart.
+export function shortId(id) {
+  return typeof id === 'string' ? id.slice(0, 8) : ''
+}
+
+/// The name a row shows. The summary carries no title; a title arrives from
+/// the chat's own log, so until then the row says what it honestly is.
+export function rowTitle(row, titles = {}) {
+  const named = titles?.[row?.id] ?? row?.title
+  return typeof named === 'string' && named.trim() ? named.trim() : 'Untitled chat'
+}
+
+const CLOCK = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' })
+const MONTH_DAY = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' })
+
+/// A row's last-changed time: the clock for today, the date before that.
+export function relativeWhen(ms, now = Date.now()) {
+  if (!Number.isFinite(ms) || ms <= 0) return ''
+  const date = new Date(ms)
+  if (Number.isNaN(date.getTime())) return ''
+  const today = new Date(now)
+  return date.toDateString() === today.toDateString() ? CLOCK.format(date) : MONTH_DAY.format(date)
+}
+
+const DAY_GROUPS = ['Today', 'Yesterday', 'Previous 7 days', 'Earlier']
+
+/// The list grouped by the local day a chat last changed, in history order.
+/// The input is already newest first; this only buckets it, never reorders it.
+export function groupByDay(rows, now = Date.now()) {
+  const list = Array.isArray(rows) ? rows : []
+  const startOfDay = (ms) => {
+    const date = new Date(Number.isFinite(ms) ? ms : 0)
+    date.setHours(0, 0, 0, 0)
+    return date.getTime()
+  }
+  const today = startOfDay(now)
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const week = new Date(today)
+  week.setDate(week.getDate() - 7)
+  const buckets = new Map(DAY_GROUPS.map((label) => [label, []]))
+  for (const row of list) {
+    const at = startOfDay(row?.updatedAt)
+    const label =
+      at >= today
+        ? 'Today'
+        : at >= yesterday.getTime()
+          ? 'Yesterday'
+          : at >= week.getTime()
+            ? 'Previous 7 days'
+            : 'Earlier'
+    buckets.get(label).push(row)
+  }
+  return DAY_GROUPS.map((label) => ({ label, rows: buckets.get(label) })).filter(
+    (group) => group.rows.length > 0,
+  )
+}
+
+/// Read the first `limit` rows' logs to recover their titles, three at a time.
+/// The summary carries no title, and this is the only existing route that does.
+/// A failed read leaves the row untitled; a cancelled run stops scheduling new
+/// reads and ignores answers already in flight.
+export async function hydrateTitles(
+  rows,
+  read,
+  { limit = 12, concurrency = 3, isCancelled = () => false, onTitle = () => {} } = {},
+) {
+  const queue = (Array.isArray(rows) ? rows : []).slice(0, limit)
+  let next = 0
+  const worker = async () => {
+    while (!isCancelled() && next < queue.length) {
+      const row = queue[next]
+      next += 1
+      try {
+        const title = await read(row)
+        if (!isCancelled() && typeof title === 'string' && title.trim()) onTitle(row.id, title.trim())
+      } catch {
+        // A row that cannot name itself stays "Untitled chat" and openable.
+      }
+    }
+  }
+  const workers = Array.from({ length: Math.min(concurrency, queue.length) }, worker)
+  await Promise.all(workers)
 }
 
 /// What the empty list says. The second sentence is the part people need:

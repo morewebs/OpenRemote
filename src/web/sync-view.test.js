@@ -15,9 +15,14 @@ import {
   canSend,
   chatRefusal,
   decisionOptions,
+  groupByDay,
+  hydrateTitles,
   pageSize,
   promptRequest,
+  relativeWhen,
   rowLine,
+  rowTitle,
+  shortId,
   summaryList,
   summaryRow,
 } from './sync-view.js'
@@ -54,7 +59,14 @@ test('a summary row carries only what the summary route sends', () => {
   assert.equal(summaryRow({ id: 'a1', executor: 'build-box', head: 3, updated_at: 7 }, { a1: 'Named in the log' }).title, 'Named in the log')
   // The executor is a device id, and this page is already showing that
   // machine, so the row names the place rather than repeating the id.
-  assert.equal(rowLine({ id: 'a1', executor: 'build-box', updatedAt: 0 }), 'synced from this computer')
+  assert.equal(rowLine({ id: 'a1', executor: 'build-box', updatedAt: 0 }), '')
+  // A titled row carries only its time; an untitled one keeps the short id
+  // so two unreadable rows are still distinguishable.
+  assert.equal(rowLine({ id: 'a1', updatedAt: 0 }, { when: () => '2:32 PM' }), '2:32 PM')
+  assert.equal(
+    rowLine({ id: 'a1', updatedAt: 0 }, { id: 'a1', when: () => '2:32 PM' }),
+    'a1 · last changed 2:32 PM',
+  )
 })
 
 test('the empty list says what it is and how a chat gets synced', () => {
@@ -130,4 +142,84 @@ test('a refusal shows the daemon sentence and leaves the row answerable', () => 
   // The row was sending, the request came back refused: the answering flag is
   // cleared and the same row can be answered again.
   assert.equal(canAnswerDecision({ pending: true, answering: false, choice: 'deny' }), true)
+})
+
+// ---- the list as a product surface, not a sync inspector ----
+
+const now = new Date(2026, 10, 9, 12, 0, 0).getTime()
+const day = (offset) => {
+  const date = new Date(now)
+  date.setDate(date.getDate() + offset)
+  return date.getTime()
+}
+
+test('the list groups chats by the day they last changed', () => {
+  const rows = [
+    { id: 'today', updatedAt: day(0) },
+    { id: 'yesterday', updatedAt: day(-1) },
+    { id: 'week', updatedAt: day(-3) },
+    { id: 'old', updatedAt: day(-30) },
+  ]
+  assert.deepEqual(
+    groupByDay(rows, now).map((group) => [group.label, group.rows.map((row) => row.id)]),
+    [
+      ['Today', ['today']],
+      ['Yesterday', ['yesterday']],
+      ['Previous 7 days', ['week']],
+      ['Earlier', ['old']],
+    ],
+  )
+  assert.deepEqual(groupByDay([], now), [])
+})
+
+test('a row is named by its real title, never by its id', () => {
+  assert.equal(rowTitle({ id: 'f36e8ec59', title: 'Ship the notes' }), 'Ship the notes')
+  assert.equal(rowTitle({ id: 'f36e8ec59' }, { f36e8ec59: 'Named later' }), 'Named later')
+  assert.equal(rowTitle({ id: 'f36e8ec59' }), 'Untitled chat')
+  assert.equal(shortId('f36e8ec59-aaaa'), 'f36e8ec5')
+})
+
+test('the row time is a clock today and a date before that', () => {
+  assert.match(relativeWhen(day(0), now), /\d/)
+  assert.match(relativeWhen(day(-3), now), /[A-Za-z]/)
+  assert.equal(relativeWhen(0, now), '')
+  assert.equal(relativeWhen(NaN, now), '')
+})
+
+test('title hydration is capped and never reads more than three at once', async () => {
+  let active = 0
+  let peak = 0
+  let calls = 0
+  const rows = Array.from({ length: 20 }, (_, i) => ({ id: `r${i}` }))
+  const read = async (row) => {
+    calls += 1
+    active += 1
+    peak = Math.max(peak, active)
+    await new Promise((resolve) => setTimeout(resolve, 1))
+    active -= 1
+    return `Title ${row.id}`
+  }
+  const titles = {}
+  await hydrateTitles(rows, read, {
+    onTitle: (id, title) => {
+      titles[id] = title
+    },
+  })
+  assert.equal(calls, 12)
+  assert.ok(peak <= 3, `peak concurrency ${peak}`)
+  assert.equal(Object.keys(titles).length, 12)
+})
+
+test('a cancelled hydration stops scheduling reads', async () => {
+  let cancelled = false
+  let calls = 0
+  const read = async () => {
+    calls += 1
+    cancelled = true
+    return 'x'
+  }
+  await hydrateTitles([{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }], read, {
+    isCancelled: () => cancelled,
+  })
+  assert.ok(calls <= 3, `started ${calls} reads after cancellation`)
 })
