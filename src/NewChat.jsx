@@ -226,6 +226,9 @@ export function EffortSlider({
 export default function NewChat({
   onOpen,
   mode = 'local',
+  web = false,
+  machinesOnly = false,
+  defaultTarget = null,
   addProjectOpen = false,
   onAddProjectDone,
   presetProject = null,
@@ -250,7 +253,9 @@ export default function NewChat({
   const [addProjectError, setAddProjectError] = useState(null)
   const cloudMode = mode === 'cloud'
   // A phone runs no chats: its list is the machines alone.
-  const machineOptions = cloudMode ? machinePickerItems(devices, thisDevice, { phone: isMobile }) : []
+  const machineOptions = cloudMode
+    ? machinePickerItems(devices, thisDevice, { phone: isMobile || machinesOnly })
+    : []
   const targetItem = machineOptions.find((m) => m.id === target) ?? null
   const targetOffline = Boolean(target && targetItem && !targetItem.online)
   const [defaults] = useState(() => loadDefaults())
@@ -337,6 +342,14 @@ export default function NewChat({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firstMachine])
+
+  // A browser has no computer of its own in Cloud: the chosen machine is the
+  // target from the first frame, and the picker lists machines only.
+  useEffect(() => {
+    if (!machinesOnly || !defaultTarget || target) return
+    if (machineOptions.some((m) => m.id === defaultTarget)) setTarget(defaultTarget)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [machinesOnly, defaultTarget, target])
 
   // The sidebar's + opens the same Add project flow the home screen's
   // button opens - one way in, whichever surface asked.
@@ -1768,7 +1781,7 @@ export default function NewChat({
             onDone={() => setSignInFor(null)}
           />
         )}
-        {managingHarnesses && (
+        {managingHarnesses && !web && (
           <HarnessManagerModal
             onClose={() => setManagingHarnesses(false)}
             onSignIn={(id) => {

@@ -334,7 +334,7 @@ const LIVE_SETTINGS = {
   opencode: { model: true, effort: false, fast: false },
 }
 
-export default function ChatView({ chat, onBack, focused = true }) {
+export default function ChatView({ chat, onBack, focused = true, web = false }) {
   const privacy = usePrivacyMode()
   const {
     capabilities,
@@ -937,7 +937,7 @@ export default function ChatView({ chat, onBack, focused = true }) {
             </span>
           )}
           <span className="cv-fact">{STATUS_LABEL[chat.status] ?? chat.status}</span>
-          {access === 'not-machine' && (
+          {!web && access === 'not-machine' && (
             <button
               className="cv-fact-btn"
               onClick={() => control(() => setDeviceKind(chat.executor, 'machine'))}
@@ -970,7 +970,7 @@ export default function ChatView({ chat, onBack, focused = true }) {
           )}
           {/* A private chat can join Cloud - asked first, since the whole
               transcript goes, tool output included. */}
-          {!chat.executor && signedIn(cloud) && (
+          {!web && !chat.executor && signedIn(cloud) && (
             confirmSync ? (
               <>
                 <span className="cv-fact">Copy this chat, tool output included, to your other devices?</span>
@@ -1003,7 +1003,7 @@ export default function ChatView({ chat, onBack, focused = true }) {
           )}
           {/* Deleting a synced chat removes it from every device - asked
               twice, in place. */}
-          {chat.executor && (
+          {!web && chat.executor && (
             confirmDelete ? (
               <>
                 <button className="cv-fact-btn" onClick={() => control(() => deleteChat(chat.id))} title="Delete this chat on all your devices">
@@ -1541,7 +1541,7 @@ export default function ChatView({ chat, onBack, focused = true }) {
         {(error || connection.state === 'error') && (
           <p className="cv-error-line">{error ?? connection.error}</p>
         )}
-        {managingHarnesses && (
+        {managingHarnesses && !web && (
           <HarnessManagerModal
             onClose={() => setManagingHarnesses(false)}
             onSignIn={(id) => {

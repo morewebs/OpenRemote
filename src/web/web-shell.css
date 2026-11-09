@@ -1,0 +1,116 @@
+/* The web console's shell. The desktop's sidebar, titlebar height and main
+   column, without the Tauri chrome: 36px bar, 264px sidebar, and the rest is
+   the view. */
+
+.web-shell {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-app);
+  color: var(--text-1);
+  font-family: var(--font-sans);
+}
+
+.web-titlebar {
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: 36px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-side);
+}
+
+.web-tb-left,
+.web-tb-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  min-width: 76px;
+}
+
+.web-tb-right {
+  justify-content: flex-end;
+}
+
+.web-tb-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.web-tb-toggle {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out;
+}
+
+.web-tb-toggle:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.web-tb-toggle:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.web-tb-info {
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.web-tb-info:hover {
+  color: var(--text-1);
+}
+
+.web-shell .app-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.web-shell .main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+@media (max-width: 639px) {
+  .web-tb-right {
+    min-width: 28px;
+  }
+
+  .web-tb-left {
+    min-width: 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .web-tb-toggle {
+    transition: none;
+  }
+}
+
+html[data-reduce-motion] .web-tb-toggle {
+  transition: none;
+}

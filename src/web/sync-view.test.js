@@ -22,8 +22,10 @@ import {
   relativeWhen,
   rowLine,
   rowTitle,
+  mergeSyncedSummaries,
   shortId,
   summaryList,
+  syncedSession,
   summaryRow,
 } from './sync-view.js'
 
@@ -222,4 +224,93 @@ test('a cancelled hydration stops scheduling reads', async () => {
     isCancelled: () => cancelled,
   })
   assert.ok(calls <= 3, `started ${calls} reads after cancellation`)
+})
+// ---- the web desktop: synced rows become the desktop Session ----
+
+test('a synced row becomes the Session its own log carries', () => {
+  const events = [
+    {
+      seq: 1,
+      payload: {
+        type: 'session.created',
+        session: {
+          id: 'a',
+          harness: 'claude',
+          workspace: 'C:/work/api',
+          status: 'idle',
+          model: 'opus',
+          effort: 'high',
+          permission_mode: 'plan',
+          fast: true,
+          title: null,
+          updated_at: 100,
+          executor: 'm1',
+        },
+      },
+    },
+    {
+      seq: 2,
+      payload: {
+        type: 'session.updated',
+        session: {
+          id: 'a',
+          harness: 'claude',
+          workspace: 'C:/work/api',
+          status: 'working',
+          model: 'opus',
+          effort: 'high',
+          permission_mode: 'plan',
+          fast: true,
+          title: 'Ship the notes',
+          updated_at: 200,
+          executor: 'm1',
+        },
+      },
+    },
+  ]
+  const session = syncedSession({ id: 'a', executor: 'm1', head: 2, updatedAt: 150 }, events)
+  assert.equal(session.harness, 'claude')
+  assert.equal(session.workspace, 'C:/work/api')
+  assert.equal(session.title, 'Ship the notes')
+  assert.equal(session.status, 'working')
+  assert.equal(session.model, 'opus')
+  assert.equal(session.head, 2)
+  assert.equal(session.updated_at, 200, 'the log is newer than the summary')
+})
+
+test('a row with no session event still opens as an idle chat', () => {
+  const session = syncedSession({ id: 'a', executor: 'm1', head: 0, updatedAt: 0 }, [])
+  assert.equal(session.id, 'a')
+  assert.equal(session.executor, 'm1')
+  assert.equal(session.status, 'idle')
+  assert.equal(session.harness, null)
+  assert.equal(session.title, null)
+})
+
+test('machine summaries merge by chat id and drop a tombstone', () => {
+  const rows = mergeSyncedSummaries([
+    {
+      machine: 'm1',
+      payload: {
+        sessions: [
+          { id: 'a', executor: 'm1', head: 3, updated_at: 10 },
+          { id: 'b', executor: 'm1', head: 1, updated_at: 5 },
+        ],
+        tombstones: [],
+      },
+    },
+    {
+      machine: 'm2',
+      payload: {
+        sessions: [
+          { id: 'a', executor: 'm1', head: 4, updated_at: 20 },
+          { id: 'c', executor: 'm2', head: 2, updated_at: 30 },
+        ],
+        tombstones: [{ id: 'b' }],
+      },
+    },
+  ])
+  assert.deepEqual(rows.map((row) => row.id), ['c', 'a'])
+  assert.equal(rows.find((row) => row.id === 'a').head, 4)
+  assert.equal(rows.find((row) => row.id === 'a').updatedAt, 20)
 })

@@ -231,3 +231,54 @@ export function answerRefusal(err) {
 export function canSend(text) {
   return typeof text === 'string' && text.trim().length > 0
 }
+
+/// A synced summary row as the desktop Session the console's views read. The
+/// summary carries id, executor, head and time; the chat's own log's
+/// `session.created` and `session.updated` payloads carry the whole Session,
+/// so a browser can rebuild the same row the desktop daemon would send.
+export function syncedSession(row, events = []) {
+  if (!row || typeof row.id !== 'string' || !row.id) return null
+  let session = null
+  for (const event of events ?? []) {
+    const payload = event?.payload ?? event
+    if (payload?.type !== 'session.created' && payload?.type !== 'session.updated') continue
+    if (payload.session && typeof payload.session === 'object') session = payload.session
+  }
+  const stamp = (value) => (Number.isFinite(value) ? value : 0)
+  return {
+    ...(session ?? {}),
+    id: row.id,
+    executor: row.executor ?? session?.executor ?? null,
+    status: session?.status ?? 'idle',
+    updated_at: Math.max(stamp(session?.updated_at), stamp(row.updatedAt ?? row.updated_at)),
+    head: Number.isFinite(row.head) ? row.head : (session?.head ?? 0),
+    harness: session?.harness ?? null,
+    workspace: session?.workspace ?? null,
+    title: session?.title ?? null,
+  }
+}
+
+/// The machine summaries merged into one list of chats, newest first. A chat
+/// can have a copy on every device that holds it; the row with the newest
+/// stamp wins, and a tombstone removes the chat everywhere.
+export function mergeSyncedSummaries(machines = []) {
+  const byId = new Map()
+  const buried = new Set()
+  for (const { payload } of Array.isArray(machines) ? machines : []) {
+    for (const stone of Array.isArray(payload?.tombstones) ? payload.tombstones : []) {
+      if (typeof stone?.id === 'string') buried.add(stone.id)
+    }
+    for (const row of Array.isArray(payload?.sessions) ? payload.sessions : []) {
+      if (!row || typeof row.id !== 'string' || !row.id) continue
+      const updatedAt = Number.isFinite(row.updated_at) ? row.updated_at : 0
+      const head = Number.isFinite(row.head) ? row.head : 0
+      const existing = byId.get(row.id)
+      if (!existing || updatedAt > existing.updatedAt) {
+        byId.set(row.id, { id: row.id, executor: row.executor ?? null, head, updatedAt })
+      }
+    }
+  }
+  return [...byId.values()]
+    .filter((row) => !buried.has(row.id))
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+}

@@ -1,10 +1,11 @@
-// The web console's entry: sign in, pick a machine, and read that machine's
-// synced chats over the encrypted link.
+// The web console's entry: sign in, and enter the desktop console's Cloud
+// mode. The browser has no daemon and no harnesses; it is a device of the
+// account, and every chat runs on a machine the person picked.
 //
-// The desktop entry is unchanged: there the shell starts the daemon and reports
-// its address. Here there is no daemon on this computer at all, so the page
-// reaches the user's own machine the way another device would: through the
-// account's relay, asking only the two routes a peer may ask a machine for.
+// The desktop entry is unchanged: there the shell starts the daemon and
+// reports its address. Here the page reaches the user's own machines the way
+// another device would: through the account's relay, asking only what a peer
+// may ask a machine for.
 
 import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -23,8 +24,8 @@ import { restoreBootPrefs } from './settings.js'
 import { openLinksOutside } from './platform.js'
 import { loadPeer, browserDeviceName } from './web/peer.js'
 import { cloudTarget } from './web/cloud.js'
-import { loadDevice, loadTokens, saveDevice } from './web/session.js'
-import DeviceView from './web/DeviceView.jsx'
+import { clearDevice, clearTokens, loadDevice, loadTokens, saveDevice } from './web/session.js'
+import WebShell from './web/WebShell.jsx'
 import SignInSurface from './web/SignInSurface.jsx'
 
 // Before first paint: the persisted reduce-motion, density and privacy mode,
@@ -35,6 +36,11 @@ openLinksOutside(document)
 function WebRoot() {
   const [route, setRoute] = useState({ step: 'booting' })
   const [peer, setPeer] = useState(null)
+  const [tokens, setTokens] = useState(null)
+  const target = cloudTarget({
+    search: window.location.search,
+    env: window.__OPENREMOTE_CLOUD__,
+  })
 
   // A machine picked on an earlier visit is worth exactly as much as the link
   // that carried it: without the link, or without the account tokens that got
@@ -46,46 +52,43 @@ function WebRoot() {
       if (cancelled) return
       setPeer(link)
       const saved = loadDevice()
-      const tokens = loadTokens()
-      if (!link || !saved || !tokens) {
+      const savedTokens = loadTokens()
+      if (!link || !saved || !savedTokens) {
         setRoute({ step: 'signin' })
         return
       }
-      // The link has to be open before the device view can ask anything: the
-      // peer module seats this browser again from the key it keeps, which is
-      // cheap when the registry already knows it.
       try {
         await link.ensureDevice({
-          api: cloudTarget({ search: window.location.search, env: window.__OPENREMOTE_CLOUD__ }).api,
-          accessToken: tokens.access,
+          api: target.api,
+          accessToken: savedTokens.access,
           name: browserDeviceName(),
         })
       } catch {
         if (!cancelled) setRoute({ step: 'signin' })
         return
       }
-      if (!cancelled) setRoute({ step: 'device', machine: saved })
+      if (!cancelled) {
+        setTokens(savedTokens)
+        setRoute({ step: 'shell', machine: saved })
+      }
     })()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [target.api])
 
   const linked = async (machine) => {
     const link = peer ?? (await loadPeer())
-    const tokens = loadTokens()
-    if (!link || !tokens) {
+    const savedTokens = loadTokens()
+    if (!link || !savedTokens) {
       setRoute({ step: 'signin' })
       return
     }
     setPeer(link)
-    // Picking a machine is what opens the link: the peer module makes sure this
-    // browser has a seat in the account and a socket to the relay, and the
-    // device view can only ask anything once that is done.
     try {
       await link.ensureDevice({
-        api: cloudTarget({ search: window.location.search, env: window.__OPENREMOTE_CLOUD__ }).api,
-        accessToken: tokens.access,
+        api: target.api,
+        accessToken: savedTokens.access,
         name: browserDeviceName(),
       })
     } catch {
@@ -93,13 +96,28 @@ function WebRoot() {
       return
     }
     saveDevice({ id: machine.id, name: machine.name })
-    setRoute({ step: 'device', machine })
+    setTokens(savedTokens)
+    setRoute({ step: 'shell', machine })
   }
 
-  if (route.step === 'device') {
+  const signOut = () => {
+    clearTokens()
+    clearDevice()
+    peer?.close?.()
+    setTokens(null)
+    setRoute({ step: 'signin' })
+  }
+
+  if (route.step === 'shell' && peer && tokens) {
     return (
       <StrictMode>
-        <DeviceView machine={route.machine} peer={peer} onLeave={() => setRoute({ step: 'signin' })} />
+        <WebShell
+          machine={route.machine}
+          peer={peer}
+          tokens={tokens}
+          target={target}
+          onSignOut={signOut}
+        />
       </StrictMode>
     )
   }

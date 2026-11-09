@@ -12,7 +12,7 @@ import { isMobile, openExternal } from '../platform.js'
 import { loadArchived, saveArchived, withArchived } from '../archive.js'
 import { webFetch } from '../web/transport.js'
 
-const ConsoleContext = createContext(null)
+export const ConsoleContext = createContext(null)
 
 const hasTauri = typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__
 

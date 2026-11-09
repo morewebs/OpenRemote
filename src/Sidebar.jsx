@@ -100,6 +100,7 @@ export default function Sidebar({
   open,
   active,
   mode,
+  web = false,
   onMode,
   onSelect,
   onSplit,
@@ -660,7 +661,7 @@ export default function Sidebar({
       // state: the row asks, the picker names the target, and the route does it.
       // Only offered once the projects list has answered - before that the picker
       // could only say "No project" and a move would be a guess.
-      ...(projectsAnswered
+      ...(projectsAnswered && !web
         ? [
             {
               label: 'Move to project',
@@ -692,10 +693,12 @@ export default function Sidebar({
           ]
         : []),
       { divider: true },
-      { label: 'Archive', icon: <Archive size={14} />, onSelect: () => archive(row.id) },
+      ...(!web
+        ? [{ label: 'Archive', icon: <Archive size={14} />, onSelect: () => archive(row.id) }]
+        : []),
       // The daemon deletes synced chats only (it removes them from every
       // device); a private chat has no delete.
-      ...(row.synced
+      ...(row.synced && !web
         ? [
             {
               label: 'Delete chat',
@@ -847,7 +850,7 @@ export default function Sidebar({
       <div className="sb-actions">
         {/* Local is this computer's chats; Cloud is the synced chats of
             every device the user signed in on. A phone has only Cloud. */}
-        {!isMobile && (
+        {!isMobile && !web && (
         <div className="mode-switch" data-mode={mode} role="group" aria-label="Connection mode">
           <span className="mode-switch-thumb" aria-hidden="true" />
           <button
@@ -904,13 +907,15 @@ export default function Sidebar({
             collapses with the mode switch (the grid-rows transition). */}
         <div className={`machines-reveal${isMobile ? ' closed' : ''}`}>
           <div className="machines-clip">
-            <button
-              className={`side-tile${active === 'plugins' && !searchOn ? ' on' : ''}`}
-              onClick={() => onSelect('plugins')}
-            >
-              <PuzzlePiece size={18} weight="duotone" />
-              Plugins
-            </button>
+            {!web && (
+              <button
+                className={`side-tile${active === 'plugins' && !searchOn ? ' on' : ''}`}
+                onClick={() => onSelect('plugins')}
+              >
+                <PuzzlePiece size={18} weight="duotone" />
+                Plugins
+              </button>
+            )}
             {/* The browser had one entry point, a globe among the floating icons, and a
                 person looking for it found nothing. It is a tile now, beside the two views
                 it works with, and the tile says whether the pane is open. */}
@@ -929,13 +934,15 @@ export default function Sidebar({
                 Browser
               </button>
             )}
-            <button
-              className={`side-tile${active === 'automations' && !searchOn ? ' on' : ''}`}
-              onClick={() => onSelect('automations')}
-            >
-              <Lightning size={18} weight="duotone" />
-              Automations
-            </button>
+            {!web && (
+              <button
+                className={`side-tile${active === 'automations' && !searchOn ? ' on' : ''}`}
+                onClick={() => onSelect('automations')}
+              >
+                <Lightning size={18} weight="duotone" />
+                Automations
+              </button>
+            )}
           </div>
         </div>
         <div className={`machines-reveal${mode === 'cloud' ? '' : ' closed'}`}>
@@ -998,17 +1005,19 @@ export default function Sidebar({
           Projects
           {/* The one way a folder becomes a project - the same flow the
               home screen's Add project button opens. */}
-          <button
-            type="button"
-            className="sb-add-project"
-            onClick={onAddProject}
-            title="Add a project"
-            aria-label="Add a project"
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M6 1.25v9.5M1.25 6h9.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            </svg>
-          </button>
+          {!web && (
+            <button
+              type="button"
+              className="sb-add-project"
+              onClick={onAddProject}
+              title="Add a project"
+              aria-label="Add a project"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+                <path d="M6 1.25v9.5M1.25 6h9.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
         </div>
         {grouped.projects.length === 0 && (
           <p className="sb-empty">
@@ -1222,6 +1231,7 @@ export default function Sidebar({
           >
             <UserCircle size={22} weight="duotone" />
           </button>
+          {!web && (
           <button
             type="button"
             className={`sb-icon-btn${phones.length ? (phoneOnline ? ' sb-phone--online' : ' sb-phone--offline') : ''}${active === 'mobile' && !searchOn ? ' on' : ''}`}
@@ -1244,6 +1254,8 @@ export default function Sidebar({
               <span className="sb-phone-dot" aria-hidden="true" />
             )}
           </button>
+          )}
+          {!web && (
           <button
             type="button"
             className={`sb-icon-btn${active === 'metrics' && !searchOn ? ' on' : ''}`}
@@ -1254,6 +1266,7 @@ export default function Sidebar({
           >
             <ChartBar size={20} weight="duotone" />
           </button>
+          )}
           <button
             type="button"
             className={`sb-icon-btn${active === 'settings' && !searchOn ? ' on' : ''}`}
