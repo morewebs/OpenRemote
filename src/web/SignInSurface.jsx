@@ -45,6 +45,9 @@ export default function SignInSurface({ onLinked }) {
   const [machines, setMachines] = useState([])
   const [problem, setProblem] = useState(null)
   const [linking, setLinking] = useState(true)
+  // One sign-in at a time: a second press while the first is navigating would
+  // save a second verifier and strand the callback that comes back.
+  const [starting, setStarting] = useState(false)
   const started = useRef(false)
   const target = useRef(cloudTarget({ search: window.location.search, env: window.__OPENREMOTE_CLOUD__ }))
   const redirect = redirectFor(window.location)
@@ -99,13 +102,21 @@ export default function SignInSurface({ onLinked }) {
       const code = params.get('code')
       const state = params.get('state')
       if (code && state) {
-        const pending = loadPending()
-        clearPending()
-        if (!pending || pending.state !== state) {
+        const pending = loadPending(state)
+        if (!pending) {
+          // A callback reloaded after it already finished has no pending
+          // entry. The tokens it saved are the real answer; only a page with
+          // neither a pending sign-in nor tokens is somebody else's.
+          const tokens = loadTokens()
+          if (tokens) {
+            await listMachines(tokens, peer)
+            return
+          }
           setProblem('That sign-in did not come from this page. Sign in again to start a fresh one.')
           setStep('intro')
           return
         }
+        clearPending(state)
         // The gateway's return address carries the code and the state and
         // nothing else, so this page's own `?api=` and `?issuer=` are gone by
         // now. The sign-in remembered the gateway it started at, and that is
@@ -168,24 +179,34 @@ export default function SignInSurface({ onLinked }) {
   }, [listMachines, redirect])
 
   const signIn = async () => {
+    if (starting) return
+    setStarting(true)
     setProblem(null)
     try {
       const verifier = verifierFor()
       const state = stateFor()
-      savePending({
+      const challenge = await challengeFor(verifier)
+      const saved = savePending({
         verifier,
         state,
         redirect,
         api: target.current.api,
         issuer: target.current.issuer,
       })
-      const challenge = await challengeFor(verifier)
+      if (!saved) {
+        setProblem(
+          'This browser could not remember the sign-in. Check that it allows storage for this page.',
+        )
+        setStarting(false)
+        return
+      }
       const url = authorizeUrl({ issuer: target.current.issuer, redirect, state, challenge })
       // A full page navigation: the gateway returns to this page with the
       // code, and the reader above finishes the exchange.
       window.location.assign(url)
     } catch {
       setProblem('This browser could not start the sign-in. Check that it allows storage for this page.')
+      setStarting(false)
     }
   }
 
@@ -224,7 +245,7 @@ export default function SignInSurface({ onLinked }) {
 
         {step === 'intro' && (
           <div className="cm-actions">
-            <button type="button" className="cm-back primary" onClick={signIn}>
+            <button type="button" className="cm-back primary" onClick={signIn} disabled={starting}>
               Sign in with moreweb
               <ArrowRight size={13} weight="bold" />
             </button>

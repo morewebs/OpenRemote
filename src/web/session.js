@@ -48,31 +48,79 @@ export function clearTokens() {
   return write(TOKENS, null)
 }
 
-/// The PKCE verifier and state of a sign-in that is in flight, so a page that
-/// came back from the gateway can finish the exchange it started.
-///
-/// It also carries the gateway the sign-in started at. The return address the
-/// gateway sends the browser to holds only the code and the state, so a page
-/// pointed at another backend by `?api=` or `window.__OPENREMOTE_CLOUD__` would
-/// otherwise finish the exchange against the default one.
-export function loadPending() {
+// A sign-in that is older than this cannot still be in flight: the gateway's
+// authorization code lives minutes, and a stale verifier is not a secret worth
+// carrying for ever.
+const PENDING_MS = 10 * 60_000
+
+/// The pending sign-ins, keyed by their own `state`. The old build stored one
+/// object in this slot; it is read as a one-entry map so a callback already in
+/// flight across the deploy still finishes.
+function pendingEntries() {
   const saved = read(PENDING)
-  if (!saved || typeof saved.verifier !== 'string' || typeof saved.state !== 'string') return null
+  if (!saved || typeof saved !== 'object') return {}
+  if (typeof saved.state === 'string' && typeof saved.verifier === 'string') {
+    return { [saved.state]: saved }
+  }
+  const entries = {}
+  for (const [state, entry] of Object.entries(saved)) {
+    if (entry && typeof entry === 'object' && typeof entry.verifier === 'string') {
+      entries[state] = entry
+    }
+  }
+  return entries
+}
+
+function pendingLive(entry) {
+  const at = Number(entry?.savedAt)
+  // An entry written by the old build carries no stamp; a deploy must not
+  // strand a sign-in that is already in the gateway's hands.
+  return !Number.isFinite(at) || Date.now() - at <= PENDING_MS
+}
+
+/**
+ * The PKCE verifier and state of the sign-in whose `state` the gateway sent
+ * back. Every sign-in keeps its own entry, so a second tab or a second click
+ * cannot hand the first callback somebody else's verifier.
+ *
+ * It also carries the gateway the sign-in started at. The return address the
+ * gateway sends the browser to holds only the code and the state, so a page
+ * pointed at another backend by `?api=` or `window.__OPENREMOTE_CLOUD__` would
+ * otherwise finish the exchange against the default one.
+ */
+export function loadPending(state) {
+  if (typeof state !== 'string' || !state) return null
+  const entry = pendingEntries()[state]
+  if (!entry || typeof entry.verifier !== 'string' || !pendingLive(entry)) return null
   return {
-    verifier: saved.verifier,
-    state: saved.state,
-    redirect: String(saved.redirect ?? ''),
-    api: String(saved.api ?? ''),
-    issuer: String(saved.issuer ?? ''),
+    verifier: entry.verifier,
+    state: entry.state ?? state,
+    redirect: String(entry.redirect ?? ''),
+    api: String(entry.api ?? ''),
+    issuer: String(entry.issuer ?? ''),
   }
 }
 
 export function savePending(pending) {
-  return write(PENDING, pending)
+  const state = pending?.state
+  if (typeof state !== 'string' || !state) return false
+  const entries = pendingEntries()
+  // Drop what can no longer finish, so one slot cannot ratchet with every
+  // attempt a person ever made.
+  for (const [key, entry] of Object.entries(entries)) {
+    if (!pendingLive(entry)) delete entries[key]
+  }
+  entries[state] = { ...pending, savedAt: Date.now() }
+  return write(PENDING, entries)
 }
 
-export function clearPending() {
-  return write(PENDING, null)
+/// Remove one sign-in by its state, or every one when no state is named
+/// (sign-out, or a gateway refusal that names no state).
+export function clearPending(state) {
+  if (typeof state !== 'string' || !state) return write(PENDING, null)
+  const entries = pendingEntries()
+  delete entries[state]
+  return write(PENDING, Object.keys(entries).length ? entries : null)
 }
 
 /// The machine the person picked, with the name to show while it connects.
