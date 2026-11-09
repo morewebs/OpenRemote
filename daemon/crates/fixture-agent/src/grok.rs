@@ -139,7 +139,8 @@ pub fn main_grok(argv: &[String]) {
         "result": format!("done: {prompt}"),
         "is_error": false,
         "num_turns": 1,
-        "usage": {"input_tokens": 10, "output_tokens": 5}
+        "usage": {"input_tokens": 10, "output_tokens": 5},
+        "total_cost_usd": 0.02
     }));
     // Keep stdin semantics irrelevant (grok runs with stdin closed); the
     // reader sees EOF and the result frame already ended the turn.

@@ -313,6 +313,16 @@ async fn read_prompt(
                         let _ = tx.send(DriverEvent::AssistantText { text }).await;
                     }
                 }
+                // The result frame's usage is the same input usage the
+                // Anthropic wire carries; only status, response and error
+                // were read before, so the context ring stayed empty.
+                if let Some(used) =
+                    openremote_harness::anthropic_wire::context_used(result.get("usage"))
+                {
+                    let _ = tx
+                        .send(DriverEvent::ContextUsed { used, window: None })
+                        .await;
+                }
                 let coarse = if status == "SUCCESS" {
                     TurnOutcome::Completed
                 } else {

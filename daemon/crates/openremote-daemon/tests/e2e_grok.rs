@@ -61,6 +61,9 @@ async fn a_grok_prompt_runs_a_real_turn_and_names_the_conversation() {
             // the init's model echo rides as session.updated
             "session.updated",
             "message.added",
+            // the result frame's usage and cost are the turn's own facts
+            "context.used",
+            "usage.cost",
             "turn.completed",
             "session.status_changed",
         ],
@@ -402,4 +405,36 @@ async fn a_second_grok_prompt_while_working_answers_409_with_one_process() {
         2,
         "the re-opened gate ran exactly one more process; ledger:\n{runs}"
     );
+}
+
+/// A Grok turn's usage is the conversation's context, and its result frame
+/// carries the turn's own cost. Both were parsed and dropped before.
+#[tokio::test]
+async fn a_grok_turn_reports_context_and_cost() {
+    let (daemon, ws) = grok_daemon(Some("plain")).await;
+    let id = create_grok(&daemon, &ws).await;
+    call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "g-usage", "text": "hi"})),
+    )
+    .await;
+    let events = until_count(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        "turn.completed",
+        1,
+    )
+    .await;
+    let context = events
+        .iter()
+        .find(|(_, payload)| kind(payload) == "context.used")
+        .expect("grok reports the context it saw");
+    assert_eq!(context.1["used"], 10, "events:\n{}", dump(&events));
+    let cost = events
+        .iter()
+        .find(|(_, payload)| kind(payload) == "usage.cost")
+        .expect("grok reports the turn's cost");
+    assert_eq!(cost.1["cost_usd"], 0.02, "events:\n{}", dump(&events));
 }

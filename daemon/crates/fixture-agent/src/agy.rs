@@ -136,7 +136,7 @@ pub fn main_agy(argv: &[String]) {
         "event": "result",
         "result": {"conversation_id": conversation, "status": "SUCCESS",
                    "response": format!("done: {prompt}\n"), "num_turns": 1,
-                   "usage": {"input_tokens": 10, "output_tokens": 5}}
+                   "usage": {"input_tokens": 10, "cache_read_input_tokens": 2, "output_tokens": 5}}
     }));
 }
 

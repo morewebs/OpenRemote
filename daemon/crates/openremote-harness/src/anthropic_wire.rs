@@ -308,6 +308,18 @@ pub fn can_use_tool_response(
     serde_json::to_string(&envelope).expect("envelope serializes")
 }
 
+/// The context a turn's usage says the model saw: the input fields together
+/// (the SDK's own semantics). None when the frame names no input at all -
+/// zero is a frame that did not report, not an empty conversation.
+pub fn context_used(usage: Option<&Value>) -> Option<u64> {
+    let usage = usage?;
+    let field = |name: &str| usage.get(name).and_then(Value::as_u64).unwrap_or(0);
+    let used = field("input_tokens")
+        + field("cache_read_input_tokens")
+        + field("cache_creation_input_tokens");
+    (used > 0).then_some(used)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -504,5 +516,19 @@ mod tests {
             answer["response"]["response"].get("message").is_none(),
             "a question answer carries no deny message; raw: {answer}"
         );
+    }
+
+    #[test]
+    fn context_used_sums_every_input_field_and_never_output() {
+        let usage = json!({
+            "input_tokens": 10,
+            "cache_read_input_tokens": 3,
+            "cache_creation_input_tokens": 2,
+            "output_tokens": 500
+        });
+        assert_eq!(context_used(Some(&usage)), Some(15));
+        assert_eq!(context_used(None), None);
+        // Output tokens are not context; no input at all is "not said".
+        assert_eq!(context_used(Some(&json!({"output_tokens": 5}))), None);
     }
 }

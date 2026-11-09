@@ -51,6 +51,8 @@ async fn an_agy_prompt_runs_a_real_turn_with_antigravity_words() {
         &[
             "message.delta",
             "message.added",
+            // the result frame's usage is now the ring's fact
+            "context.used",
             "turn.completed",
             "session.status_changed",
         ],
@@ -348,4 +350,32 @@ async fn a_second_agy_prompt_while_working_answers_409_with_one_process() {
         2,
         "the re-opened gate ran exactly one more process; ledger:\n{runs}"
     );
+}
+
+/// Antigravity's result frame carries the same input usage the other
+/// Anthropic-wire harnesses do; the ring was empty because the driver read
+/// three fields and dropped the fourth.
+#[tokio::test]
+async fn an_agy_turn_reports_context_used() {
+    let (daemon, ws) = agy_daemon(Some("plain")).await;
+    let id = create_agy(&daemon, &ws).await;
+    call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "a-usage", "text": "hi"})),
+    )
+    .await;
+    let events = until_count(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        "turn.completed",
+        1,
+    )
+    .await;
+    let context = events
+        .iter()
+        .find(|(_, payload)| kind(payload) == "context.used")
+        .expect("antigravity reports the context it saw");
+    assert_eq!(context.1["used"], 12, "events:\n{}", dump(&events));
 }

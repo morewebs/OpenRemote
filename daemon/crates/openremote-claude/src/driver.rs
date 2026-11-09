@@ -232,17 +232,6 @@ fn coarse_outcome(subtype: &str, terminal_reason: Option<&str>) -> TurnOutcome {
     }
 }
 
-/// The SDK's own context math: what the model read this turn - its input
-/// tokens plus both cache fields. `None` when the frame carried no usage.
-fn context_used(usage: Option<&Value>) -> Option<u64> {
-    let usage = usage?;
-    let field = |name: &str| usage.get(name).and_then(|v| v.as_u64()).unwrap_or(0);
-    let used = field("input_tokens")
-        + field("cache_read_input_tokens")
-        + field("cache_creation_input_tokens");
-    (used > 0).then_some(used)
-}
-
 /// The SDK's question answer body: the original input with `answers`
 /// added, keyed by the question's own text (the console renders and
 /// answers the first question - `decision_spec` serves its options, so
@@ -904,7 +893,7 @@ async fn read_stdout(
                 // The turn's own usage is the conversation's context: the
                 // SDK's input fields together (its own semantics - the
                 // context the model saw). No window rides this wire.
-                if let Some(used) = context_used(usage.as_ref()) {
+                if let Some(used) = frames::context_used(usage.as_ref()) {
                     if tx
                         .send(DriverEvent::ContextUsed { used, window: None })
                         .await

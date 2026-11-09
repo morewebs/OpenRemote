@@ -422,10 +422,22 @@ async fn read_prompt(
                 subtype,
                 terminal_reason,
                 is_error,
-                usage: _,
+                usage,
                 cost_usd,
             } => {
                 saw_result = true;
+                // The turn's usage is the conversation's context: the SDK's
+                // input fields together. The ring was empty because this
+                // frame's usage was thrown away.
+                if let Some(used) = wire::context_used(usage.as_ref()) {
+                    if tx
+                        .send(DriverEvent::ContextUsed { used, window: None })
+                        .await
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
                 let coarse = if subtype == "success" {
                     TurnOutcome::Completed
                 } else if terminal_reason
