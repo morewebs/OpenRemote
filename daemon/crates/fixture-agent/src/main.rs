@@ -73,6 +73,7 @@ pub const SCENARIOS: &[&str] = &[
     "dialog",
     "die",
     "tree",
+    "mcp-tool",
 ];
 
 /// Hold a scenario's turn open until the e2e creates `fixture-release` in

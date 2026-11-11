@@ -485,6 +485,47 @@ fn image_item(image: &openremote_harness::Image) -> Value {
     }
 }
 
+/// An MCP tool call's name in the shape claude gives one
+/// (`mcp__<server>__<tool>`), so a tool reads the same in every chat
+/// whichever harness called it.
+fn mcp_tool_name(item: &Value) -> String {
+    let field = |key: &str| item.get(key).and_then(Value::as_str).unwrap_or_default();
+    format!("mcp__{}__{}", field("server"), field("tool"))
+}
+
+/// A finished MCP tool call as a tool result: the words and pictures of
+/// its content, or its error's words. A call that failed, or answered
+/// with MCP's own error flag, is an error.
+fn mcp_tool_result(item: &Value) -> DriverEvent {
+    let content = item
+        .pointer("/result/content")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    let error = item
+        .pointer("/error/message")
+        .and_then(Value::as_str)
+        .map(String::from);
+    let flagged = item.pointer("/result/isError").and_then(Value::as_bool) == Some(true);
+    let failed = item.get("status").and_then(Value::as_str) == Some("failed");
+    let words = openremote_harness::anthropic_wire::content_text(content);
+    DriverEvent::ToolResult {
+        tool_use_id: item
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        name: mcp_tool_name(item),
+        text: match (&error, words.is_empty()) {
+            (Some(error), true) => error.clone(),
+            (Some(error), false) => format!("{words}\n{error}"),
+            (None, _) => words,
+        },
+        is_error: failed || flagged || error.is_some(),
+        images: openremote_harness::anthropic_wire::content_images(content),
+    }
+}
+
 /// The `/name` and `@path` words of a prompt: each at the start or after
 /// whitespace; an `@"quoted path"` keeps its spaces.
 pub fn mention_words(text: &str) -> Vec<String> {
@@ -1328,6 +1369,19 @@ fn notification(method: &str, params: &Value, shared: &Shared) -> Option<DriverE
                     name: "commandExecution".into(),
                     input: item.clone(),
                 }),
+                // A call to one of the chat's MCP servers (OpenRemote's
+                // read-a-chat, agent-team and browser tools among them):
+                // its arguments are the card's input, as claude's tool_use
+                // input is.
+                "mcpToolCall" => Some(DriverEvent::ToolStarted {
+                    tool_use_id: item
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                    name: mcp_tool_name(item),
+                    input: item.get("arguments").cloned().unwrap_or(Value::Null),
+                }),
                 // Codex's own reasoning item, on models that emit them -
                 // its words, surfaced dim, never mixed into the reply.
                 "reasoning" => item
@@ -1366,6 +1420,7 @@ fn notification(method: &str, params: &Value, shared: &Shared) -> Option<DriverE
                         images: Vec::new(),
                     })
                 }
+                "mcpToolCall" => Some(mcp_tool_result(item)),
                 _ => None,
             }
         }
@@ -1461,6 +1516,61 @@ async fn read_stderr(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_mcp_tool_call_reads_like_claudes_with_its_words_and_pictures() {
+        let item = json!({
+            "type": "mcpToolCall", "id": "call-1", "server": "openremote",
+            "tool": "browser_screenshot", "status": "completed",
+            "arguments": {"tab": 1},
+            "result": {"content": [
+                {"type": "text", "text": "captured"},
+                {"type": "image", "mimeType": "image/png", "data": "iVBORw0K"}
+            ]}
+        });
+        assert_eq!(mcp_tool_name(&item), "mcp__openremote__browser_screenshot");
+        let DriverEvent::ToolResult {
+            tool_use_id,
+            name,
+            text,
+            is_error,
+            images,
+        } = mcp_tool_result(&item)
+        else {
+            panic!("a tool result");
+        };
+        assert_eq!(tool_use_id, "call-1");
+        assert_eq!(name, "mcp__openremote__browser_screenshot");
+        assert_eq!(text, "captured");
+        assert!(!is_error);
+        assert_eq!(images.len(), 1);
+        assert_eq!(images[0].mime, "image/png");
+        assert_eq!(images[0].data, "iVBORw0K");
+    }
+
+    #[test]
+    fn a_failed_or_flagged_mcp_call_is_an_error_with_its_words() {
+        let failed = json!({
+            "type": "mcpToolCall", "id": "c", "server": "s", "tool": "t",
+            "status": "failed", "error": {"message": "no such tab"}
+        });
+        let DriverEvent::ToolResult { text, is_error, .. } = mcp_tool_result(&failed) else {
+            panic!("a tool result");
+        };
+        assert_eq!(text, "no such tab");
+        assert!(is_error);
+
+        let flagged = json!({
+            "type": "mcpToolCall", "id": "c", "server": "s", "tool": "t",
+            "status": "completed",
+            "result": {"isError": true, "content": [{"type": "text", "text": "denied"}]}
+        });
+        let DriverEvent::ToolResult { text, is_error, .. } = mcp_tool_result(&flagged) else {
+            panic!("a tool result");
+        };
+        assert_eq!(text, "denied");
+        assert!(is_error);
+    }
 
     #[test]
     fn fast_mode_rides_codex_service_tier_word() {

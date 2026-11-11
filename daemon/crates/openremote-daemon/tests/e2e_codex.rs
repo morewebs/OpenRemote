@@ -704,3 +704,48 @@ async fn a_boot_crashed_codex_fails_create_in_seconds_not_minutes() {
     let session = call(&daemon, "GET", &format!("/sessions/{id}"), None).await;
     assert_eq!(session.body["status"], "failed", "raw: {}", session.raw);
 }
+
+#[tokio::test]
+async fn a_codex_mcp_tool_call_gets_a_card_named_like_claudes_and_keeps_its_picture() {
+    let (daemon, ws) = codex_daemon(Some("mcp-tool")).await;
+    let id = create_codex(&daemon, &ws).await;
+    let path = format!("/sessions/{id}/events");
+    until_kinds(&daemon, &path, &["session.status_changed"]).await;
+
+    let prompt = call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "c-mcp", "text": "take a screenshot"})),
+    )
+    .await;
+    assert_eq!(prompt.status, 200, "raw: {}", prompt.raw);
+    let events = until_kinds(&daemon, &path, &["turn.completed"]).await;
+
+    let started = events
+        .iter()
+        .find(|(_, p)| kind(p) == "tool.started")
+        .unwrap_or_else(|| panic!("no tool.started:\n{}", dump(&events)));
+    assert_eq!(started.1["name"], "mcp__openremote__browser_screenshot");
+    assert_eq!(started.1["input"], json!({"tab": 1}));
+
+    let result = events
+        .iter()
+        .find(|(_, p)| kind(p) == "tool.result")
+        .unwrap_or_else(|| panic!("no tool.result:\n{}", dump(&events)));
+    assert_eq!(result.1["name"], "mcp__openremote__browser_screenshot");
+    assert_eq!(result.1["output"], "captured");
+    assert_eq!(result.1["is_error"], false);
+    // The screenshot is kept in the blob store and only named here.
+    let sha = "6076df256f61bd37cc8e3436e6f867089063b58ae62726f2af3809bbf4afc52c";
+    assert_eq!(
+        result.1["images"],
+        json!([{"blob": sha, "mime": "image/png"}]),
+        "{}",
+        dump(&events)
+    );
+    assert!(!dump(&events).contains("iVBORw0KGgpzY3JlZW5zaG90"));
+    let blob = raw_http(&daemon, "GET", &format!("/blobs/{sha}"), &[], None).await;
+    assert_eq!(blob.status, 200, "{}", blob.raw);
+    assert_eq!(blob.header("content-type"), Some("image/png"));
+}

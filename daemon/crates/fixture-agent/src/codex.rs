@@ -217,6 +217,9 @@ impl CodexFixture {
                     .to_string();
                 if self.scenario == "approve" {
                     self.ask_approval(&self.active_turn.clone().unwrap(), &prompt);
+                } else if self.scenario == "mcp-tool" {
+                    self.mcp_tool_call();
+                    self.finish_plain_turn(&prompt);
                 } else {
                     self.finish_plain_turn(&prompt);
                 }
@@ -408,6 +411,30 @@ impl CodexFixture {
             item_id,
             prompt: prompt.to_string(),
         });
+    }
+
+    /// One call to an MCP server's tool, as the app-server reports it: an
+    /// `mcpToolCall` item started with its arguments, then completed with
+    /// MCP content - words and a screenshot (a PNG by its signature).
+    fn mcp_tool_call(&mut self) {
+        let turn = self.active_turn.clone().unwrap_or_default();
+        let id = format!("mcp-{}", self.turn_count);
+        let call = json!({"type": "mcpToolCall", "id": id, "server": "openremote",
+                          "tool": "browser_screenshot", "arguments": {"tab": 1}});
+        self.notify(
+            "item/started",
+            json!({"threadId": self.thread(), "turnId": turn, "item": call}),
+        );
+        let mut done = call;
+        done["status"] = json!("completed");
+        done["result"] = json!({"content": [
+            {"type": "text", "text": "captured"},
+            {"type": "image", "mimeType": "image/png", "data": "iVBORw0KGgpzY3JlZW5zaG90"}
+        ]});
+        self.notify(
+            "item/completed",
+            json!({"threadId": self.thread(), "turnId": turn, "item": done}),
+        );
     }
 
     /// The plain turn: agent message, the thread's own context numbers,
