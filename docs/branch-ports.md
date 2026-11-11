@@ -51,6 +51,7 @@ recorded as dropped below.
 | Screenshot and region to the focused composer; `setFocusedComposer` released on unmount | browser 0d3211a, b06f02d (`screenshotAttachment`) | c0df86f |
 | Recording a tab to Downloads (WebM, 90 s, pill) | browser 0d3211a | 8f2e720 |
 | Freebuff model catalogs: `models_file` and capture age, `settings: "live"`, catalog refresh route, model rows with `detail`/`note` | br-freebuff-tui 53c803a, 31380b8, 3450ccb | 67350a3, 5d24a5f |
+| Harness contract additions on main's `plugin_driver`: `mcp_servers` and `allowed_tools` on spawn, `--commands` catalog, `commands_listed`, ask `interrupts_turn`/`session_grant`, manifest `permission_modes`, `default_permission`, `fast`, `mcp`, `commands`, `one_prompt_at_a_time`, `steers_mid_turn` | br-plugins 7f75c88 (`plugin_runtime/harness.rs`, dropped) | 43d33dd |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 `wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`,
@@ -109,8 +110,8 @@ tag keeps it.
 Main's `plugin_driver` stays the harness base (documented, tested, used by
 Freebuff). `plugin_runtime/harness.rs` is dropped; the rest is ported on top.
 1. ~~Freebuff model catalogs and live settings~~ (done: 67350a3, 5d24a5f).
-2. Harness contract additions from `harness.rs` (MCP servers and allowed tools
-   on spawn, commands catalog, extra events and manifest fields).
+2. ~~Harness contract additions from `harness.rs` (MCP servers and allowed tools
+   on spawn, commands catalog, extra events and manifest fields)~~ (done: 43d33dd).
 3. Model and store: `contributes`, scopes, `project`.
 4. `plugin_runtime` without harnesses: manifest, process tools and views,
    settings, routes, WASM, notices. Keep the 409 that names live chats.
