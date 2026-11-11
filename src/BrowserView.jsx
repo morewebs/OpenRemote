@@ -484,6 +484,8 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   const star = () => {
     const tab = activeTab()
     if (editor || !tab?.url) return
+    // The editor will cover the page: its picture, taken while the bookmark saves.
+    precapture()
     const kept = bookmarkFor(bookmarks, tab.url)
     if (kept) {
       setEditor({ mark: kept, fresh: false })
@@ -1107,6 +1109,8 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
             onFocus={(e) => {
               setEditing(true)
               e.target.select()
+              // Suggestions will cover the page: its picture, taken ahead.
+              precapture()
             }}
             onBlur={() => setEditing(false)}
             onKeyDown={(e) => {
