@@ -22,9 +22,17 @@ recorded as dropped below.
 | Daemon lifetime: job object, private stdio, parent watch, bounded leave | br-backlog 6872f11 | 5d972a7 |
 | Dev servers in replies, "Open beside chat" | browser dba4001, 1a2ab3d (chip) | 18bc2f2 |
 | Codex approvals: new request names, MCP elicitation, permissions | br-teams 18b21bc | 706608f |
+| Agent teams, data: `Session.parent`, message `origin` | br-teams a5ae3da | 4416eb0 |
+| Agent teams, origin through prompt, queue and steer | br-teams aeb6846 | 72ea604 |
+| Agent teams, daemon: `agents_*` MCP tools, limits, reports, team stop | br-teams 5be0788, 7920984, f4ba777, e7bc340, 9335af8 | 5e81db4 |
+| Agent teams, console: team model, TeamBar, origin chips, tool words | br-teams 308ac64, 26f689c | c82aded, 62d3988 |
+| Agent teams, Settings > Agents tab | br-teams 0b7548a | 6df81cf |
+| Agent teams, lead archive/delete asks about its workers | br-teams 7272ecc | c13b253 |
+| Agent teams, workers nest under their lead in the sidebar | br-teams 7297baf | 5d18d73 |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
-`wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`.
+`wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`,
+`br-backlog`, `br-teams`.
 
 ## To port
 
@@ -35,18 +43,14 @@ Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
   the first-message name, double-click to rename, a hint on "Show more".
 - Obsolete: separate Pinned group, inline rename, row dots, DESIGN.md.
 
-### Agent teams (br-teams, 13 commits; none on main)
-1. ~~Codex approvals (18b21bc)~~ - done.
-2. Data: `Session.parent`, `Origin` on queued and chat messages (a5ae3da).
-3. Messages carry an origin through prompt, queue and steer (aeb6846).
-4. Team core: `team.rs`, `supervisor/team.rs`, MCP tools, routes, `e2e_team.rs`
-   (5be0788 + 7920984, f4ba777, e7bc340, 9335af8).
-5. Console data, Settings > Agents, chat TeamBar, lifecycle, sidebar nesting
-   (308ac64, 0b7548a, 26f689c, 7272ecc, 7297baf).
-
 ### Browser (browser, br-console, br-android, br-images)
 - Images: daemon blob store and `Prompt{text,images}` (01b3d02), console images
   (2b770c1), composer attachments (5f59a28), codex `mcpToolCall` (e5fccc5).
+  Teams went in first, so thread `images` through `prompt_as`, `queue_add_as`
+  and `steer_as`, and show `ChatImages` on an agent's message (OriginChip).
+- Browser tool cards in `ChatView.jsx` (`browserTool`, `BrowserFacts`, the
+  folding `OutRow`): main's tool card has neither yet; the team tools render
+  through `ToolIo` meanwhile.
 - Console gaps in main's `BrowserView.jsx`: permission bar, private tabs, full
   screen, session restore (+01aee56), put away past 10, agent badge and take
   over, new-tab shortcuts and dev-server row, inline completion, bookmarks
