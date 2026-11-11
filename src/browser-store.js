@@ -11,6 +11,7 @@ import { HISTORY_CAP, recordVisit as pushVisit, visitsBefore } from './browser-h
 import { linkAbort, loadConnection } from './api/daemon.js'
 import { browserSetting, getBrowserPrefs, loadBrowserPrefs, setSitePermission } from './browser-prefs.js'
 import { rememberedAnswer } from './browser-chrome.js'
+import { recordFrame, recording, startRecording, stopRecording, subscribeRecording, tabClosed } from './browser-record.js'
 
 // A bookmark call waits this long for the daemon before it is treated as a
 // daemon that did not answer. A write that never settles is the worst case for
@@ -570,8 +571,30 @@ export function closePage(native) {
   early.delete(native)
   clearTimeout(orphans.get(native))
   orphans.delete(native)
+  // A recorded tab closing ends its recording, saved as far as it went.
+  tabClosed(native)
   call('browser_close', { tab: native })
 }
+
+// ---- recording ----
+
+/// Record a tab's page (browser-record.js): one at a time, 90 seconds at
+/// most, saved to Downloads, where the downloads menu lists it. `say` hears
+/// the one sentence about how it ended. False when nothing started.
+export function recordTab(native, say = () => {}) {
+  return startRecording(native, call, (result) => {
+    if (result.error) {
+      say(result.error)
+      return
+    }
+    setState((s) => ({
+      downloads: [{ id: `rec-${Date.now()}`, url: '', path: result.path, state: 'done' }, ...s.downloads].slice(0, 50),
+    }))
+    say(`Recording saved to Downloads: ${result.name}`)
+  })
+}
+
+export { recording, stopRecording, subscribeRecording }
 
 /// Show the console tab holding a page of the shell's ("tab-3"). When that
 /// tab isn't in the strip yet, the wish waits a moment for it.
@@ -683,6 +706,8 @@ async function wire() {
   })
   listen('browser:permission', ({ payload }) => onPermission(payload))
   listen('browser:fullscreen', ({ payload }) => onFullscreen(payload))
+  // A recorded tab's pictures (browser_screencast), for browser-record.js.
+  listen('browser:frame', ({ payload }) => recordFrame(payload))
   // What this build's shell can do with a tab: find in page, the DevTools
   // bridge (element picking), device view and forgetting a site are written
   // against Windows' engine, and a control the shell would refuse must not

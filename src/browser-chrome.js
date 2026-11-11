@@ -119,3 +119,19 @@ export function rememberedAnswer(permissions, { origin, kind, private: priv = fa
   const state = permissions?.[`${origin}|${kind}`]
   return state === 'allow' || state === 'deny' ? state : null
 }
+
+// A recording's file name in Downloads, from when it started:
+// "OpenRemote recording 2026-11-11 14.05.09.webm" (no colons: Windows
+// refuses them in a name).
+export function recordingName(date) {
+  const two = (n) => String(n).padStart(2, '0')
+  const day = `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}`
+  const time = `${two(date.getHours())}.${two(date.getMinutes())}.${two(date.getSeconds())}`
+  return `OpenRemote recording ${day} ${time}.webm`
+}
+
+// A recording's running time as the pill shows it: "1:05".
+export function recordingClock(startedAt, now = Date.now()) {
+  const secs = startedAt ? Math.max(0, Math.floor((now - startedAt) / 1000)) : 0
+  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+}

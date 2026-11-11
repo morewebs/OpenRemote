@@ -29,9 +29,11 @@ import {
   MagnifyingGlassPlus,
   Plus,
   Printer,
+  Record,
   Selection,
   Trash,
   Star,
+  StopCircle,
   Warning,
   X,
 } from '@phosphor-icons/react'
@@ -41,9 +43,10 @@ import { insertToComposer } from './composer-insert.js'
 import { SEARCH_ENGINES, inlineFor, omnibox, security, shownAddress, suggest } from './browser-omnibox.js'
 import { browserSetting, setSitePermission, useBrowserPrefs } from './browser-prefs.js'
 import { closeOthers, closeTab, closeToRight, cycle, canUse, extrasMissing, isDormant, newTab, openBelongs, rememberClosed, stripPlan, takeClosed, tabTitle } from './browser-tabs.js'
-import { adopt, answerPrompt, browserCall, call, closePage, dropPromptsFor, focusTab, onFullscreen, startSession, clearHistory, getState, onKey, patchTab, recordVisit, registerReopen, removeBookmark, saveBookmark, setState, subscribe, updateBookmark } from './browser-store.js'
+import { adopt, answerPrompt, browserCall, call, closePage, recordTab, recording, stopRecording, subscribeRecording, dropPromptsFor, focusTab, onFullscreen, startSession, clearHistory, getState, onKey, patchTab, recordVisit, registerReopen, removeBookmark, saveBookmark, setState, subscribe, updateBookmark } from './browser-store.js'
 import { FLOATING, covered } from './browser-occlusion.js'
-import { DEVICES, browserHasFocus, fitDevice, fileName, nextZoom, permissionName, permissionRows, zoomLabel } from './browser-chrome.js'
+import { DEVICES, browserHasFocus, fitDevice, fileName, nextZoom, permissionName, permissionRows, recordingClock, zoomLabel } from './browser-chrome.js'
+import { canRecord } from './browser-record.js'
 import { AgentBadge, AgentBar, PermissionBar } from './BrowserInfobar.jsx'
 import { consoleError, errorCopy } from './error-copy.js'
 import { NO_COMPOSER, addToFocused, focusedComposer } from './attachments.js'
@@ -135,6 +138,21 @@ async function crop(picture, r, box) {
   }
 }
 
+// "Recording 0:12 · Stop": the pill is the stop button, ticking while it runs.
+function RecordPill({ rec, onStop }) {
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const timer = setInterval(() => tick((n) => n + 1), 500)
+    return () => clearInterval(timer)
+  }, [])
+  return (
+    <button type="button" className="bw-rec" title="Stop recording and save it to Downloads" onClick={onStop}>
+      <span className="bw-rec-dot" />
+      <span>Recording {recordingClock(rec.startedAt)} · Stop</span>
+    </button>
+  )
+}
+
 // A menu anchored under a toolbar button.
 function anchorOf(el) {
   const r = el.getBoundingClientRect()
@@ -155,6 +173,9 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   // engine the address bar searches with, and whether the bookmarks bar
   // shows on every page or on the new tab page only.
   const prefs = useBrowserPrefs()
+  // The recording running now, if any ({ tab, startedAt }): it lives in its
+  // own module, so it keeps going while the pane is closed.
+  const rec = useSyncExternalStore(subscribeRecording, recording)
   useEffect(() => {
     // The settings, the sites' answers and, once per run, the last
     // session's tabs (startSession loads the first two too).
@@ -1001,6 +1022,21 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     if (region && region.tab !== current?.native) setRegion(null)
   }, [current?.native, region])
 
+  // ---- recording ----
+
+  // A tab's page recorded to a WebM in Downloads, 90 seconds at most. Only
+  // on the user's own press (a private tab included); the file is theirs,
+  // and nothing reaches history.
+  const record = () => {
+    const tab = activeTab()
+    if (!tab?.native || rec) return
+    if (!can('cdp') || !canRecord()) {
+      notify('Recording is not in this build yet')
+      return
+    }
+    recordTab(tab.native, notify)
+  }
+
   const toggleDevice = () => {
     const tab = activeTab()
     if (!tab?.native) return
@@ -1148,6 +1184,15 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
           disabled: !live || !can('cdp'),
           onSelect: startRegion,
         },
+        rec
+          ? { label: 'Stop recording', icon: <StopCircle size={14} />, hint: 'Saves to Downloads', onSelect: () => stopRecording() }
+          : {
+              label: 'Record this tab',
+              icon: <Record size={14} />,
+              hint: can('cdp') && canRecord() ? '90 seconds at most' : 'Not in this build',
+              disabled: !live || !can('cdp') || !canRecord(),
+              onSelect: record,
+            },
         { divider: true },
         { label: 'Downloads', icon: <DownloadSimple size={14} />, hint: 'Ctrl+J', onSelect: () => setTimeout(() => setMenu({ kind: 'downloads', ...anchorFor('downloads') }), 0) },
         { label: 'History', icon: <ClockCounterClockwise size={14} />, disabled: !history.length, onSelect: () => setHistoryOpen(true) },
@@ -1511,6 +1556,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
           </button>
         </form>
         <BrowserSuggestions id="bw-suggest" rows={suggestionRows} active={suggestion} onPick={pick} />
+        {rec && <RecordPill rec={rec} onStop={() => stopRecording()} />}
         <button
           type="button"
           className={`bw-btn${device ? ' on' : ''}`}

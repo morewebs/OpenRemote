@@ -997,6 +997,44 @@ html[data-reduce-motion] .bw-btn {
   color: var(--text-3);
   font-size: 12.5px;
 }
+/* ---- recording ---- */
+/* "Recording 0:12 · Stop": the pill is the stop button. */
+.bw-rec {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  margin: 0 4px;
+  padding: 0 11px 0 10px;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.bw-rec:hover {
+  background: rgba(248, 113, 113, 0.1);
+}
+.bw-rec-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--red, #f87171);
+  animation: bw-breathe 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bw-rec-dot {
+    animation: none;
+  }
+}
+html[data-reduce-motion] .bw-rec-dot {
+  animation: none;
+}
 /* ---- screenshot a region ---- */
 /* Over the page's picture (the page steps aside while it is open): a shade
    to drag a rectangle on, the chosen part left clear. */
