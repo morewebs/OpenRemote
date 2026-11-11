@@ -31,6 +31,9 @@ recorded as dropped below.
 | Agent teams, workers nest under their lead in the sidebar | br-teams 7297baf | 5d18d73 |
 | Images, daemon: blob store, `Prompt{text,images}`, `/blobs` routes, refusal by `honors.attachments` | br-images 01b3d02 | a51039c |
 | Codex MCP tool cards (`mcpToolCall`), screenshots kept | br-images e5fccc5 | c17f429 |
+| Images, console: API attachments and `blob()`, reducer pictures, `ChatImages` | br-images 2b770c1 | 6662c73 |
+| Composer attachments (paste, drop, pick; `honors.attachments`; errorCopy) | br-images 5f59a28 | a545687 |
+| Pictures in the chat view (user, OriginChip, tool screenshots, queue) | br-images 1a2ab3d (pictures half) | 007e28e |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 `wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`,
@@ -46,10 +49,10 @@ Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 - Obsolete: separate Pinned group, inline rename, row dots, DESIGN.md.
 
 ### Browser (browser, br-console, br-android, br-images)
-- Images, console only (the daemon side is done): console images (2b770c1)
-  and composer attachments (5f59a28). The daemon states picture support as
-  `honors.attachments`, not the branch's `image_input`, so the console must
-  read that; show `ChatImages` on an agent's message (OriginChip) too.
+- The browser half of br-images 1a2ab3d (its pictures half is done): browser
+  tool cards and approvals, the header's Browser button, the phone's "is
+  browsing". Screenshot-to-composer adds through `attachments.js`
+  (`addAttachment`, focused composer).
 - Browser tool cards in `ChatView.jsx` (`browserTool`, `BrowserFacts`, the
   folding `OutRow`): main's tool card has neither yet; the team tools render
   through `ToolIo` meanwhile.
