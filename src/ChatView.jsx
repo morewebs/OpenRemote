@@ -13,6 +13,7 @@ import {
   PencilSimple,
   X,
   ArrowBendUpLeft,
+  ImageSquare,
 } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { chatAccess, deviceName, signedIn } from './cloud.js'
@@ -40,6 +41,11 @@ import { useHint, useModelSwitches, usePaletteSource, useShortcut } from './keyb
 import { useComposerMenus } from './useComposerMenus.jsx'
 import { mentionedChats, ownCommands, takeCommands } from './composer-menus.js'
 import { claimInserter } from './composer-insert.js'
+import { addAttachment, removeAttachment, setFocusedComposer } from './attachments.js'
+import { AttachmentChips, useAttachInput, useAttachments } from './ComposerAttachments.jsx'
+import { outgoingOrThrow, takesNoPictures, takesPictures } from './composer-attachments.js'
+import { ChatImages, chatImageDataUrl } from './chat-images.jsx'
+import { errorCopy } from './error-copy.js'
 import { isTeamTool, teamTool } from './team.js'
 import { requestBeside } from './team-placement.js'
 import TeamBar from './TeamBar.jsx'
@@ -172,7 +178,7 @@ function MarkdownBody({ text, live = false, className, tail = '' }) {
 /// stays the user message and the reply. The steps open as names, not
 /// as a log of every JSON body.
 // Work row for a turn. Named at module scope so the rail can render it.
-function WorkCluster({ items, running }) {
+function WorkCluster({ items, running, chat }) {
   const [open, setOpen] = useState(false)
   const live = workIsLive(items, running)
   const tools = items.filter((item) => item.kind === 'tool')
@@ -188,6 +194,9 @@ function WorkCluster({ items, running }) {
             <li key={item.id}>
               <span className="cv-work-name">{item.name}</span>
               {toolHint(item) && <span className="cv-work-hint pv">{toolHint(item)}</span>}
+              {/* What the tool answered with besides words - an agent's
+                  screenshot of a page - large on a click. */}
+              <ChatImages images={item.images} chat={chat} label="Screenshot" />
             </li>
           ))}
         </ul>
@@ -459,6 +468,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
     renameChat,
     chats,
     sessions,
+    apiFor,
   } = useConsole()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmSync, setConfirmSync] = useState(false)
@@ -517,8 +527,16 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
   // the daemon and runs as its own turn when this one ends.
   const turnOpen = chat.status === 'running' || chat.status === 'waiting'
   const queue = chat.queue ?? []
-  const canSend = text.trim().length > 0 && alive && !busy && reachable
+  // What rides the next message besides its words: pictures, and elements
+  // picked in the browser (attachments.js keeps them per composer).
+  const composerKey = chat.id
+  const attached = useAttachments(composerKey)
+  const canSend = (text.trim().length > 0 || attached.length > 0) && alive && !busy && reachable
   const harness = (capabilities?.harnesses ?? []).find((h) => h.id === chat.harness)
+  // The daemon's honors.attachments for the chat's app; a chat whose app
+  // this computer does not list (it runs elsewhere) falls back to the apps
+  // known to read pictures, and that device's daemon still has the last word.
+  const takesImages = takesPictures(harness, chat.harness)
   // What this window calls the chat's harness: the daemon's own name when the
   // harness list has a row for it (a plugin harness is only named there),
   // else the id the chat carries.
@@ -603,6 +621,17 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
   useEffect(() => {
     claimInserter(attach)
   }, [])
+  // The browser's pictures go to the composer the user is in, like its text
+  // (claimInserter): this one while it is the focused pane's, or the moment
+  // its text gains focus.
+  useEffect(() => {
+    if (focused) setFocusedComposer(composerKey)
+  }, [focused, composerKey])
+  const attachInput = useAttachInput(composerKey, {
+    enabled: takesImages && alive && reachable,
+    onError: setError,
+    refuse: takesImages ? null : takesNoPictures(harnessText ?? 'This app'),
+  })
 
   // An OpenRemote command from the composer, run here before the rest of
   // the message goes: the same paths the pickers and buttons take.
@@ -626,11 +655,25 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
   }
 
   // The message as it goes: OpenRemote's commands run and leave it; what
-  // remains goes to the harness with the chats it points at.
+  // remains goes to the harness with the chats it points at, its pictures,
+  // and the picked elements' words. A message that can't carry what is
+  // attached is refused before any command runs.
   const prepare = async () => {
     const { run, text: message } = takeCommands(text.trim(), ownCommands({ inChat: true, cloud: cloudReady }))
+    const sent = attached
+    const payload = outgoingOrThrow(message, sent, {
+      images: takesImages,
+      app: harnessText ?? 'This app',
+      remote: Boolean(elsewhere),
+    })
     for (const command of run) await runCommand(command)
-    return { message, pointed: mentionedChats(message, chats) }
+    return { message: payload.text, pointed: mentionedChats(message, chats), attachments: payload.attachments, sent }
+  }
+
+  // What was sent leaves the composer; anything the browser added meanwhile
+  // stays.
+  const clearSent = (sent) => {
+    for (const item of sent) removeAttachment(composerKey, item.id)
   }
 
   useEffect(() => {
@@ -816,14 +859,17 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
     setBusy(true)
     setError(null)
     try {
-      const { message, pointed } = await prepare()
-      if (message) {
-        if (turnOpen) await queueMessage(chat.id, message, pointed)
-        else await sendPrompt(chat.id, message, pointed)
+      const { message, pointed, attachments, sent } = await prepare()
+      if (message || attachments.length) {
+        if (turnOpen) await queueMessage(chat.id, message, pointed, attachments)
+        else await sendPrompt(chat.id, message, pointed, attachments)
       }
+      clearSent(sent)
       setText('')
     } catch (err) {
-      setError(err.message ?? String(err))
+      // A refused picture (an app that reads none, over 5 MB, past what
+      // Cloud carries) is the daemon's or the console's sentence.
+      setError(errorCopy(err))
     } finally {
       setBusy(false)
     }
@@ -962,7 +1008,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
   // Steer (Ctrl+Enter): into the running turn now; with nothing running
   // it is an ordinary send.
   const steerNow = async () => {
-    if (!text.trim() || !alive || !reachable || busy) return false
+    if ((!text.trim() && !attached.length) || !alive || !reachable || busy) return false
     if (!turnOpen) {
       send()
       return
@@ -970,11 +1016,12 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
     setBusy(true)
     setError(null)
     try {
-      const { message, pointed } = await prepare()
-      if (message) await steerMessage(chat.id, message, pointed)
+      const { message, pointed, attachments, sent } = await prepare()
+      if (message || attachments.length) await steerMessage(chat.id, message, pointed, attachments)
+      clearSent(sent)
       setText('')
     } catch (err) {
-      setError(err.message ?? String(err))
+      setError(errorCopy(err))
     } finally {
       setBusy(false)
     }
@@ -984,6 +1031,12 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
   // anything already typed) and leaves the queue; Enter queues it again.
   const pullBack = (message) => {
     setText((typed) => (typed.trim() ? `${message.text}\n${typed}` : message.text))
+    // Its pictures come back as attachments, read from where they were kept.
+    for (const image of message.images ?? []) {
+      chatImageDataUrl(apiFor(elsewhere ? chat.executor : null), image, elsewhere ? chat.id : null)
+        .then((dataUrl) => addAttachment({ kind: 'image', name: 'Picture', mime: image.mime, dataUrl }, composerKey))
+        .catch(() => setError('A queued picture could not be brought back - attach it again.'))
+    }
     control(() => removeQueued(chat.id, message.id))
     inputRef.current?.focus()
   }
@@ -1133,7 +1186,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
           {rail.length === 0 && <p className="cv-node cv-note">The transcript will appear here.</p>}
           {quiet.map((item) => {
             if (item.kind === 'work') {
-              return <WorkCluster key={item.id} items={item.items} running={chat.running} />
+              return <WorkCluster key={item.id} items={item.items} running={chat.running} chat={chat} />
             }
             if (item.kind === 'reasoning' || item.kind === 'reasoning-stream') {
               // The harness's own thinking, dim and collapsible - never
@@ -1169,7 +1222,17 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
                   return (
                     <div key={item.id} className="cv-user cv-user--agent">
                       <OriginChip origin={item.origin} chatId={chat.id} started={started} />
-                      <MarkdownBody text={item.text} className="cv-agent cv-origin-body pv" />
+                      {item.text && <MarkdownBody text={item.text} className="cv-agent cv-origin-body pv" />}
+                      <ChatImages images={item.images} chat={chat} label="Picture from another agent" />
+                    </div>
+                  )
+                }
+                // The words, then the pictures sent with them.
+                if (item.images?.length) {
+                  return (
+                    <div key={item.id} className="cv-user">
+                      {item.text && <div className="pv">{item.text}</div>}
+                      <ChatImages images={item.images} chat={chat} label="Attached picture" />
                     </div>
                   )
                 }
@@ -1344,7 +1407,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
       </div>
 
       <div className="cv-composer" ref={composerRef}>
-        <div className="cv-box">
+        <div className="cv-box" onDragOver={attachInput.onDragOver} onDrop={attachInput.onDrop}>
           {menus.element}
           {queue.length > 0 && (
             <div className="cv-queue">
@@ -1368,6 +1431,15 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
               {queue.map((message) => (
                 <div key={message.id} className="cv-queue-row">
                   <span className="cv-queue-text pv">{message.text}</span>
+                  {message.images?.length > 0 && (
+                    <span
+                      className="cv-queue-pics"
+                      title={`${message.images.length} picture${message.images.length > 1 ? 's' : ''} with it`}
+                    >
+                      <ImageSquare size={13} />
+                      {message.images.length}
+                    </span>
+                  )}
                   <span className="cv-queue-actions">
                     <button
                       type="button"
@@ -1400,10 +1472,15 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
               ))}
             </div>
           )}
+          <AttachmentChips composerKey={composerKey} takesImages={takesImages} app={harnessText ?? 'This app'} />
           <textarea
             ref={inputRef}
             value={text}
-            onFocus={() => claimInserter(attach)}
+            onFocus={() => {
+              claimInserter(attach)
+              setFocusedComposer(composerKey)
+            }}
+            onPaste={attachInput.onPaste}
             onChange={(e) => {
               setText(e.target.value)
               menus.track(e)
@@ -1606,6 +1683,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
 
             </div>
             <div className="nc-send-group">
+              {attachInput.button}
               {/* The harness's own permission word for this chat, by the
                   send button: the last thing to check before a message
                   goes. It is start-time on every harness - the chip

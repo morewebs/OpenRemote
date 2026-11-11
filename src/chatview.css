@@ -1389,3 +1389,23 @@ html[data-reduce-motion] .cv-dev-chip {
 html[data-reduce-motion] .ci-thumb {
   transition: none;
 }
+
+/* A queued message's pictures: their count beside its words. */
+.cv-queue-pics {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+/* A tool's screenshot under its name in the opened work row. */
+.cv-work-list li:has(.ci-strip) {
+  flex-wrap: wrap;
+}
+
+.cv-work-list .ci-strip {
+  flex-basis: 100%;
+  margin: 6px 0 4px;
+}
