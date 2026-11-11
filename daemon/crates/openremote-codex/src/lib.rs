@@ -8,8 +8,11 @@
 //! via `turn/start` (`clientUserMessageId`, text items), boundaries from
 //! `turn/completed` with `TurnStatus = completed | interrupted | failed |
 //! inProgress`, approvals as **server→client requests**
-//! (`commandExecution/requestApproval`, `applyPatch/requestApproval`)
-//! answered with `accept | acceptForSession | decline | cancel`.
+//! (`item/commandExecution/requestApproval`, `item/fileChange/requestApproval`,
+//! `item/permissions/requestApproval`, MCP tool calls through
+//! `mcpServer/elicitation/request`; the older spellings still answer) each
+//! answered in its own shape - `accept | acceptForSession | decline | cancel`
+//! for commands and file changes. Checked against the schema of codex 0.162.
 
 pub mod driver;
 pub mod resolve;

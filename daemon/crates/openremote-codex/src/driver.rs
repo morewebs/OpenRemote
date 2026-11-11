@@ -116,6 +116,10 @@ impl PendingCalls {
 
 struct Shared {
     child: Arc<AsyncMutex<Child>>,
+    /// The child's stdin. The reader writes too - it refuses the requests
+    /// no one here can answer - so a whole line goes out under this lock
+    /// and two writers never interleave one.
+    stdin: AsyncMutex<tokio::process::ChildStdin>,
     /// Host calls in flight, keyed by call id.
     pending: PendingCalls,
     /// The turn Codex reports as running (turn/started … turn/completed).
@@ -123,7 +127,6 @@ struct Shared {
 }
 
 pub struct Driver {
-    stdin: tokio::process::ChildStdin,
     shared: Arc<Shared>,
     thread_id: String,
     next_id: u64,
@@ -188,6 +191,7 @@ impl Driver {
         let (tx, mut rx) = mpsc::channel(256);
         let shared = Arc::new(Shared {
             child: Arc::new(AsyncMutex::new(child)),
+            stdin: AsyncMutex::new(stdin),
             pending: PendingCalls::new(),
             active_turn: StdMutex::new(None),
         });
@@ -202,7 +206,6 @@ impl Driver {
         ));
 
         let mut driver = Self {
-            stdin,
             shared: Arc::clone(&shared),
             thread_id: String::new(),
             next_id: HOST_CALL_ID_BASE,
@@ -348,18 +351,24 @@ impl Driver {
         Ok(())
     }
 
-    /// Answer an approval request with Codex's own decision word
-    /// (`accept | acceptForSession | decline | cancel`).
+    /// Answer one of Codex's requests with the choice picked. Each kind of
+    /// request has its own answer shape; the request as stored names the
+    /// kind, and `answer_result` speaks that kind's words.
     pub async fn answer(
         &mut self,
         harness_ref: &str,
         choice: &str,
-        _request: &Value,
+        request: &Value,
     ) -> Result<(), DriverError> {
-        let id: u64 = harness_ref
-            .parse()
-            .map_err(|_| DriverError::Protocol("codex approval ids are numeric".into()))?;
-        self.write(json!({"id": id, "result": {"decision": choice}}))
+        // The reference is the request id as its own JSON: `7`, or `"7"`
+        // where the app-server numbers its requests with strings.
+        let id: Value = serde_json::from_str(harness_ref)
+            .ok()
+            .filter(|id: &Value| id.is_u64() || id.is_string())
+            .ok_or_else(|| {
+                DriverError::Protocol("codex request ids are numbers or strings".into())
+            })?;
+        self.write(json!({"id": id, "result": answer_result(choice, request)}))
             .await
     }
 
@@ -442,12 +451,18 @@ impl Driver {
     }
 
     async fn write(&mut self, value: Value) -> Result<(), DriverError> {
-        let mut line = serde_json::to_string(&value).expect("envelope serializes");
-        line.push('\n');
-        self.stdin.write_all(line.as_bytes()).await?;
-        self.stdin.flush().await?;
-        Ok(())
+        write_frame(&self.shared, &value).await
     }
+}
+
+/// One frame to the app-server, whole, under the stdin lock.
+async fn write_frame(shared: &Shared, value: &Value) -> Result<(), DriverError> {
+    let mut line = serde_json::to_string(value).expect("envelope serializes");
+    line.push('\n');
+    let mut stdin = shared.stdin.lock().await;
+    stdin.write_all(line.as_bytes()).await?;
+    stdin.flush().await?;
+    Ok(())
 }
 
 /// The `/name` and `@path` words of a prompt: each at the start or after
@@ -732,6 +747,24 @@ fn approval_spec(tool: &str, summary: Option<String>) -> DecisionSpec {
     }
 }
 
+/// An approval with only the choices that mean something for it: each is
+/// a decision word and the label it wears. None of them ends the turn.
+fn choice_spec(tool: &str, summary: Option<String>, choices: &[(&str, &str)]) -> DecisionSpec {
+    DecisionSpec {
+        kind: DecisionKind::Approval,
+        options: choices
+            .iter()
+            .map(|(id, label)| DecisionOption {
+                id: (*id).into(),
+                label: (*label).into(),
+            })
+            .collect(),
+        tool_name: Some(tool.to_string()),
+        summary,
+        interrupts_turn: Vec::new(),
+    }
+}
+
 /// The `thread/start` (and `thread/resume`) params. Fast mode rides
 /// Codex's own service-tier word on the thread - `serviceTier: "fast"`
 /// (v0.110.0+; a model that doesn't advertise the tier drops it with a
@@ -804,16 +837,34 @@ async fn read_stdout(
         };
         let has_method = frame.get("method").is_some();
         let id = frame.get("id").and_then(Value::as_u64);
+        // A request id is a number or a string; the app-server uses numbers
+        // today, but a request whose id is a string is still a request.
+        let request_id = frame
+            .get("id")
+            .filter(|id| id.is_u64() || id.is_string())
+            .cloned();
 
-        if let (true, Some(id)) = (has_method, id) {
+        if let (true, Some(request_id)) = (has_method, request_id) {
             // A server→client request: approvals land here.
             let method = frame["method"].as_str().unwrap_or_default().to_string();
             let params = frame.get("params").cloned().unwrap_or(Value::Null);
-            let Some(event) = server_request(&method, &params, id) else {
-                continue;
-            };
-            if tx.send(event).await.is_err() {
-                return;
+            match server_request(&method, &params, &request_id) {
+                Incoming::Ask(event) => {
+                    if tx.send(event).await.is_err() {
+                        return;
+                    }
+                }
+                // Nobody here can answer it. Say so now: a request left
+                // unanswered holds the turn open for as long as the
+                // process lives.
+                Incoming::Refuse { code, message } => {
+                    let refusal = json!({
+                        "id": request_id,
+                        "error": {"code": code, "message": message},
+                    });
+                    // A dead stdin ends the stdout read on its own.
+                    let _ = write_frame(&shared, &refusal).await;
+                }
             }
         } else if has_method {
             let method = frame["method"].as_str().unwrap_or_default().to_string();
@@ -834,30 +885,353 @@ async fn read_stdout(
     let _ = tx.send(DriverEvent::StdoutClosed).await;
 }
 
-/// Server→client requests. Approvals are answered later through `answer`.
-fn server_request(method: &str, params: &Value, id: u64) -> Option<DriverEvent> {
+/// What Codex asks of the host, by the reader's reckoning.
+enum Incoming {
+    /// A person decides. It rides out as a decision and is answered later
+    /// through `answer`.
+    Ask(DriverEvent),
+    /// Nobody here can serve it, and a request left unanswered holds the
+    /// turn open: it is refused on the spot with a JSON-RPC error.
+    Refuse { code: i64, message: String },
+}
+
+/// JSON-RPC's "method not found".
+const METHOD_NOT_FOUND: i64 = -32601;
+/// JSON-RPC's server-defined error range, for "cannot be answered here".
+const CANNOT_ANSWER: i64 = -32000;
+
+/// The server→client requests Codex makes, by the names the app-server
+/// speaks (checked against `codex app-server generate-json-schema`, 0.162):
+/// - `item/commandExecution/requestApproval`, `item/fileChange/requestApproval`
+///   and `item/permissions/requestApproval` - a command, a file change, and
+///   a grant of more sandbox, each asking before it runs;
+/// - `mcpServer/elicitation/request` - how an MCP tool call asks before it
+///   runs (the browser's tools and the team tools are those), and how an
+///   MCP server asks for anything else;
+/// - `item/tool/requestUserInput` - Codex's own question to the user;
+/// - `execCommandApproval` and `applyPatchApproval` - the first protocol's
+///   spellings, and `commandExecution/requestApproval` and
+///   `applyPatch/requestApproval`, the bare names older builds used.
+///
+/// Each decision keeps Codex's own params, plus the wire `method` its answer
+/// needs and the `tool_name` and `input` the console reads off any approval.
+fn server_request(method: &str, params: &Value, id: &Value) -> Incoming {
+    let text = |key: &str| {
+        params
+            .get(key)
+            .and_then(Value::as_str)
+            .filter(|t| !t.is_empty())
+            .map(String::from)
+    };
     match method {
-        "commandExecution/requestApproval" => Some(DriverEvent::ApprovalRequested {
-            approval: ApprovalRequest {
-                harness_ref: id.to_string(),
-                spec: approval_spec(
-                    "commandExecution",
-                    params
-                        .get("command")
-                        .and_then(|c| c.as_str())
-                        .map(String::from),
+        "item/commandExecution/requestApproval" | "commandExecution/requestApproval" => {
+            let command = text("command");
+            // The reason leads the terminal tile as its caption, the way a
+            // command's description does for claude.
+            let input = input_of([
+                ("command", command.clone().map(Value::from)),
+                ("description", text("reason").map(Value::from)),
+            ]);
+            ask(
+                id,
+                approval_spec("commandExecution", command),
+                stored(method, params, "commandExecution", input),
+            )
+        }
+        "item/fileChange/requestApproval" | "applyPatch/requestApproval" => {
+            let input = input_of([
+                ("reason", text("reason").map(Value::from)),
+                ("grantRoot", text("grantRoot").map(Value::from)),
+            ]);
+            ask(
+                id,
+                approval_spec("fileChange", text("reason")),
+                stored(method, params, "fileChange", input),
+            )
+        }
+        "item/permissions/requestApproval" => {
+            let input = input_of([
+                ("reason", text("reason").map(Value::from)),
+                (
+                    "permissions",
+                    params.get("permissions").filter(|p| !p.is_null()).cloned(),
                 ),
-                request: params.clone(),
+            ]);
+            ask(
+                id,
+                choice_spec(
+                    "permissions",
+                    text("reason"),
+                    &[
+                        ("accept", "Accept"),
+                        ("acceptForSession", "Accept for session"),
+                        ("decline", "Decline"),
+                    ],
+                ),
+                stored(method, params, "permissions", input),
+            )
+        }
+        // The first protocol: a command as an argv, a patch as a map of
+        // paths. Answered in its own review words.
+        "execCommandApproval" => {
+            let command = params
+                .get("command")
+                .and_then(Value::as_array)
+                .map(|argv| {
+                    argv.iter()
+                        .filter_map(Value::as_str)
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .filter(|c| !c.is_empty());
+            let input = input_of([
+                ("command", command.clone().map(Value::from)),
+                ("description", text("reason").map(Value::from)),
+            ]);
+            ask(
+                id,
+                approval_spec("commandExecution", command),
+                stored(method, params, "commandExecution", input),
+            )
+        }
+        "applyPatchApproval" => {
+            let files = params
+                .get("fileChanges")
+                .and_then(Value::as_object)
+                .map(|changes| changes.keys().cloned().collect::<Vec<_>>());
+            let input = input_of([
+                ("files", files.map(Value::from)),
+                ("reason", text("reason").map(Value::from)),
+            ]);
+            ask(
+                id,
+                approval_spec("fileChange", text("reason")),
+                stored(method, params, "fileChange", input),
+            )
+        }
+        "mcpServer/elicitation/request" => elicitation(id, method, params),
+        "item/tool/requestUserInput" => user_input(id, method, params),
+        other => Incoming::Refuse {
+            code: METHOD_NOT_FOUND,
+            message: format!("OpenRemote does not serve {other}"),
+        },
+    }
+}
+
+/// An MCP server's ask. Codex asks before an MCP tool runs this way (its
+/// `_meta` says `codex_approval_kind`, names the tool's arguments, and lists
+/// how long a yes may last), so the tool shows as the card claude's tool
+/// approvals have: `mcp__<server>__<tool>` and its arguments. Anything else
+/// an MCP server asks is a form or a link, and the console cannot fill one
+/// in or open one for it: it shows the message and offers a no.
+fn elicitation(id: &Value, method: &str, params: &Value) -> Incoming {
+    let server = params
+        .get("serverName")
+        .and_then(Value::as_str)
+        .unwrap_or("an MCP server");
+    let message = params
+        .get("message")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let meta = params.get("_meta").filter(|m| m.is_object());
+    if let Some(meta) = meta.filter(|m| m.get("codex_approval_kind").is_some()) {
+        // The tool as the message names it ("... to run tool \"name\"?");
+        // its display title is the fallback.
+        let tool = message
+            .split_once(" to run tool \"")
+            .and_then(|(_, rest)| rest.split_once('"'))
+            .map(|(name, _)| name.to_string())
+            .or_else(|| {
+                meta.get("tool_title")
+                    .and_then(Value::as_str)
+                    .map(String::from)
+            })
+            .unwrap_or_else(|| "tool".into());
+        let tool_name = format!("mcp__{server}__{tool}");
+        // `persist` is a word or a list of words: "session" and "always".
+        // Only the session one is offered here - "always" would write a
+        // standing grant into Codex's own config from a click in a chat.
+        let remembers = match meta.get("persist") {
+            Some(Value::String(word)) => word == "session",
+            Some(Value::Array(words)) => words.iter().any(|w| w.as_str() == Some("session")),
+            _ => false,
+        };
+        let mut choices = vec![("accept", "Allow")];
+        if remembers {
+            choices.push(("acceptForSession", "Allow for this session"));
+        }
+        choices.push(("decline", "Decline"));
+        let input = meta.get("tool_params").filter(|p| !p.is_null()).cloned();
+        return ask(
+            id,
+            choice_spec(&tool_name, Some(message.to_string()), &choices),
+            stored(method, params, &tool_name, input.unwrap_or(Value::Null)),
+        );
+    }
+    let confirm_only = params.get("mode").and_then(Value::as_str) == Some("form")
+        && params
+            .pointer("/requestedSchema/properties")
+            .and_then(Value::as_object)
+            .is_none_or(|fields| fields.is_empty());
+    let mut choices = Vec::new();
+    if confirm_only {
+        choices.push(("accept", "Continue"));
+    }
+    choices.push(("decline", "Decline"));
+    let input = input_of([
+        ("message", Some(Value::from(message))),
+        ("url", params.get("url").filter(|u| u.is_string()).cloned()),
+    ]);
+    let tool_name = format!("{server} asks");
+    ask(
+        id,
+        choice_spec(&tool_name, Some(message.to_string()), &choices),
+        stored(method, params, &tool_name, input),
+    )
+}
+
+/// Codex's own question to the user. One question with options is a choice
+/// the console can put, in the shape claude's questions have so it renders
+/// the same way; a question that wants typed words, or several answers at
+/// once, cannot be put here, so Codex is told so and goes on without.
+fn user_input(id: &Value, method: &str, params: &Value) -> Incoming {
+    let refusal = || Incoming::Refuse {
+        code: CANNOT_ANSWER,
+        message: "OpenRemote can only put a question that has options to choose from; \
+                  the user was not asked"
+            .into(),
+    };
+    let Some([question]) = params
+        .get("questions")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+    else {
+        return refusal();
+    };
+    let secret = question.get("isSecret").and_then(Value::as_bool) == Some(true);
+    let options: Vec<&Value> = question
+        .get("options")
+        .and_then(Value::as_array)
+        .map(|options| options.iter().collect())
+        .unwrap_or_default();
+    if secret || options.is_empty() {
+        return refusal();
+    }
+    let asked = question
+        .get("question")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let labels: Vec<&str> = options
+        .iter()
+        .filter_map(|o| o.get("label").and_then(Value::as_str))
+        .collect();
+    let input = json!({"questions": [{
+        "question": asked,
+        "header": question.get("header").and_then(Value::as_str).unwrap_or_default(),
+        "options": options,
+    }]});
+    Incoming::Ask(DriverEvent::ApprovalRequested {
+        approval: ApprovalRequest {
+            harness_ref: id.to_string(),
+            spec: DecisionSpec {
+                kind: DecisionKind::Question,
+                // The choice is the option's own label, as claude's
+                // questions answer.
+                options: labels
+                    .iter()
+                    .map(|label| DecisionOption {
+                        id: (*label).to_string(),
+                        label: (*label).to_string(),
+                    })
+                    .collect(),
+                tool_name: Some("request_user_input".into()),
+                summary: Some(asked.to_string()),
+                interrupts_turn: Vec::new(),
             },
-        }),
-        "applyPatch/requestApproval" => Some(DriverEvent::ApprovalRequested {
-            approval: ApprovalRequest {
-                harness_ref: id.to_string(),
-                spec: approval_spec("applyPatch", None),
-                request: params.clone(),
-            },
-        }),
-        _ => None,
+            request: stored(method, params, "request_user_input", input),
+        },
+    })
+}
+
+/// A request that a person answers: the decision as the supervisor takes it.
+fn ask(id: &Value, spec: DecisionSpec, request: Value) -> Incoming {
+    Incoming::Ask(DriverEvent::ApprovalRequested {
+        approval: ApprovalRequest {
+            // The id as its own JSON, so `answer` can send back exactly it.
+            harness_ref: id.to_string(),
+            spec,
+            request,
+        },
+    })
+}
+
+/// The request as the decision keeps it: Codex's params as they came, plus
+/// the wire name its answer needs and what the console reads off an
+/// approval (`tool_name`, `input`).
+fn stored(method: &str, params: &Value, tool_name: &str, input: Value) -> Value {
+    let mut request = params.as_object().cloned().unwrap_or_default();
+    request.insert("method".into(), json!(method));
+    request.insert("tool_name".into(), json!(tool_name));
+    request.insert("input".into(), input);
+    Value::Object(request)
+}
+
+/// An approval's input: the facts that are there, or nothing at all (the
+/// console shows no body for no input).
+fn input_of<const N: usize>(facts: [(&str, Option<Value>); N]) -> Value {
+    let facts: serde_json::Map<String, Value> = facts
+        .into_iter()
+        .filter_map(|(key, value)| Some((key.to_string(), value?)))
+        .collect();
+    if facts.is_empty() {
+        Value::Null
+    } else {
+        Value::Object(facts)
+    }
+}
+
+/// What to send back for a choice, in the words of the request's own kind.
+/// A request stored without its `method` is answered as the first
+/// approvals were: a bare decision word.
+fn answer_result(choice: &str, request: &Value) -> Value {
+    match request.get("method").and_then(Value::as_str) {
+        Some("mcpServer/elicitation/request") => match choice {
+            "accept" => json!({"action": "accept"}),
+            // Codex's own spelling of "remember this for the session".
+            "acceptForSession" => json!({"action": "accept", "_meta": {"persist": "session"}}),
+            "cancel" => json!({"action": "cancel"}),
+            _ => json!({"action": "decline"}),
+        },
+        Some("item/permissions/requestApproval") => {
+            let granted = matches!(choice, "accept" | "acceptForSession");
+            json!({
+                // Granting is the whole of what was asked for; declining
+                // grants nothing.
+                "permissions": if granted {
+                    request.get("permissions").cloned().unwrap_or_else(|| json!({}))
+                } else {
+                    json!({})
+                },
+                "scope": if choice == "acceptForSession" { "session" } else { "turn" },
+            })
+        }
+        Some("item/tool/requestUserInput") => {
+            let question = request
+                .pointer("/questions/0/id")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            json!({"answers": {question: {"answers": [choice]}}})
+        }
+        Some("execCommandApproval" | "applyPatchApproval") => {
+            let decision = match choice {
+                "accept" => json!("approved"),
+                "acceptForSession" => json!("approved_for_session"),
+                "cancel" => json!("abort"),
+                _ => json!({"denied": {"rejection": "Declined from OpenRemote"}}),
+            };
+            json!({"decision": decision})
+        }
+        _ => json!({"decision": choice}),
     }
 }
 
@@ -1123,6 +1497,174 @@ mod tests {
             ..Default::default()
         });
         assert!(plain.get("config").is_none());
+    }
+
+    fn asked(incoming: Incoming) -> ApprovalRequest {
+        match incoming {
+            Incoming::Ask(DriverEvent::ApprovalRequested { approval }) => approval,
+            _ => panic!("expected a decision for a person"),
+        }
+    }
+
+    fn ids(approval: &ApprovalRequest) -> Vec<&str> {
+        approval
+            .spec
+            .options
+            .iter()
+            .map(|o| o.id.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn the_approvals_codex_sends_today_reach_the_console_and_answer_in_their_words() {
+        // 0.162 spells them with the item/ prefix; the bare names older
+        // builds used still answer.
+        for method in [
+            "item/commandExecution/requestApproval",
+            "commandExecution/requestApproval",
+        ] {
+            let params = json!({"itemId": "i1", "threadId": "t", "turnId": "u",
+                "command": "npm test", "reason": "run the suite", "startedAtMs": 1});
+            let approval = asked(server_request(method, &params, &json!(7)));
+            assert_eq!(approval.harness_ref, "7");
+            assert_eq!(approval.spec.tool_name.as_deref(), Some("commandExecution"));
+            assert_eq!(
+                ids(&approval),
+                ["accept", "acceptForSession", "decline", "cancel"]
+            );
+            // Codex's params ride as they came, with what the card reads.
+            assert_eq!(approval.request["command"], "npm test");
+            assert_eq!(approval.request["input"]["command"], "npm test");
+            assert_eq!(approval.request["input"]["description"], "run the suite");
+            assert_eq!(
+                answer_result("acceptForSession", &approval.request),
+                json!({"decision": "acceptForSession"})
+            );
+        }
+        let patch = asked(server_request(
+            "item/fileChange/requestApproval",
+            &json!({"itemId": "i2", "threadId": "t", "turnId": "u", "grantRoot": "/w", "startedAtMs": 1}),
+            &json!(8),
+        ));
+        assert_eq!(patch.request["tool_name"], "fileChange");
+        assert_eq!(patch.request["input"]["grantRoot"], "/w");
+        assert_eq!(
+            answer_result("decline", &patch.request),
+            json!({"decision": "decline"})
+        );
+    }
+
+    #[test]
+    fn an_mcp_tool_asks_through_an_elicitation_and_a_yes_can_last_the_session() {
+        let params = json!({
+            "serverName": "openremote", "threadId": "t", "turnId": "u", "mode": "form",
+            "message": "Allow the openremote MCP server to run tool \"agents_spawn\"?",
+            "requestedSchema": {"type": "object", "properties": {}},
+            "_meta": {"codex_approval_kind": "mcp_tool_call",
+                "persist": ["session", "always"], "tool_params": {"harness": "codex"}},
+        });
+        let approval = asked(server_request(
+            "mcpServer/elicitation/request",
+            &params,
+            &json!(3),
+        ));
+        // Named as claude names an MCP tool, with its arguments as the input,
+        // so the console's tool cards and approvals read it the same way.
+        assert_eq!(
+            approval.spec.tool_name.as_deref(),
+            Some("mcp__openremote__agents_spawn")
+        );
+        assert_eq!(approval.request["input"], json!({"harness": "codex"}));
+        assert_eq!(ids(&approval), ["accept", "acceptForSession", "decline"]);
+        assert_eq!(
+            answer_result("accept", &approval.request),
+            json!({"action": "accept"})
+        );
+        assert_eq!(
+            answer_result("acceptForSession", &approval.request),
+            json!({"action": "accept", "_meta": {"persist": "session"}})
+        );
+        assert_eq!(
+            answer_result("decline", &approval.request),
+            json!({"action": "decline"})
+        );
+
+        // A server's own form cannot be filled in here: a no is all it gets.
+        let form = asked(server_request(
+            "mcpServer/elicitation/request",
+            &json!({"serverName": "docs", "threadId": "t", "mode": "form", "message": "Your API key?",
+                "requestedSchema": {"type": "object", "properties": {"key": {"type": "string"}}}}),
+            &json!(4),
+        ));
+        assert_eq!(ids(&form), ["decline"]);
+    }
+
+    #[test]
+    fn permissions_and_questions_answer_in_their_own_shape() {
+        let permissions = json!({"fileSystem": {"write": ["/w/out"]}, "network": null});
+        let ask_for = asked(server_request(
+            "item/permissions/requestApproval",
+            &json!({"cwd": "/w", "itemId": "i", "threadId": "t", "turnId": "u",
+                "permissions": permissions, "reason": "write the build output", "startedAtMs": 1}),
+            &json!(5),
+        ));
+        assert_eq!(
+            answer_result("accept", &ask_for.request),
+            json!({"permissions": permissions, "scope": "turn"})
+        );
+        assert_eq!(
+            answer_result("decline", &ask_for.request),
+            json!({"permissions": {}, "scope": "turn"})
+        );
+
+        let question = json!({"itemId": "i", "threadId": "t", "turnId": "u", "isBlocking": true,
+            "questions": [{"id": "q1", "header": "DB", "question": "Which database?",
+                "options": [{"label": "Postgres", "description": "x"}, {"label": "SQLite", "description": "y"}]}]});
+        let approval = asked(server_request(
+            "item/tool/requestUserInput",
+            &question,
+            &json!(6),
+        ));
+        assert_eq!(approval.spec.kind, DecisionKind::Question);
+        assert_eq!(ids(&approval), ["Postgres", "SQLite"]);
+        assert_eq!(
+            answer_result("SQLite", &approval.request),
+            json!({"answers": {"q1": {"answers": ["SQLite"]}}})
+        );
+        // Several questions, or one wanting typed words, cannot be put:
+        // Codex is told at once rather than left waiting.
+        let two = json!({"questions": [question["questions"][0].clone(), question["questions"][0].clone()]});
+        assert!(matches!(
+            server_request("item/tool/requestUserInput", &two, &json!(9)),
+            Incoming::Refuse { .. }
+        ));
+    }
+
+    #[test]
+    fn a_request_nobody_here_serves_is_refused_not_left_waiting() {
+        assert!(matches!(
+            server_request("attestation/generate", &json!({}), &json!(2)),
+            Incoming::Refuse {
+                code: METHOD_NOT_FOUND,
+                ..
+            }
+        ));
+        // The first protocol's words, for the builds that still speak it.
+        let argv = asked(server_request(
+            "execCommandApproval",
+            &json!({"callId": "c", "command": ["git", "status"], "cwd": "/w", "parsedCmd": []}),
+            &json!("r-1"),
+        ));
+        assert_eq!(argv.harness_ref, "\"r-1\"");
+        assert_eq!(argv.request["input"]["command"], "git status");
+        assert_eq!(
+            answer_result("accept", &argv.request),
+            json!({"decision": "approved"})
+        );
+        assert_eq!(
+            answer_result("cancel", &argv.request),
+            json!({"decision": "abort"})
+        );
     }
 
     #[test]
