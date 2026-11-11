@@ -59,8 +59,9 @@ test('a registered project with no chats keeps its row and says so', () => {
   // holds ("0 chats" included, which is what tells a person the project is
   // empty without expanding it), and the expanded head says nothing unless
   // something is waiting. projects.js owns the copy; the view renders parts.
+  // The count holds the workers nested under a lead, so it matches the rows.
   assert.ok(
-    source.includes("projectLine({ chats: items.length, waiting: waitingIn.get(project.id) ?? 0 }, { collapsed: isCollapsed })"),
+    source.includes("projectLine({ chats: items.reduce((n, row) => n + 1 + teamSize(row), 0), waiting: waitingIn.get(project.id) ?? 0 }, { collapsed: isCollapsed })"),
     'the head reads its line from the shared rule',
   )
   assert.ok(source.includes('{held && ('), 'and draws it only when there is something to say')

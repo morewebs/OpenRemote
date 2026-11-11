@@ -60,21 +60,33 @@ export function isAlive(session) {
 }
 
 // The dot language: waiting beats failed beats running.
-const RANK = { waiting: 3, failed: 2, working: 1, starting: 1 }
-const DOT = { waiting: 'waiting', failed: 'failed', working: 'running', starting: 'running' }
+const RANK = { waiting: 3, failed: 2, running: 1, starting: 1 }
+// A session's status in the dot vocabulary the sidebar and the chat use.
+const DOT = { working: 'running' }
+const dotOf = (status) => DOT[status] ?? status
 
 /**
- * The dot a chat wears for what is under it: amber when anyone under it
- * waits for the user, red when a worker failed, green while one runs, and
- * none otherwise. Meant for a lead's row, beside its own status.
+ * What a lead's dot shows: the heaviest of its own status and its
+ * workers' (all in the dot vocabulary - running, waiting, failed, idle,
+ * stopped, starting): amber when anyone waits for the user, red when
+ * something failed, green while something runs.
+ */
+export function rolledStatus(own, kids = []) {
+  let best = own
+  for (const status of kids) if ((RANK[status] ?? 0) > (RANK[best] ?? 0)) best = status
+  return best
+}
+
+/**
+ * The dot a chat wears for what is under it alone - none when nothing
+ * under it needs a mark. Meant for the team bar's head.
  */
 export function teamDot(sessions, chatId) {
-  let best = null
-  for (const { session } of descendantsOf(sessions, chatId)) {
-    const rank = RANK[session.status] ?? 0
-    if (rank > (RANK[best] ?? 0)) best = session.status
-  }
-  return best ? DOT[best] : null
+  const best = rolledStatus(
+    null,
+    descendantsOf(sessions, chatId).map(({ session }) => dotOf(session.status)),
+  )
+  return RANK[best] ? best : null
 }
 
 /** What a worker row says of its state, in the words an agent reads too. */

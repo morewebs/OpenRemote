@@ -164,6 +164,49 @@
   margin: 0;
 }
 
+/* ---- the sidebar: workers nest under their lead ---- */
+
+/* A lead's row leaves room for its fold caret at the left edge. */
+.chat-item--lead .chat-row {
+  padding-left: 17px;
+}
+
+.chat-fold {
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  transform: translateY(-50%);
+  cursor: pointer;
+  transition: color 0.12s;
+}
+
+.chat-fold:hover {
+  color: var(--text-1);
+}
+
+.chat-fold-caret {
+  transition: transform 0.12s;
+}
+
+.chat-fold-caret.closed {
+  transform: rotate(-90deg);
+}
+
+/* Its workers: indented under it behind a 1px line, their own rows and
+   their own dots. */
+.chat-team {
+  margin-left: 17px;
+  border-left: 1px solid var(--line);
+}
+
 /* ---- Settings > Agents ---- */
 
 .stg-agents-harnesses {
@@ -180,6 +223,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .chat-fold,
+  .chat-fold-caret,
   .cv-team-head,
   .cv-team-btn,
   .cv-team-row,
@@ -188,6 +233,8 @@
   }
 }
 
+html[data-reduce-motion] .chat-fold,
+html[data-reduce-motion] .chat-fold-caret,
 html[data-reduce-motion] .cv-team-head,
 html[data-reduce-motion] .cv-team-btn,
 html[data-reduce-motion] .cv-team-row,

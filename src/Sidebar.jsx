@@ -56,7 +56,9 @@ import { errorCopy } from './error-copy.js'
 import { CHATS_PAGE, PROJECT_PAGE, loadPins, planList, storePins, togglePin } from './sidebar-list.js'
 import { usePrivacyMode } from './privacy.js'
 import { useHint, useShortcut } from './keyboard.jsx'
+import { rolledStatus } from './team.js'
 import './sidebar.css'
+import './team.css'
 
 // How long the archived line stays. Long enough to catch a mispress on a
 // hover control, short enough that the sidebar keeps no history of its own.
@@ -98,6 +100,26 @@ function storeCollapsed(map) {
   }
 }
 
+// Workers under their leads, among `list`: `top` keeps the rows that stand on
+// their own (in the list's order), `kids` maps a lead's id to its workers,
+// oldest first. A worker whose lead is not in the list stands on its own.
+function nestTeams(list) {
+  const here = new Set(list.map((r) => r.id))
+  const kids = new Map()
+  const top = []
+  for (const row of list) {
+    if (row.parent && row.parent !== row.id && here.has(row.parent)) {
+      const workers = kids.get(row.parent) ?? []
+      workers.push(row)
+      kids.set(row.parent, workers)
+    } else {
+      top.push(row)
+    }
+  }
+  for (const workers of kids.values()) workers.sort((a, b) => a.spawnedAt - b.spawnedAt)
+  return { top, kids }
+}
+
 export default function Sidebar({
   open,
   active,
@@ -124,6 +146,8 @@ export default function Sidebar({
   const [query, setQuery] = useState('')
   const [searchOn, setSearchOn] = useState(false)
   const [collapsed, setCollapsed] = useState(loadCollapsed)
+  // The leads whose workers are folded away (open by default).
+  const [foldedTeams, setFoldedTeams] = useState({})
   // The project waiting on a "unregister?" answer. The sidebar's trash sits
   // two pixels from the project's new-chat button, and unregistering has no
   // undo, so the first press arms the row and the second acts. row-confirm.js
@@ -222,6 +246,9 @@ export default function Sidebar({
         // A copy's last status is stale while its device is away.
         offline: elsewhere && !device?.online,
         synced: Boolean(session.executor),
+        // The chat that started this one, when its agent did.
+        parent: session.parent?.chat ?? null,
+        spawnedAt: session.parent?.spawned_at ?? 0,
       }
     })
   }, [sessions, archived, chats, mode, devices, thisDevice, renamedTitles])
@@ -305,7 +332,7 @@ export default function Sidebar({
   // Chats list - every chat that belongs to no project. A waiting chat is in
   // the group above instead, so no chat reads twice and each project's count
   // matches the rows under it.
-  const rest = useMemo(() => {
+  const standing = useMemo(() => {
     const waiting = new Set(needs.chats.map((c) => c.id))
     return visible.filter((c) => !waiting.has(c.id))
   }, [visible, needs])
@@ -313,7 +340,26 @@ export default function Sidebar({
   // to scan every project's folders for every chat, which is chats x projects
   // x folders on every beat.
   const folders = useMemo(() => projectIndex(projects), [projects])
+  // A worker nests under the chat that started it, when that chat is in the
+  // same list: the lists hold the chats that stand on their own, and each
+  // lead carries its workers (oldest first). A worker whose lead is archived,
+  // filtered out, waiting in the group above or gone stands on its own; a
+  // waiting worker is in that group, like any chat that waits.
+  const nest = useMemo(() => nestTeams(standing), [standing])
+  const rest = nest.top
   const grouped = useMemo(() => sections(projects, rest, folders), [projects, rest, folders])
+  // Every lead's workers among all the rows, for the status a lead's row
+  // shows of its whole team: waiting beats failed beats running, so a worker
+  // that waits in the group above still lights its lead.
+  const teams = useMemo(() => nestTeams(rows).kids, [rows])
+  const rolled = (row, seen = new Set()) => {
+    if (seen.has(row.id)) return row.status
+    seen.add(row.id)
+    return rolledStatus(
+      row.status,
+      (teams.get(row.id) ?? []).map((kid) => rolled(kid, seen)),
+    )
+  }
   // The names two or more projects share, so each head can say which folder it is.
   const sharedNames = useMemo(() => duplicatedNames(projects), [projects])
 
@@ -449,16 +495,24 @@ export default function Sidebar({
       keep: (row) => row.id === active,
     })
   const flatPlan = planFor('flat', grouped.flat, CHATS_PAGE)
+  // How many chats are drawn under a row: a project's count holds its
+  // workers too, so it matches the rows under its head.
+  const teamSize = (row) =>
+    (nest.kids.get(row.id) ?? []).reduce((n, kid) => n + 1 + teamSize(kid), 0)
+  // A lead's open team is walked right after it, as it is drawn.
+  const walk = (row) => [
+    row.id,
+    ...(foldedTeams[row.id] ? [] : (nest.kids.get(row.id) ?? []).flatMap(walk)),
+  ]
   const order = [
-    ...needs.chats,
+    ...needs.chats.map((row) => row.id),
     ...grouped.projects.flatMap(({ project, items }) => {
       if (folded(project.id)) return []
       const plan = planFor(project.id, items, PROJECT_PAGE)
-      return [...plan.pinned, ...plan.shown]
+      return [...plan.pinned, ...plan.shown].flatMap(walk)
     }),
-    ...flatPlan.pinned,
-    ...flatPlan.shown,
-  ].map((row) => row.id)
+    ...[...flatPlan.pinned, ...flatPlan.shown].flatMap(walk),
+  ]
   const step = (pick) => () => {
     if (!order.length) return false
     const at = order.indexOf(active)
@@ -625,11 +679,15 @@ export default function Sidebar({
 
   const archive = (id) => {
     const row = rows.find((r) => r.id === id)
-    setChatArchived(id, true)
-    // Both ways in come through here (the row's actions menu and its context
-    // menu), so the way back is offered whichever one the press came from.
-    setUndo(row ? { id: row.id, title: row.title } : null)
-    if (id === active) onSelect('new')
+    // A lead with workers asks what becomes of them first: the list lets go
+    // of the chat only once it is archived, and "never mind" leaves it be.
+    Promise.resolve(setChatArchived(id, true)).then((done) => {
+      if (done === false) return
+      // Both ways in come through here (the row's actions menu and its context
+      // menu), so the way back is offered whichever one the press came from.
+      setUndo(row ? { id: row.id, title: row.title } : null)
+      if (id === active) onSelect('new')
+    })
   }
 
   // The same call the Settings list makes. Restoring puts the chat back in
@@ -817,10 +875,24 @@ export default function Sidebar({
   const phones = (devices ?? []).filter(isPhone)
   const phoneOnline = phones.some((d) => d.online)
 
-  const chatRow = (row) => (
+  // A row, and under it its team when it leads one: the workers indented
+  // behind a 1px line, foldable from the lead's caret.
+  const chatRow = (row) => {
+    const workers = nest.kids.get(row.id) ?? []
+    if (!workers.length) return chatItem(row, 0, false)
+    const open = !foldedTeams[row.id]
+    return (
+      <div key={row.id} className="chat-branch">
+        {chatItem(row, workers.length, open)}
+        {open && <div className="chat-team">{workers.map(chatRow)}</div>}
+      </div>
+    )
+  }
+
+  const chatItem = (row, workerCount, open) => (
     <div
       key={row.id}
-      className="chat-item"
+      className={`chat-item${workerCount > 0 ? ' chat-item--lead' : ''}`}
       // A chat is a thing you can drag into a pane: the middle opens it
       // there, an edge band splits. Right-click and the palette still do
       // the same job for anyone who never drags.
@@ -849,7 +921,8 @@ export default function Sidebar({
     >
       <button
         className={`chat-row${row.id === active && !searchOn ? ' active' : ''}`}
-        data-status={row.status}
+        // A lead's status speaks for its team too, folded or not.
+        data-status={workerCount > 0 ? rolled(row) : row.status}
         // The quiet mark: one white-alpha tint step,
         // not a colour and not a number. The status column keeps its own
         // language, so "not read" and "waiting" cannot be mistaken.
@@ -911,6 +984,21 @@ export default function Sidebar({
           <Cloud size={11} className="chat-synced" aria-label="Syncs to your devices" />
         )}
       </button>
+      {/* A lead folds its workers away; its status keeps saying what is
+          under it. */}
+      {workerCount > 0 && (
+        <button
+          type="button"
+          className="chat-fold"
+          tabIndex={-1}
+          title={open ? 'Fold its workers' : `Show its ${workerCount} worker${workerCount === 1 ? '' : 's'}`}
+          aria-label={open ? 'Fold its workers' : 'Show its workers'}
+          aria-expanded={open}
+          onClick={() => setFoldedTeams((f) => ({ ...f, [row.id]: !f[row.id] }))}
+        >
+          <CaretDown size={10} className={`chat-fold-caret${open ? '' : ' closed'}`} />
+        </button>
+      )}
       <button
         type="button"
         className="chat-more"
@@ -1133,7 +1221,7 @@ export default function Sidebar({
           // one fact the expanded list does not show at a glance. Both numbers
           // were counted in the grouping pass (projects.js), so this is only
           // formatting.
-          const held = projectLine({ chats: items.length, waiting: waitingIn.get(project.id) ?? 0 }, { collapsed: isCollapsed })
+          const held = projectLine({ chats: items.reduce((n, row) => n + 1 + teamSize(row), 0), waiting: waitingIn.get(project.id) ?? 0 }, { collapsed: isCollapsed })
           return (
             <section
               key={project.id}
