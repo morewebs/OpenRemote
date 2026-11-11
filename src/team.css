@@ -1,0 +1,196 @@
+/* Agent teams: the team bar under a lead's header, the chip a message from
+   another agent wears, and Settings > Agents. App tokens only; 1px lines,
+   no shadows; motion is the hover fade. */
+
+/* ---- the team bar ---- */
+
+.cv-team {
+  flex: none;
+  padding: 8px 32px 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+}
+
+.cv-team-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cv-team-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  cursor: pointer;
+  transition: color 0.12s;
+}
+
+.cv-team-head:hover {
+  color: var(--text-1);
+}
+
+.cv-team-title {
+  color: var(--text-1);
+  font-weight: 500;
+}
+
+.cv-team-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cv-team-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.cv-team-bar > .cv-team-btn {
+  margin-left: auto;
+}
+
+.cv-team-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.cv-team-rows {
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
+}
+
+.cv-team-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 6px;
+  border-radius: var(--radius);
+  transition: background 0.12s;
+}
+
+.cv-team-row:hover {
+  background: var(--bg-hover);
+}
+
+.cv-team-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cv-team-name:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--text-3);
+  text-underline-offset: 3px;
+}
+
+.cv-team-state {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 7px;
+  color: var(--text-3);
+}
+
+.cv-team-error {
+  margin: 6px 6px 0;
+  color: #f87171;
+  font-size: 12.5px;
+}
+
+/* ---- a message another agent sent ---- */
+
+.cv-user--agent {
+  white-space: normal;
+}
+
+.cv-origin {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  margin: 0 0 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 1.6;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.cv-origin:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.cv-origin > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cv-origin-body {
+  margin: 0;
+}
+
+/* ---- Settings > Agents ---- */
+
+.stg-agents-harnesses {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+@media (max-width: 640px) {
+  .cv-team {
+    padding: 8px 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cv-team-head,
+  .cv-team-btn,
+  .cv-team-row,
+  .cv-origin {
+    transition: none;
+  }
+}
+
+html[data-reduce-motion] .cv-team-head,
+html[data-reduce-motion] .cv-team-btn,
+html[data-reduce-motion] .cv-team-row,
+html[data-reduce-motion] .cv-origin {
+  transition: none;
+}
