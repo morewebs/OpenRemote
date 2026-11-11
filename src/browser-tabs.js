@@ -79,9 +79,9 @@ export function popupBelongs(tabs, opener) {
 export const CLOSED_CAP = 5
 
 /// What a closing tab leaves for the list, or null when there is nothing to
-/// reopen.
+/// reopen. A private tab leaves no trace, the reopen list included.
 export function closedEntry(tab) {
-  if (!tab || !tab.url || tab.url === 'about:blank') return null
+  if (!tab || tab.private || !tab.url || tab.url === 'about:blank') return null
   return { url: tab.url, title: tab.title || tab.url }
 }
 

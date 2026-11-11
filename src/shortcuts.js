@@ -82,6 +82,7 @@ export const ACTIONS = [
 // Ctrl+Shift+B stays the app's (show or hide the browser) even from a page.
 export const BROWSER_ACTIONS = [
   { id: 'browser-new-tab', group: 'browser', label: 'New tab', keys: 'Mod+T' },
+  { id: 'browser-private-tab', group: 'browser', label: 'New private tab', keys: 'Mod+Shift+N' },
   { id: 'browser-close-tab', group: 'browser', label: 'Close the tab', keys: 'Mod+W' },
   { id: 'browser-reopen-tab', group: 'browser', label: 'Reopen the closed tab', keys: 'Mod+Shift+T' },
   { id: 'browser-next-tab', group: 'browser', label: 'Next tab', keys: 'Mod+Tab' },

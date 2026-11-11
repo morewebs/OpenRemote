@@ -356,6 +356,8 @@ function fieldsOf(p) {
     // a private page out of history (BrowserView's visit effect) and to say so
     // in the strip. Absent means normal, which is what the shell sends for one.
     private: p.private === true,
+    // A private tab the user handed to agents (its site menu's toggle).
+    shared: p.shared === true,
   }
 }
 

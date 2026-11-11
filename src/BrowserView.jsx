@@ -16,6 +16,7 @@ import {
   CaretUp,
   Code,
   Crosshair,
+  Detective,
   DeviceMobile,
   DotsThreeVertical,
   ClockCounterClockwise,
@@ -439,8 +440,9 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     patchTab(tab.key, { url, loading: true })
     // The page is built hidden: the layout effect places and shows it once
     // the tab has it, so the console is the only thing that decides a page
-    // is visible.
-    const native = await call('browser_open', { url, bounds, show: false })
+    // is visible. A private tab's page is built in the shell's throwaway
+    // profile (InPrivate): nothing it reads or sets outlives it.
+    const native = await call('browser_open', { url, bounds, show: false, private: Boolean(tab.private) })
     // No page, or a page nothing owns any more: the tab may have been closed,
     // or the whole pane, while the shell was building it, and a page that
     // lands anyway has no tab strip to close it with and floats over the
@@ -457,12 +459,25 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     adopt(tab.key, native)
   }
 
-  const openTab = () => {
-    const tab = newTab()
+  // A new tab, or a private one (Ctrl+Shift+N): it wears the Detective mark,
+  // is kept from history, the closed list and the saved session, and agents
+  // see it only when the user hands it to them from its site menu.
+  const openTab = ({ private: priv = false } = {}) => {
+    const tab = newTab(priv ? { private: true } : {})
     setState((s) => ({ tabs: [...s.tabs, tab], active: tab.key }))
     setEditing(true)
     setAddress('')
     requestAnimationFrame(() => addressRef.current?.focus())
+  }
+  const openPrivate = () => openTab({ private: true })
+
+  // A private tab handed to agents, or taken back: the shell lists it to
+  // the daemon only while it is shared, and it still never reaches history.
+  const share = (on) => {
+    const tab = activeTab()
+    if (!tab?.native || !tab.private) return
+    patchTab(tab.key, { shared: on })
+    call('browser_share', { tab: tab.native, on })
   }
 
   // ---- bookmarks ----
@@ -774,7 +789,8 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   // are typed in the browser's own chrome.
   const keys = useRef({})
   keys.current = {
-    'browser-new-tab': openTab,
+    'browser-new-tab': () => openTab(),
+    'browser-private-tab': openPrivate,
     'browser-close-tab': () => close(getState().active),
     'browser-address': focusAddress,
     'browser-bookmark': star,
@@ -855,7 +871,8 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     if (!menu) return []
     if (menu.kind === 'main') {
       return [
-        { label: 'New tab', icon: <Plus size={14} />, hint: 'Ctrl+T', onSelect: openTab },
+        { label: 'New tab', icon: <Plus size={14} />, hint: 'Ctrl+T', onSelect: () => openTab() },
+        { label: 'New private tab', icon: <Detective size={14} />, hint: 'Ctrl+Shift+N', onSelect: openPrivate },
         { label: 'Reopen closed tab', icon: <ArrowCounterClockwise size={14} />, hint: 'Ctrl+Shift+T', disabled: !closed.length, onSelect: reopen },
         { divider: true },
         { label: 'Zoom in', icon: <MagnifyingGlassPlus size={14} />, hint: 'Ctrl+=', disabled: !live, onSelect: () => zoom(1) },
@@ -916,6 +933,14 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
         { label: said, icon: lock === 'insecure' ? <Warning size={14} /> : <Lock size={14} />, disabled: true },
         { divider: true },
         ...(zoomed ? [{ label: `Zoom ${zoomLabel(current.zoom)}: reset`, icon: <ArrowsClockwise size={14} />, onSelect: () => zoom(0) }] : []),
+        // A private tab is hidden from agents until the user hands it over.
+        ...(current?.private
+          ? [{
+              label: current.shared ? 'Stop letting agents use this tab' : 'Let agents use this tab',
+              icon: <Detective size={14} />,
+              onSelect: () => share(!current.shared),
+            }]
+          : []),
         { label: 'Clear cookies and site data', icon: <Trash size={14} />, hint: can('clearSite') ? '' : 'Not in this build', danger: true, disabled: !can('clearSite'), onSelect: () => onNative('browser_clear_site') },
       ]
     }
@@ -990,7 +1015,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
         { header: `${tabs.length} open ${tabs.length === 1 ? 'tab' : 'tabs'}` },
         ...tabs.map((t) => ({
           label: tabTitle(t),
-          icon: t.favicon ? <img className="bw-menu-icon" src={t.favicon} alt="" /> : <Globe size={14} />,
+          icon: t.private ? <Detective size={14} /> : t.favicon ? <img className="bw-menu-icon" src={t.favicon} alt="" /> : <Globe size={14} />,
           hint: t.key === active ? 'Showing' : '',
           onSelect: () => setState(() => ({ active: t.key })),
         })),
@@ -1019,7 +1044,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
               key={t.key}
               role="tab"
               aria-selected={t.key === active}
-              className={`bw-tab${t.key === active ? ' on' : ''}`}
+              className={`bw-tab${t.key === active ? ' on' : ''}${t.private ? ' private' : ''}`}
               onMouseDown={(e) => {
                 if (e.button === 1) {
                   e.preventDefault()
@@ -1034,6 +1059,8 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
             >
               {t.loading ? (
                 <span className="bw-spinner" aria-label="Loading" />
+              ) : t.private ? (
+                <Detective size={14} className="bw-tab-icon" aria-label="Private" />
               ) : t.favicon ? (
                 <img className="bw-favicon" src={t.favicon} alt="" />
               ) : (
@@ -1051,7 +1078,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
               </button>
             </div>
           ))}
-          <button type="button" className="bw-newtab" title="New tab (Ctrl+T)" onClick={openTab}>
+          <button type="button" className="bw-newtab" title="New tab (Ctrl+T)" onClick={() => openTab()}>
             <Plus size={14} />
           </button>
         </div>
@@ -1124,6 +1151,12 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
             {lock === 'insecure' ? <Warning size={14} /> : lock === 'none' ? <Globe size={14} /> : <Lock size={14} />}
             {lock === 'insecure' && <span className="bw-site-word">Not secure</span>}
           </button>
+          {current?.private && (
+            <span className="bw-private" title="Private: no history, not saved for next time, nothing kept when it closes">
+              <Detective size={13} />
+              Private
+            </span>
+          )}
           <input
             ref={addressRef}
             value={address}
@@ -1353,7 +1386,17 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
                 <MagnifyingGlass size={18} className="bw-ntp-icon" />
                 <input name="q" placeholder={`Search ${SEARCH_ENGINES[engine].name} or type a URL`} spellCheck={false} autoFocus />
               </form>
-              {recent.length > 0 && (
+              {current?.private ? (
+                // A private tab shows nothing this window has read: it is the
+                // one place that list would be out of place.
+                <p className="bw-ntp-private">
+                  <Detective size={16} />
+                  <span>
+                    A private tab. Pages read here stay out of history, the tab is not brought back next time, and its
+                    cookies and site data go when it closes. Agents can't see it unless you let them from the site menu.
+                  </span>
+                </p>
+              ) : recent.length > 0 && (
                 // The addresses this window has read, newest first: the same
                 // record the history list draws, so a private tab is not here
                 // (it was never recorded). A row opens in this tab.

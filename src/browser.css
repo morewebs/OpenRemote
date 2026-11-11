@@ -499,6 +499,43 @@
   font-size: 13px;
 }
 
+/* ---- private tabs ---- */
+
+/* The Detective mark: in the strip, beside the address, and on the new tab
+   page's one line about what a private tab keeps. */
+.bw-tab.private .bw-tab-icon {
+  color: var(--text-2);
+}
+
+.bw-private {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+
+.bw-ntp-private {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 22px 0 0;
+  color: var(--text-3);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.bw-ntp-private svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--text-2);
+}
+
 /* Reduced motion, both ways: the system's setting and the app's own. */
 @media (prefers-reduced-motion: reduce) {
   .bw-spinner {
