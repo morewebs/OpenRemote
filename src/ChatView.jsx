@@ -9,6 +9,7 @@ import {
   Brain,
   Trash,
   CloudArrowUp,
+  Globe,
   PencilSimple,
   X,
 } from '@phosphor-icons/react'
@@ -30,7 +31,9 @@ import ContextRing from './ContextRing.jsx'
 import PickerMenu from './PickerMenu.jsx'
 import { EffortSlider, FadingLabel, effortLabel } from './NewChat.jsx'
 import { EndpointManagerModal } from './EndpointManager.jsx'
-import { isMobile } from './platform.js'
+import { hasTauri, isMobile } from './platform.js'
+import { findDevServers } from './devservers.js'
+import { requestBrowser } from './browser-placement.js'
 import { usePrivacyMode } from './privacy.js'
 import { useHint, useModelSwitches, usePaletteSource, useShortcut } from './keyboard.jsx'
 import { useComposerMenus } from './useComposerMenus.jsx'
@@ -67,6 +70,51 @@ const decisionAnswer = (item) =>
 /// object: the reducer folds deltas into the live item in place, so item
 /// identity would freeze while the text grew - a changed text re-parses,
 /// an unchanged one reuses the cached HTML.
+// The browser opens beside a chat in the desktop app only: a phone has no
+// browser pane, and a plain browser tab has no browser to show.
+const BESIDE = hasTauri && !isMobile
+
+// Dev server addresses per text, kept while the text is the same: the
+// timeline re-renders on every streamed token, and a long reply must not be
+// searched again each time.
+const devCache = new Map()
+function devServersIn(text) {
+  if (!text) return []
+  let found = devCache.get(text)
+  if (!found) {
+    if (devCache.size > 400) devCache.clear()
+    found = findDevServers(text)
+    devCache.set(text, found)
+  }
+  return found
+}
+
+/// "Open beside chat" for each dev server a reply mentions - this
+/// computer's own servers, so only on a chat that runs here.
+function DevServerChips({ text, chatId }) {
+  const servers = devServersIn(text)
+  if (!servers.length) return null
+  return (
+    <div className="cv-dev-row">
+      {servers.slice(0, 3).map((server) => (
+        <button
+          key={server.url}
+          type="button"
+          className="cv-dev-chip"
+          onClick={() => requestBrowser({ chatId, url: server.url })}
+          title={`Open ${server.url} in the browser beside this chat`}
+        >
+          <Globe size={12} />
+          <span className="cv-dev-host">
+            {server.host === '0.0.0.0' ? 'localhost' : server.host}:{server.port}
+          </span>
+          Open beside chat
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function MarkdownBody({ text, live = false, className, tail = '' }) {
   const cache = useRef({ text: null, html: '', at: 0 })
   let html = cache.current.html
@@ -1059,7 +1107,17 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
               if (item.role === 'note') return <p key={item.id} className="cv-node cv-note pv">{item.text}</p>
               // Agent messages are markdown - the harness's own output
               // shape - rendered through the escape-first mini renderer,
-              // parsed once per message (MarkdownBody's cache).
+              // parsed once per message (MarkdownBody's cache). A dev
+              // server it names on a chat running here gets its "Open
+              // beside chat" chip.
+              if (BESIDE && !elsewhere && devServersIn(item.text).length) {
+                return (
+                  <div key={item.id} className="cv-node cv-agent-wrap">
+                    <MarkdownBody text={item.text} className="cv-agent pv" />
+                    <DevServerChips text={item.text} chatId={chat.id} />
+                  </div>
+                )
+              }
               return <MarkdownBody key={item.id} text={item.text} className="cv-node cv-agent pv" />
             }
             if (item.kind === 'tool') {

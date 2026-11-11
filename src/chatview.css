@@ -1232,3 +1232,59 @@ html[data-reduce-motion] .cv-tool-actions button {
 .cv-queue-steer:disabled {
   opacity: 0.5;
 }
+
+/* "Open beside chat" under a reply that names a dev server on this
+   computer (ported from the browser branch). */
+.cv-agent-wrap > .cv-agent {
+  margin: 0;
+}
+
+.cv-dev-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.cv-dev-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9999px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: default;
+  transition:
+    background-color 0.12s cubic-bezier(0.2, 0, 0, 1),
+    color 0.12s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.cv-dev-chip:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.cv-dev-chip svg {
+  color: var(--text-3);
+}
+
+.cv-dev-host {
+  color: var(--text-1);
+  font-family: 'Geist Mono', ui-monospace, Consolas, monospace;
+  font-size: 11.5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cv-dev-chip {
+    transition: none;
+  }
+}
+
+html[data-reduce-motion] .cv-dev-chip {
+  transition: none;
+}
