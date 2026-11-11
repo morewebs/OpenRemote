@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use openremote_core::TurnOutcome;
 use openremote_harness::anthropic_wire as wire;
-use openremote_harness::{DriverError, DriverEvent, Resolution, SpawnOptions, kill_tree};
+use openremote_harness::{DriverError, DriverEvent, Prompt, Resolution, SpawnOptions, kill_tree};
 use serde_json::Value;
 use tokio::io::BufReader;
 use tokio::process::{Child, Command};
@@ -87,7 +87,10 @@ impl Driver {
     /// The prompt reaches the CLI as a file (`--prompt-file`), never as an
     /// argv word: chat text is arbitrary, and `--single <prompt>` would put it
     /// where grok's parser looks for options.
-    pub async fn send_prompt(&mut self, text: &str) -> Result<(), DriverError> {
+    pub async fn send_prompt(&mut self, prompt: &Prompt) -> Result<(), DriverError> {
+        // Grok's print mode reads words alone: a picture is refused here,
+        // before the prompt file is written.
+        let text = prompt.text_only("Grok Build")?;
         let (program, prefix): (PathBuf, Vec<std::ffi::OsString>) = match &self.resolution {
             Resolution::Executable(path) => (path.clone(), Vec::new()),
             Resolution::NodeScript { node, script } => {
@@ -401,13 +404,14 @@ async fn read_prompt(
                 }
             }
             wire::Frame::UserToolResults { content } => {
-                for (_id, text, is_error) in wire::tool_result_blocks(&content) {
+                for block in wire::tool_result_blocks(&content) {
                     let _ = tx
                         .send(DriverEvent::ToolResult {
                             tool_use_id: String::new(),
                             name: "commandExecution".into(),
-                            text,
-                            is_error,
+                            text: block.text,
+                            is_error: block.is_error,
+                            images: block.images,
                         })
                         .await;
                 }

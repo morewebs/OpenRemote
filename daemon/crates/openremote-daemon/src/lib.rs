@@ -11,6 +11,7 @@ pub mod files;
 pub mod fsdirs;
 pub mod host;
 pub mod http;
+pub mod images;
 pub mod install;
 pub mod marketplace;
 pub mod mcp_chat;

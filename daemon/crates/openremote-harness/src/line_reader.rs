@@ -3,11 +3,13 @@
 use std::io;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt};
 
-/// The hard cap on one line from a harness: 4 MiB of content, the
-/// delimiter excluded. A stream-json frame tops out well under this even
-/// with a giant tool result, so anything past it is a runaway (a delta
-/// flood, a bug), not a frame worth parsing.
-pub const MAX_LINE_BYTES: usize = 4 * 1024 * 1024;
+/// The hard cap on one line from a harness: 32 MiB of content, the
+/// delimiter excluded. A frame can carry pictures - an agent's
+/// screenshot rides its tool result as base64, and claude repeats the
+/// result beside the message - so a full-page capture alone can pass
+/// 4 MiB; a frame past this one is a runaway (a delta flood, a bug), not
+/// one worth parsing.
+pub const MAX_LINE_BYTES: usize = 32 * 1024 * 1024;
 
 /// Reads lines from a child stream with a hard cap per line (harness
 /// audit F11, the bounded-read half; the idle-watchdog half is

@@ -47,6 +47,9 @@ pub fn router(app: Arc<App>) -> Router {
         // Linux daemon has no install dir to read - so it serves what it
         // was built with. Console-only: a peer never needs it.
         .route("/notices", get(notices))
+        // The chats' pictures, by hash: this device's console only. A peer
+        // asks for one chat's picture through the chat's own route.
+        .route("/blobs/{sha}", get(get_blob))
         // The built-in browser: this device's console and its chats' MCP
         // server only, never another device.
         .merge(crate::browser::routes::routes())
@@ -96,6 +99,10 @@ enum Tier {
     Machine,
     /// Acting on one chat: a machine, and the chat is synced and runs here.
     Chat,
+    /// Reading one chat's pictures: any of the account's devices, as with
+    /// copying the chat's events, and only a synced chat that runs here -
+    /// the device that keeps its pictures.
+    Read,
 }
 
 /// What another of the user's devices may ask of this one. MCP servers,
@@ -136,6 +143,8 @@ const PEER_ROUTES: &[(&str, &str, Tier)] = &[
     ("POST", "/sessions/{id}/resume", Tier::Chat),
     ("POST", "/sessions/{id}/title", Tier::Chat),
     ("POST", "/decisions/{id}/answer", Tier::Chat),
+    // A synced chat's pictures, for the devices that show it.
+    ("GET", "/sessions/{id}/blobs/{sha}", Tier::Read),
 ];
 
 async fn peer_gate(
@@ -155,6 +164,12 @@ async fn peer_gate(
     if *tier == Tier::Sync {
         return next.run(request).await;
     }
+    if *tier == Tier::Read {
+        if !synced_here(&app, request.uri().path(), path) {
+            return error(StatusCode::NOT_FOUND, "no such chat here");
+        }
+        return next.run(request).await;
+    }
     // A desktop that isn't a machine only ever syncs; nobody else drives it.
     if !app.cloud.mesh().is_some_and(|m| m.kind() == "machine") {
         return (
@@ -163,25 +178,26 @@ async fn peer_gate(
         )
             .into_response();
     }
-    if *tier == Tier::Chat {
-        let id = request.uri().path().split('/').nth(2).unwrap_or_default();
-        let synced_here = {
-            let store = crate::supervisor::lock_recovering(&app.store);
-            let session = if path.starts_with("/decisions/") {
-                DecisionId::parse(id)
-                    .and_then(|d| store.decision(&d).ok().map(|d| d.session_id))
-                    .and_then(|s| store.session(&s).ok())
-            } else {
-                SessionId::parse(id).and_then(|s| store.session(&s).ok())
-            };
-            session.is_some_and(|s| s.executor.is_some() && store.executes_here(s))
-        };
-        // Private chats are invisible to peers: the same answer as none.
-        if !synced_here {
-            return error(StatusCode::NOT_FOUND, "no such chat here");
-        }
+    // Private chats are invisible to peers: the same answer as none.
+    if *tier == Tier::Chat && !synced_here(&app, request.uri().path(), path) {
+        return error(StatusCode::NOT_FOUND, "no such chat here");
     }
     next.run(request).await
+}
+
+/// Whether the chat a peer's request names (by its own id, or by one of
+/// its decisions) is synced and runs on this device.
+fn synced_here(app: &App, uri_path: &str, matched: &str) -> bool {
+    let id = uri_path.split('/').nth(2).unwrap_or_default();
+    let store = crate::supervisor::lock_recovering(&app.store);
+    let session = if matched.starts_with("/decisions/") {
+        DecisionId::parse(id)
+            .and_then(|d| store.decision(&d).ok().map(|d| d.session_id))
+            .and_then(|s| store.session(&s).ok())
+    } else {
+        SessionId::parse(id).and_then(|s| store.session(&s).ok())
+    };
+    session.is_some_and(|s| s.executor.is_some() && store.executes_here(s))
 }
 
 /// Every route the console and (through the gate) peers share.
@@ -256,15 +272,26 @@ fn api_routes() -> Router<Arc<App>> {
         .route("/sessions/{id}", get(get_session).delete(delete_session))
         .route("/sessions/{id}/events", get(session_events))
         .route("/sessions/{id}/decisions", get(list_decisions))
-        .route("/sessions/{id}/prompts", post(post_prompt))
-        .route("/sessions/{id}/queue", post(post_queue))
+        // A message can carry pictures: past axum's 2 MB default.
+        .route(
+            "/sessions/{id}/prompts",
+            post(post_prompt).layer(message_body_limit()),
+        )
+        .route(
+            "/sessions/{id}/queue",
+            post(post_queue).layer(message_body_limit()),
+        )
         .route("/sessions/{id}/queue/resume", post(post_queue_resume))
         .route(
             "/sessions/{id}/queue/{item}/remove",
             post(post_queue_remove),
         )
         .route("/sessions/{id}/queue/{item}/steer", post(post_queue_steer))
-        .route("/sessions/{id}/steer", post(post_steer))
+        .route(
+            "/sessions/{id}/steer",
+            post(post_steer).layer(message_body_limit()),
+        )
+        .route("/sessions/{id}/blobs/{sha}", get(get_session_blob))
         .route("/sessions/{id}/settings", post(post_settings))
         .route("/sessions/{id}/endpoint", post(post_session_endpoint))
         .route("/sessions/{id}/workspace", post(post_workspace))
@@ -2728,11 +2755,17 @@ struct RequestBody {
 #[derive(Deserialize)]
 struct PromptBody {
     request_id: String,
+    /// The words; empty for a message of pictures alone.
+    #[serde(default)]
     text: String,
     /// The chats this message points at with @: from now on this chat's
     /// agent may read them, and only them.
     #[serde(default)]
     mentioned_chats: Vec<String>,
+    /// Pictures riding the message: what was pasted or dropped, a page's
+    /// screenshot, a picked element's picture.
+    #[serde(default)]
+    attachments: Vec<crate::images::Attachment>,
 }
 
 fn mentioned(body: &PromptBody) -> Vec<SessionId> {
@@ -2740,6 +2773,62 @@ fn mentioned(body: &PromptBody) -> Vec<SessionId> {
         .iter()
         .filter_map(|id| SessionId::parse(id))
         .collect()
+}
+
+/// The body limit of the routes a message takes: its pictures ride as
+/// base64.
+fn message_body_limit() -> axum::extract::DefaultBodyLimit {
+    axum::extract::DefaultBodyLimit::max(crate::images::MESSAGE_BODY_LIMIT)
+}
+
+/// A picture from the blob store, for this device's console: an `<img>`
+/// can't send the token, so the console fetches it into an object URL.
+async fn get_blob(State(app): State<Arc<App>>, AxumPath(sha): AxumPath<String>) -> Response {
+    blob_response(&app, sha, None).await
+}
+
+/// One chat's picture - how another device showing a synced chat asks the
+/// device that runs it. Only a picture that chat keeps answers.
+async fn get_session_blob(
+    State(app): State<Arc<App>>,
+    AxumPath((id, sha)): AxumPath<(String, String)>,
+) -> Response {
+    let Some(chat) = SessionId::parse(&id) else {
+        return error(StatusCode::NOT_FOUND, "no such chat");
+    };
+    blob_response(&app, sha, Some(chat)).await
+}
+
+async fn blob_response(app: &App, sha: String, chat: Option<SessionId>) -> Response {
+    let blobs = app.supervisor.blobs();
+    let found = tokio::task::spawn_blocking(move || {
+        if !openremote_core::blobs::Blobs::is_name(&sha) {
+            return Ok(None);
+        }
+        if chat.is_some_and(|chat| !blobs.held_by(&sha, chat)) {
+            return Ok(None);
+        }
+        blobs.get(&sha)
+    })
+    .await;
+    match found {
+        Ok(Ok(Some((mime, bytes)))) => (
+            [
+                (header::CONTENT_TYPE, mime),
+                // Named by its hash, so it never changes.
+                (
+                    header::CACHE_CONTROL,
+                    "private, max-age=31536000, immutable".to_string(),
+                ),
+                (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_string()),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Ok(Ok(None)) => error(StatusCode::NOT_FOUND, "no such picture"),
+        Ok(Err(e)) => error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+        Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+    }
 }
 
 #[derive(Deserialize)]
@@ -2814,6 +2903,11 @@ async fn post_prompt(
     let Some(session_id) = SessionId::parse(&id) else {
         return error(StatusCode::BAD_REQUEST, "bad session id");
     };
+    // The pictures are checked before anything is recorded.
+    let images = match crate::images::decode(&body.attachments) {
+        Ok(images) => images,
+        Err(why) => return error(StatusCode::BAD_REQUEST, &why),
+    };
     let accepted = Receipt {
         request_id: body.request_id.clone(),
         session_id: Some(session_id),
@@ -2829,7 +2923,11 @@ async fn post_prompt(
     if let Err(err) = app.supervisor.note_mentions(&session_id, &pointed) {
         return supervisor_error(err);
     }
-    match app.supervisor.prompt(&session_id, &body.text).await {
+    match app
+        .supervisor
+        .prompt_with(&session_id, &body.text, images)
+        .await
+    {
         Ok(()) => {
             let receipt = Receipt {
                 request_id: body.request_id,
@@ -2912,11 +3010,19 @@ async fn post_queue(
     AxumPath(id): AxumPath<String>,
     Json(body): Json<PromptBody>,
 ) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&body.request_id) {
+        return receipt_response(&receipt);
+    }
+    // The pictures are checked before anything is recorded.
+    let images = match crate::images::decode(&body.attachments) {
+        Ok(images) => images,
+        Err(why) => return error(StatusCode::BAD_REQUEST, &why),
+    };
     let sup = Arc::clone(&app.supervisor);
     let pointed = mentioned(&body);
     receipted(&app, body.request_id, &id, |sid| async move {
         sup.note_mentions(&sid, &pointed)?;
-        let session = sup.queue_add(&sid, &body.text).await?;
+        let session = sup.queue_add_with(&sid, &body.text, images).await?;
         Ok(serde_json::to_value(&session).unwrap_or(Value::Null))
     })
     .await
@@ -2968,11 +3074,19 @@ async fn post_steer(
     AxumPath(id): AxumPath<String>,
     Json(body): Json<PromptBody>,
 ) -> Response {
+    if let Some(receipt) = app.supervisor.receipt(&body.request_id) {
+        return receipt_response(&receipt);
+    }
+    // The pictures are checked before anything is recorded.
+    let images = match crate::images::decode(&body.attachments) {
+        Ok(images) => images,
+        Err(why) => return error(StatusCode::BAD_REQUEST, &why),
+    };
     let sup = Arc::clone(&app.supervisor);
     let pointed = mentioned(&body);
     receipted(&app, body.request_id, &id, |sid| async move {
         sup.note_mentions(&sid, &pointed)?;
-        sup.steer(&sid, &body.text).await?;
+        sup.steer_with(&sid, &body.text, images).await?;
         Ok(json!({"steered": true}))
     })
     .await

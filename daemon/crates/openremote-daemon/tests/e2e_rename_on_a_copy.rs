@@ -71,6 +71,7 @@ async fn a_rename_on_a_copy_is_refused_and_leaves_its_log_alone() {
                                 role: MessageRole::User,
                                 text: "fix the login redirect loop".into(),
                                 origin: None,
+                                images: Vec::new(),
                             },
                         },
                     ],

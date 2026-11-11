@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use openremote_core::Harness;
 use openremote_core::model::PermissionWord;
 use openremote_harness::{
-    DriverError, DriverEvent, ModelDescriptor, Resolution, SessionSettings, SpawnOptions,
+    DriverError, DriverEvent, ModelDescriptor, Prompt, Resolution, SessionSettings, SpawnOptions,
 };
 use serde_json::Value;
 use tokio::sync::mpsc;
@@ -60,16 +60,28 @@ impl SessionDriver {
         matches!(self, SessionDriver::Claude(_) | SessionDriver::Codex(_))
     }
 
-    pub async fn send_prompt(&mut self, text: &str) -> Result<(), DriverError> {
+    /// One message with its pictures. A harness that reads no pictures
+    /// refuses a message that carries some (each driver says so in its
+    /// own name).
+    pub async fn send_prompt(&mut self, prompt: &Prompt) -> Result<(), DriverError> {
         match self {
-            SessionDriver::Claude(driver) => driver.send_prompt(text).await,
-            SessionDriver::Codex(driver) => driver.send_prompt(text).await,
-            SessionDriver::Grok(driver) => driver.send_prompt(text).await,
-            SessionDriver::Pi(driver) => driver.send_prompt(text).await,
-            SessionDriver::Opencode(driver) => driver.send_prompt(text).await,
-            SessionDriver::Agy(driver) => driver.send_prompt(text).await,
-            SessionDriver::Plugin(driver) => driver.send_prompt(text).await,
+            SessionDriver::Claude(driver) => driver.send_prompt(prompt).await,
+            SessionDriver::Codex(driver) => driver.send_prompt(prompt).await,
+            SessionDriver::Grok(driver) => driver.send_prompt(prompt).await,
+            SessionDriver::Pi(driver) => driver.send_prompt(prompt).await,
+            SessionDriver::Opencode(driver) => driver.send_prompt(prompt).await,
+            SessionDriver::Agy(driver) => driver.send_prompt(prompt).await,
+            // The plugin contract's prompt carries words alone.
+            SessionDriver::Plugin(driver) => {
+                driver.send_prompt(prompt.text_only("This app")?).await
+            }
         }
+    }
+
+    /// Whether this harness reads its pictures from files rather than
+    /// from the message's own bytes (codex's `localImage` items).
+    pub fn reads_image_files(&self) -> bool {
+        matches!(self, SessionDriver::Codex(_))
     }
 
     /// Apply a live model, effort, or fast change in the harness's own
@@ -380,6 +392,10 @@ pub struct HarnessRegistry {
 }
 /// What each built-in driver actually reads. Fast is the version's fact;
 /// the rest are the driver's own code paths, not a guess from the console.
+/// Attachments are pictures sent with a message: claude takes base64 image
+/// blocks in its stream-json user message, codex local image files as turn
+/// input. The others' wires carry words alone, so the daemon refuses a
+/// message with pictures for them before anything is written.
 fn honors(id: &str, version: Option<&str>) -> openremote_core::HarnessHonors {
     let fast = fast_supported(id, version);
     match id {
@@ -389,7 +405,7 @@ fn honors(id: &str, version: Option<&str>) -> openremote_core::HarnessHonors {
             mcp: true,
             plugins: true,
             tools: true,
-            attachments: false,
+            attachments: true,
         },
         "codex" => openremote_core::HarnessHonors {
             effort: true,
@@ -397,7 +413,7 @@ fn honors(id: &str, version: Option<&str>) -> openremote_core::HarnessHonors {
             mcp: true,
             plugins: false,
             tools: false,
-            attachments: false,
+            attachments: true,
         },
         "grok" | "pi" => openremote_core::HarnessHonors {
             effort: true,
@@ -1058,19 +1074,24 @@ mod tests {
             claude.effort && claude.mcp && claude.plugins && claude.tools && claude.fast,
             "claude honors effort, fast, mcp, plugins and tools: {claude:?}"
         );
-        assert!(!claude.attachments);
+        assert!(claude.attachments, "claude reads pictures: {claude:?}");
         let codex = honors("codex", Some("0.160.0"));
-        assert!(codex.effort && codex.mcp && codex.fast);
-        assert!(!codex.plugins && !codex.tools && !codex.attachments);
+        assert!(codex.effort && codex.mcp && codex.fast && codex.attachments);
+        assert!(!codex.plugins && !codex.tools);
         let grok = honors("grok", None);
         assert!(grok.effort);
         assert!(!grok.fast && !grok.mcp && !grok.plugins && !grok.tools && !grok.attachments);
         let pi = honors("pi", None);
-        assert!(pi.effort && !pi.mcp && !pi.plugins && !pi.tools);
+        assert!(pi.effort && !pi.mcp && !pi.plugins && !pi.tools && !pi.attachments);
         for id in ["opencode", "agy"] {
             let row = honors(id, None);
             assert!(
-                !row.effort && !row.fast && !row.mcp && !row.plugins && !row.tools,
+                !row.effort
+                    && !row.fast
+                    && !row.mcp
+                    && !row.plugins
+                    && !row.tools
+                    && !row.attachments,
                 "{id} does not honor a control its driver ignores: {row:?}"
             );
         }

@@ -17,7 +17,9 @@ use std::time::Duration;
 
 use openremote_core::{DecisionKind, DecisionOption, TurnOutcome};
 use openremote_harness::events::{ApprovalRequest, DecisionSpec};
-use openremote_harness::{DriverError, DriverEvent, Resolution, SessionSettings, SpawnOptions};
+use openremote_harness::{
+    DriverError, DriverEvent, Prompt, Resolution, SessionSettings, SpawnOptions,
+};
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
@@ -72,7 +74,8 @@ impl Driver {
         spawn_serve(command, opts).await
     }
 
-    pub async fn send_prompt(&mut self, text: &str) -> Result<(), DriverError> {
+    pub async fn send_prompt(&mut self, prompt: &Prompt) -> Result<(), DriverError> {
+        let text = prompt.text_only("OpenCode")?;
         self.turn_open.store(true, Ordering::SeqCst);
         // A prompt that starts with one of OpenCode's own commands runs it
         // through OpenCode's command endpoint (its template, its
@@ -463,6 +466,7 @@ fn map_event(event: &Value, session_id: &str) -> Option<DriverEvent> {
                 name: tool_name(properties),
                 text: tool_text(properties),
                 is_error: failed,
+                images: Vec::new(),
             })
         }
         "session.reasoning.delta" => properties.get("delta").and_then(Value::as_str).map(|text| {

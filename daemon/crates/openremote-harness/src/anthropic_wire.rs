@@ -94,28 +94,72 @@ pub fn tool_use_blocks(content: &[Value]) -> Vec<(String, String, Value)> {
         .collect()
 }
 
-pub fn tool_result_blocks(content: &[Value]) -> Vec<(String, String, bool)> {
+/// One tool result from a `user` frame: its words, and the pictures it
+/// answered with.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolResultBlock {
+    pub tool_use_id: String,
+    pub text: String,
+    pub is_error: bool,
+    pub images: Vec<crate::Image>,
+}
+
+pub fn tool_result_blocks(content: &[Value]) -> Vec<ToolResultBlock> {
     content
         .iter()
         .filter(|b| b.get("type").and_then(|t| t.as_str()) == Some("tool_result"))
         .filter_map(|b| {
             let tool_use_id = b.get("tool_use_id")?.as_str()?.to_string();
-            let text = b
-                .get("content")
+            let inner = b.get("content");
+            let blocks = inner.and_then(|c| c.as_array()).map(Vec::as_slice);
+            let text = inner
                 .and_then(|c| c.as_str())
                 .map(String::from)
-                .or_else(|| {
-                    b.get("content").and_then(|c| c.as_array()).map(|blocks| {
-                        blocks
-                            .iter()
-                            .filter_map(|x| x.get("text").and_then(|t| t.as_str()))
-                            .collect::<Vec<_>>()
-                            .join("\n")
-                    })
-                })
+                .or_else(|| blocks.map(content_text))
                 .unwrap_or_default();
             let is_error = b.get("is_error").and_then(|e| e.as_bool()).unwrap_or(false);
-            Some((tool_use_id, text, is_error))
+            Some(ToolResultBlock {
+                tool_use_id,
+                text,
+                is_error,
+                images: blocks.map(content_images).unwrap_or_default(),
+            })
+        })
+        .collect()
+}
+
+/// The words of a list of content blocks, one block per line.
+pub fn content_text(blocks: &[Value]) -> String {
+    blocks
+        .iter()
+        .filter_map(|x| x.get("text").and_then(|t| t.as_str()))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The pictures in a list of content blocks, in either shape a picture
+/// arrives in: the Messages API's (`source: {type: "base64", media_type,
+/// data}`, how claude hands back an MCP tool's image) or MCP's own
+/// (`data`, `mimeType`, how codex reports one).
+pub fn content_images(blocks: &[Value]) -> Vec<crate::Image> {
+    blocks
+        .iter()
+        .filter(|b| b.get("type").and_then(Value::as_str) == Some("image"))
+        .filter_map(|b| {
+            let (mime, data) = match b.get("source") {
+                Some(source) => {
+                    if source.get("type").and_then(Value::as_str) != Some("base64") {
+                        return None; // a URL source names no bytes to keep
+                    }
+                    (source.get("media_type")?, source.get("data")?)
+                }
+                None => (b.get("mimeType")?, b.get("data")?),
+            };
+            Some(crate::Image {
+                mime: mime.as_str()?.to_string(),
+                data: data.as_str()?.to_string(),
+                path: None,
+            })
         })
         .collect()
 }
@@ -236,9 +280,27 @@ pub fn parse_frame(line: &str) -> Option<Frame> {
 
 /// The user-message envelope written to stdin (the SDK's exact shape).
 pub fn user_envelope(text: &str) -> String {
+    prompt_envelope(&crate::Prompt::text(text))
+}
+
+/// A message with its pictures, in the same envelope: the words first (a
+/// leading `/command` must stay the message's start), then each picture
+/// as a base64 image block. Empty words are left out - a picture alone is
+/// a whole message, an empty text block is not.
+pub fn prompt_envelope(prompt: &crate::Prompt) -> String {
+    let mut content = Vec::new();
+    if !prompt.text.is_empty() || prompt.images.is_empty() {
+        content.push(serde_json::json!({"type": "text", "text": prompt.text}));
+    }
+    for image in &prompt.images {
+        content.push(serde_json::json!({
+            "type": "image",
+            "source": {"type": "base64", "media_type": image.mime, "data": image.data}
+        }));
+    }
     let envelope = serde_json::json!({
         "type": "user",
-        "message": {"role": "user", "content": [{"type": "text", "text": text}]},
+        "message": {"role": "user", "content": content},
         "parent_tool_use_id": null
     });
     serde_json::to_string(&envelope).expect("envelope serializes")
@@ -450,7 +512,12 @@ mod tests {
             Frame::UserToolResults { content } => {
                 assert_eq!(
                     tool_result_blocks(&content),
-                    vec![("t1".into(), "ok".into(), false)]
+                    vec![ToolResultBlock {
+                        tool_use_id: "t1".into(),
+                        text: "ok".into(),
+                        is_error: false,
+                        images: Vec::new(),
+                    }]
                 );
             }
             other => panic!("unexpected {other:?}"),

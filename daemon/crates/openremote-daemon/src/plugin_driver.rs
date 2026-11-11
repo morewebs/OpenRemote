@@ -322,6 +322,8 @@ pub fn parse_event(line: &str) -> Result<DriverEvent, String> {
                 .get("is_error")
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
+            // The plugin contract's tool result carries words alone.
+            images: Vec::new(),
         },
         "approval_requested" => DriverEvent::ApprovalRequested {
             approval: ApprovalRequest {

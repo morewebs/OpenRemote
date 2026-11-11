@@ -16,10 +16,10 @@ use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock};
 use std::time::{Duration, Instant};
 
 use openremote_core::{
-    AutomationRule, Decision, DecisionId, DecisionState, Event, EventPayload, Harness, Machine,
-    MachineId, MachineStatus, MachineView, McpServerEntry, Origin, ParentLink, Project, ProjectId,
-    QueuedMessage, Receipt, RuleId, Session, SessionId, SessionStatus, Store, TriggerKind,
-    TurnOutcome, now_ms,
+    AutomationRule, Decision, DecisionId, DecisionState, Event, EventPayload, Harness, ImageRef,
+    Machine, MachineId, MachineStatus, MachineView, McpServerEntry, Origin, ParentLink, Project,
+    ProjectId, QueuedMessage, Receipt, RuleId, Session, SessionId, SessionStatus, Store,
+    TriggerKind, TurnOutcome, now_ms,
 };
 use openremote_harness::{DriverEvent, Resolution};
 use serde_json::Value;
@@ -27,6 +27,7 @@ use thiserror::Error;
 use tokio::sync::{Mutex as AsyncMutex, broadcast, mpsc, oneshot};
 use uuid::Uuid;
 
+use crate::images::NewImage;
 use crate::registry::{Backend, HarnessRegistry, SessionDriver};
 
 mod composer;
@@ -367,7 +368,7 @@ pub struct Supervisor {
     /// A message steered into a harness that cannot take input mid-turn
     /// (one process per prompt): the turn was interrupted for it, and the
     /// turn's end sends it before anything queued.
-    steer_next: StdMutex<HashMap<SessionId, (String, Option<Origin>)>>,
+    steer_next: StdMutex<HashMap<SessionId, Steered>>,
     /// The daemon's own machine - sessions run here, plugins ride from here.
     this_machine: MachineId,
     /// Each harness's command list per workspace, as the composer's /
@@ -383,10 +384,17 @@ pub struct Supervisor {
     prompt_note: std::sync::OnceLock<PromptNote>,
     /// Agent teams: the user's limits and the reports in flight.
     team: team::Team,
+    /// The chats' pictures: what the user attached, what tools answered
+    /// with. A chat's go when the chat does (the store releases them).
+    blobs: Arc<openremote_core::blobs::Blobs>,
 }
 
 /// Where the note riding each delivered message comes from.
 type PromptNote = Box<dyn Fn() -> Option<String> + Send + Sync>;
+
+/// A message held for the next turn: its words, who sent it when another
+/// agent did, and its pictures, already kept.
+type Steered = (String, Option<Origin>, Vec<ImageRef>);
 
 /// One poisoning policy for every mutex that routes through this helper
 /// (the store, the sync maps, the schedule's arming, the webhooks'
@@ -417,9 +425,13 @@ impl Supervisor {
     /// The registry is injected so tests can point harnesses at fixture
     /// agents; production passes `HarnessRegistry::probe(&HashMap::new())`.
     pub fn new(store: Arc<StdMutex<Store>>, registry: HarnessRegistry) -> Arc<Self> {
-        let (this_machine, data_dir) = {
+        let (this_machine, data_dir, blobs) = {
             let mut guard = lock_recovering(&store);
-            (guard.ensure_this_machine(), guard.dir().to_path_buf())
+            (
+                guard.ensure_this_machine(),
+                guard.dir().to_path_buf(),
+                guard.blobs(),
+            )
         };
         let supervisor = Arc::new(Self {
             store,
@@ -436,6 +448,7 @@ impl Supervisor {
             controls: std::sync::OnceLock::new(),
             prompt_note: std::sync::OnceLock::new(),
             team: team::Team::open(&data_dir),
+            blobs,
         });
         supervisor.spawn_presence_ticker(this_machine);
         supervisor.spawn_schedule_engine();
@@ -1575,7 +1588,19 @@ impl Supervisor {
 
     /// Send a prompt: turn + user message events, then the envelope.
     pub async fn prompt(&self, id: &SessionId, text: &str) -> Result<(), SupervisorError> {
-        self.prompt_as(id, text, None).await
+        self.prompt_as(id, text, None, &[]).await
+    }
+
+    /// A message with pictures (the composer's attachments): kept for the
+    /// chat first, so its event can name them, then sent like any prompt.
+    pub async fn prompt_with(
+        &self,
+        id: &SessionId,
+        text: &str,
+        images: Vec<NewImage>,
+    ) -> Result<(), SupervisorError> {
+        let kept = self.keep_images(id, &images)?;
+        self.prompt_as(id, text, None, &kept).await
     }
 
     /// A message another agent sent (a lead's brief to its worker): the chat
@@ -1587,21 +1612,79 @@ impl Supervisor {
         text: &str,
         origin: &Origin,
     ) -> Result<(), SupervisorError> {
-        self.prompt_as(id, text, Some(origin)).await
+        self.prompt_as(id, text, Some(origin), &[]).await
     }
 
+    /// A prompt whose pictures are already kept.
     async fn prompt_as(
         &self,
         id: &SessionId,
         text: &str,
         origin: Option<&Origin>,
+        images: &[ImageRef],
     ) -> Result<(), SupervisorError> {
         self.ensure_here(id)?;
         let entry = self.entry(id).await?;
+        // Built before anything is written: a picture that can't be read
+        // leaves no turn behind.
+        let pictures = self.harness_images(&entry, images).await?;
         let order = entry.order.lock().await;
-        self.open_prompt_locked(id, &entry, text, origin).await?;
+        self.open_prompt_locked(id, &entry, text, origin, images)
+            .await?;
         drop(order);
-        self.send_prompt_text(id, &entry, text, origin).await
+        self.send_prompt_text(id, &entry, text, origin, pictures)
+            .await
+    }
+
+    /// Keep a message's pictures for its chat. A harness that reads no
+    /// pictures refuses them here, before anything is kept or written.
+    fn keep_images(
+        &self,
+        id: &SessionId,
+        images: &[NewImage],
+    ) -> Result<Vec<ImageRef>, SupervisorError> {
+        if images.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.ensure_here(id)?;
+        let harness = self.session(id)?.harness;
+        let reads_pictures = self
+            .registry
+            .read()
+            .expect("registry lock")
+            .harnesses()
+            .into_iter()
+            .find(|h| h.id == harness)
+            .is_some_and(|h| h.honors.attachments);
+        if !reads_pictures {
+            return Err(SupervisorError::Conflict(format!(
+                "{} doesn't read pictures - send the message without them",
+                self.harness_name(&harness)
+            )));
+        }
+        crate::images::keep(&self.blobs, *id, images).map_err(|e| SupervisorError::Store(e.into()))
+    }
+
+    /// A message's kept pictures in the form its harness's wire takes.
+    async fn harness_images(
+        &self,
+        entry: &SessionEntry,
+        images: &[ImageRef],
+    ) -> Result<Vec<openremote_harness::Image>, SupervisorError> {
+        if images.is_empty() {
+            return Ok(Vec::new());
+        }
+        let as_files = entry.driver.lock().await.reads_image_files();
+        images
+            .iter()
+            .map(|image| crate::images::for_harness(&self.blobs, image, as_files))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| SupervisorError::Store(e.into()))
+    }
+
+    /// The chats' pictures.
+    pub fn blobs(&self) -> Arc<openremote_core::blobs::Blobs> {
+        Arc::clone(&self.blobs)
     }
 
     /// A prompt's turn and message events, written under the session's
@@ -1613,6 +1696,7 @@ impl Supervisor {
         entry: &SessionEntry,
         text: &str,
         origin: Option<&Origin>,
+        images: &[ImageRef],
     ) -> Result<(), SupervisorError> {
         // The Working gate (harness audit F8): a driver that runs one
         // process per prompt cannot take a second while a turn is open -
@@ -1663,6 +1747,7 @@ impl Supervisor {
                 role: openremote_core::MessageRole::User,
                 text: text.to_string(),
                 origin: origin.cloned(),
+                images: images.to_vec(),
             },
         };
         let payloads = if steering {
@@ -1728,10 +1813,14 @@ impl Supervisor {
         entry: &SessionEntry,
         text: &str,
         origin: Option<&Origin>,
+        images: Vec<openremote_harness::Image>,
     ) -> Result<(), SupervisorError> {
         let mut driver = entry.driver.lock().await;
-        let words = self.with_prompt_note(driver.rides_mcp(), text, origin);
-        let sent = driver.send_prompt(&words).await;
+        let prompt = openremote_harness::Prompt {
+            text: self.with_prompt_note(driver.rides_mcp(), text, origin),
+            images,
+        };
+        let sent = driver.send_prompt(&prompt).await;
         drop(driver);
         if let Err(e) = sent {
             // The turn's existence is already durable: a write that
@@ -2460,8 +2549,19 @@ impl Supervisor {
     /// Queue a message behind the running turn. A chat with no turn
     /// running takes it at once.
     pub async fn queue_add(&self, id: &SessionId, text: &str) -> Result<Session, SupervisorError> {
+        self.queue_add_with(id, text, Vec::new()).await
+    }
+
+    /// Queue a message with pictures: they are kept at once, and the queue
+    /// holds where they are.
+    pub async fn queue_add_with(
+        &self,
+        id: &SessionId,
+        text: &str,
+        images: Vec<NewImage>,
+    ) -> Result<Session, SupervisorError> {
         self.ensure_here(id)?;
-        self.queue_add_as(id, text, None).await
+        self.queue_add_as(id, text, None, images).await
     }
 
     /// Queue a message another agent sent: it waits behind the running
@@ -2475,7 +2575,7 @@ impl Supervisor {
         origin: Origin,
     ) -> Result<Session, SupervisorError> {
         self.ensure_here(id)?;
-        self.queue_add_as(id, text, Some(origin)).await
+        self.queue_add_as(id, text, Some(origin), Vec::new()).await
     }
 
     async fn queue_add_as(
@@ -2483,7 +2583,9 @@ impl Supervisor {
         id: &SessionId,
         text: &str,
         origin: Option<Origin>,
+        images: Vec<NewImage>,
     ) -> Result<Session, SupervisorError> {
+        let kept = self.keep_images(id, &images)?;
         {
             let order = self.order_of(id).await;
             let _guard = match &order {
@@ -2504,6 +2606,7 @@ impl Supervisor {
                 text: text.to_string(),
                 at: now_ms(),
                 origin,
+                images: kept,
             });
             self.emit_queue(id, queue, session.queue_paused)?;
         }
@@ -2545,7 +2648,18 @@ impl Supervisor {
         id: &SessionId,
         text: &str,
     ) -> Result<(), SupervisorError> {
-        self.steer_as(id, text, None).await
+        self.steer_as(id, text, None, &[]).await
+    }
+
+    /// Steer a message with pictures, kept first.
+    pub async fn steer_with(
+        self: &Arc<Self>,
+        id: &SessionId,
+        text: &str,
+        images: Vec<NewImage>,
+    ) -> Result<(), SupervisorError> {
+        let kept = self.keep_images(id, &images)?;
+        self.steer_as(id, text, None, &kept).await
     }
 
     /// Steer a message another agent sent into the running turn.
@@ -2555,14 +2669,16 @@ impl Supervisor {
         text: &str,
         origin: &Origin,
     ) -> Result<(), SupervisorError> {
-        self.steer_as(id, text, Some(origin)).await
+        self.steer_as(id, text, Some(origin), &[]).await
     }
 
+    /// Steer a message whose pictures are already kept.
     async fn steer_as(
         self: &Arc<Self>,
         id: &SessionId,
         text: &str,
         origin: Option<&Origin>,
+        images: &[ImageRef],
     ) -> Result<(), SupervisorError> {
         self.ensure_here(id)?;
         if !self.session(id)?.status.is_alive() {
@@ -2575,11 +2691,12 @@ impl Supervisor {
             SessionStatus::Working | SessionStatus::Waiting
         );
         if per_prompt && turn_open {
-            lock_recovering(&self.steer_next).insert(*id, (text.to_string(), origin.cloned()));
+            lock_recovering(&self.steer_next)
+                .insert(*id, (text.to_string(), origin.cloned(), images.to_vec()));
             entry.driver.lock().await.interrupt().await?;
             return Ok(());
         }
-        self.prompt_as(id, text, origin).await
+        self.prompt_as(id, text, origin, images).await
     }
 
     /// Steer one queued message: it leaves the queue and goes in now. If
@@ -2605,7 +2722,7 @@ impl Supervisor {
             message
         };
         if let Err(err) = self
-            .steer_as(id, &message.text, message.origin.as_ref())
+            .steer_as(id, &message.text, message.origin.as_ref(), &message.images)
             .await
         {
             let order = self.order_of(id).await;
@@ -2666,11 +2783,14 @@ impl Supervisor {
         }
         let mut queue = session.queue;
         let next = queue.remove(0);
+        // Built before the queue changes: a picture that can't be read
+        // leaves the message where it was.
+        let pictures = self.harness_images(&entry, &next.images).await?;
         self.emit_queue(id, queue, false)?;
-        self.open_prompt_locked(id, &entry, &next.text, next.origin.as_ref())
+        self.open_prompt_locked(id, &entry, &next.text, next.origin.as_ref(), &next.images)
             .await?;
         drop(order);
-        self.send_prompt_text(id, &entry, &next.text, next.origin.as_ref())
+        self.send_prompt_text(id, &entry, &next.text, next.origin.as_ref(), pictures)
             .await
     }
 
@@ -2678,7 +2798,9 @@ impl Supervisor {
     async fn after_turn(&self, id: &SessionId) {
         let steered = lock_recovering(&self.steer_next).remove(id);
         let sent = match steered {
-            Some((text, origin)) => self.prompt_as(id, &text, origin.as_ref()).await,
+            Some((text, origin, images)) => {
+                self.prompt_as(id, &text, origin.as_ref(), &images).await
+            }
             None => self.drain_queue(id).await,
         };
         if let Err(err) = sent {
@@ -2803,6 +2925,7 @@ impl Supervisor {
                             role: openremote_core::MessageRole::Assistant,
                             text,
                             origin: None,
+                            images: Vec::new(),
                         },
                     }],
                 )?;
@@ -2837,9 +2960,13 @@ impl Supervisor {
                 name,
                 text,
                 is_error,
+                images,
                 ..
             } => {
                 let turn = self.current_turn(id);
+                // A screenshot's bytes go to the blob store; the event
+                // only names it.
+                let images = crate::images::keep_tool_images(&self.blobs, *id, &images);
                 self.emit_all(
                     id,
                     vec![EventPayload::ToolResult {
@@ -2847,6 +2974,7 @@ impl Supervisor {
                         name,
                         output: Value::String(text),
                         is_error,
+                        images,
                     }],
                 )?;
             }
@@ -3661,6 +3789,7 @@ mod tests {
                             role: openremote_core::MessageRole::Assistant,
                             text: format!("tail {i}"),
                             origin: None,
+                            images: Vec::new(),
                         },
                     }],
                 ) {

@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
 use openremote_core::TurnOutcome;
-use openremote_harness::{DriverError, DriverEvent, Resolution, SpawnOptions, kill_tree};
+use openremote_harness::{DriverError, DriverEvent, Prompt, Resolution, SpawnOptions, kill_tree};
 use serde_json::Value;
 use tokio::io::{AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
@@ -73,7 +73,10 @@ impl Driver {
     /// The prompt enters on stdin as one NDJSON message and never touches
     /// argv: chat text is arbitrary, and a word a chat typed must not stand
     /// anywhere the CLI's parser could read it as a flag.
-    pub async fn send_prompt(&mut self, text: &str) -> Result<(), DriverError> {
+    pub async fn send_prompt(&mut self, prompt: &Prompt) -> Result<(), DriverError> {
+        // Antigravity's print mode reads words alone: a picture is refused
+        // here, before anything is spawned.
+        let text = prompt.text_only("Antigravity")?;
         let program = match &self.resolution {
             Resolution::Executable(path) => path.clone(),
             Resolution::NodeScript { .. } => {

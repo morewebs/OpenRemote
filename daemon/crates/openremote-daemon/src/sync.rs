@@ -1013,6 +1013,7 @@ mod tests {
                 role: openremote_core::MessageRole::User,
                 text: "private words".into(),
                 origin: None,
+                images: Vec::new(),
             },
         };
         {

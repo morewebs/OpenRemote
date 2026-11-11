@@ -480,6 +480,10 @@ pub struct QueuedMessage {
     /// Set when another agent sent it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<Origin>,
+    /// Its pictures, already in the blob store: the queue holds where they
+    /// are, never their bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<ImageRef>,
 }
 
 /// One computer that can run agent chats. The daemon's own machine is
@@ -903,6 +907,22 @@ pub struct ChatMessage {
     /// worker's report): the chat shows who it came from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<Origin>,
+    /// The pictures the user sent with it (pasted, dropped, a page's
+    /// screenshot), kept in the blob store of the device that runs the
+    /// chat.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<ImageRef>,
+}
+
+/// A picture as an event names it: the sha256 its bytes are kept under in
+/// the blob store, and its type. The bytes never ride the event log - a
+/// screenshot outweighs a whole transcript, and every device copies the
+/// log - so a device that wants to show one asks the device that runs the
+/// chat.
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct ImageRef {
+    pub blob: String,
+    pub mime: String,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]

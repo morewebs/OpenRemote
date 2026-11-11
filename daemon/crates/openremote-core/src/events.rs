@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::ids::DecisionId;
-use crate::model::{ChatMessage, Decision, QueuedMessage, Session, SessionStatus, TurnOutcome};
+use crate::model::{
+    ChatMessage, Decision, ImageRef, QueuedMessage, Session, SessionStatus, TurnOutcome,
+};
 
 /// One append-only session event. The console renders only from these.
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -78,6 +80,11 @@ pub enum EventPayload {
         name: String,
         output: serde_json::Value,
         is_error: bool,
+        /// Pictures the tool answered with (an agent's screenshot of a
+        /// page), kept in the blob store. Results written before pictures
+        /// were kept have none.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        images: Vec<ImageRef>,
     },
     /// The harness reported the conversation's context size - its own
     /// numbers, never ours. The window only rides where the harness

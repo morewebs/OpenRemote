@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use openremote_core::{DecisionKind, DecisionOption, TurnOutcome};
 use openremote_harness::{
-    DriverError, DriverEvent, Resolution, SessionSettings, SpawnOptions, kill_tree,
+    DriverError, DriverEvent, Prompt, Resolution, SessionSettings, SpawnOptions, kill_tree,
 };
 use serde_json::{Value, json};
 use tokio::io::{AsyncWriteExt, BufReader};
@@ -130,8 +130,14 @@ impl Driver {
         ))
     }
 
-    /// Queue one user message; the CLI runs it as a turn.
-    pub async fn send_prompt(&mut self, text: &str) -> Result<(), DriverError> {
+    /// Queue one user message, with its pictures as image blocks; the CLI
+    /// runs it as a turn.
+    pub async fn send_prompt(&mut self, prompt: &Prompt) -> Result<(), DriverError> {
+        self.write_line(frames::prompt_envelope(prompt)).await
+    }
+
+    /// A message of words alone - the slash commands below.
+    async fn send_text(&mut self, text: &str) -> Result<(), DriverError> {
         self.write_line(frames::user_envelope(text)).await
     }
 
@@ -146,16 +152,16 @@ impl Driver {
         // One slash command per user envelope - the wire takes a single
         // command per turn, so each field rides its own prompt.
         if let Some(model) = &settings.model {
-            self.send_prompt(&format!("/model {model}")).await?;
+            self.send_text(&format!("/model {model}")).await?;
         }
         if let Some(effort) = &settings.effort {
-            self.send_prompt(&format!("/effort {effort}")).await?;
+            self.send_text(&format!("/effort {effort}")).await?;
         }
         if let Some(fast) = &settings.fast {
             // `/fast` toggles; an explicit off has no word - skip and let
             // the console's fast control stay start-time only.
             if *fast {
-                self.send_prompt("/fast").await?;
+                self.send_text("/fast").await?;
             }
         }
         Ok(())
@@ -863,14 +869,15 @@ async fn read_stdout(
                 continue;
             }
             Frame::UserToolResults { content } => {
-                for (tool_use_id, text, is_error) in frames::tool_result_blocks(&content) {
-                    let name = names.get(&tool_use_id).cloned().unwrap_or_default();
+                for block in frames::tool_result_blocks(&content) {
+                    let name = names.get(&block.tool_use_id).cloned().unwrap_or_default();
                     if tx
                         .send(DriverEvent::ToolResult {
-                            tool_use_id,
+                            tool_use_id: block.tool_use_id,
                             name,
-                            text,
-                            is_error,
+                            text: block.text,
+                            is_error: block.is_error,
+                            images: block.images,
                         })
                         .await
                         .is_err()

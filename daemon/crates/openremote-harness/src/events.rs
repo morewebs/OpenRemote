@@ -85,6 +85,9 @@ pub enum DriverEvent {
         name: String,
         text: String,
         is_error: bool,
+        /// Pictures in the result (an MCP tool's image content, like a
+        /// browser screenshot), as the wire carried them.
+        images: Vec<crate::Image>,
     },
     ApprovalRequested {
         approval: ApprovalRequest,

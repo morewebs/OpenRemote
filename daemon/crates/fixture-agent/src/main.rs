@@ -496,6 +496,12 @@ impl FixtureAgent {
 
     fn handle_user_message(&mut self, frame: &serde_json::Value) {
         self.prompt_count += 1;
+        // What the driver handed the turn, block by block: the words and
+        // any pictures riding with them.
+        record(
+            "fixture-claude-input",
+            &frame["message"]["content"].to_string(),
+        );
         let prompt = Self::prompt_text(frame);
         match self.scenario.as_str() {
             "approve" | "deny" => self.scenario_approve(&prompt),

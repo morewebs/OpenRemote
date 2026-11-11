@@ -31,6 +31,48 @@ pub enum DriverError {
     Gone,
 }
 
+/// A picture as a harness's wire carries it: its type and its bytes in
+/// base64. `path` is the same picture as a file, for a harness that reads
+/// pictures from disk (codex's local images); the others ignore it, and a
+/// picture from a tool result has none.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Image {
+    pub mime: String,
+    pub data: String,
+    pub path: Option<PathBuf>,
+}
+
+/// One message for a harness: the text it reads and the pictures that
+/// ride with it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Prompt {
+    pub text: String,
+    pub images: Vec<Image>,
+}
+
+impl Prompt {
+    /// A message of words alone.
+    pub fn text(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            images: Vec::new(),
+        }
+    }
+
+    /// The words, for a harness that reads no pictures. A message that
+    /// carries some is refused in so many words - never sent without them,
+    /// which would leave the agent answering about pictures it never saw.
+    pub fn text_only(&self, harness: &str) -> Result<&str, DriverError> {
+        if self.images.is_empty() {
+            Ok(&self.text)
+        } else {
+            Err(DriverError::Harness(format!(
+                "{harness} doesn't read pictures - send the message without them"
+            )))
+        }
+    }
+}
+
 /// How a harness's CLI was found. `NodeScript` covers the npm layout where
 /// the CLI is a script driven by node.
 #[derive(Clone, Debug, PartialEq, Eq)]
