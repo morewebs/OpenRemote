@@ -34,14 +34,22 @@ test('a live step names the tool that is running', () => {
   assert.equal(workLabel([{ kind: 'reasoning-stream' }], true), 'Thinking…')
 })
 
-test('a browser step names what it acted on in the opened work row', async () => {
-  const { toolLabel } = await import('./quiet-rail.js')
-  const click = { kind: 'tool', id: 'b1', name: 'mcp__openremote__browser_click', input: { element: 'Sign in', url: 'https://a.test/' } }
-  const nav = { kind: 'tool', id: 'b2', name: 'mcp__openremote__browser_navigate', input: { url: 'https://docs.rs/serde' } }
-  const press = { kind: 'tool', id: 'b3', name: 'mcp__openremote__browser_press', input: { key: 'Enter' } }
-  assert.equal(toolLabel(click), 'Browser · click')
-  assert.equal(toolLabel({ name: 'bash' }), 'bash')
-  assert.equal(toolHint(click), 'Sign in')
-  assert.equal(toolHint(nav), 'docs.rs/serde')
-  assert.equal(toolHint(press), 'Enter')
+test('an opened step: a browser step in words with its output, a page read folded', async () => {
+  const { workStep } = await import('./quiet-rail.js')
+  const click = workStep({ kind: 'tool', id: 'b1', name: 'mcp__openremote__browser_click', input: { element: 'Sign in', url: 'https://a.test/' }, result: 'clicked' })
+  assert.equal(click.label, 'Browser · click')
+  assert.equal(click.hint, null, 'the facts replace the hint')
+  assert.equal(click.browser.description, 'Sign in')
+  assert.equal(click.out, 'clicked')
+  assert.equal(click.fold, false)
+  const read = workStep({ kind: 'tool', id: 'b2', name: 'mcp__openremote__browser_snapshot', input: {}, result: 'a long page' })
+  assert.equal(read.label, 'Browser · read page')
+  assert.equal(read.fold, true, 'a page read as text folds')
+  const team = workStep({ kind: 'tool', id: 't', name: 'agents_start', input: { brief: 'x' }, result: '{"chat":"c1"}' })
+  assert.equal(team.browser, null)
+  assert.equal(team.out, '{"chat":"c1"}', 'a team tool answers in the same Out row')
+  assert.equal(team.fold, false)
+  const plain = workStep({ kind: 'tool', id: 'w', name: 'webfetch', input: { url: 'https://docs.rs/serde' }, result: null })
+  assert.equal(plain.hint, 'docs.rs/serde')
+  assert.equal(plain.out, null)
 })

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import {
   ArrowUp,
   ArrowUpRight,
-  Check,
   Stop,
   Play,
   HandPalm,
@@ -20,17 +19,16 @@ import {
 import { useConsole } from './state/console.jsx'
 import { chatAccess, deviceName, signedIn } from './cloud.js'
 import { railItems } from './state/reducer.js'
-import { quietRail, toolHint, toolLabel, workIsLive, workLabel } from './quiet-rail.js'
-import { browserTool, foldsResult, isBrowserTool } from './browser-tools.js'
+import { quietRail, workIsLive, workLabel, workStep } from './quiet-rail.js'
+import { browserTool, isBrowserTool } from './browser-tools.js'
 import { harnessLabel } from './harness-names.js'
 import { findModel, modelDisplayName, prettyModelName } from './model-display.js'
 import { HarnessMark } from './brand-marks.jsx'
 import HarnessManagerModal from './HarnessManagerModal.jsx'
 import SignInModal from './SignInModal.jsx'
-import { editRows, isFileEdit, writeRows } from './diff.js'
 import { isCommandRun } from './command-card.js'
 import { renderMarkdown } from './markdown.js'
-import { bodyPreview, capRows, MAX_RENDER_LINES, MAX_RENDER_ROWS, shouldRenderLive } from './render-budget.js'
+import { bodyPreview, MAX_RENDER_LINES, shouldRenderLive } from './render-budget.js'
 import { jsonCaption, jsonIsLarge, jsonShape, readJson } from './json-card.js'
 import ContextRing from './ContextRing.jsx'
 import PickerMenu from './PickerMenu.jsx'
@@ -202,10 +200,13 @@ function MarkdownBody({ text, live = false, className, tail = '' }) {
 /// whole mark while it runs and after it settles. The words stay hidden
 /// until the reader asks - a live stream was a wall of text.
 /// One quiet row for a turn's thinking and tool calls. The conversation
-/// stays the user message and the reply. The steps open as names, not
-/// as a log of every JSON body.
+/// stays the user message and the reply. Opened, each step is its name and
+/// a hint, a browser or team tool's facts in words, and what it answered
+/// (Out, through OutRow: fields, text folded behind its size, a page read
+/// as text folded whole) - never a JSON dump of its input.
 // Work row for a turn. Named at module scope so the rail can render it.
 function WorkCluster({ items, running, chat }) {
+  const { sessions } = useConsole()
   const [open, setOpen] = useState(false)
   const live = workIsLive(items, running)
   const tools = items.filter((item) => item.kind === 'tool')
@@ -217,19 +218,37 @@ function WorkCluster({ items, running, chat }) {
       </button>
       {open && tools.length > 0 && (
         <ul className="cv-work-list">
-          {tools.map((item) => (
-            <li key={item.id}>
-              {/* A browser step reads "Browser · click"; its MCP name
-                  stays on hover. */}
-              <span className="cv-work-name" title={isBrowserTool(item.name) ? item.name : undefined}>
-                {toolLabel(item)}
-              </span>
-              {toolHint(item) && <span className="cv-work-hint pv">{toolHint(item)}</span>}
-              {/* What the tool answered with besides words - an agent's
-                  screenshot of a page - large on a click. */}
-              <ChatImages images={item.images} chat={chat} label="Screenshot" />
-            </li>
-          ))}
+          {tools.map((item) => {
+            const step = workStep(item)
+            // A team tool reads as "Started a Codex worker" with its brief.
+            const team = isTeamTool(item.name)
+              ? teamTool(item.name, item.input, { sessions, chatId: chat.id, result: item.result })
+              : null
+            return (
+              <li key={item.id}>
+                {/* A browser or team step reads in words; its MCP name
+                    stays on hover. */}
+                <span className="cv-work-name" title={step.browser || team ? item.name : undefined}>
+                  {team ? team.label : step.label}
+                </span>
+                {step.hint && !team && <span className="cv-work-hint pv">{step.hint}</span>}
+                {(step.browser || team || step.out) && (
+                  <div className="cv-work-body">
+                    {step.browser && <BrowserFacts facts={step.browser} />}
+                    {team && <TeamFacts facts={team} />}
+                    {step.out && (
+                      <div className="cv-io pv">
+                        <OutRow raw={step.out} fold={step.fold} />
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* What the tool answered with besides words - an agent's
+                    screenshot of a page - large on a click. */}
+                <ChatImages images={item.images} chat={chat} label="Screenshot" />
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>
@@ -578,7 +597,8 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
   const pendingDecision = rail.find((item) => item.kind === 'decision' && item.pending)
   // Every tool call riding the rail, keyed the way the duplicate checks
   // pair a decision with its run: (name, input). A settled approval
-  // whose run is here hides - the run card is the one full record.
+  // whose run is here hides - the run's step in the work row is the one
+  // full record.
   const toolCalls = new Set(
     rail.filter((item) => item.kind === 'tool').map((item) => `${item.name}|${JSON.stringify(item.input)}`),
   )
@@ -1318,124 +1338,13 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
               }
               return <MarkdownBody key={item.id} text={item.text} className="cv-node cv-agent pv" />
             }
-            if (item.kind === 'tool') {
-              // While the ask for this very call is pending, the decision
-              // card is the one card - it carries the command and the
-              // buttons, and this one saying "Running" would be a lie (the
-              // call is blocked) and a duplicate. It returns once the
-              // answer lands and the run is real.
-              const isThePendingAsk =
-                pendingDecision &&
-                pendingDecision.toolName === item.name &&
-                JSON.stringify(pendingDecision.input) === JSON.stringify(item.input)
-              if (isThePendingAsk) return null
-              // A file edit renders as a split diff - the tool card's
-              // honest shape, never a JSON dump of its input.
-              const edit = isFileEdit(item.input)
-                ? item.input.old_string != null
-                  ? editRows(item.input.old_string, item.input.new_string)
-                  : writeRows(item.input.content)
-                : null
-              // What the card actually shows: a bounded first slice, never
-              // the whole walk - a 3000-line write renders 500 rows plus a
-              // note, not thousands of DOM nodes. Tool inputs and outputs
-              // take the same cap on their lines.
-              const diff = edit && edit.length > 0 ? capRows(edit) : null
-              // A command run renders as a terminal tile - the command
-              // itself in mono, its description as the caption, never a
-              // JSON dump of the input. The tile replaces the In row
-              // alone; the Out row still shows what the command printed.
-              const command = !edit && isCommandRun(item.input) ? item.input : null
-              // One of the team tools reads as "Started a Codex worker:
-              // Fix the parser" with its brief, never as a JSON dump.
-              const team = isTeamTool(item.name)
-                ? teamTool(item.name, item.input, {
-                    sessions,
-                    chatId: chat.id,
-                    result: item.result,
-                  })
-                : null
-              // One of OpenRemote's browser tools reads as "Browser ·
-              // click" with what it acted on, never as a JSON dump.
-              const browser = isBrowserTool(item.name) ? browserTool(item.name, item.input) : null
-              const shownIn = item.input && !command && !edit && !team && !browser ? item.input : null
-              const shownOut = item.result ? item.result : null
-              // The status rides the name line, right-aligned - the beat of
-              // agent work: a breathing green dot and Running while the tool
-              // is in flight, a check the moment the result lands (green
-              // for done, red for failed) - and it stays, the transcript's
-              // own record. A tool left unresolved by an interrupted turn
-              // never pretends: no status word.
-              const inFlight = item.result == null && chat.running
-              return (
-                <div key={item.id} className={`cv-node cv-node--${item.state}`}>
-                  <div className="cv-tool-line">
-                    <span className="cv-tool-name" title={team || browser ? item.name : undefined}>
-                      {team ? team.label : browser ? browser.label : item.name}
-                    </span>
-                    {inFlight ? (
-                      <span className="cv-tool-status">
-                        <span className="cv-tool-status-dot" />
-                        Running
-                      </span>
-                    ) : item.state === 'failed' ? (
-                      <span className="cv-tool-status">
-                        <Check className="cv-check--failed" size={13} weight="bold" />
-                        Failed
-                      </span>
-                    ) : (
-                      <span className="cv-tool-status">
-                        <Check className="cv-check--ok" size={13} weight="bold" />
-                        Done
-                      </span>
-                    )}
-                  </div>
-                  {diff && (
-                    <div className="cv-diff pv">
-                      <div className="cv-diff-file">{item.input.file_path}</div>
-                      <div className="cv-diff-grid">
-                        {diff.rows.map((row, i) => (
-                          <div className="cv-diff-row" key={i}>
-                            <span className={`cv-diff-side cv-diff-side--${row.left.kind ?? 'empty'}`}>{row.left.text}</span>
-                            <span className={`cv-diff-side cv-diff-side--${row.right.kind ?? 'empty'}`}>{row.right.text}</span>
-                          </div>
-                        ))}
-                        {diff.hidden > 0 && (
-                          <div className="cv-diff-more">Showing the first {MAX_RENDER_ROWS} rows.</div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {command && (
-                    <div className="cv-cmd pv">
-                      {/* the description leads - what this is, in plain
-                          words - then the command itself in mono */}
-                      {command.description && (
-                        <span className="cv-cmd-desc">{command.description}</span>
-                      )}
-                      <code className="cv-cmd-text">{command.command}</code>
-                    </div>
-                  )}
-                  {team && <TeamFacts facts={team} />}
-                  {browser && <BrowserFacts facts={browser} />}
-                  {(shownIn || shownOut) && !edit && (
-                    <div className="cv-io pv">
-                      {shownIn && <ToolIo label="In" raw={shownIn} />}
-                      {/* Team and browser tools alike answer in the one Out
-                          row; a page read as text folds until asked for. */}
-                      {shownOut && <OutRow raw={shownOut} fold={Boolean(browser) && foldsResult(item.name)} />}
-                    </div>
-                  )}
-                </div>
-              )
-            }
             // decision: approval or question, options in the harness's words.
             // A settled approval whose own run rides the rail hides -
-            // the run card is the one full record (its Done/Failed is
-            // the outcome); the answered card would only repeat the
-            // command. Questions always keep theirs - nothing else
-            // carries the Q&A - and a settled approval with no run card
-            // (an ask that never became one) keeps its answer line.
+            // the run's step in the work row is the one full record; the
+            // answered card would only repeat the command. Questions
+            // always keep theirs - nothing else carries the Q&A - and a
+            // settled approval with no run (an ask that never became
+            // one) keeps its answer line.
             const isQuestion =
               item.input && typeof item.input === 'object' && Array.isArray(item.input.questions)
             if (

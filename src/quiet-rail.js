@@ -2,7 +2,7 @@
 // quiet row, not a log of every call. Pending decisions stay, because
 // the person has to answer them.
 
-import { browserTool, isBrowserTool } from './browser-tools.js'
+import { browserTool, foldsResult, isBrowserTool } from './browser-tools.js'
 
 /// How one tool call reads in that row. The browser's tools say what they did to a page
 /// ("Browser · read page") rather than the MCP name they arrive under, which is the one
@@ -57,6 +57,21 @@ export function workLabel(items, live) {
   return `${tools.length} steps`
 }
 
+/// What one step shows in an opened work row: its name, a one-line hint,
+/// the browser's facts in words (what it acted on, where, what it typed or
+/// ran - which replace the hint), and its output, which a page read as
+/// text (the browser's snapshot) keeps folded until asked for.
+export function workStep(item) {
+  const browser = isBrowserTool(item?.name) ? browserTool(item.name, item.input) : null
+  return {
+    label: toolLabel(item),
+    hint: browser ? null : toolHint(item),
+    browser,
+    out: item?.result ?? null,
+    fold: Boolean(browser) && foldsResult(item.name),
+  }
+}
+
 export function workIsLive(items, running) {
   if (!running) return false
   return items.some(
@@ -68,14 +83,6 @@ export function workIsLive(items, running) {
 export function toolHint(item) {
   const input = item.input
   if (!input || typeof input !== 'object') return null
-  // A browser step names what it acted on: the element as the agent named
-  // it, else the page, else the one argument worth reading (a key, a size).
-  if (isBrowserTool(item.name)) {
-    const facts = browserTool(item.name, input)
-    if (facts.description) return clip(facts.description)
-    if (facts.url) return urlLabel(facts.url)
-    return facts.detail ? clip(facts.detail) : null
-  }
   if (typeof input.url === 'string') return urlLabel(input.url)
   if (typeof input.file_path === 'string') return input.file_path
   if (typeof input.command === 'string') return input.command
