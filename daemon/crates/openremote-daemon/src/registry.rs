@@ -57,7 +57,12 @@ impl SessionDriver {
     /// `--mcp-config`, codex's config overrides) - OpenRemote's own tools,
     /// the browser's among them, with them.
     pub fn rides_mcp(&self) -> bool {
-        matches!(self, SessionDriver::Claude(_) | SessionDriver::Codex(_))
+        match self {
+            SessionDriver::Claude(_) | SessionDriver::Codex(_) => true,
+            // A plugin driver says so in its manifest (`"mcp": true`).
+            SessionDriver::Plugin(driver) => driver.rides_mcp(),
+            _ => false,
+        }
     }
 
     /// One message with its pictures. A harness that reads no pictures
@@ -173,9 +178,10 @@ impl SessionDriver {
                 driver.answer(harness_ref, choice, request).await?;
                 Ok(AnswerOutcome::default())
             }
+            // The driver's own ask named which choices end the turn and
+            // which grant the tool for the chat.
             SessionDriver::Plugin(driver) => {
-                driver.answer(harness_ref, choice, request).await?;
-                Ok(AnswerOutcome::default())
+                driver.answer(harness_ref, choice, request, tool_name).await
             }
         }
     }
@@ -200,10 +206,13 @@ impl SessionDriver {
     /// (harness audit F8) - the driver advertises its own semantics, so no
     /// call site matches harness ids.
     pub fn per_prompt_process(&self) -> bool {
-        matches!(
-            self,
-            SessionDriver::Grok(_) | SessionDriver::Agy(_) | SessionDriver::Plugin(_)
-        )
+        match self {
+            SessionDriver::Grok(_) | SessionDriver::Agy(_) => true,
+            // A plugin's manifest says; one prompt at a time unless it says
+            // otherwise.
+            SessionDriver::Plugin(driver) => driver.per_prompt_process(),
+            _ => false,
+        }
     }
 
     /// Whether a message sent while a turn is working lands inside that
@@ -214,7 +223,11 @@ impl SessionDriver {
     /// would never complete. Pi and opencode stay out until their own
     /// mid-turn behavior is verified on a real install.
     pub fn steers_mid_turn(&self) -> bool {
-        matches!(self, SessionDriver::Claude(_) | SessionDriver::Codex(_))
+        match self {
+            SessionDriver::Claude(_) | SessionDriver::Codex(_) => true,
+            SessionDriver::Plugin(driver) => driver.steers_mid_turn(),
+            _ => false,
+        }
     }
 }
 
@@ -303,7 +316,10 @@ impl Backend {
             Backend::Opencode(resolution) => openremote_opencode::commands(resolution, cwd)
                 .await
                 .map(Some),
-            Backend::Grok(_) | Backend::Agy(_) | Backend::Plugin(_) => Ok(None),
+            // A plugin driver that declares `"commands": true` answers
+            // `--commands <folder>`; any other lists nothing through us.
+            Backend::Plugin(plugin) => plugin_driver::commands(&plugin.spec, cwd).await,
+            Backend::Grok(_) | Backend::Agy(_) => Ok(None),
         }
     }
 
@@ -429,9 +445,9 @@ fn honors(id: &str, version: Option<&str>) -> openremote_core::HarnessHonors {
     }
 }
 
-/// A plugin harness declares no honors object yet. Its models' own effort
-/// tiers are the only fact the seam carries, and an effort picker exists
-/// only when one of those tiers does.
+/// A plugin harness declares no honors object. Its models' own effort tiers
+/// say whether an effort picker exists; its manifest's `fast` and `mcp` say
+/// whether the driver reads those. Nothing else is claimed.
 fn plugin_honors(spec: &HarnessSpec) -> openremote_core::HarnessHonors {
     let effort = spec.models.as_ref().is_some_and(|models| {
         models
@@ -440,6 +456,8 @@ fn plugin_honors(spec: &HarnessSpec) -> openremote_core::HarnessHonors {
     });
     openremote_core::HarnessHonors {
         effort,
+        fast: spec.traits.fast,
+        mcp: spec.traits.mcp,
         ..Default::default()
     }
 }
@@ -603,15 +621,15 @@ impl HarnessRegistry {
                     version: answer.version,
                     available,
                     enabled: spec.enabled,
-                    fast_supported: false,
+                    fast_supported: spec.traits.fast,
                     honors: plugin_honors(spec),
                     signed_in: answer.signed_in,
                     using_api_key: false,
                     default_model: spec.default_model.clone(),
                     default_effort: None,
                     custom_endpoint_supported: false,
-                    permission_modes: Vec::new(),
-                    default_permission: None,
+                    permission_modes: spec.traits.permission_modes.clone(),
+                    default_permission: spec.traits.default_permission.clone(),
                     // A plugin harness's list is measured: the driver's
                     // capture beats the manifest, and the stamp says when.
                     models_captured_at: spec.models_captured_at,
@@ -1129,6 +1147,7 @@ mod tests {
             default_model: Some("toy-1".into()),
             models_captured_at: None,
             settings_live: false,
+            traits: crate::plugins::HarnessTraits::default(),
             enabled: true,
             problem: None,
         };
@@ -1138,5 +1157,11 @@ mod tests {
         // No catalog means no effort picker, so the row must not claim one.
         spec.models = None;
         assert!(!plugin_honors(&spec).effort);
+        // A manifest that says `fast` and `mcp` honors exactly those two.
+        spec.traits.fast = true;
+        spec.traits.mcp = true;
+        let row = plugin_honors(&spec);
+        assert!(row.fast && row.mcp);
+        assert!(!row.effort && !row.plugins && !row.tools && !row.attachments);
     }
 }

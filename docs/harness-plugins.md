@@ -44,7 +44,17 @@ my-harness/
     "models": null,
     "default_model": null,
     "models_file": "models.json",
-    "settings": "live"
+    "settings": "live",
+    "permission_modes": [
+      {"w": "ask", "l": "Ask first"},
+      {"w": "auto", "l": "Run without asking"}
+    ],
+    "default_permission": "ask",
+    "fast": false,
+    "mcp": true,
+    "commands": true,
+    "one_prompt_at_a_time": true,
+    "steers_mid_turn": false
   }
 }
 ```
@@ -86,6 +96,34 @@ my-harness/
   resuming the same conversation (a working turn has to finish first). Any
   other word is refused at install, naming `live`, rather than being read as
   start-time.
+- `permission_modes` is optional: the harness's own permission words, each a
+  `{"w": "<word>", "l": "<label>"}` row (a bare string is accepted and is its
+  own label). The console's permission picker lists them and the chosen word
+  arrives as `spawn.permission_mode`, verbatim. Empty or absent means no
+  permission picker. A word listed twice, or a row with an empty word or label,
+  is refused at install.
+- `default_permission` is optional: the word a fresh chat starts with. It must
+  be one of `permission_modes`, or the plugin is refused at install.
+- `fast` is optional (default `false`). `true` says the harness has a fast mode
+  of its own and the driver reads `spawn.fast`; the console then offers the
+  fast toggle.
+- `mcp` is optional (default `false`). `true` says the driver hands
+  `spawn.mcp_servers` and `spawn.allowed_tools` to its CLI, so the agent can
+  call OpenRemote's own tools (the browser, the team tools) and the user's MCP
+  servers. The lists are sent either way; without `mcp` the daemon does not
+  tell the agent the tools exist and offers no team tools for the chat.
+- `commands` is optional (default `false`). `true` says the driver answers
+  `--commands <folder>` (see "Commands" below), and the composer's `/` and `@`
+  menus list what it answers. Without it no process starts for a menu, and the
+  harness's own commands still run when typed.
+- `one_prompt_at_a_time` is optional. Absent or `true`, a message sent while a
+  turn runs is refused by the daemon before it reaches the driver. `false` says the driver takes a second `prompt` mid-turn on its
+  own wire, which then opens a new turn.
+- `steers_mid_turn` is optional (default `false`). `true` says a message sent
+  while a turn runs lands inside that turn, and the harness closes the whole
+  run with one `turn_completed`; the daemon files it under the running turn.
+  It implies `one_prompt_at_a_time: false`, and saying both `true` is refused
+  at install.
 
 ## Probe
 
@@ -111,6 +149,33 @@ It must print one JSON line and exit:
 The probe must not start a chat or reach the network if it can avoid it. It is
 bounded at five seconds.
 
+## Commands
+
+A driver whose manifest says `"commands": true` is asked for the composer's
+menus when one opens:
+
+```
+my-harness-driver --commands <folder>
+```
+
+`<folder>` is the chat's workspace (or the home folder before a chat has one);
+the driver's working directory stays the plugin folder. It must print one JSON
+line and exit 0:
+
+```json
+{"commands": [{"name": "review", "description": "Review the diff", "argument_hint": "<path>", "aliases": ["r"]}],
+ "agents": [{"name": "planner", "description": "Plans before it edits"}]}
+```
+
+- `commands` fill the `/` menu and `agents` the `@` menu. Only `name` is
+  required; an entry without one is skipped. `{}` is an honest empty answer.
+- A driver that cannot list them prints `{"reason": "<one sentence>"}`. The
+  menu keeps what an earlier answer listed and asks again next time; so does a
+  non-zero exit, output that is not JSON, or no answer within twenty seconds.
+- The answer is cached per workspace. A `commands_listed` event (below) with a
+  name the cached list lacks makes the next menu ask again.
+- Like the probe, it must not start a chat. Its stderr is discarded.
+
 ## Session protocol
 
 For each chat the daemon starts one driver process and speaks JSON lines over
@@ -122,7 +187,7 @@ Commands from OpenRemote:
 
 | type | fields | meaning |
 |------|--------|---------|
-| `spawn` | `cwd`, `model`, `permission_mode`, `effort`, `resume`, `fast` | start the harness for this chat; `cwd` is the chat's workspace, `resume` is a `session_ref` from an earlier run |
+| `spawn` | `cwd`, `model`, `permission_mode`, `effort`, `resume`, `fast`, `mcp_servers`, `allowed_tools` | start the harness for this chat; `cwd` is the chat's workspace, `resume` is a `session_ref` from an earlier run |
 | `prompt` | `text` | send a user prompt |
 | `interrupt` | none | cancel the turn in progress |
 | `answer` | `harness_ref`, `choice` | answer an approval the driver reported |
@@ -136,12 +201,13 @@ Events from the driver:
 | `initialized` | `session_ref`, `model`, `permission_mode` |
 | `model_reported` | `model` |
 | `settings_refused` | `message` |
+| `commands_listed` | `names` |
 | `text` | `text` |
 | `text_delta` | `text` |
 | `reasoning`, `reasoning_delta` | `text` |
 | `tool_started` | `tool_use_id`, `name`, `input` |
 | `tool_result` | `tool_use_id`, `name`, `text`, `is_error` |
-| `approval_requested` | `harness_ref`, `request`, `kind`, `options`, `tool_name`, `summary` |
+| `approval_requested` | `harness_ref`, `request`, `kind`, `options`, `tool_name`, `summary`, `interrupts_turn`, `session_grant` |
 | `turn_completed` | `subtype`, `coarse`, `is_error`, `error_message` |
 | `context_used` | `used`, `window` |
 | `turn_cost` | `cost_usd` |
@@ -158,13 +224,31 @@ Rules:
   sentence saying why a change did not happen, and it lands as a note in the
   chat. Both are optional, and a driver that cannot read the model sends
   neither.
+- `spawn.mcp_servers` is a list of `{"id", "command", "args"}`: the user's MCP
+  servers on this machine and OpenRemote's own per-chat server (id
+  `openremote`). `spawn.allowed_tools` names the tools that may run without
+  asking, as `mcp__<server>__<tool>`. Both are always lists, empty when there
+  is nothing. Hand them to your CLI's own MCP configuration and declare
+  `"mcp": true` in the manifest; a driver that cannot ignores them.
+- `commands_listed.names` are the command names the harness listed as the chat
+  started. It is optional; it only tells the daemon its cached `/` menu is
+  behind.
+- `approval_requested.options` is a list of `{"id", "label"}`; an option
+  without a label is shown as its id. `kind` is `approval` or `question`.
+  `interrupts_turn` lists the option ids that end the turn instead of
+  continuing it: the daemon does not mark the chat working again after one,
+  and your own `turn_completed` settles it. `session_grant` lists the option
+  ids that allow the tool for the rest of the chat: the daemon records
+  `tool_name` on the chat. Both are optional; an option in neither continues
+  the turn and grants nothing.
 - `turn_completed.coarse` is `completed`, `interrupted` or `failed`, and
   `subtype` is the harness's own final word. A turn that ended in an error
   says `is_error: true` and puts the harness's own explanation in
   `error_message`.
 - A second prompt while a turn is open is refused by the daemon before it
-  reaches the driver: a plugin harness is one prompt at a time. Do not expect
-  steering.
+  reaches the driver, unless the manifest says `one_prompt_at_a_time: false`
+  or `steers_mid_turn: true`. Only then does a driver receive a `prompt`
+  mid-turn.
 - On `interrupt`, send Escape (and Ctrl-C if your harness needs it), wait up to
   five seconds for your own end-of-turn signal, then emit
   `{"type":"turn_completed","subtype":"interrupted","coarse":"interrupted","is_error":false}`.

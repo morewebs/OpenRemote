@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex as StdMutex;
 use std::time::Duration;
 
+use openremote_core::model::PermissionWord;
 use openremote_core::{
     ApprovedCommand, InstalledPlugin, LOCAL_MARKETPLACE, PluginPower, PluginRuntime, PluginSource,
 };
@@ -121,9 +122,102 @@ pub struct HarnessManifest {
     /// install rather than quietly treated as start-time.
     #[serde(default)]
     pub settings: Option<String>,
+    /// The harness's own permission words, each a `{ "w", "l" }` row (a bare
+    /// string is its own label). Empty means no permission picker.
+    #[serde(default)]
+    pub permission_modes: Vec<ManifestPermission>,
+    /// The word a fresh chat starts with; one of `permission_modes`.
+    #[serde(default)]
+    pub default_permission: Option<String>,
+    /// The harness has a fast mode of its own, and the driver reads `fast`.
+    #[serde(default)]
+    pub fast: bool,
+    /// The driver hands the spawn's `mcp_servers` (OpenRemote's own per-chat
+    /// server among them) and `allowed_tools` to its CLI. Without it the
+    /// lists still arrive, but nothing tells the agent the tools exist.
+    #[serde(default)]
+    pub mcp: bool,
+    /// The driver answers `--commands <folder>` with the composer's `/` and
+    /// `@` lists. Without it no process starts for a menu.
+    #[serde(default)]
+    pub commands: bool,
+    /// The driver takes one prompt at a time: a message sent while a turn
+    /// runs waits in the queue. Unset is `true`, the safe answer for a
+    /// driver that runs its CLI once per prompt.
+    #[serde(default)]
+    pub one_prompt_at_a_time: Option<bool>,
+    /// A message sent while a turn runs lands inside that turn, which the
+    /// harness closes with one result.
+    #[serde(default)]
+    pub steers_mid_turn: bool,
+}
+
+/// One permission word in a harness manifest: the `{ "w", "l" }` row the
+/// pickers use, or a bare word that is its own label.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum ManifestPermission {
+    Word(String),
+    Row(PermissionWord),
+}
+
+impl ManifestPermission {
+    pub fn row(&self) -> PermissionWord {
+        match self {
+            ManifestPermission::Word(word) => PermissionWord::new(word, word),
+            ManifestPermission::Row(row) => row.clone(),
+        }
+    }
+}
+
+/// What a plugin harness declares about how it runs, beyond its driver and
+/// models: the parts of the contract the registry and the supervisor read.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HarnessTraits {
+    pub permission_modes: Vec<PermissionWord>,
+    pub default_permission: Option<String>,
+    pub fast: bool,
+    pub mcp: bool,
+    pub commands: bool,
+    pub one_prompt_at_a_time: bool,
+    pub steers_mid_turn: bool,
+}
+
+impl Default for HarnessTraits {
+    /// What a manifest that says nothing gets: no pickers, no MCP, no menus,
+    /// and one prompt at a time.
+    fn default() -> Self {
+        Self {
+            permission_modes: Vec::new(),
+            default_permission: None,
+            fast: false,
+            mcp: false,
+            commands: false,
+            one_prompt_at_a_time: true,
+            steers_mid_turn: false,
+        }
+    }
 }
 
 impl HarnessManifest {
+    /// The traits this manifest declares, as the registry reads them.
+    pub fn traits(&self) -> HarnessTraits {
+        HarnessTraits {
+            permission_modes: self
+                .permission_modes
+                .iter()
+                .map(ManifestPermission::row)
+                .collect(),
+            default_permission: self.default_permission.clone(),
+            fast: self.fast,
+            mcp: self.mcp,
+            commands: self.commands,
+            // A driver that steers takes the second message by definition.
+            one_prompt_at_a_time: self.one_prompt_at_a_time.unwrap_or(!self.steers_mid_turn),
+            steers_mid_turn: self.steers_mid_turn,
+        }
+    }
+
     /// The driver path this OS runs, when the plugin names one.
     pub fn driver_path(&self) -> Option<&str> {
         let os = std::env::consts::OS;
@@ -198,6 +292,8 @@ pub struct HarnessSpec {
     pub models_captured_at: Option<u64>,
     /// Whether the driver can change the model on a running chat.
     pub settings_live: bool,
+    /// Its permission words, fast mode, MCP, command menus and prompt rules.
+    pub traits: HarnessTraits,
     pub enabled: bool,
     /// Why this harness cannot be offered, in one sentence the console shows.
     pub problem: Option<String>,
@@ -238,11 +334,13 @@ pub fn installed_harnesses(data_dir: &Path, installed: &[&InstalledPlugin]) -> V
                 default_model: None,
                 models_captured_at: None,
                 settings_live: false,
+                traits: HarnessTraits::default(),
                 enabled: plugin.enabled,
                 problem,
             });
             continue;
         };
+        let traits = harness.traits();
         let (driver, problem) = match harness.resolved_driver(&dir) {
             Ok(path) => (path, None),
             Err(reason) => (PathBuf::new(), Some(reason)),
@@ -268,6 +366,7 @@ pub fn installed_harnesses(data_dir: &Path, installed: &[&InstalledPlugin]) -> V
             default_model: harness.default_model,
             models_captured_at,
             settings_live: harness.settings.as_deref() == Some(SETTINGS_LIVE),
+            traits,
             enabled: plugin.enabled,
             problem,
         });
@@ -387,6 +486,42 @@ fn validate_harness(
                  knows is '{SETTINGS_LIVE}'"
             )));
         }
+    }
+    let words: Vec<PermissionWord> = harness
+        .permission_modes
+        .iter()
+        .map(ManifestPermission::row)
+        .collect();
+    for (index, row) in words.iter().enumerate() {
+        if row.word.trim().is_empty() || row.label.trim().is_empty() {
+            return Err(PluginError::Invalid(
+                "the plugin's harness lists a permission word with no word or no label".into(),
+            ));
+        }
+        if words[..index]
+            .iter()
+            .any(|earlier| earlier.word == row.word)
+        {
+            return Err(PluginError::Invalid(format!(
+                "the plugin's harness lists the permission word '{}' twice",
+                row.word
+            )));
+        }
+    }
+    if let Some(default) = harness.default_permission.as_deref() {
+        if !words.iter().any(|row| row.word == default) {
+            return Err(PluginError::Invalid(format!(
+                "the plugin's harness starts with permission '{default}', which its \
+                 permission_modes do not list"
+            )));
+        }
+    }
+    if harness.steers_mid_turn && harness.one_prompt_at_a_time == Some(true) {
+        return Err(PluginError::Invalid(
+            "the plugin's harness says it both steers mid-turn and takes one prompt at a \
+             time; a harness that steers takes the second message inside the turn"
+                .into(),
+        ));
     }
     // The id and the plugin's own name may match (a plugin called freebuff
     // provides harness freebuff); only the built-in ids are reserved.
@@ -3299,6 +3434,72 @@ mod tests {
         let err = read_manifest(dir.path(), &builtins()).expect_err("an unknown word");
         assert!(err.to_string().contains("live"), "{err}");
         assert!(err.to_string().contains("sometimes"), "{err}");
+    }
+
+    /// A manifest with the contract's harness block, in this OS's driver key.
+    fn traits_manifest(extra: &str) -> tempfile::TempDir {
+        let os = std::env::consts::OS;
+        folder(&[(
+            "openremote.json",
+            &format!(
+                r#"{{"api":1,"name":"x","runtime":"process","harness":{{"api":1,"id":"x","name":"X","driver":{{"{os}":"d"}}{extra}}}}}"#
+            ),
+        )])
+    }
+
+    #[test]
+    fn a_harness_manifest_declares_its_permission_words_fast_mcp_menus_and_prompt_rules() {
+        let dir = traits_manifest(
+            r#","permission_modes":["ask",{"w":"auto","l":"Run without asking"}],"default_permission":"ask","fast":true,"mcp":true,"commands":true,"steers_mid_turn":true"#,
+        );
+        let manifest = read_manifest(dir.path(), &builtins()).expect("reads");
+        let traits = manifest.harness.expect("harness").traits();
+        assert_eq!(
+            traits.permission_modes,
+            vec![
+                PermissionWord::new("ask", "ask"),
+                PermissionWord::new("auto", "Run without asking"),
+            ],
+            "a bare word is its own label; a row keeps its own"
+        );
+        assert_eq!(traits.default_permission.as_deref(), Some("ask"));
+        assert!(traits.fast && traits.mcp && traits.commands && traits.steers_mid_turn);
+        assert!(
+            !traits.one_prompt_at_a_time,
+            "a harness that steers takes the second message inside the turn"
+        );
+
+        // A block that says nothing keeps every old answer: one prompt at a
+        // time, no pickers, no MCP, no process started for a menu.
+        let dir = traits_manifest("");
+        let manifest = read_manifest(dir.path(), &builtins()).expect("reads");
+        assert_eq!(
+            manifest.harness.expect("harness").traits(),
+            HarnessTraits::default()
+        );
+        assert!(HarnessTraits::default().one_prompt_at_a_time);
+    }
+
+    #[test]
+    fn a_harness_manifest_whose_words_disagree_is_refused() {
+        let unlisted =
+            traits_manifest(r#","permission_modes":["ask"],"default_permission":"auto""#);
+        let err = read_manifest(unlisted.path(), &builtins()).expect_err("an unlisted default");
+        assert!(err.to_string().contains("'auto'"), "{err}");
+
+        let twice = traits_manifest(r#","permission_modes":["ask",{"w":"ask","l":"Ask"}]"#);
+        let err = read_manifest(twice.path(), &builtins()).expect_err("a word twice");
+        assert!(err.to_string().contains("twice"), "{err}");
+
+        let blank = traits_manifest(r#","permission_modes":[{"w":"ask","l":" "}]"#);
+        assert!(
+            read_manifest(blank.path(), &builtins()).is_err(),
+            "a blank label"
+        );
+
+        let both = traits_manifest(r#","steers_mid_turn":true,"one_prompt_at_a_time":true"#);
+        let err = read_manifest(both.path(), &builtins()).expect_err("steers and one at a time");
+        assert!(err.to_string().contains("steers"), "{err}");
     }
 
     #[cfg(windows)]

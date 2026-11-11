@@ -7,7 +7,8 @@ mod common;
 use std::path::{Path, PathBuf};
 
 use common::*;
-use openremote_daemon::plugins::HarnessSpec;
+use openremote_core::model::PermissionWord;
+use openremote_daemon::plugins::{HarnessSpec, HarnessTraits};
 use serde_json::json;
 
 /// The driver fixture, built once per test process - the same rescue the
@@ -60,6 +61,7 @@ fn spec(folder: &Path) -> HarnessSpec {
         default_model: None,
         models_captured_at: None,
         settings_live: false,
+        traits: HarnessTraits::default(),
         enabled: true,
         problem: None,
     }
@@ -591,7 +593,8 @@ async fn a_refused_live_setting_lands_as_a_note_in_the_chat() {
         .expect("the note");
     assert!(restored < noted, "{}", dump(&events));
     assert_ne!(
-        events[restored].1["session"]["model"], "missing-model",
+        events[restored].1["session"]["model"],
+        "missing-model",
         "{}",
         dump(&events)
     );
@@ -802,4 +805,308 @@ async fn a_plugin_harness_approval_can_be_answered() {
         .find(|(_, payload)| kind(payload) == "turn.completed")
         .expect("the turn completes");
     assert_eq!(completed.1["coarse"], "completed");
+}
+
+/// The query string's form of a folder path.
+fn encode(path: &Path) -> String {
+    path.to_string_lossy()
+        .bytes()
+        .map(|b| {
+            if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.') {
+                (b as char).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
+        .collect()
+}
+
+/// The manifest's contract fields reach the harness row, and a driver that
+/// declares `commands` fills the composer's menus from `--commands <folder>`.
+#[tokio::test]
+async fn a_plugin_harness_row_and_menus_follow_its_manifest() {
+    let folder = tempfile::tempdir().expect("plugin folder");
+    let declared = HarnessSpec {
+        traits: HarnessTraits {
+            permission_modes: vec![
+                PermissionWord::new("ask", "Ask first"),
+                PermissionWord::new("auto", "Run without asking"),
+            ],
+            default_permission: Some("ask".into()),
+            fast: true,
+            mcp: true,
+            commands: true,
+            ..HarnessTraits::default()
+        },
+        ..spec(folder.path())
+    };
+    let daemon = start_daemon_with_plugins(&[], &[declared]).await;
+
+    let capabilities = call(&daemon, "GET", "/capabilities", None).await;
+    let harness = capabilities.body["harnesses"]
+        .as_array()
+        .expect("harnesses")
+        .iter()
+        .find(|harness| harness["id"] == "fixture-harness")
+        .expect("the plugin harness")
+        .clone();
+    assert_eq!(harness["fast_supported"], true, "{harness}");
+    assert_eq!(harness["honors"]["fast"], true, "{harness}");
+    assert_eq!(harness["honors"]["mcp"], true, "{harness}");
+    assert_eq!(harness["honors"]["tools"], false, "{harness}");
+    assert_eq!(
+        harness["permission_modes"],
+        json!([{"w": "ask", "l": "Ask first"}, {"w": "auto", "l": "Run without asking"}]),
+        "{harness}"
+    );
+    assert_eq!(harness["default_permission"], "ask", "{harness}");
+
+    let workspace = tempfile::tempdir().expect("workspace");
+    let reply = call(
+        &daemon,
+        "GET",
+        &format!(
+            "/commands?harness=fixture-harness&workspace={}",
+            encode(workspace.path())
+        ),
+        None,
+    )
+    .await;
+    assert_eq!(reply.status, 200, "{}", reply.raw);
+    assert!(reply.body.get("error").is_none(), "{}", reply.raw);
+    let command = reply.body["commands"]
+        .as_array()
+        .expect("commands")
+        .iter()
+        .find(|command| command["name"] == "fixture-review")
+        .expect("the driver's command")
+        .clone();
+    assert_eq!(command["source"], "harness", "{command}");
+    assert_eq!(command["argument_hint"], "<path>", "{command}");
+    assert_eq!(command["aliases"], json!(["fr"]), "{command}");
+    let agent = reply.body["agents"]
+        .as_array()
+        .expect("agents")
+        .iter()
+        .find(|agent| agent["name"] == "fixture-planner")
+        .expect("the driver's agent")
+        .clone();
+    assert_eq!(
+        agent["description"],
+        workspace.path().to_string_lossy().as_ref(),
+        "the driver was asked about the chat's folder: {agent}"
+    );
+}
+
+/// A driver that does not declare `commands` is never started for a menu.
+#[tokio::test]
+async fn a_plugin_harness_without_commands_lists_none_of_its_own() {
+    let folder = tempfile::tempdir().expect("plugin folder");
+    let daemon = start_daemon_with_plugins(&[], &[spec(folder.path())]).await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let reply = call(
+        &daemon,
+        "GET",
+        &format!(
+            "/commands?harness=fixture-harness&workspace={}",
+            encode(workspace.path())
+        ),
+        None,
+    )
+    .await;
+    assert_eq!(reply.status, 200, "{}", reply.raw);
+    assert!(
+        reply.body["commands"]
+            .as_array()
+            .expect("commands")
+            .iter()
+            .all(|command| command["source"] != "harness"),
+        "{}",
+        reply.raw
+    );
+}
+
+/// The spawn command carries the chat's MCP servers (OpenRemote's own among
+/// them) and the tools that run without asking.
+#[tokio::test]
+async fn a_plugin_harness_spawn_carries_the_chats_mcp_servers_and_allowed_tools() {
+    let folder = tempfile::tempdir().expect("plugin folder");
+    let mut echo = spec(folder.path());
+    echo.args = vec!["echo-spawn".into()];
+    let daemon = start_daemon_with_plugins(&[], &[echo]).await;
+
+    let workspace = tempfile::tempdir().expect("workspace");
+    let created = call(
+        &daemon,
+        "POST",
+        "/sessions",
+        Some(json!({
+            "request_id": "ph-echo-create",
+            "harness": "fixture-harness",
+            "workspace": workspace.path(),
+        })),
+    )
+    .await;
+    assert_eq!(created.status, 201, "raw: {}", created.raw);
+    let id = created.body["id"].as_str().expect("session id").to_string();
+    call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "ph-echo-p1", "text": "what did you get"})),
+    )
+    .await;
+    let events = until_kinds(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        &["message.added", "turn.completed"],
+    )
+    .await;
+    let text = events
+        .iter()
+        .find(|(_, payload)| {
+            kind(payload) == "message.added" && payload["message"]["role"] == "assistant"
+        })
+        .and_then(|(_, payload)| payload["message"]["text"].as_str().map(String::from))
+        .expect("an assistant message");
+    assert!(
+        text.contains("mcp=[openremote]"),
+        "OpenRemote's per-chat server rides the spawn: {text}"
+    );
+    assert!(
+        !text.contains("allowed=0") && !text.contains("allowed=missing"),
+        "the reading tools ride the spawn: {text}"
+    );
+}
+
+/// An ask that names a choice in `session_grant` records the tool for the
+/// rest of the chat when that choice is picked.
+#[tokio::test]
+async fn a_plugin_ask_whose_choice_grants_the_tool_records_it_for_the_chat() {
+    let folder = tempfile::tempdir().expect("plugin folder");
+    let mut with_approval = spec(folder.path());
+    with_approval.args = vec!["approval".into()];
+    let daemon = start_daemon_with_plugins(&[], &[with_approval]).await;
+
+    let workspace = tempfile::tempdir().expect("workspace");
+    let created = call(
+        &daemon,
+        "POST",
+        "/sessions",
+        Some(json!({
+            "request_id": "ph-grant-create",
+            "harness": "fixture-harness",
+            "workspace": workspace.path(),
+        })),
+    )
+    .await;
+    assert_eq!(created.status, 201, "raw: {}", created.raw);
+    let id = created.body["id"].as_str().expect("session id").to_string();
+    call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "ph-grant-p1", "text": "write it"})),
+    )
+    .await;
+    let events = until_kinds(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        &["decision.requested"],
+    )
+    .await;
+    let decision_id = events
+        .iter()
+        .find(|(_, payload)| kind(payload) == "decision.requested")
+        .and_then(|(_, payload)| payload["decision"]["id"].as_str().map(String::from))
+        .expect("the driver's approval arrives");
+
+    let answered = call(
+        &daemon,
+        "POST",
+        &format!("/decisions/{decision_id}/answer"),
+        Some(json!({"request_id": "ph-grant-answer", "choice": "always"})),
+    )
+    .await;
+    assert_eq!(answered.status, 200, "raw: {}", answered.raw);
+
+    let session = call(&daemon, "GET", &format!("/sessions/{id}"), None).await;
+    assert_eq!(
+        session.body["approved_tools"],
+        json!(["write_file"]),
+        "{}",
+        session.raw
+    );
+}
+
+/// Send two prompts to a held turn on a harness with these traits, and
+/// answer the second prompt's status.
+async fn second_prompt_status(traits: HarnessTraits, tag: &str) -> u16 {
+    let folder = tempfile::tempdir().expect("plugin folder");
+    let held = HarnessSpec {
+        args: vec!["--hold".into()],
+        traits,
+        ..spec(folder.path())
+    };
+    let daemon = start_daemon_with_plugins(&[], &[held]).await;
+    let workspace = tempfile::tempdir().expect("workspace");
+    let created = call(
+        &daemon,
+        "POST",
+        "/sessions",
+        Some(json!({
+            "request_id": format!("{tag}-create"),
+            "harness": "fixture-harness",
+            "workspace": workspace.path()
+        })),
+    )
+    .await;
+    assert_eq!(created.status, 201, "{}", created.raw);
+    let id = created.body["id"].as_str().expect("session id").to_string();
+    until_status(&daemon, &id, &["idle"]).await;
+    let first = call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": format!("{tag}-p1"), "text": "stay busy"})),
+    )
+    .await;
+    assert_eq!(first.status, 200, "{}", first.raw);
+    until_status(&daemon, &id, &["working"]).await;
+    let second = call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": format!("{tag}-p2"), "text": "and this"})),
+    )
+    .await;
+    let _ = call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/stop"),
+        Some(json!({"request_id": format!("{tag}-stop")})),
+    )
+    .await;
+    second.status
+}
+
+/// The manifest decides the prompt gate: by default a second message waits
+/// for the turn; a driver that steers takes it inside the running turn.
+#[tokio::test]
+async fn a_plugin_harness_takes_a_mid_turn_message_only_when_its_manifest_says_so() {
+    assert_eq!(
+        second_prompt_status(HarnessTraits::default(), "gate-default").await,
+        409,
+        "one prompt at a time unless the manifest says otherwise"
+    );
+    let steering = HarnessTraits {
+        one_prompt_at_a_time: false,
+        steers_mid_turn: true,
+        ..HarnessTraits::default()
+    };
+    assert_eq!(
+        second_prompt_status(steering, "gate-steer").await,
+        200,
+        "a steering driver takes the message mid-turn"
+    );
 }

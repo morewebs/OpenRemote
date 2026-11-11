@@ -10,6 +10,9 @@
 //!
 //! Two flags hold a chat in a state a test needs: `--hold` leaves a turn open,
 //! and `--refuse-settings` answers a settings command with a refusal.
+//! `--commands <folder>` prints the composer's lists, naming the folder it
+//! was asked about; the `echo-spawn` argument makes a turn's reply name the
+//! MCP servers and allowed tools the spawn command carried.
 
 use std::io::{BufRead, Write};
 
@@ -32,7 +35,27 @@ fn main() {
         println!("{CATALOG}");
         return;
     }
+    if let Some(index) = args.iter().position(|argument| argument == "--commands") {
+        // One line and an exit, like the probe. The agent's description is
+        // the folder the daemon asked about, so a test can see it arrive.
+        let folder = args.get(index + 1).cloned().unwrap_or_default();
+        println!(
+            "{}",
+            serde_json::json!({
+                "commands": [{
+                    "name": "fixture-review",
+                    "description": "Review with the fixture",
+                    "argument_hint": "<path>",
+                    "aliases": ["fr"]
+                }],
+                "agents": [{"name": "fixture-planner", "description": folder}]
+            })
+        );
+        return;
+    }
     let hold = args.iter().any(|argument| argument == "--hold");
+    let echo_spawn = args.iter().any(|argument| argument == "echo-spawn");
+    let mut spawned = serde_json::Value::Null;
     let refuse_settings = args.iter().any(|argument| argument == "--refuse-settings");
 
     // The e2e's HarnessSpec passes args through the plugin seam. The
@@ -52,15 +75,49 @@ fn main() {
             .and_then(|kind| kind.as_str())
             .unwrap_or_default();
         match kind {
-            "spawn" => emit(
-                &mut stdout,
-                serde_json::json!({
-                    "type": "initialized",
-                    "session_ref": "fixture-1",
-                    "model": null,
-                    "permission_mode": null
-                }),
-            ),
+            "spawn" => {
+                spawned = value.clone();
+                emit(
+                    &mut stdout,
+                    serde_json::json!({
+                        "type": "initialized",
+                        "session_ref": "fixture-1",
+                        "model": null,
+                        "permission_mode": null
+                    }),
+                );
+            }
+            "prompt" if echo_spawn => {
+                let ids: Vec<&str> = spawned["mcp_servers"]
+                    .as_array()
+                    .map(|servers| {
+                        servers
+                            .iter()
+                            .filter_map(|server| server["id"].as_str())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let allowed = spawned["allowed_tools"]
+                    .as_array()
+                    .map(|tools| tools.len().to_string())
+                    .unwrap_or_else(|| "missing".into());
+                emit(
+                    &mut stdout,
+                    serde_json::json!({
+                        "type": "text",
+                        "text": format!("fixture spawn: mcp=[{}] allowed={allowed}", ids.join(","))
+                    }),
+                );
+                emit(
+                    &mut stdout,
+                    serde_json::json!({
+                        "type": "turn_completed",
+                        "subtype": "finished",
+                        "coarse": "completed",
+                        "is_error": false
+                    }),
+                );
+            }
             "prompt" if approval_scenario => {
                 emit(
                     &mut stdout,
@@ -72,8 +129,10 @@ fn main() {
                         "kind": "approval",
                         "options": [
                             {"id": "allow", "label": "Allow"},
-                            {"id": "deny", "label": "Deny"}
+                            {"id": "deny", "label": "Deny"},
+                            {"id": "always", "label": "Allow for this chat"}
                         ],
+                        "session_grant": ["always"],
                         "request": {"path": "a.py"}
                     }),
                 );
