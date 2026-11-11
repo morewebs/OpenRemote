@@ -77,6 +77,12 @@ fn prior_live_settings() -> &'static StdMutex<std::collections::HashMap<SessionI
     PRIOR.get_or_init(Default::default)
 }
 
+/// Drop a chat's held settings: its driver is gone (stopped, exited) or the
+/// chat itself is deleted, so no refusal can come for them any more.
+pub fn forget_live_settings(id: &SessionId) {
+    lock_recovering(prior_live_settings()).remove(id);
+}
+
 /// The chats being moved right now. A second move of the same chat is refused
 /// rather than queued, so two moves never stop and restart one harness at once.
 fn moving_chats() -> &'static StdMutex<std::collections::HashSet<SessionId>> {
@@ -1977,18 +1983,10 @@ impl Supervisor {
             // live wire carries only what a harness can apply now.
             let mut live = settings.clone();
             live.permission_mode = None;
-            // Kept before the write: a refusal can arrive on the pump as
-            // soon as the driver reads the command.
-            let live_harness = self.settings_are_live(&session.harness);
-            if live_harness {
-                prior_live_settings().lock().expect("prior settings").insert(
-                    id.clone(),
-                    PriorSettings {
-                        model: session.model.clone(),
-                        effort: session.effort.clone(),
-                        fast: session.fast,
-                    },
-                );
+            if self.settings_are_live(&session.harness) {
+                return self
+                    .apply_live_settings(id, &session, &entry, &settings, &live)
+                    .await;
             }
             match entry.driver.lock().await.apply_settings(&live).await {
                 Ok(()) => false,
@@ -2007,13 +2005,7 @@ impl Supervisor {
                     }
                     true
                 }
-                Err(error) => {
-                    // Nothing reached the driver, so nothing can be refused.
-                    if live_harness {
-                        prior_live_settings().lock().expect("prior settings").remove(id);
-                    }
-                    return Err(error.into());
-                }
+                Err(error) => return Err(error.into()),
             }
         } else if session.status.is_alive() {
             return Err(SupervisorError::Conflict(
@@ -2022,6 +2014,22 @@ impl Supervisor {
         } else {
             false
         };
+        let updated = self.store_settings(id, &settings)?;
+        if restart {
+            // Same conversation, new process. Resume passes the model
+            // just stored. A stop that already settled is still resumable.
+            self.stop(id).await?;
+            return self.resume(id).await;
+        }
+        Ok(updated)
+    }
+
+    /// Validate and store a settings change, then tell the console.
+    fn store_settings(
+        &self,
+        id: &SessionId,
+        settings: &openremote_harness::SessionSettings,
+    ) -> Result<Session, SupervisorError> {
         let updated = self
             .with_store(|s| {
                 // A custom model id is free text in the harness's own
@@ -2049,11 +2057,44 @@ impl Supervisor {
                 session: updated.clone(),
             }],
         )?;
-        if restart {
-            // Same conversation, new process. Resume passes the model
-            // just stored. A stop that already settled is still resumable.
-            self.stop(id).await?;
-            return self.resume(id).await;
+        Ok(updated)
+    }
+
+    /// A live harness's change, in the one order a refusal cannot undercut:
+    /// the change is validated and stored first, then the values before it
+    /// are held, and only then is the driver written to. The live wire has
+    /// no acknowledgement; a `settings_refused` (handled on the pump) puts
+    /// the held values back, and it can only arrive after the write, by
+    /// which time the store already holds the change it undoes. A write that
+    /// fails reached no driver, so it is undone here and nothing is held.
+    async fn apply_live_settings(
+        &self,
+        id: &SessionId,
+        session: &Session,
+        entry: &SessionEntry,
+        settings: &openremote_harness::SessionSettings,
+        live: &openremote_harness::SessionSettings,
+    ) -> Result<Session, SupervisorError> {
+        let prior = PriorSettings {
+            model: session.model.clone(),
+            effort: session.effort.clone(),
+            fast: session.fast,
+        };
+        // A change that fails validation or the store write holds nothing.
+        let updated = self.store_settings(id, settings)?;
+        lock_recovering(prior_live_settings()).insert(id.clone(), prior.clone());
+        let written = entry.driver.lock().await.apply_settings(live).await;
+        if let Err(error) = written {
+            forget_live_settings(id);
+            if let Ok(restored) = self.with_store(|s| {
+                s.restore_session_settings(id, prior.model, prior.effort, prior.fast)
+            }) {
+                let _ = self.emit_all(
+                    id,
+                    vec![EventPayload::SessionUpdated { session: restored }],
+                );
+            }
+            return Err(error.into());
         }
         Ok(updated)
     }
@@ -2145,6 +2186,7 @@ impl Supervisor {
         }
         self.sessions.lock().await.remove(id);
         lock_recovering(&self.stderr_ring).remove(id);
+        forget_live_settings(id);
         self.session(id)
     }
 
@@ -3017,10 +3059,7 @@ impl Supervisor {
                 // reads the reason where they asked for the change. The change
                 // was stored when it was written, so it is undone here: the
                 // chip and a later resume keep what the harness actually runs.
-                let prior = prior_live_settings()
-                    .lock()
-                    .expect("prior settings")
-                    .remove(id);
+                let prior = lock_recovering(prior_live_settings()).remove(id);
                 if let Some(prior) = prior {
                     let restored = self
                         .with_store(|s| {
@@ -3252,6 +3291,7 @@ impl Supervisor {
             sessions.remove(id).and_then(|e| e.done)
         };
         lock_recovering(&self.stderr_ring).remove(id);
+        forget_live_settings(id);
         if let Some(tx) = done {
             if let Ok(session) = self.session(id) {
                 let _ = tx.send(session);
@@ -4199,5 +4239,29 @@ mod tests {
         ] {
             assert!(refuse_live_mid_turn(true, status).is_none(), "{status:?}");
         }
+    }
+
+    /// Wiring pin, source text. The race a refusal could win is an order of
+    /// statements: the change must be stored and its prior held before the
+    /// driver is written to, or a fast refusal restores first and the late
+    /// store write puts the refused model back. No test can schedule the
+    /// pump between two awaits on demand, so the order itself is pinned.
+    #[test]
+    fn a_live_change_is_stored_and_held_before_the_driver_write() {
+        let src = include_str!("supervisor.rs");
+        let body = src
+            .split("async fn apply_live_settings(")
+            .nth(1)
+            .expect("apply_live_settings is in this file")
+            .split("/// Point a stopped chat")
+            .next()
+            .expect("the function has a body");
+        let stored = body.find("self.store_settings(id, settings)?").expect("stored");
+        let held = body.find("prior_live_settings()).insert(").expect("held");
+        let written = body.find(".apply_settings(live)").expect("written");
+        assert!(stored < held && held < written, "store, hold, then write");
+        // The delete path and both ends of a driver forget the held values.
+        assert!(include_str!("sync.rs").contains("forget_live_settings(&id)"));
+        assert!(src.matches("forget_live_settings(id);").count() >= 3);
     }
 }

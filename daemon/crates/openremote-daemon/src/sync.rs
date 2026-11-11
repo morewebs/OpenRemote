@@ -310,6 +310,8 @@ pub async fn apply_tombstone(app: &Arc<App>, id: SessionId, stone: Tombstone) {
     }
     let _ = lock_recovering(&app.store).tombstone(id, stone);
     app.sync.forget(id);
+    // A held live-settings change belongs to the chat; it goes with it.
+    crate::supervisor::forget_live_settings(&id);
 }
 
 /// Whether a stop attempt reported the child gone. Only a stop that succeeded
