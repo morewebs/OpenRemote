@@ -82,7 +82,8 @@ my-harness/
   driver can change the model on a running chat, between turns. The daemon then
   passes a model change straight to the driver and refuses it while a turn is
   working, because the driver cannot see the session's status. Without the key
-  a change is stored on the chat and takes effect when the chat is resumed. Any
+  a change is stored on the chat and an idle driver is restarted onto it,
+  resuming the same conversation (a working turn has to finish first). Any
   other word is refused at install, naming `live`, rather than being read as
   start-time.
 
