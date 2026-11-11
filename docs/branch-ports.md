@@ -21,6 +21,7 @@ recorded as dropped below.
 | Open-tabs note on delivered prompts | browser 25e69c8 | 8236744 |
 | Daemon lifetime: job object, private stdio, parent watch, bounded leave | br-backlog 6872f11 | 5d972a7 |
 | Dev servers in replies, "Open beside chat" | browser dba4001, 1a2ab3d (chip) | 18bc2f2 |
+| Codex approvals: new request names, MCP elicitation, permissions | br-teams 18b21bc | 706608f |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 `wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`.
@@ -35,7 +36,7 @@ Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 - Obsolete: separate Pinned group, inline rename, row dots, DESIGN.md.
 
 ### Agent teams (br-teams, 13 commits; none on main)
-1. Codex approvals: new request names, MCP elicitation, permissions (18b21bc).
+1. ~~Codex approvals (18b21bc)~~ - done.
 2. Data: `Session.parent`, `Origin` on queued and chat messages (a5ae3da).
 3. Messages carry an origin through prompt, queue and steer (aeb6846).
 4. Team core: `team.rs`, `supervisor/team.rs`, MCP tools, routes, `e2e_team.rs`
