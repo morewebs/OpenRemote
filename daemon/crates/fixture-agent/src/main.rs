@@ -27,6 +27,7 @@ mod codex;
 mod grok;
 mod opencode;
 mod pi;
+mod sidecar;
 
 use std::io::{BufRead, Write};
 
@@ -144,6 +145,11 @@ fn main() {
         for name in SCENARIOS {
             println!("{name}");
         }
+        return;
+    }
+    // Not a harness: the desktop app's side of the daemon sidecar.
+    if argv.first().is_some_and(|a| a == "sidecar-host") {
+        sidecar::main_sidecar_host(&argv);
         return;
     }
     if argv.iter().any(|a| a == "app-server") {

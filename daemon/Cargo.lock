@@ -883,6 +883,7 @@ dependencies = [
  "tower",
  "tower-http",
  "uuid",
+ "windows-sys 0.61.2",
  "zip",
 ]
 

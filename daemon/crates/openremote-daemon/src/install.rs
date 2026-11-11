@@ -450,7 +450,7 @@ fn shell(os: Os, script: &str) -> tokio::process::Command {
 
 /// No terminal for the installer: its own session on Unix (an installer
 /// that opens /dev/tty to ask finds none and takes its default), no
-/// console window on Windows. The one unsafe block in the daemon: a
+/// console window on Windows. Unsafe for a reason of its own: a
 /// `pre_exec` hook is the only way to call setsid between fork and exec,
 /// and a process group alone would stop on SIGTTIN instead of failing to
 /// open the terminal.

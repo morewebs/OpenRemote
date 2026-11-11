@@ -19,6 +19,7 @@ pub mod pairing_page;
 pub mod plugin_driver;
 pub mod plugins;
 pub mod registry;
+pub mod shutdown;
 pub mod signin;
 pub mod supervisor;
 pub mod sync;

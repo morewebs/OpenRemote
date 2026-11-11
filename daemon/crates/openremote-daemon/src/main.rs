@@ -2,8 +2,8 @@
 //!
 //! - `openremote-daemon`: the desktop app's sidecar. Prints
 //!   `READY 127.0.0.1:<port>` on stdout when it is listening (all logs go to
-//!   stderr) and exits when stdin closes - the desktop shell owns its
-//!   lifetime.
+//!   stderr) and exits when stdin closes or the app that started it is
+//!   gone - the desktop shell owns its lifetime.
 //! - `openremote-daemon agent`: a machine's long-running service (systemd
 //!   runs it). No stdin watchdog; exits 78 when this computer isn't in
 //!   OpenRemote Cloud, so the service manager stops retrying.
@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 use openremote_cloud::{Cloud, CloudConfig};
 use openremote_daemon::app::{self, App, AppOptions};
+use openremote_daemon::shutdown;
 
 /// sysexits' EX_CONFIG (78) for a machine that is not in Cloud: a service
 /// manager stops retrying, because the next start would say the same thing.
@@ -151,6 +152,11 @@ async fn serve(agent: bool) -> ExitCode {
             return ExitCode::from(EX_CONFIG);
         }
     };
+    // Before the first child starts (the registry probe below): every
+    // process this daemon starts ends with it, and none of them holds the
+    // daemon's own pipes (shutdown.rs says why).
+    shutdown::hold_children();
+    shutdown::keep_pipes_private();
     // Bind early so the port is known before the app is assembled (the
     // read-a-chat MCP server a chat starts calls back on it), but do not
     // announce it yet. READY is what tells the shell's console that a daemon
@@ -199,13 +205,7 @@ async fn serve(agent: bool) -> ExitCode {
         let dir = data_dir.clone();
         tokio::spawn(async move {
             shutdown_signal().await;
-            eprintln!("openremote-daemon: stopping");
-            app.supervisor.shutdown_all().await;
-            // Clean stop: the published port is no longer true, and the next
-            // start publishes its own. Left behind it would point a chat's
-            // read-a-chat server at a socket nobody holds.
-            openremote_daemon::mcp_chat::remove_port_file(&dir);
-            std::process::exit(0);
+            shutdown::leave(app, "stopping", dir).await;
         });
     } else {
         // The app's sidecar: the app's browser talks to us over these same
@@ -215,6 +215,9 @@ async fn serve(agent: bool) -> ExitCode {
         // The sidecar watchdog: when the shell dies, our stdin closes, and
         // the daemon must not outlive its owner. Same sweep for the same
         // reason - the children belong to this process, not to the shell.
+        // The shell's process is watched too, in case a pipe end ever
+        // outlives it.
+        shutdown::watch_parent(Arc::clone(&app), data_dir.clone());
         let app = Arc::clone(&app);
         let dir = data_dir.clone();
         tokio::spawn(async move {
@@ -232,11 +235,7 @@ async fn serve(agent: bool) -> ExitCode {
                     Ok(None) | Err(_) => break,
                 }
             }
-            eprintln!("openremote-daemon: stdin closed, exiting");
-            app.browser.disconnect();
-            app.supervisor.shutdown_all().await;
-            openremote_daemon::mcp_chat::remove_port_file(&dir);
-            std::process::exit(0);
+            shutdown::leave(app, "stdin closed", dir).await;
         });
     }
 

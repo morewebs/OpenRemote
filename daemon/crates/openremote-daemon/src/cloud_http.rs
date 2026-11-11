@@ -64,9 +64,9 @@ fn open_browser(url: &str) -> bool {
     command
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .is_ok()
+        .stderr(std::process::Stdio::null());
+    // The browser is the user's: it stays open after OpenRemote quits.
+    crate::shutdown::spawn_outside(&mut command).is_ok()
 }
 
 pub async fn cancel_sign_in(State(app): State<Arc<App>>) -> Response {
