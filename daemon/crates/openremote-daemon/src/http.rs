@@ -1482,6 +1482,18 @@ async fn install_staged(
             let command = staged.command.clone();
             app.plugins.install(staged).map_err(plugin_failure)?;
             let now = openremote_core::now_ms();
+            let harness =
+                manifest
+                    .harness
+                    .as_ref()
+                    .map(|harness| openremote_core::PluginHarnessRef {
+                        id: harness.id.clone(),
+                        name: harness.name.clone(),
+                    });
+            let contributes = openremote_core::PluginContributions {
+                harnesses: harness.iter().cloned().collect(),
+                ..Default::default()
+            };
             let plugin = {
                 let mut store = crate::supervisor::lock_recovering(&app.store);
                 let before = store.installed_plugin(&plugin_id).ok().cloned();
@@ -1495,13 +1507,15 @@ async fn install_staged(
                     runtime: manifest.runtime,
                     powers: manifest.powers,
                     source,
-                    scope: openremote_core::PluginScope::Machine,
-                    harness: manifest.harness.as_ref().map(|harness| {
-                        openremote_core::PluginHarnessRef {
-                            id: harness.id.clone(),
-                            name: harness.name.clone(),
-                        }
-                    }),
+                    // An update keeps the scope its install was approved
+                    // for; a new install is for this machine (the install
+                    // screen's scope choice arrives with the scopes).
+                    scope: before
+                        .as_ref()
+                        .map_or(openremote_core::PluginScope::Machine, |p| p.scope),
+                    project: None,
+                    contributes,
+                    harness,
                     enabled: before.as_ref().is_none_or(|p| p.enabled),
                     installed_at: before.as_ref().map_or(now, |p| p.installed_at),
                     updated_at: now,

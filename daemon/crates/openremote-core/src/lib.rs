@@ -31,15 +31,16 @@ pub mod store;
 pub use events::{Event, EventPayload};
 pub use ids::{DecisionId, DeviceId, MachineId, ProjectId, RuleId, SessionId};
 pub use model::{
-    ApprovedCommand, AutomationRule, ChatMessage, Decision, DecisionKind, DecisionOption,
-    DecisionState, EndpointAuthKind, EndpointModel, EndpointSecret, Harness, HarnessHonors,
-    ImageRef, InstallSpec, InstalledPlugin, LOCAL_MARKETPLACE, Machine, MachineStatus, MachineView,
-    MarketplaceRecord, MarketplaceSource, McpServerEntry, MessageRole, ModelEndpoint,
-    ModelEndpointView, Origin, ParentLink, PluginHarnessRef, PluginPower, PluginRuntime,
-    PluginScope, PluginSource, Project, QueuedMessage, Receipt, ReceiptStatus, Session,
-    SessionStatus, Trigger, TriggerKind, TurnOutcome, endpoint_models_url,
-    normalize_endpoint_base_url, normalize_endpoint_models_path, validate_endpoint_harness,
-    validate_endpoint_name, validate_model_id,
+    ApprovedCommand, AutomationRule, ChatMessage, ComposerInputContribution, Decision,
+    DecisionKind, DecisionOption, DecisionState, EndpointAuthKind, EndpointModel, EndpointSecret,
+    Harness, HarnessHonors, ImageRef, InstallSpec, InstalledPlugin, LOCAL_MARKETPLACE, Machine,
+    MachineStatus, MachineView, MarketplaceRecord, MarketplaceSource, McpServerEntry, MessageRole,
+    ModelEndpoint, ModelEndpointView, Origin, ParentLink, PluginContributions, PluginHarnessRef,
+    PluginPower, PluginRuntime, PluginScope, PluginSource, Project, QueuedMessage, Receipt,
+    ReceiptStatus, Session, SessionStatus, SettingField, SettingKind, SettingOption,
+    ToolContribution, Trigger, TriggerKind, TurnOutcome, ViewContribution, endpoint_models_url,
+    normalize_endpoint_base_url, normalize_endpoint_models_path, plugin_id,
+    validate_endpoint_harness, validate_endpoint_name, validate_model_id,
 };
 // Same reason as mod store: the desktop's store type is not in a browser build.
 #[cfg(not(target_arch = "wasm32"))]

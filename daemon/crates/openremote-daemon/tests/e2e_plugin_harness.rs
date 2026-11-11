@@ -251,6 +251,20 @@ async fn installing_a_harness_plugin_adds_its_harness_without_a_restart() {
         installed.body["result"]["harness"]["id"],
         "fixture-plugin-harness"
     );
+    // The record also says who it is for and what it adds: this machine, no
+    // project, and the harness it drives - every other list empty.
+    let record = &installed.body["result"];
+    assert_eq!(record["scope"], "machine", "{}", installed.raw);
+    assert!(record.get("project").is_none(), "{}", installed.raw);
+    assert_eq!(
+        record["contributes"]["harnesses"],
+        json!([{"id": "fixture-plugin-harness", "name": "Fixture Plugin Harness"}]),
+        "{}",
+        installed.raw
+    );
+    for list in ["tools", "composer_inputs", "views", "settings"] {
+        assert_eq!(record["contributes"][list], json!([]), "{list}");
+    }
 
     // No restart: the registry re-probed when the plugin landed.
     let after = call(&daemon, "GET", "/capabilities", None).await;

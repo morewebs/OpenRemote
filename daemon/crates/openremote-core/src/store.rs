@@ -188,6 +188,7 @@ impl Store {
         let blobs = std::sync::Arc::new(crate::blobs::Blobs::new(&dir));
         let mut store = Self { dir, state, blobs };
         let rekeyed = store.rekey_installed_plugins();
+        let contributed = store.backfill_plugin_contributions();
         let healed = store.heal_logs()?;
         let discovered = store.discover_logs()?;
         let pruned = store.prune_receipts();
@@ -197,7 +198,15 @@ impl Store {
         let this_id = store.ensure_this_machine();
         // Opening the store means the daemon is running - present now.
         store.mark_present(&this_id).ok();
-        if rekeyed || healed || discovered || pruned || reconciled || titled || !had_this_machine {
+        if rekeyed
+            || contributed
+            || healed
+            || discovered
+            || pruned
+            || reconciled
+            || titled
+            || !had_this_machine
+        {
             store.persist()?;
         }
         Ok(store)
@@ -228,6 +237,25 @@ impl Store {
         let plugins = std::mem::take(&mut self.state.installed_plugins);
         self.state.installed_plugins = plugins.into_values().map(|p| (p.id(), p)).collect();
         true
+    }
+
+    /// An install saved before plugins had `contributes` has an empty one,
+    /// though its record names the harness it provides: carry that harness
+    /// over, so the review and the list say what the plugin adds. Only that
+    /// one summary is derived - from what the user approved at install, never
+    /// from the plugin's folder. A record that already lists its harnesses is
+    /// left as it is.
+    fn backfill_plugin_contributions(&mut self) -> bool {
+        let mut changed = false;
+        for plugin in self.state.installed_plugins.values_mut() {
+            if let Some(harness) = &plugin.harness {
+                if plugin.contributes.harnesses.is_empty() {
+                    plugin.contributes.harnesses.push(harness.clone());
+                    changed = true;
+                }
+            }
+        }
+        changed
     }
 
     /// A crash can tear the last line of a log, or land a batch in the log
@@ -1936,7 +1964,7 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{DecisionKind, DecisionOption};
+    use crate::model::{DecisionKind, DecisionOption, PluginScope};
     use crate::{EndpointAuthKind, EndpointSecret, ModelEndpoint};
 
     fn tempdir() -> PathBuf {
@@ -2059,6 +2087,169 @@ mod tests {
         assert!(store.installed_plugin("toy").is_err());
         let saved = std::fs::read_to_string(dir.join("state.json")).unwrap();
         assert!(saved.contains("\"toy@local\""), "{saved}");
+    }
+
+    fn installed(name: &str, scope: PluginScope, project: Option<ProjectId>) -> InstalledPlugin {
+        InstalledPlugin {
+            name: name.into(),
+            marketplace: "local".into(),
+            resolved: None,
+            command: None,
+            version: None,
+            description: None,
+            runtime: crate::model::PluginRuntime::Wasm,
+            powers: vec![crate::model::PluginPower::AgentTools],
+            source: crate::model::PluginSource::Folder {
+                path: "/somewhere".into(),
+            },
+            scope,
+            project,
+            contributes: crate::model::PluginContributions {
+                tools: vec![crate::model::ToolContribution {
+                    name: "shout".into(),
+                    description: "upper-case a line".into(),
+                    input_schema: serde_json::json!({"type": "object"}),
+                    read_only: true,
+                    timeout_secs: None,
+                }],
+                ..Default::default()
+            },
+            harness: None,
+            enabled: true,
+            installed_at: 1,
+            updated_at: 1,
+        }
+    }
+
+    #[test]
+    fn plugins_installed_before_scopes_and_contributions_still_load() {
+        // A store written by the build that had one scope and no
+        // `contributes` or `project`: the same record JSON, with only what
+        // that build wrote. It loads as a machine install that adds
+        // nothing, under the same id - and a harness plugin's record, which
+        // already named its harness, shows it as what it contributes.
+        let dir = tempdir();
+        let content = serde_json::json!({
+            "name": "notes",
+            "marketplace": "openremote",
+            "runtime": "content",
+            "powers": [],
+            "source": {"kind": "folder", "path": "/somewhere/notes"},
+            "scope": "machine",
+            "enabled": false,
+            "installed_at": 7,
+            "updated_at": 8,
+        });
+        let driver = serde_json::json!({
+            "name": "freebuff",
+            "marketplace": "local",
+            "runtime": "process",
+            "powers": ["run_programs", "network"],
+            "source": {"kind": "folder", "path": "/somewhere/freebuff"},
+            "scope": "machine",
+            "harness": {"id": "freebuff", "name": "Freebuff"},
+            "enabled": true,
+            "installed_at": 1,
+            "updated_at": 1,
+        });
+        let state = serde_json::json!({
+            "sessions": {}, "decisions": {}, "receipts": {},
+            "installed_plugins": {"notes@openremote": content, "freebuff@local": driver},
+        });
+        std::fs::write(dir.join("state.json"), state.to_string()).unwrap();
+        let store = Store::open(dir.clone()).unwrap();
+        let notes = store.installed_plugin("notes@openremote").unwrap();
+        assert_eq!(notes.scope, PluginScope::Machine);
+        assert_eq!(notes.project, None);
+        assert!(notes.contributes.is_empty());
+        assert!(!notes.enabled);
+        assert_eq!((notes.installed_at, notes.updated_at), (7, 8));
+        let freebuff = store.installed_plugin("freebuff@local").unwrap();
+        assert_eq!(freebuff.powers.len(), 2);
+        assert_eq!(
+            freebuff.contributes.harnesses,
+            vec![freebuff.harness.clone().unwrap()]
+        );
+        assert!(freebuff.contributes.tools.is_empty());
+        drop(store);
+        // The next open reads what was saved, and the backfill holds still.
+        let again = Store::open(dir).unwrap();
+        assert_eq!(
+            again
+                .installed_plugin("freebuff@local")
+                .unwrap()
+                .contributes
+                .harnesses
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn a_plugin_installed_for_a_project_keeps_it_and_two_projects_sit_side_by_side() {
+        let dir = tempdir();
+        let (one, two) = (ProjectId::new(), ProjectId::new());
+        let mut store = Store::open(dir.clone()).unwrap();
+        store
+            .put_installed_plugin(installed("shout", PluginScope::Machine, None))
+            .unwrap();
+        store
+            .put_installed_plugin(installed("shout", PluginScope::Project, Some(one)))
+            .unwrap();
+        store
+            .put_installed_plugin(installed("shout", PluginScope::ProjectLocal, Some(two)))
+            .unwrap();
+        assert_eq!(store.installed_plugins().len(), 3);
+        drop(store);
+        // Saved and reopened: every record is still under its own id, with
+        // its scope, its project and what it contributes.
+        let mut store = Store::open(dir).unwrap();
+        let machine = store.installed_plugin("shout@local").unwrap();
+        assert_eq!(
+            (machine.scope, machine.project),
+            (PluginScope::Machine, None)
+        );
+        let repo = store
+            .installed_plugin(&format!("shout@local~{one}"))
+            .unwrap();
+        assert_eq!(
+            (repo.scope, repo.project),
+            (PluginScope::Project, Some(one))
+        );
+        assert_eq!(repo.contributes.tools[0].name, "shout");
+        let local = store
+            .installed_plugin(&format!("shout@local~{two}"))
+            .unwrap();
+        assert_eq!(
+            (local.scope, local.project),
+            (PluginScope::ProjectLocal, Some(two))
+        );
+        // Turning one off leaves the others, and removing one is by its id.
+        store
+            .set_installed_plugin_enabled(&format!("shout@local~{one}"), false)
+            .unwrap();
+        assert!(store.installed_plugin("shout@local").unwrap().enabled);
+        store
+            .remove_installed_plugin(&format!("shout@local~{two}"))
+            .unwrap();
+        assert_eq!(store.installed_plugins().len(), 2);
+    }
+
+    #[test]
+    fn turning_a_plugin_off_never_changes_what_the_user_approved() {
+        // powers, scope, project and contributes are the install record: the
+        // store's other writes to the record leave them as they were.
+        let dir = tempdir();
+        let project = ProjectId::new();
+        let mut store = Store::open(dir).unwrap();
+        let before = installed("shout", PluginScope::Project, Some(project));
+        let id = before.id();
+        store.put_installed_plugin(before.clone()).unwrap();
+        let after = store.set_installed_plugin_enabled(&id, false).unwrap();
+        assert!(!after.enabled);
+        assert_eq!(after.powers, before.powers);
+        assert_eq!((after.scope, after.project), (before.scope, before.project));
+        assert_eq!(after.contributes, before.contributes);
     }
 
     #[test]
