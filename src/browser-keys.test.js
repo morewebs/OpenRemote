@@ -113,7 +113,7 @@ test('the browser runs its keys from the catalog, and only while it has focus', 
   assert.match(view, /keys\.current\[actionForCombo\(bound\.current, chord\)\]/)
   for (const a of BROWSER_ACTIONS) assert.ok(view.includes(`'${a.id}':`), `the view handles ${a.id}`)
   assert.match(view, /if \(!browserHasFocus\(rootRef\.current, e\.target\)\) return/)
-  assert.match(view, /<div className="bw" ref=\{rootRef\} tabIndex=\{-1\}>/)
+  assert.match(view, /<div className=\{full \? 'bw full' : 'bw'\} ref=\{rootRef\} tabIndex=\{-1\}>/)
   assert.doesNotMatch(view, /function chordOf/)
 })
 

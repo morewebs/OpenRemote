@@ -39,7 +39,7 @@ import { insertToComposer } from './composer-insert.js'
 import { SEARCH_ENGINES, omnibox, security, shownAddress, suggest } from './browser-omnibox.js'
 import { browserSetting, loadBrowserPrefs, setSitePermission, useBrowserPrefs } from './browser-prefs.js'
 import { closeOthers, closeTab, closeToRight, cycle, canUse, extrasMissing, newTab, openBelongs, rememberClosed, stripPlan, takeClosed, tabTitle } from './browser-tabs.js'
-import { adopt, answerPrompt, browserCall, call, dropPromptsFor, clearHistory, getState, onKey, patchTab, recordVisit, registerReopen, removeBookmark, saveBookmark, setState, subscribe, updateBookmark } from './browser-store.js'
+import { adopt, answerPrompt, browserCall, call, dropPromptsFor, onFullscreen, clearHistory, getState, onKey, patchTab, recordVisit, registerReopen, removeBookmark, saveBookmark, setState, subscribe, updateBookmark } from './browser-store.js'
 import { FLOATING, covered } from './browser-occlusion.js'
 import { DEVICES, browserHasFocus, fitDevice, fileName, nextZoom, permissionName, permissionRows, zoomLabel } from './browser-chrome.js'
 import { PermissionBar } from './BrowserInfobar.jsx'
@@ -112,10 +112,13 @@ function anchorOf(el) {
 // ---- the view ----
 
 export default function BrowserView({ onClosePane = null, askToShow = null }) {
-  const { tabs, active, downloads, finds, prompts, closed, features, bookmarks, bookmarksStale, bookmarksNote, history } = useSyncExternalStore(subscribe, getState)
+  const { tabs, active, downloads, finds, prompts, fullscreen, closed, features, bookmarks, bookmarksStale, bookmarksNote, history } = useSyncExternalStore(subscribe, getState)
   const current = tabs.find((t) => t.key === active) ?? tabs[0]
   // The shown page's waiting request, if a site asked for something.
   const prompt = (current?.native && prompts.find((p) => p.tab === current.native)) || null
+  // The shown page is full screen (a video's button): the shell made the
+  // window full screen, and the pane gives the page all of it, chrome hidden.
+  const full = Boolean(fullscreen) && fullscreen === current?.native
   // Settings > Browser's choices, shared through browser-prefs.js: the
   // engine the address bar searches with, and whether the bookmarks bar
   // shows on every page or on the new tab page only.
@@ -553,8 +556,30 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
 
   const close = (key) => {
     const tab = getState().tabs.find((t) => t.key === key)
-    if (tab?.native) call('browser_close', { tab: tab.native })
-    dropPromptsFor(tab?.native)
+    // A page closing while full screen first leaves it, so the shell takes
+    // the window out of full screen with it (Ctrl+W from a full-screen
+    // video would otherwise leave the app full screen with no page).
+    if (tab?.native && tab.native === getState().fullscreen) {
+      leaveFullscreen(tab.native).finally(() => closeNow(key))
+      return
+    }
+    closeNow(key)
+  }
+
+  const leaveFullscreen = (native) =>
+    call('browser_cdp', {
+      tab: native,
+      method: 'Runtime.evaluate',
+      params: { expression: 'document.exitFullscreen?.()', awaitPromise: true },
+      wait: 'deadline',
+    })
+
+  const closeNow = (key) => {
+    const tab = getState().tabs.find((t) => t.key === key)
+    if (!tab) return
+    if (tab.native) call('browser_close', { tab: tab.native })
+    dropPromptsFor(tab.native)
+    if (tab.native) onFullscreen({ tab: tab.native, on: false })
     setState((s) => {
       const next = closeTab(s.tabs, key, s.active)
       return { tabs: next.tabs, active: next.active, closed: rememberClosed(s.closed, next.closed) }
@@ -1074,7 +1099,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   const shownTabs = tabs.slice(plan.start, plan.start + plan.shown)
 
   return (
-    <div className="bw" ref={rootRef} tabIndex={-1}>
+    <div className={full ? 'bw full' : 'bw'} ref={rootRef} tabIndex={-1}>
       <div className="bw-tabs" role="tablist" aria-label="Tabs" onPointerEnter={precapture}>
         <div className="bw-tabs-scroll" ref={stripRef}>
           {shownTabs.map((t) => (
@@ -1300,7 +1325,9 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
 
       {prompt && (
         // A site asking for the camera, the microphone, the location...: in
-        // the pane's flow, so it never covers the page it speaks for.
+        // the pane's flow, so it never covers the page it speaks for. It
+        // shows even in full screen: a call that went full screen and then
+        // asks for the camera still needs an answer.
         <PermissionBar key={`${prompt.tab}:${prompt.id}`} prompt={prompt} onAnswer={answer} />
       )}
 

@@ -93,7 +93,7 @@ test('Settings finds Site permissions, and every surface is wired', () => {
   assert.match(view, /<PermissionBar key=\{`\$\{prompt\.tab\}:\$\{prompt\.id\}`\} prompt=\{prompt\} onAnswer=\{answer\} \/>/)
   assert.match(view, /answerPrompt\(prompt, allow, remember\)\.catch\(\(err\) => notify\(errorCopy\(err\)\)\)/)
   assert.match(view, /permissionRows\(prefs\.permissions, siteOrigin\)/)
-  assert.match(view, /dropPromptsFor\(tab\?\.native\)/)
+  assert.match(view, /dropPromptsFor\(tab\.native\)/)
   const bar = read('./BrowserInfobar.jsx')
   assert.match(bar, /className="bw-strip bw-info" role="alert"/)
   assert.match(bar, /!prompt\.private && \(/)

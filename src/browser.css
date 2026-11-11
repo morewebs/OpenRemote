@@ -546,6 +546,21 @@
   color: var(--accent);
 }
 
+/* ---- full screen ---- */
+
+/* A page showing something full screen: the shell made the window full
+   screen, and the pane covers it with the page alone: every bar goes but
+   a site's request, which still needs an answer. */
+.bw.full {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+}
+
+.bw.full > :not(.bw-page):not(.bw-info) {
+  display: none;
+}
+
 /* ---- private tabs ---- */
 
 /* The Detective mark: in the strip, beside the address, and on the new tab

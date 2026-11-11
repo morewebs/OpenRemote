@@ -196,6 +196,9 @@ let state = (() => {
     // Sites' requests waiting for the user's answer (the permission bar):
     // { tab, id, origin, kind, label, private }.
     prompts: [],
+    // The page showing something full screen (a video's button), by the
+    // shell's id: the view gives it the whole window.
+    fullscreen: null,
     features: null,
     bookmarks: loadBookmarks(),
     // Whether the list is the daemon's, or only this window's last cache, and
@@ -414,6 +417,14 @@ export async function onPermission(p) {
   timer?.unref?.()
 }
 
+// ---- full screen ----
+
+/// A page went full screen or came back (`browser:fullscreen`); the shell
+/// has already made the window follow.
+export function onFullscreen({ tab, on } = {}) {
+  setState((s) => ({ fullscreen: on ? tab : s.fullscreen === tab ? null : s.fullscreen }))
+}
+
 async function wire() {
   const { listen } = await import('@tauri-apps/api/event')
   listen('browser:tab', ({ payload: p }) => {
@@ -458,6 +469,7 @@ async function wire() {
     for (const fn of keyHandlers) fn(payload.chord)
   })
   listen('browser:permission', ({ payload }) => onPermission(payload))
+  listen('browser:fullscreen', ({ payload }) => onFullscreen(payload))
   // What this build's shell can do with a tab: find in page, the DevTools
   // bridge (element picking), device view and forgetting a site are written
   // against Windows' engine, and a control the shell would refuse must not
