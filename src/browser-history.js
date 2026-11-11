@@ -85,15 +85,21 @@ export const CLEAR_RANGES = [
   { id: 'all', label: 'All time', ms: null },
 ]
 
-// Where a range starts, or null for all of it.
+// Where a range starts, or null for all of it ("All time" only). A range
+// this build does not know is refused, never read as "all of it": clearing
+// is not undone.
 export function sinceFor(range, now = Date.now()) {
   const found = CLEAR_RANGES.find((r) => r.id === range)
-  return found?.ms ? now - found.ms : null
+  if (!found) throw new RangeError(`"${range}" is not a time range to clear.`)
+  return found.ms ? now - found.ms : null
 }
 
-// The record with the visits from `since` on taken out (all of it when
-// `since` is null): what is left is older than the range.
+// The record with the visits from `since` on taken out: what is left is
+// older than the range. Only null (All time) empties it; anything that is
+// not a time clears nothing.
 export function visitsBefore(entries, since) {
-  if (since == null) return []
-  return (entries ?? []).filter((entry) => entry.at < since)
+  const list = entries ?? []
+  if (since === null) return []
+  if (!Number.isFinite(since)) return list
+  return list.filter((entry) => entry.at < since)
 }

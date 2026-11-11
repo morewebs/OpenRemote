@@ -79,7 +79,9 @@ test('Chrome\'s time ranges, and clearing keeps only what is older', () => {
   assert.equal(sinceFor('hour', now), now - 60 * 60 * 1000)
   assert.equal(sinceFor('month', now), now - 28 * 24 * 60 * 60 * 1000)
   assert.equal(sinceFor('all', now), null)
-  assert.equal(sinceFor('nonsense', now), null)
+  // A range this build does not know is refused, never read as All time.
+  assert.throws(() => sinceFor('nonsense', now), RangeError)
+  assert.throws(() => sinceFor(undefined, now), RangeError)
   const visits = [
     { url: 'https://c.test/', at: now - 1000 },
     { url: 'https://b.test/', at: now - 2 * 60 * 60 * 1000 },
@@ -88,6 +90,9 @@ test('Chrome\'s time ranges, and clearing keeps only what is older', () => {
   assert.deepEqual(visitsBefore(visits, sinceFor('hour', now)).map((v) => v.url), ['https://b.test/', 'https://a.test/'])
   assert.deepEqual(visitsBefore(visits, sinceFor('day', now)).map((v) => v.url), ['https://a.test/'])
   assert.deepEqual(visitsBefore(visits, null), [])
+  // Only null empties the record: anything that is not a time clears nothing.
+  assert.equal(visitsBefore(visits, undefined).length, 3)
+  assert.equal(visitsBefore(visits, NaN).length, 3)
 })
 
 test('the shell is asked for what was ticked: cookies with the sites\' storage', () => {
@@ -130,7 +135,9 @@ test('the dialog is the dialog family, clears through the shell, and says refusa
   const dialog = read('./BrowserClearData.jsx')
   assert.match(dialog, /useDialog\(panelRef, onClose\)/)
   assert.match(dialog, /invoke\('browser_clear_data', \{ kinds \}\)/)
-  assert.match(dialog, /if \(history\) clearHistorySince\(sinceFor\(range\)\)/)
+  // The range is read before anything is cleared, so a bad one stops the lot.
+  assert.match(dialog, /const since = history \? sinceFor\(range\) : null\s*const kinds = clearKinds/)
+  assert.match(dialog, /if \(history\) clearHistorySince\(since\)/)
   assert.match(dialog, /setError\(errorCopy\(err\)\)/)
   assert.doesNotMatch(dialog, /addEventListener\('keydown'/)
 })

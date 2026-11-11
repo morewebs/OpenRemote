@@ -32,6 +32,9 @@ export default function BrowserClearData({ onClose, onCleared }) {
     setBusy(true)
     setError(null)
     try {
+      // The range first: one this build does not know stops here, before
+      // anything is cleared.
+      const since = history ? sinceFor(range) : null
       const kinds = clearKinds({ cookies, cache })
       if (kinds.length) {
         const { invoke } = await import('@tauri-apps/api/core')
@@ -39,7 +42,7 @@ export default function BrowserClearData({ onClose, onCleared }) {
       }
       // The reading record is this console's own: cleared after the shell
       // answered, so a refusal leaves everything as it was.
-      if (history) clearHistorySince(sinceFor(range))
+      if (history) clearHistorySince(since)
       onCleared?.()
       onClose()
     } catch (err) {
