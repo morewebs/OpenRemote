@@ -58,7 +58,7 @@ import './panels.css'
 import './settings.css'
 import './keyboard.css'
 import { useKeyboard, isMac } from './keyboard.jsx'
-import { ACTIONS, GROUPS, captureRefusal, comboFromEvent, comboLabel, isOverridden } from './shortcuts.js'
+import { BROWSER_ACTIONS, CATALOG, GROUPS, captureRefusal, comboFromEvent, comboLabel, isOverridden, shownActions } from './shortcuts.js'
 
 // The harnesses whose own login command the daemon can relay - the
 // Sign-in action renders only there (no dead UI elsewhere).
@@ -81,6 +81,10 @@ const SECTION_ICONS = {
 }
 
 const MAX_RESULTS = 24
+
+// The browser's keys are listed only where there is a browser: the desktop
+// app, not a phone or a plain browser tab.
+const BROWSER_KEYS = hasTauri && !isMobile
 
 // The time a fact was read, said plainly. A row the console cannot re-read on
 // focus says when it last looked rather than pretending to be live.
@@ -185,7 +189,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
       const displaced = kb.rebind(capturing, combo)
       setMoved(
         displaced.length
-          ? { id: capturing, from: displaced.map((id) => ACTIONS.find((a) => a.id === id)?.label ?? id).join(', ') }
+          ? { id: capturing, from: displaced.map((id) => CATALOG.find((a) => a.id === id)?.label ?? id).join(', ') }
           : null,
       )
       setCapturing(null)
@@ -625,6 +629,8 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
     // "Reset every shortcut" is in the bar only while some key has been
     // changed with the defaults gone, there is nothing to reset.
     if (!(Object.keys(kb?.overrides ?? {}).length > 0)) keys.add('keyboard-reset')
+    // The Browser key group is listed only where there is a browser.
+    if (!BROWSER_KEYS) for (const a of BROWSER_ACTIONS) keys.add(`keyboard-${a.id}`)
     // This install is a phone tab, but the daemon rows and the first-run step
     // are drawn on the desktop only: a result that lands nowhere is dead UI.
     if (isMobile) {
@@ -662,7 +668,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
     const words = keyboardFilter.split(/\s+/).filter(Boolean)
     return GROUPS.map((group) => ({
       ...group,
-      actions: ACTIONS.filter((a) => {
+      actions: shownActions(BROWSER_KEYS).filter((a) => {
         if (a.group !== group.id) return false
         if (!words.length || capturing === a.id) return true
         const combo = kb?.bindings?.[a.id] ?? null
@@ -1423,7 +1429,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
               </label>
               {shortcutQuery && (
                 <span className="stg-kb-count" aria-live="polite">
-                  {shortcutCount} of {ACTIONS.length}
+                  {shortcutCount} of {shownActions(BROWSER_KEYS).length}
                 </span>
               )}
               {Object.keys(kb.overrides).length > 0 && (
@@ -1451,6 +1457,12 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
               keyboardGroups.map((group) => (
                 <div key={group.id} className="pn-list pn-list--tight kb-set">
                   <div className="kb-group-label">{group.label}</div>
+                  {group.id === 'browser' && (
+                    <div className="pn-detail kb-group-note">
+                      These act while the browser has focus. Everywhere else the same keys keep their meaning above.
+                      From a page, a key reaches the browser only if it is one the browser listens for.
+                    </div>
+                  )}
                   {group.actions.map((a) => (
                     <div className="pn-row" key={a.id} data-stg={`keyboard-${a.id}`}>
                       <div>

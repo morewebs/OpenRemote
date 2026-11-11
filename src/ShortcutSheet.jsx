@@ -5,8 +5,12 @@ import { useRef } from 'react'
 import { X } from '@phosphor-icons/react'
 import { useKeyboard, isMac } from './keyboard.jsx'
 import { useDialog } from './dialog-focus.js'
-import { ACTIONS, GROUPS, comboLabel } from './shortcuts.js'
+import { GROUPS, comboLabel, shownActions } from './shortcuts.js'
+import { hasTauri, isMobile } from './platform.js'
 import './keyboard.css'
+
+// The Browser group shows only where there is a browser: the desktop app.
+const BROWSER_KEYS = hasTauri && !isMobile
 
 export default function ShortcutSheet({ onClose }) {
   const kb = useKeyboard()
@@ -15,7 +19,7 @@ export default function ShortcutSheet({ onClose }) {
 
   const groups = GROUPS.map((g) => ({
     ...g,
-    rows: ACTIONS.filter((a) => a.group === g.id && kb.bindings[a.id]),
+    rows: shownActions(BROWSER_KEYS).filter((a) => a.group === g.id && kb.bindings[a.id]),
   })).filter((g) => g.rows.length)
 
   return (

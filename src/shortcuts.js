@@ -17,6 +17,7 @@ export const GROUPS = [
   { id: 'chat', label: 'Chat' },
   { id: 'pickers', label: 'Pickers' },
   { id: 'layout', label: 'Layout' },
+  { id: 'browser', label: 'Browser' },
 ]
 
 const modelSwitches = Array.from({ length: 9 }, (_, i) => ({
@@ -72,20 +73,72 @@ export const ACTIONS = [
   { id: 'close-pane', group: 'layout', label: 'Close the pane', keys: 'Mod+W', navigates: true },
 ]
 
+// The built-in browser's keys: Chrome's, acting only while the browser has
+// focus (its tab strip, toolbar, address bar or page). They live in a scope
+// of their own, so Ctrl+W closes a tab in the browser and the pane
+// everywhere else; taking a key moves it only between actions of one scope.
+// A page hands the console only the chords the shell takes for it (TAKEN in
+// src-tauri/src/browser/win.rs), so every default here is one of those.
+// Ctrl+Shift+B stays the app's (show or hide the browser) even from a page.
+export const BROWSER_ACTIONS = [
+  { id: 'browser-new-tab', group: 'browser', label: 'New tab', keys: 'Mod+T' },
+  { id: 'browser-close-tab', group: 'browser', label: 'Close the tab', keys: 'Mod+W' },
+  { id: 'browser-reopen-tab', group: 'browser', label: 'Reopen the closed tab', keys: 'Mod+Shift+T' },
+  { id: 'browser-next-tab', group: 'browser', label: 'Next tab', keys: 'Mod+Tab' },
+  { id: 'browser-prev-tab', group: 'browser', label: 'Previous tab', keys: 'Mod+Shift+Tab' },
+  { id: 'browser-address', group: 'browser', label: 'Go to the address bar', keys: 'Mod+L' },
+  { id: 'browser-back', group: 'browser', label: 'Back', keys: 'Alt+Left' },
+  { id: 'browser-forward', group: 'browser', label: 'Forward', keys: 'Alt+Right' },
+  { id: 'browser-reload', group: 'browser', label: 'Reload', keys: 'Mod+R' },
+  { id: 'browser-reload-key', group: 'browser', label: 'Reload, second key', keys: 'F5' },
+  { id: 'browser-find', group: 'browser', label: 'Find in page', keys: 'Mod+F' },
+  { id: 'browser-bookmark', group: 'browser', label: 'Bookmark this tab', keys: 'Mod+D' },
+  { id: 'browser-history', group: 'browser', label: 'History', keys: 'Mod+H' },
+  { id: 'browser-downloads', group: 'browser', label: 'Downloads', keys: 'Mod+J' },
+  { id: 'browser-zoom-in', group: 'browser', label: 'Zoom in', keys: 'Mod+=' },
+  { id: 'browser-zoom-out', group: 'browser', label: 'Zoom out', keys: 'Mod+-' },
+  { id: 'browser-zoom-reset', group: 'browser', label: 'Actual size', keys: 'Mod+0' },
+  { id: 'browser-devtools', group: 'browser', label: 'Developer tools', keys: 'F12' },
+]
+
+// Every action, app and browser, in the order Settings and the cheat sheet
+// list them.
+export const CATALOG = [...ACTIONS, ...BROWSER_ACTIONS]
+
+// The actions listed where this console runs: the browser's only where
+// there is a browser (the desktop app).
+export function shownActions(hasBrowser) {
+  return hasBrowser ? CATALOG : ACTIONS
+}
+
 // macOS keeps Cmd+H (hide), Cmd+M (minimize) and Cmd+W (close the
-// window) for itself, so those three actions default to Option+Cmd there.
+// window) for itself, so those actions default to Option+Cmd there. The
+// browser's keys follow Chrome for the Mac where Cmd+Tab (switching apps)
+// or Option+arrows (moving by word) would clash.
 const MAC_KEYS = {
   'pick-harness': 'Mod+Alt+H',
   'pick-model': 'Mod+Alt+M',
   'close-pane': 'Mod+Alt+W',
+  'browser-close-tab': 'Mod+Alt+W',
+  'browser-next-tab': 'Ctrl+Tab',
+  'browser-prev-tab': 'Ctrl+Shift+Tab',
+  'browser-back': 'Mod+[',
+  'browser-forward': 'Mod+]',
+  'browser-history': 'Mod+Y',
+  'browser-downloads': 'Mod+Shift+J',
 }
 
-const ACTION_IDS = new Set(ACTIONS.map((a) => a.id))
+const ACTION_IDS = new Set(CATALOG.map((a) => a.id))
+const BROWSER_IDS = new Set(BROWSER_ACTIONS.map((a) => a.id))
+
+function scopeOf(id) {
+  return BROWSER_IDS.has(id) ? BROWSER_ACTIONS : ACTIONS
+}
 
 // The default key for an action on this platform.
 export function defaultKey(id, mac = false) {
   if (mac && Object.hasOwn(MAC_KEYS, id)) return MAC_KEYS[id]
-  return ACTIONS.find((a) => a.id === id)?.keys ?? null
+  return CATALOG.find((a) => a.id === id)?.keys ?? null
 }
 
 const MOD_ORDER = ['Mod', 'Ctrl', 'Alt', 'Shift']
@@ -269,19 +322,20 @@ export function saveOverrides(overrides) {
   }
 }
 
-// Every action's live combo: the user's choice where they made one, else
-// the default - but a default never shares a key with a user's choice
-// (the user's choice wins; the default is shadowed to unbound).
-export function effectiveBindings(overrides, mac = false) {
+// Every action's live combo within one scope: the user's choice where they
+// made one, else the default - but a default never shares a key with a
+// user's choice (the user's choice wins; the default is shadowed to
+// unbound).
+function scopeBindings(list, overrides, mac) {
   const out = {}
   const taken = new Set()
-  for (const a of ACTIONS) {
+  for (const a of list) {
     if (Object.hasOwn(overrides, a.id)) {
       out[a.id] = overrides[a.id]
       if (overrides[a.id]) taken.add(overrides[a.id])
     }
   }
-  for (const a of ACTIONS) {
+  for (const a of list) {
     if (Object.hasOwn(out, a.id)) continue
     const key = defaultKey(a.id, mac)
     out[a.id] = key && !taken.has(key) ? key : null
@@ -290,16 +344,28 @@ export function effectiveBindings(overrides, mac = false) {
   return out
 }
 
+// The app's own actions and their live keys: what the window listener
+// dispatches.
+export function effectiveBindings(overrides, mac = false) {
+  return scopeBindings(ACTIONS, overrides, mac)
+}
+
+// The browser's actions and their live keys: the browser dispatches these
+// itself, while it has focus.
+export function browserBindings(overrides, mac = false) {
+  return scopeBindings(BROWSER_ACTIONS, overrides, mac)
+}
+
 export function actionForCombo(bindings, combo) {
   for (const [id, c] of Object.entries(bindings)) if (c === combo) return id
   return null
 }
 
-// Taking a key another action holds moves it: the new action gets the
-// key, the other is left unbound. Returns the new overrides and the
-// actions that lost their key (for the "moved from" message).
+// Taking a key another action of the same scope holds moves it: the new
+// action gets the key, the other is left unbound. Returns the new overrides
+// and the actions that lost their key (for the "moved from" message).
 export function rebind(overrides, actionId, combo, mac = false) {
-  const before = effectiveBindings(overrides, mac)
+  const before = scopeBindings(scopeOf(actionId), overrides, mac)
   const displaced = Object.keys(before).filter((id) => id !== actionId && before[id] === combo)
   const next = { ...overrides, [actionId]: combo }
   for (const id of displaced) next[id] = null
@@ -310,14 +376,15 @@ export function unbind(overrides, actionId) {
   return { ...overrides, [actionId]: null }
 }
 
-// Back to the default key. If another action took that key meanwhile, it
-// gives it back and is left unbound - the same rule as a rebind.
+// Back to the default key. If another action of its scope took that key
+// meanwhile, it gives it back and is left unbound - the same rule as a
+// rebind.
 export function resetOne(overrides, actionId, mac = false) {
   const next = { ...overrides }
   delete next[actionId]
   const key = defaultKey(actionId, mac)
   if (!key) return next
-  const live = effectiveBindings(next, mac)
+  const live = scopeBindings(scopeOf(actionId), next, mac)
   if (live[actionId] === key) return next
   for (const [id, combo] of Object.entries(live)) {
     if (id !== actionId && combo === key) next[id] = null

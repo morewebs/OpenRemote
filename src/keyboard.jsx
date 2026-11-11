@@ -10,6 +10,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import {
   actionForCombo,
   blocksWhileTyping,
+  browserBindings,
   clearStaleOverrides,
   comboFromEvent,
   comboLabel,
@@ -45,9 +46,14 @@ const KeyboardContext = createContext(null)
 
 export function KeyboardProvider({ children }) {
   const [overrides, setOverrides] = useState(loadOverrides)
-  const bindings = useMemo(() => effectiveBindings(overrides, isMac), [overrides])
-  const bindingsRef = useRef(bindings)
-  bindingsRef.current = bindings
+  // The app's keys, which this layer dispatches, and the browser's, which
+  // the browser dispatches itself while it has focus (BrowserView). Lists
+  // and labels read both through `bindings`; the ids never overlap.
+  const appBindings = useMemo(() => effectiveBindings(overrides, isMac), [overrides])
+  const browserKeys = useMemo(() => browserBindings(overrides, isMac), [overrides])
+  const bindings = useMemo(() => ({ ...appBindings, ...browserKeys }), [appBindings, browserKeys])
+  const bindingsRef = useRef(appBindings)
+  bindingsRef.current = appBindings
   const handlers = useRef(new Map())
   const sources = useRef(new Map())
   // The Keyboard settings' "press the new keys" moment: every shortcut
@@ -129,6 +135,7 @@ export function KeyboardProvider({ children }) {
   const value = useMemo(
     () => ({
       bindings,
+      browserBindings: browserKeys,
       overrides,
       label: (id) => comboLabel(bindings[id], isMac),
       run,
@@ -152,7 +159,7 @@ export function KeyboardProvider({ children }) {
       staleBindings: staleOverrides(overrides),
       clearStale: () => commit(clearStaleOverrides(overrides)),
     }),
-    [bindings, overrides, run, available, source, register, commit],
+    [bindings, browserKeys, overrides, run, available, source, register, commit],
   )
 
   return <KeyboardContext.Provider value={value}>{children}</KeyboardContext.Provider>

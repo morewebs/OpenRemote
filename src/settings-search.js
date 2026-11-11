@@ -9,7 +9,7 @@
 // all: `dynamicEntries` builds them from the same arrays the view draws, so
 // a seventh harness or a new archived chat is searchable without an edit.
 
-import { ACTIONS, GROUPS, fuzzyScore } from './shortcuts.js'
+import { CATALOG, GROUPS, fuzzyScore } from './shortcuts.js'
 import { harnessName } from './harness-names.js'
 import { chatTitle, text } from './shape.js'
 
@@ -111,7 +111,9 @@ const ROWS = [
   row('browser-downloads-open', 'browser', 'Show the last download', 'Opens the folder of the newest finished download.', ['downloads', 'download', 'open', 'show', 'reveal', 'folder', 'file']),
 ]
 
-const KEYBOARD = ACTIONS.map((a) =>
+// Every action, the browser's too: Settings drops the Browser group's rows
+// where there is no browser (its `absent` set).
+const KEYBOARD = CATALOG.map((a) =>
   row(
     `keyboard-${a.id}`,
     'keyboard',

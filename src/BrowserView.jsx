@@ -48,6 +48,8 @@ import BrowserBookmarksBar from './BrowserBookmarksBar.jsx'
 import BrowserBookmarkEditor from './BrowserBookmarkEditor.jsx'
 import BrowserHistoryModal from './BrowserHistoryModal.jsx'
 import BrowserSuggestions from './BrowserSuggestions.jsx'
+import { isMac, useKeyboard } from './keyboard.jsx'
+import { actionForCombo, browserBindings, comboFromEvent } from './shortcuts.js'
 import './browser.css'
 
 // The app's own global keys pressed while a page had focus: handed to the
@@ -71,16 +73,6 @@ function replayAppKey(chord) {
     new KeyboardEvent('keydown', { code, key: shiftKey ? key : key.toLowerCase(), ctrlKey: true, shiftKey, bubbles: true }),
   )
   return true
-}
-
-function chordOf(e) {
-  const parts = []
-  if (e.ctrlKey) parts.push('Mod')
-  if (e.altKey) parts.push('Alt')
-  if (e.shiftKey) parts.push('Shift')
-  const named = { ArrowLeft: 'Left', ArrowRight: 'Right', '+': '=', _: '-' }
-  const key = named[e.key] ?? (e.key.length === 1 ? e.key.toUpperCase() : e.key)
-  return [...parts, key].join('+')
 }
 
 // A box on whole device pixels: its edges rounded, not its size, so two
@@ -758,28 +750,49 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     if (tab?.device) patchTab(tab.key, { device: { ...tab.device, ...change } })
   }
 
-  // The browser's keys: from a page (the shell takes them before the page
-  // does) or typed in the browser's own chrome.
+  // The browser's keys, by action: the Browser group of the shortcut
+  // catalog (shortcuts.js), rebindable in Settings > Keyboard. They come
+  // from a page (the shell takes its TAKEN chords before the page does) or
+  // are typed in the browser's own chrome.
   const keys = useRef({})
   keys.current = {
-    'Mod+T': openTab,
-    'Mod+W': () => close(getState().active),
-    'Mod+L': focusAddress,
-    'Mod+D': star,
-    'Mod+R': () => onNative('browser_reload'),
-    F5: () => onNative('browser_reload'),
-    'Mod+F': openFind,
-    'Mod+J': (e) => setMenu({ kind: 'downloads', ...anchorFor('downloads', e) }),
-    F12: () => (can('devtools') ? onNative('browser_devtools') : notify('Developer tools are not in this build')),
-    'Mod+=': () => zoom(1),
-    'Mod+-': () => zoom(-1),
-    'Mod+0': () => zoom(0),
-    'Mod+Tab': () => setState((s) => ({ active: cycle(s.tabs, s.active, 1) })),
-    'Mod+Shift+Tab': () => setState((s) => ({ active: cycle(s.tabs, s.active, -1) })),
-    'Mod+Shift+T': reopen,
-    'Alt+Left': () => onNative('browser_back'),
-    'Alt+Right': () => onNative('browser_forward'),
+    'browser-new-tab': openTab,
+    'browser-close-tab': () => close(getState().active),
+    'browser-address': focusAddress,
+    'browser-bookmark': star,
+    'browser-reload': () => onNative('browser_reload'),
+    'browser-reload-key': () => onNative('browser_reload'),
+    'browser-find': openFind,
+    'browser-history': () => {
+      if (getState().history.length) setHistoryOpen(true)
+    },
+    'browser-downloads': () => setMenu({ kind: 'downloads', ...anchorFor('downloads') }),
+    'browser-devtools': () =>
+      can('devtools') ? onNative('browser_devtools') : notify('Developer tools are not in this build'),
+    'browser-zoom-in': () => zoom(1),
+    'browser-zoom-out': () => zoom(-1),
+    'browser-zoom-reset': () => zoom(0),
+    'browser-next-tab': () => setState((s) => ({ active: cycle(s.tabs, s.active, 1) })),
+    'browser-prev-tab': () => setState((s) => ({ active: cycle(s.tabs, s.active, -1) })),
+    'browser-reopen-tab': reopen,
+    'browser-back': () => onNative('browser_back'),
+    'browser-forward': () => onNative('browser_forward'),
   }
+  // The keys as bound now; without the keyboard layer (no provider), the
+  // catalog's defaults.
+  const kb = useKeyboard()
+  const bound = useRef({})
+  bound.current = kb?.browserBindings ?? browserBindings({}, isMac)
+  const rootRef = useRef(null)
+  // One chord, run as the browser action bound to it; false when none is.
+  const runKey = (chord) => {
+    const fn = keys.current[actionForCombo(bound.current, chord)]
+    if (!fn) return false
+    fn()
+    return true
+  }
+  const runKeyRef = useRef(runKey)
+  runKeyRef.current = runKey
   const anchorFor = (name) => {
     const el = document.querySelector(`[data-bw-anchor="${name}"]`)
     return el ? anchorOf(el) : { x: 0, y: 0 }
@@ -787,15 +800,18 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   useEffect(() => {
     const fromPage = (chord) => {
       if (replayAppKey(chord)) return
-      keys.current[chord]?.()
+      runKeyRef.current(chord)
     }
     const unhook = onKey(fromPage)
+    // Typed in the browser's own chrome: only while the focus is in the
+    // browser, so beside a chat the app's keys stay the app's (Ctrl+L
+    // focuses the composer, Ctrl+W closes the pane, Ctrl+F searches chats).
     const fromChrome = (e) => {
-      const fn = keys.current[chordOf(e)]
-      if (!fn) return
+      if (!rootRef.current?.contains(e.target)) return
+      const chord = comboFromEvent(e, isMac)
+      if (!chord || !runKeyRef.current(chord)) return
       e.preventDefault()
       e.stopPropagation()
-      fn()
     }
     window.addEventListener('keydown', fromChrome, true)
     return () => {
@@ -977,7 +993,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   const shownTabs = tabs.slice(plan.start, plan.start + plan.shown)
 
   return (
-    <div className="bw">
+    <div className="bw" ref={rootRef}>
       <div className="bw-tabs" role="tablist" aria-label="Tabs" onPointerEnter={precapture}>
         <div className="bw-tabs-scroll" ref={stripRef}>
           {shownTabs.map((t) => (

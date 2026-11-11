@@ -100,5 +100,8 @@ test('the store keeps bookmarks on this device and the view draws the three surf
   assert.match(view, /data-bw-anchor="star"/)
   assert.match(view, /<BrowserBookmarksBar/)
   assert.match(view, /<BrowserBookmarkEditor/)
-  assert.match(view, /'Mod\+D': star/)
+  // Ctrl+D is the catalog's browser-bookmark key (shortcuts.js), run as star.
+  assert.match(view, /'browser-bookmark': star/)
+  const shortcuts = readFileSync(new URL('./shortcuts.js', import.meta.url), 'utf8')
+  assert.match(shortcuts, /id: 'browser-bookmark', group: 'browser', label: 'Bookmark this tab', keys: 'Mod\+D'/)
 })

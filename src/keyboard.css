@@ -329,3 +329,7 @@ html[data-reduce-motion] .kb-sheet {
   font-size: 12px;
   line-height: 1.4;
 }
+/* The Browser group says when its keys act. */
+.kb-set .kb-group-note {
+  margin: -6px 0 2px;
+}
