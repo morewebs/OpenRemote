@@ -64,6 +64,7 @@ import {
   splitLeaf,
 } from './split.js'
 import { onBesideRequest } from './team-placement.js'
+import LeadWorkersModal from './LeadWorkersModal.jsx'
 
 
 const OB_KEY = 'openremote-onboarded'
@@ -661,10 +662,14 @@ function Shell() {
     setPaneMenu({ x: e.clientX, y: e.clientY, leafId })
   }
 
+  // The pane lets go of the chat only once it is archived: a lead with
+  // workers asks first, and "never mind" leaves it where it is.
   const archiveFrom = (leaf, id) => {
-    setChatArchived(id, true)
-    if (leaf.view === null) navigate('new')
-    else setLayout((l) => setLeafView(l, leaf.id, 'new'))
+    Promise.resolve(setChatArchived(id, true)).then((done) => {
+      if (done === false) return
+      if (leaf.view === null) navigate('new')
+      else setLayout((l) => setLeafView(l, leaf.id, 'new'))
+    })
   }
 
   const paneMenuItems = (leafId) => {
@@ -1430,6 +1435,8 @@ export default function App() {
       <KeyboardProvider>
         <div className="app">
           <Shell />
+          {/* What becomes of a lead's workers when it is archived or deleted. */}
+          <LeadWorkersModal />
         </div>
       </KeyboardProvider>
     </ConsoleProvider>

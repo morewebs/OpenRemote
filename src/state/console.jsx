@@ -161,6 +161,10 @@ export function ConsoleProvider({ children }) {
   // that will fold them. See nextFrame above for why they wait.
   const pendingRef = useRef(new Map())
   const frameRef = useRef(null)
+  const sessionsRef = useRef([])
+  // Archiving or deleting a chat that has workers asks what becomes of
+  // them, in place, wherever the click came from: { id, action, resolve }.
+  const [teamAsk, setTeamAsk] = useState(null)
   // Ids a poll has carried at least once - what tells a chat gone from
   // this beat (deleted elsewhere) from one not yet in any beat (created
   // between polls, fresher than the list).
@@ -602,6 +606,7 @@ export function ConsoleProvider({ children }) {
   }, [sessions])
 
   chatsRef.current = chats
+  sessionsRef.current = sessions
 
   // Watch exactly these chats. Order is irrelevant; the same set is a no-op.
   const watchChats = useCallback((ids) => {
@@ -1044,10 +1049,29 @@ export function ConsoleProvider({ children }) {
     [api],
   )
 
+  // Stop everyone under a chat that is still running; the chat stays up.
+  // The daemon that runs the chat does it in one go. A chat running on
+  // another device is stopped worker by worker, since the daemon reaches
+  // that device through each chat's own stop.
+  const stopTeam = useCallback(
+    async (chatId) => {
+      const lead = sessions.find((s) => s.id === chatId)
+      const here = cloud?.device?.id ?? null
+      if (!lead?.executor || lead.executor === here) {
+        await api.stopTeam(chatId)
+        return
+      }
+      for (const { session } of descendantsOf(sessions, chatId)) {
+        if (isAlive(session)) await api.stop(session.id)
+      }
+    },
+    [api, sessions, cloud],
+  )
+
   // Archiving is console-side: the chat leaves the sidebar, its transcript
   // and its other devices are untouched. The answer is whether the set reached storage,
   // so a surface can say a write was refused instead of leaving the row unchanged.
-  const setChatArchived = useCallback((id, value) => {
+  const applyArchived = useCallback((id, value) => {
     let saved = true
     setArchived((current) => {
       const next = withArchived(current, id, value)
@@ -1057,19 +1081,76 @@ export function ConsoleProvider({ children }) {
     return saved
   }, [])
 
-  // Deleting a synced chat removes it from every device.
+  // Ask what becomes of a lead's workers; resolves with the answer's word,
+  // or null when the user changed their mind.
+  const askTeam = useCallback(
+    (id, action) => new Promise((resolve) => setTeamAsk({ id, action, resolve })),
+    [],
+  )
+  const answerTeamAsk = useCallback((choice) => {
+    setTeamAsk((current) => {
+      current?.resolve(choice)
+      return null
+    })
+  }, [])
+
+  // A chat that has workers is archived with a question: they go with it,
+  // are stopped and go with it, or stay where they are. A chat with none
+  // (and every unarchive) answers at once, whether the set reached storage;
+  // one that asks answers with a promise of the same, false when the user
+  // changed their mind - callers that wait wrap it in Promise.resolve.
+  const setChatArchived = useCallback(
+    (id, value) => {
+      const team = value ? descendantsOf(sessionsRef.current, id) : []
+      if (team.length === 0) return applyArchived(id, value)
+      return askTeam(id, 'archive').then(async (choice) => {
+        if (choice == null) return false
+        if (choice === 'stop') {
+          try {
+            await stopTeam(id)
+          } catch {
+            /* the ones that did not stop stay in the list, as they were */
+          }
+        }
+        if (choice !== 'leave') for (const { session } of team) applyArchived(session.id, true)
+        return applyArchived(id, true)
+      })
+    },
+    [applyArchived, askTeam, stopTeam],
+  )
+
+  // Deleting a synced chat removes it from every device. A lead's workers
+  // are asked about first: deleted with it, or kept (they go on as chats of
+  // their own).
   const deleteChat = useCallback(
     async (id) => {
+      const team = descendantsOf(sessionsRef.current, id)
+      const gone = new Set([id])
+      if (team.length > 0) {
+        const choice = await askTeam(id, 'delete')
+        if (choice == null) return
+        if (choice === 'delete') {
+          // The deepest first, so no worker is ever left under a deleted one.
+          for (const { session } of [...team].reverse()) {
+            try {
+              await api.deleteSession(session.id)
+              gone.add(session.id)
+            } catch {
+              /* a private worker cannot be deleted; it stays */
+            }
+          }
+        }
+      }
       await api.deleteSession(id)
-      setChatArchived(id, false)
-      setSessions((current) => current.filter((s) => s.id !== id))
+      for (const one of gone) applyArchived(one, false)
+      setSessions((current) => current.filter((s) => !gone.has(s.id)))
       setChats((current) => {
         const next = { ...current }
-        delete next[id]
+        for (const one of gone) delete next[one]
         return next
       })
     },
-    [api, setChatArchived],
+    [api, applyArchived, askTeam],
   )
 
   const sendPrompt = useCallback(
@@ -1099,25 +1180,6 @@ export function ConsoleProvider({ children }) {
       await api.stop(chatId)
     },
     [api],
-  )
-
-  // Stop everyone under a chat that is still running; the chat stays up.
-  // The daemon that runs the chat does it in one go. A chat running on
-  // another device is stopped worker by worker, since the daemon reaches
-  // that device through each chat's own stop.
-  const stopTeam = useCallback(
-    async (chatId) => {
-      const lead = sessions.find((s) => s.id === chatId)
-      const here = cloud?.device?.id ?? null
-      if (!lead?.executor || lead.executor === here) {
-        await api.stopTeam(chatId)
-        return
-      }
-      for (const { session } of descendantsOf(sessions, chatId)) {
-        if (isAlive(session)) await api.stop(session.id)
-      }
-    },
-    [api, sessions, cloud],
   )
 
   // Interrupt the running turn - the agent stops what it's doing but the
@@ -1603,6 +1665,8 @@ export function ConsoleProvider({ children }) {
       answerDecision,
       stopChat,
       stopTeam,
+      teamAsk,
+      answerTeamAsk,
       interruptChat,
       queueMessage,
       removeQueued,
@@ -1694,6 +1758,8 @@ export function ConsoleProvider({ children }) {
       answerDecision,
       stopChat,
       stopTeam,
+      teamAsk,
+      answerTeamAsk,
       interruptChat,
       queueMessage,
       removeQueued,
