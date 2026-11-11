@@ -31,6 +31,8 @@ use crate::registry::{Backend, HarnessRegistry, SessionDriver};
 
 mod composer;
 pub use composer::{AgentEntry, CommandEntry, CommandsView, McpServerName};
+mod team;
+pub use team::{Offer, SpawnRequest, TeamSettings, state_word};
 
 /// Store conflicts surface as their own shape, not a generic store error.
 fn store_error(e: openremote_core::store::StoreError) -> SupervisorError {
@@ -379,6 +381,8 @@ pub struct Supervisor {
     /// receives it - never to what is stored or shown (the browser's open
     /// tabs). Set once by whoever assembles the app.
     prompt_note: std::sync::OnceLock<PromptNote>,
+    /// Agent teams: the user's limits and the reports in flight.
+    team: team::Team,
 }
 
 /// Where the note riding each delivered message comes from.
@@ -413,9 +417,9 @@ impl Supervisor {
     /// The registry is injected so tests can point harnesses at fixture
     /// agents; production passes `HarnessRegistry::probe(&HashMap::new())`.
     pub fn new(store: Arc<StdMutex<Store>>, registry: HarnessRegistry) -> Arc<Self> {
-        let this_machine = {
+        let (this_machine, data_dir) = {
             let mut guard = lock_recovering(&store);
-            guard.ensure_this_machine()
+            (guard.ensure_this_machine(), guard.dir().to_path_buf())
         };
         let supervisor = Arc::new(Self {
             store,
@@ -431,6 +435,7 @@ impl Supervisor {
             command_cache: StdMutex::new(HashMap::new()),
             controls: std::sync::OnceLock::new(),
             prompt_note: std::sync::OnceLock::new(),
+            team: team::Team::open(&data_dir),
         });
         supervisor.spawn_presence_ticker(this_machine);
         supervisor.spawn_schedule_engine();
@@ -1676,6 +1681,18 @@ impl Supervisor {
         Ok(())
     }
 
+    /// A harness's name as the harness spells it, for words the user reads.
+    fn harness_name(&self, id: &str) -> String {
+        self.registry
+            .read()
+            .expect("registry lock")
+            .harnesses()
+            .into_iter()
+            .find(|h| h.id == id)
+            .map(|h| h.name)
+            .unwrap_or_else(|| id.to_string())
+    }
+
     /// The note added to each delivered message, from here on.
     pub fn set_prompt_note(&self, note: impl Fn() -> Option<String> + Send + Sync + 'static) {
         let _ = self.prompt_note.set(Box::new(note));
@@ -1906,7 +1923,7 @@ impl Supervisor {
     /// what the harness already said - the transcript's tail must land
     /// before the entry goes. Returns the session as it settled (stopped,
     /// or failed if the process died first).
-    pub async fn stop(&self, id: &SessionId) -> Result<Session, SupervisorError> {
+    pub async fn stop_only(&self, id: &SessionId) -> Result<Session, SupervisorError> {
         self.ensure_here(id)?;
         let entry = self.entry(id).await?;
         {
@@ -2676,10 +2693,13 @@ impl Supervisor {
         tokio::spawn(async move {
             let mut saw_close = false;
             while let Some(event) = rx.recv().await {
-                let order = {
+                let (order, stopping) = {
                     let sessions = supervisor.sessions.lock().await;
                     match sessions.get(&id) {
-                        Some(entry) => Arc::clone(&entry.order),
+                        Some(entry) => (
+                            Arc::clone(&entry.order),
+                            entry.stopping.load(AtomicOrdering::SeqCst),
+                        ),
                         None => break, // stopped and reaped; nothing left to say
                     }
                 };
@@ -2687,6 +2707,9 @@ impl Supervisor {
                     saw_close = true;
                 }
                 let turn_ended = matches!(event, DriverEvent::TurnCompleted { .. });
+                // What the lead of a worker hears of this event is worked
+                // out before the event is applied.
+                let team_end = supervisor.team_ending(&id, &event, stopping);
                 let guard = order.lock().await;
                 if let Err(err) = supervisor.pump_one(&id, event).await {
                     eprintln!("session {id}: pump error: {err}");
@@ -2699,6 +2722,11 @@ impl Supervisor {
                 if turn_ended {
                     let supervisor = Arc::clone(&supervisor);
                     tokio::spawn(async move { supervisor.after_turn(&id).await });
+                }
+                // A worker's report to its lead, likewise on its own task.
+                if let Some(end) = team_end {
+                    let supervisor = Arc::clone(&supervisor);
+                    tokio::spawn(async move { supervisor.team_turn_ended(&id, end).await });
                 }
             }
             // The channel ended (harness audit F10): the driver dropped

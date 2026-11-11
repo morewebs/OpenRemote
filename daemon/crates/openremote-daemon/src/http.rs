@@ -50,6 +50,9 @@ pub fn router(app: Arc<App>) -> Router {
         // The built-in browser: this device's console and its chats' MCP
         // server only, never another device.
         .merge(crate::browser::routes::routes())
+        // Agent teams: the user's limits, a chat's team tools, Stop all.
+        // This device's console and its chats' MCP server only.
+        .merge(crate::team::routes())
         // The console reaches another device's API through this one.
         .route(
             "/devices/{id}/{*rest}",

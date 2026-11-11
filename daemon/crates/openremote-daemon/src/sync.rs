@@ -328,9 +328,11 @@ pub fn tombstone_after_stop(stop: &Result<(), String>) -> bool {
 /// than a new one. A chat that is not here reports that too, and there is
 /// nothing to kill.
 async fn stop_chat(app: &App, id: &SessionId) -> Result<(), String> {
+    // Only this chat: what becomes of its workers was the user's call when
+    // they deleted it.
     let first = app
         .supervisor
-        .stop(id)
+        .stop_only(id)
         .await
         .map(|_| ())
         .map_err(|e| e.to_string());
@@ -339,7 +341,7 @@ async fn stop_chat(app: &App, id: &SessionId) -> Result<(), String> {
     }
     tokio::time::sleep(PULL_RETRY_DELAY).await;
     app.supervisor
-        .stop(id)
+        .stop_only(id)
         .await
         .map(|_| ())
         .map_err(|e| e.to_string())

@@ -146,7 +146,9 @@ impl Supervisor {
     /// as its MCP server's tools.
     pub(super) fn allowed_tools(&self) -> Vec<String> {
         if self.controls.get().is_some() {
-            crate::browser::tools::reading_tool_names("openremote")
+            let mut names = crate::browser::tools::reading_tool_names("openremote");
+            names.extend(crate::team::reading_tool_names("openremote"));
+            names
         } else {
             Vec::new()
         }
@@ -374,7 +376,7 @@ impl Supervisor {
         let events = self
             .with_store(|s| s.events_after(&target, None))
             .map_err(store_error)?;
-        Ok(condensed(&chat, &events))
+        Ok(condensed(&chat, &events, None))
     }
 }
 
@@ -546,25 +548,38 @@ fn build_view(
 
 /// A chat as the read-a-chat tool hands it to an agent: its name and
 /// harness, then its messages in order, each tool call a one-line note.
-/// Past the limit the oldest part is cut - the end of a chat is the part
-/// an agent pointed at it most likely needs.
-fn condensed(chat: &Session, events: &[Event]) -> String {
-    let mut body = String::new();
+/// A message another agent sent says so. With `tail`, only the last that
+/// many messages (the tool notes between them ride along). Past the limit
+/// the oldest part is cut - the end of a chat is the part an agent
+/// pointed at it most likely needs.
+pub(super) fn condensed(chat: &Session, events: &[Event], tail: Option<usize>) -> String {
+    // Each message starts its own part; a tool note belongs to the part
+    // before it, so a tail keeps the notes that came with its messages.
+    let mut parts: Vec<String> = Vec::new();
     for event in events {
         match &event.payload {
             EventPayload::MessageAdded { message } => {
-                let who = match message.role {
-                    MessageRole::User => "User",
-                    MessageRole::Assistant => "Assistant",
+                let who = match (message.role, &message.origin) {
+                    (MessageRole::User, Some(origin)) => {
+                        format!("Agent \"{}\" (not the user)", origin.title)
+                    }
+                    (MessageRole::User, None) => "User".to_string(),
+                    (MessageRole::Assistant, _) => "Assistant".to_string(),
                 };
-                body.push_str(&format!("\n{who}: {}\n", message.text.trim()));
+                parts.push(format!("\n{who}: {}\n", message.text.trim()));
             }
-            EventPayload::ToolStarted { name, .. } => {
-                body.push_str(&format!("[tool: {name}]\n"));
-            }
+            EventPayload::ToolStarted { name, .. } => match parts.last_mut() {
+                Some(last) => last.push_str(&format!("[tool: {name}]\n")),
+                None => parts.push(format!("[tool: {name}]\n")),
+            },
             _ => {}
         }
     }
+    if let Some(tail) = tail.filter(|t| *t > 0) {
+        let from = parts.len().saturating_sub(tail);
+        parts.drain(..from);
+    }
+    let mut body = parts.concat();
     if body.len() > READ_LIMIT {
         let mut cut = body.len() - READ_LIMIT;
         while !body.is_char_boundary(cut) {

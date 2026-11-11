@@ -23,6 +23,7 @@ pub mod shutdown;
 pub mod signin;
 pub mod supervisor;
 pub mod sync;
+pub mod team;
 
 pub use app::{AppOptions, serve};
 pub use registry::HarnessRegistry;
