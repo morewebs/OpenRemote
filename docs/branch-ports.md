@@ -45,10 +45,35 @@ recorded as dropped below.
 | Session restore, "On startup" in Settings > Browser | browser 0d3211a, 01aee56, 015ea58 (On startup) | f9c17fd |
 | Put pages away past ten open | browser 0d3211a | a36a3a6 |
 | Agent badge and take over (an agent's tab joins without taking the view) | browser 0d3211a | 5fffff9 |
+| New tab page shortcuts (daemon tiles) and the dev-server row | browser 0d3211a, dfcf317, 08d720e | f220976 |
+| Address bar inline completion (Tab or Right takes it) | browser 0d3211a, 015ea58 (`completion`) | f4f33e9 |
+| Bookmarks manager (a dialog: search, reorder, move, rename, delete) | browser 0d3211a | bcceeb0 |
+| Screenshot and region to the focused composer; `setFocusedComposer` released on unmount | browser 0d3211a, b06f02d (`screenshotAttachment`) | c0df86f |
+| Recording a tab to Downloads (WebM, 90 s, pill) | browser 0d3211a | 8f2e720 |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 `wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`,
 `br-backlog`, `br-teams`.
+
+### Ready to delete: br-console
+
+Every br-console commit (head 52705e9; all of them are also in `browser`) is
+ported or obsolete. The branch is not deleted here; its `archive/br-console`
+tag keeps it.
+
+| Commit | What | State |
+|---|---|---|
+| f6668d2 | Browser keys in the shortcut catalog | ported (286508a, 2d0311b for the private-tab key) |
+| 015ea58 | Settings > Browser; pure rules (history days, folders, permission words, inline completion) | ported (114b65f, 762a244, ea36bfd, f9c17fd, f4f33e9); `openremote://` address-bar pages obsolete |
+| b06f02d | Pure rules: session, put-away, attachments, key replay, floating surfaces, devservers | ported (f9c17fd, a36a3a6, c0df86f; devservers.js was in main); the picked element as a chip is obsolete (main's picker inserts text through composer-insert.js) |
+| 0d3211a | The Browser view in parts and everything it does | ported (Tasks 4 and 5 rows above); obsolete: the BrowserTabStrip/Toolbar split, `openremote://` history, downloads and settings pages (main has the history dialog and the downloads menu), the element-picker chip |
+| 44e53b7 | useBrowserPage refactor | obsolete (main keeps placement in the view) |
+| dfcf317 | Dev-server row snapshot fix | ported (f220976: the list is kept in state, since `recentDevServers()` builds a new array per read) |
+| 11944a8 | `focused` prop, Browser key group | ported (1b8f209) |
+| 08d720e | New-tab button calls openTab with nothing; downloads page Clear all; editor closed twice | in main in effect (openTab(), `if (!editor) return`); downloads page obsolete |
+| 01aee56 | Restore when agents opened tabs first | ported (f9c17fd) |
+| f118e43 | Bookmarks bar picture ahead | in main |
+| 52705e9 | Picture ahead on address focus and the star | ported (4862afa) |
 
 ## To port
 
@@ -60,9 +85,6 @@ Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 - Obsolete: separate Pinned group, inline rename, row dots, DESIGN.md.
 
 ### Browser (browser, br-console, br-android, br-images)
-- Console gaps in main's `BrowserView.jsx`: new-tab shortcuts and dev-server
-  row, inline completion, bookmarks manager, screenshot/region to composer
-  (through `attachments.js` `addAttachment`, focused composer), recording.
 - Android phone browser, as one block (5df13bd, f768051, 25aee6d, 1c6f04b,
   56371d7, cc0080f, 546c420), with 1a2ab3d's phone "<agent> is browsing"
   pill. Regenerate Cargo.lock and capabilities.
