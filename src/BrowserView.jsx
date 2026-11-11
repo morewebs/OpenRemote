@@ -39,10 +39,10 @@ import { insertToComposer } from './composer-insert.js'
 import { SEARCH_ENGINES, omnibox, security, shownAddress, suggest } from './browser-omnibox.js'
 import { browserSetting, setSitePermission, useBrowserPrefs } from './browser-prefs.js'
 import { closeOthers, closeTab, closeToRight, cycle, canUse, extrasMissing, isDormant, newTab, openBelongs, rememberClosed, stripPlan, takeClosed, tabTitle } from './browser-tabs.js'
-import { adopt, answerPrompt, browserCall, call, dropPromptsFor, onFullscreen, startSession, clearHistory, getState, onKey, patchTab, recordVisit, registerReopen, removeBookmark, saveBookmark, setState, subscribe, updateBookmark } from './browser-store.js'
+import { adopt, answerPrompt, browserCall, call, closePage, dropPromptsFor, focusTab, onFullscreen, startSession, clearHistory, getState, onKey, patchTab, recordVisit, registerReopen, removeBookmark, saveBookmark, setState, subscribe, updateBookmark } from './browser-store.js'
 import { FLOATING, covered } from './browser-occlusion.js'
 import { DEVICES, browserHasFocus, fitDevice, fileName, nextZoom, permissionName, permissionRows, zoomLabel } from './browser-chrome.js'
-import { PermissionBar } from './BrowserInfobar.jsx'
+import { AgentBadge, AgentBar, PermissionBar } from './BrowserInfobar.jsx'
 import { errorCopy } from './error-copy.js'
 import ContextMenu from './ContextMenu.jsx'
 import { bookmarkFor, labelFor } from './browser-bookmarks.js'
@@ -468,7 +468,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
       // A page the shell would not build is marked, so a waiting tab is not
       // asked for again and again.
       patchTab(tab.key, { loading: false, failed: !native })
-      if (native) call('browser_close', { tab: native })
+      if (native) closePage(native)
       return
     }
     // The layout effect owns shownNative and shows the page as the tab gains
@@ -598,7 +598,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   const closeNow = (key) => {
     const tab = getState().tabs.find((t) => t.key === key)
     if (!tab) return
-    if (tab.native) call('browser_close', { tab: tab.native })
+    closePage(tab.native)
     dropPromptsFor(tab.native)
     if (tab.native) onFullscreen({ tab: tab.native, on: false })
     setState((s) => {
@@ -615,7 +615,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     const gone = new Set(keys)
     for (const t of getState().tabs) {
       if (gone.has(t.key) && t.native) {
-        call('browser_close', { tab: t.native })
+        closePage(t.native)
         dropPromptsFor(t.native)
       }
     }
@@ -664,8 +664,10 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     if (!askToShow || askToShow === ask.current) return
     ask.current = askToShow
     if (askToShow.tab) {
-      const shown = getState().tabs.find((t) => t.native === askToShow.tab || t.key === askToShow.tab)
-      if (shown) setState((s) => ({ active: shown.key }))
+      const shown = getState().tabs.find((t) => t.key === askToShow.tab)
+      if (shown) setState(() => ({ active: shown.key }))
+      // An agent's tab may not be in the strip yet: the wish waits for it.
+      else focusTab(askToShow.tab)
       return
     }
     if (askToShow.url) {
@@ -728,6 +730,20 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     if (!tab) return
     patchTab(tab.key, { find: null })
     if (tab.native) call('browser_find', { tab: tab.native, term: '', step: 0 })
+  }
+
+  // The user's hand on a tab a chat's agent holds: take it over (the agent
+  // may still read the page but not act), hand it back, or stop sharing it.
+  // The daemon keeps the hold; its answer is the tab's new controller.
+  const control = async (action) => {
+    const tab = activeTab()
+    if (!tab?.native) return
+    try {
+      const got = await browserCall('POST', `/browser/tabs/${encodeURIComponent(tab.native)}/control`, { action })
+      patchTab(tab.key, { controller: got?.controller ?? null })
+    } catch (err) {
+      notify(errorCopy(err))
+    }
   }
 
   // A remembered answer forgotten, so the site asks again. A refusal puts
@@ -1151,6 +1167,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
                 <Globe size={14} className="bw-tab-icon" />
               )}
               <span className="bw-tab-title">{tabTitle(t)}</span>
+              {t.controller && <AgentBadge controller={t.controller} />}
               <button
                 type="button"
                 className="bw-tab-close"
@@ -1351,6 +1368,8 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
         // asks for the camera still needs an answer.
         <PermissionBar key={`${prompt.tab}:${prompt.id}`} prompt={prompt} onAnswer={answer} />
       )}
+
+      {current?.controller && live && <AgentBar controller={current.controller} onControl={control} />}
 
       {picking && live && (
         <div className="bw-strip">

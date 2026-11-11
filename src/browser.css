@@ -546,6 +546,62 @@
   color: var(--accent);
 }
 
+/* ---- an agent's tab ---- */
+
+/* The chat whose agent holds the tab: its title on a small badge in the
+   strip, breathing while the agent acts, still once the user took over. */
+.bw-agent {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 96px;
+  height: 18px;
+  padding: 0 7px 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.bw-agent.live {
+  border-color: rgba(76, 180, 135, 0.35);
+  color: var(--text-2);
+}
+
+.bw-agent-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bw-agent-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dot-idle);
+}
+
+.bw-agent.live .bw-agent-dot,
+.bw-agent-dot.live {
+  background: var(--green);
+  animation: bw-breathe 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bw-agent.live .bw-agent-dot,
+  .bw-agent-dot.live {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion] .bw-agent.live .bw-agent-dot,
+html[data-reduce-motion] .bw-agent-dot.live {
+  animation: none;
+}
+
 /* ---- full screen ---- */
 
 /* A page showing something full screen: the shell made the window full

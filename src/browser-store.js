@@ -356,6 +356,8 @@ export function onKey(fn) {
 export function adopt(key, native) {
   const said = early.get(native) ?? {}
   early.delete(native)
+  clearTimeout(orphans.get(native))
+  orphans.delete(native)
   patchTab(key, { native, ...said })
   enforceMemory()
 }
@@ -368,7 +370,7 @@ export function enforceMemory() {
   if (!doomed.length) return
   const keys = new Set(doomed.map((t) => t.key))
   const natives = new Set(doomed.map((t) => t.native))
-  for (const t of doomed) call('browser_close', { tab: t.native })
+  for (const t of doomed) closePage(t.native)
   setState((s) => ({
     tabs: s.tabs.map((t) => (keys.has(t.key) ? putAway(t) : t)),
     prompts: s.prompts.filter((p) => !natives.has(p.tab)),
@@ -389,6 +391,9 @@ function fieldsOf(p) {
     private: p.private === true,
     // A private tab the user handed to agents (its site menu's toggle).
     shared: p.shared === true,
+    // Which chat's agent holds the tab ({ kind: 'agent' | 'paused', chat,
+    // title }), or null: the strip's badge and the take-over bar.
+    controller: p.controller ?? null,
   }
 }
 
@@ -530,37 +535,125 @@ function scheduleSave() {
   saveTimer?.unref?.()
 }
 
+// ---- the shell's news about a tab ----
+
+// A page that no console tab claims within this long (an agent's whose hold
+// was marked late) joins the strip in the background, if the shell still
+// has it.
+const ORPHAN_MS = 8000
+const orphans = new Map()
+// Pages the console closed: a late event about one never brings it back.
+const gone = new Set()
+// A page the app asked to show before its tab was in the strip (an agent's
+// tab beside its chat), for a moment.
+const WANT_MS = 10_000
+let wanted = null
+
+/// Close a page the console is done with (its tab closed, or put away).
+export function closePage(native) {
+  if (!native) return
+  gone.add(native)
+  early.delete(native)
+  clearTimeout(orphans.get(native))
+  orphans.delete(native)
+  call('browser_close', { tab: native })
+}
+
+/// Show the console tab holding a page of the shell's ("tab-3"). When that
+/// tab isn't in the strip yet, the wish waits a moment for it.
+export function focusTab(native) {
+  const tab = state.tabs.find((t) => t.native === native)
+  if (!tab) {
+    wanted = { native, at: Date.now() }
+    return false
+  }
+  wanted = null
+  if (state.active !== tab.key) setState(() => ({ active: tab.key }))
+  return true
+}
+
+function grantWish() {
+  if (!wanted) return
+  if (Date.now() - wanted.at > WANT_MS) {
+    wanted = null
+    return
+  }
+  focusTab(wanted.native)
+}
+
+/// What the shell says about a tab (`browser:tab`).
+export function onTab(p) {
+  if (!p?.id || gone.has(p.id)) return
+  // A popup whose opener's tab this console does not have: no tab will
+  // ever place it, so it is closed instead of staying in the shell's tab
+  // list with no console tab, to come back as a stray tab on the next
+  // console load. The console's own opens have no opener and are adopted
+  // by the tab that asked for them.
+  const tabs = getState().tabs
+  if (p.opener && !popupBelongs(tabs, p.opener) && !tabs.some((t) => t.native === p.id)) {
+    closePage(p.id)
+    return
+  }
+  let joined = null
+  setState((s) => {
+    const fields = fieldsOf(p)
+    if (s.tabs.some((t) => t.native === p.id)) {
+      return { tabs: s.tabs.map((t) => (t.native === p.id ? { ...t, ...fields } : t)) }
+    }
+    const opener = s.tabs.find((t) => t.native && t.native === p.opener)
+    if (opener) {
+      // A page opened a window: a new tab beside its opener, shown when the
+      // user's own page opened it (an agent's popup never takes the view).
+      const show = opener.key === s.active && !p.controller
+      joined = { show }
+      const tab = newTab({ native: p.id, ...fields })
+      return { tabs: insertAfter(s.tabs, tab, opener.key), active: show ? tab.key : s.active }
+    }
+    if (p.controller) {
+      // A tab a chat's agent opened: in the strip, the user's view unmoved.
+      const said = early.get(p.id)
+      early.delete(p.id)
+      clearTimeout(orphans.get(p.id))
+      orphans.delete(p.id)
+      joined = { show: false }
+      return { tabs: [...s.tabs, newTab({ native: p.id, ...said, ...fields })] }
+    }
+    // A tab still opening: a fast page can finish loading before the
+    // console hears which tab it is. Kept until it does (adopt).
+    early.set(p.id, { ...early.get(p.id), ...fields })
+    if (!orphans.has(p.id)) {
+      const timer = setTimeout(() => claimOrphan(p.id), ORPHAN_MS)
+      timer?.unref?.()
+      orphans.set(p.id, timer)
+    }
+    return {}
+  })
+  if (joined) {
+    // One that isn't shown stays out of sight until the user picks it.
+    if (!joined.show) call('browser_hide', { tab: p.id })
+    grantWish()
+  }
+  enforceMemory()
+}
+
+// A page nobody claimed joins the strip in the background, if the shell
+// still has it.
+async function claimOrphan(id) {
+  orphans.delete(id)
+  if (!early.has(id) || gone.has(id) || state.tabs.some((t) => t.native === id)) return
+  const open = await call('browser_tabs')
+  const fields = early.get(id)
+  if (!fields || !open?.some((t) => t.id === id) || state.tabs.some((t) => t.native === id)) return
+  early.delete(id)
+  setState((s) => ({ tabs: [...s.tabs, newTab({ native: id, ...fields })] }))
+  call('browser_hide', { tab: id })
+  grantWish()
+  enforceMemory()
+}
+
 async function wire() {
   const { listen } = await import('@tauri-apps/api/event')
-  listen('browser:tab', ({ payload: p }) => {
-    // A popup whose opener's tab this console does not have: no tab will
-    // ever place it, so it is closed instead of staying in the shell's tab
-    // list with no console tab, to come back as a stray tab on the next
-    // console load. The console's own opens have no opener and are adopted
-    // by the tab that asked for them.
-    const tabs = getState().tabs
-    if (p.opener && !popupBelongs(tabs, p.opener) && !tabs.some((t) => t.native === p.id)) {
-      call('browser_close', { tab: p.id })
-      return
-    }
-    setState((s) => {
-      const fields = fieldsOf(p)
-      if (s.tabs.some((t) => t.native === p.id)) {
-        return { tabs: s.tabs.map((t) => (t.native === p.id ? { ...t, ...fields } : t)) }
-      }
-      // A page opened a window: a new tab beside its opener, shown.
-      const opener = s.tabs.find((t) => t.native && t.native === p.opener)
-      if (!opener) {
-        // A tab still opening: a fast page can finish loading before the
-        // console hears which tab it is. Kept until it does (adopt).
-        early.set(p.id, fields)
-        return {}
-      }
-      const tab = newTab({ native: p.id, ...fields })
-      return { tabs: insertAfter(s.tabs, tab, opener.key), active: tab.key }
-    })
-    enforceMemory()
-  })
+  listen('browser:tab', ({ payload }) => onTab(payload))
   listen('browser:download', ({ payload: d }) => {
     setState((s) => {
       const known = s.downloads.find((x) => x.id === d.id)
