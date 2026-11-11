@@ -52,6 +52,7 @@ import BrowserBookmarksBar from './BrowserBookmarksBar.jsx'
 import BrowserBookmarkEditor from './BrowserBookmarkEditor.jsx'
 import BrowserHistoryModal from './BrowserHistoryModal.jsx'
 import BrowserSuggestions from './BrowserSuggestions.jsx'
+import BrowserShortcuts from './BrowserShortcuts.jsx'
 import { isMac, useKeyboard } from './keyboard.jsx'
 import { actionForCombo, browserBindings, comboFromEvent } from './shortcuts.js'
 import './browser.css'
@@ -1507,7 +1508,13 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
                     cookies and site data go when it closes. Agents can't see it unless you let them from the site menu.
                   </span>
                 </p>
-              ) : recent.length > 0 && (
+              ) : (
+                <>
+                {/* The shortcuts (the user's own, then the sites read most)
+                    and the dev servers seen in chats: a private tab's page
+                    shows neither. */}
+                <BrowserShortcuts onOpen={(url) => openUrl(url)} onError={notify} />
+                {recent.length > 0 && (
                 // The addresses this window has read, newest first: the same
                 // record the history list draws, so a private tab is not here
                 // (it was never recorded). A row opens in this tab.
@@ -1526,6 +1533,8 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
                     </button>
                   ))}
                 </section>
+                )}
+                </>
               )}
             </div>
           </div>

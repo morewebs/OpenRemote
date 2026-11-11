@@ -422,6 +422,8 @@
   align-items: center;
   justify-content: flex-start;
   padding-top: 20vh;
+  padding-bottom: 24px;
+  overflow-y: auto;
   background: var(--bg-app);
 }
 
@@ -461,6 +463,115 @@
 
 .bw-ntp-recent-row:hover {
   background: var(--bg-hover);
+}
+
+/* The new tab page's shortcuts: the user's own, then the sites read most,
+   eight at most, under the search box. */
+.bw-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 112px);
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 22px;
+}
+
+.bw-tile {
+  position: relative;
+}
+
+.bw-tile-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 16px 8px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.bw-tile-main:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.bw-tile-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #1c1c1c;
+  color: var(--text-2);
+}
+
+.bw-tile-letter {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.bw-tile-title {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The tile's menu button shows on hover and on keyboard focus. */
+.bw-tile-more {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-3);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.bw-tile:hover .bw-tile-more,
+.bw-tile-more:focus-visible {
+  opacity: 1;
+}
+
+.bw-tile-more:hover {
+  background: var(--bg-active);
+  color: var(--text-1);
+}
+
+/* One quiet row of the dev servers seen in chats. */
+.bw-ntp-servers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.bw-ntp-label {
+  margin-right: 4px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.bw-ntp-servers .bw-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Geist Mono', ui-monospace, Consolas, monospace;
+  font-size: 11.5px;
 }
 
 .bw-ntp-icon {

@@ -31,6 +31,23 @@ export function omnibox(input, engine = 'google') {
   return searchUrl(text, engine)
 }
 
+// The address a typed line names, or null when the line is words (a search)
+// or nothing: what a new tab page shortcut can be saved as.
+export function addressFor(input) {
+  const text = (input ?? '').trim()
+  if (!text || /^javascript:/i.test(text)) return null
+  if (SCHEME.test(text) || LOCAL.test(text) || DOMAIN.test(text)) return omnibox(text)
+  return null
+}
+
+// An address as people type it: no scheme, no leading www.
+export function bareAddress(url) {
+  return String(url ?? '')
+    .toLowerCase()
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
+    .replace(/^www\./, '')
+}
+
 // What the address bar shows for a page: the address as it is, except a
 // search shows its words (Chrome shows the address; we keep that, plain).
 export function shownAddress(url) {
