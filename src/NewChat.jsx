@@ -43,6 +43,9 @@ import { useComposerMenus } from './useComposerMenus.jsx'
 import { mentionedChats, ownCommands, takeCommands } from './composer-menus.js'
 import { claimInserter } from './composer-insert.js'
 import { isMobile } from './platform.js'
+import { moveAttachments, removeAttachment, setFocusedComposer } from './attachments.js'
+import { AttachmentChips, useAttachInput, useAttachments } from './ComposerAttachments.jsx'
+import { outgoingOrThrow, takesNoPictures, takesPictures } from './composer-attachments.js'
 import './newchat.css'
 import './composer.css'
 import { errorCopy } from './error-copy.js'
@@ -656,8 +659,14 @@ export default function NewChat({
   // the body (the escaped text plus the request's reserve), so a newline-heavy
   // message is stopped here rather than by the daemon.
   const bound = messageBound(text)
+  // What rides the first message besides its words: pictures, and elements
+  // picked in the browser - kept under 'new' until the chat exists
+  // (attachments.js). Whether the app reads pictures is the daemon's
+  // honors.attachments for the machine the chat will run on.
+  const attached = useAttachments('new')
+  const takesImages = takesPictures(currentHarness, currentHarness?.id)
   const canSend =
-    text.trim().length > 0 && !busy && currentHarness && connection.state === 'connected'
+    (text.trim().length > 0 || attached.length > 0) && !busy && currentHarness && connection.state === 'connected'
     && !needsSignIn && !targetOffline && !bound
   // The harness's own pre-send facts, each in its own words: what its
   // config says a fresh chat runs (grok's config.toml, agy's settings,
@@ -1052,10 +1061,20 @@ export default function NewChat({
   // composer that no longer exists. A focus takes the bus again (a split
   // pane's other composer may hold it), so the claim held here goes first.
   const releaseInserter = useRef(null)
+  // The same moment names this the focused composer for attachments.js, so
+  // the browser's text (claimInserter) and its pictures (addAttachment)
+  // land in the one composer the user is in.
   const takeInserter = () => {
     releaseInserter.current?.()
     releaseInserter.current = claimInserter(attach)
+    setFocusedComposer('new')
   }
+  // Paste, drop and the attach button; off where the app reads no pictures.
+  const attachInput = useAttachInput('new', {
+    enabled: takesImages,
+    onError: setError,
+    refuse: currentHarness && !takesImages ? takesNoPictures(harnessLabel(currentHarness)) : null,
+  })
   useEffect(() => {
     takeInserter()
     return () => {
@@ -1172,7 +1191,15 @@ export default function NewChat({
       const { run, text: message } = takeCommands(text.trim(), ownCommands({ inChat: false, cloud: cloudReady }))
       const picked = Object.fromEntries(run.map((c) => [c.name, c.arg]))
       const fastPicked = 'fast' in picked ? (picked.fast ? picked.fast.toLowerCase() === 'on' : !fast) : fast
-      if (!message) {
+      // The first message's pictures and picked elements, refused here when
+      // the app can't take them - before a chat is made.
+      const sent = attached
+      const payload = outgoingOrThrow(message, sent, {
+        images: takesImages,
+        app: harnessLabel(currentHarness),
+        remote: Boolean(target) && target !== thisDevice,
+      })
+      if (!payload.text && !payload.attachments.length) {
         // Only commands: they set this screen's pickers.
         if (picked.model) setModel(picked.model)
         if (picked.effort) setEffort(picked.effort)
@@ -1182,7 +1209,7 @@ export default function NewChat({
         return
       }
       const id = await createChat(
-        message,
+        payload.text,
         workspace,
         currentHarness.id,
         picked.model ?? startModel ?? undefined,
@@ -1194,8 +1221,13 @@ export default function NewChat({
           synced: cloudMode || 'sync' in picked || 'cloud' in picked,
           mentionedChats: mentionedChats(message, chats),
           endpointId: endpointId ?? undefined,
+          attachments: payload.attachments,
         },
       )
+      // What was sent leaves; anything added meanwhile follows the message
+      // into its chat's composer.
+      for (const item of sent) removeAttachment('new', item.id)
+      moveAttachments('new', id)
       if (picked.rename) await renameChat(id, picked.rename)
       setText('')
       onOpen(id)
@@ -1340,16 +1372,23 @@ export default function NewChat({
           the app picker under the box; it scans this computer each time it opens.
         </p>
       )}
-      <div className={`nc-box${needsSignIn || usingApiKey ? ' nc-box--auth' : ''}${fast ? ' is-fast' : ''}`} ref={boxRef}>
+      <div
+        className={`nc-box${needsSignIn || usingApiKey ? ' nc-box--auth' : ''}${fast ? ' is-fast' : ''}`}
+        ref={boxRef}
+        onDragOver={attachInput.onDragOver}
+        onDrop={attachInput.onDrop}
+      >
         {(carryNote || selectionNote) && (
           <p className="nc-preset-note" role="status">
             {carryNote ?? selectionNote}
           </p>
         )}
         {menus.element}
+        <AttachmentChips composerKey="new" takesImages={takesImages} app={harnessLabel(currentHarness) ?? 'This app'} />
         <textarea
           value={text}
           onFocus={takeInserter}
+          onPaste={attachInput.onPaste}
           // Leaving the composer closes the / or @ list: a click somewhere
           // else in the window never moves the caret, so the caret's word
           // alone could not retire it and the menu hung over an unfocused box.
@@ -1610,6 +1649,7 @@ export default function NewChat({
                 }
               />
             )}
+            {attachInput.button}
             <button className="nc-send" onClick={start} disabled={!canSend} title="Start task">
               <ArrowUp size={16} weight="bold" />
             </button>
