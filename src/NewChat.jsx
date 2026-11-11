@@ -13,6 +13,7 @@ import { EndpointManagerModal } from './EndpointManager.jsx'
 import { useConsole } from './state/console.jsx'
 import { harnessLabel } from './harness-names.js'
 import { findModel, modelDisplayName, prettyModelName } from './model-display.js'
+import { relativeTime } from './relative-time.js'
 import { modelMaker } from './model-maker.js'
 import { ModelMark } from './model-marks.jsx'
 import { SIGNIN_HARNESSES, pickable } from './harness-manager.js'
@@ -243,7 +244,7 @@ export default function NewChat({
   const privacy = usePrivacyMode()
   const {
     connection, capabilities, chats, createChat, modelsFor, endpointsFor, refreshEndpoints,
-    endpointModelsFor, devices, thisDevice,
+    refreshModels, endpointModelsFor, devices, thisDevice,
     capabilitiesFor, apiFor, projects, addProject, plugins, cloud, renameChat,
   } = useConsole()
   // Plugins of one name both on: said here too, where chats start.
@@ -324,6 +325,10 @@ export default function NewChat({
   const [model, setModel] = useState(null)
   const [models, setModels] = useState([])
   const [modelsPending, setModelsPending] = useState(true)
+  // The model menu's own capture: a refresh in flight, and the daemon's
+  // sentence when it refused or failed, both read by the footer.
+  const [catalogRefreshing, setCatalogRefreshing] = useState(false)
+  const [catalogError, setCatalogError] = useState(null)
   // Custom endpoints on the machine the chat will run on: the records,
   // the models each enabled one lists today, and this chat's own pick
   // (null = the harness's machine default, if any, else its provider).
@@ -885,9 +890,37 @@ export default function NewChat({
       id: m.model,
       name: prettyModelName(m.display_name ?? m.model),
       resolved_model: m.resolved_model,
+      // The harness's own two extra facts, where its catalog carries them:
+      // the second line (a cost tier) and the hover sentence. Shown as sent;
+      // the console never invents either.
+      detail: m.detail ?? null,
+      note: m.note ?? null,
     })),
     ...customItems,
   ]
+  // A captured catalog carries the moment it was captured (a harness that
+  // ships its list with OpenRemote has no capture and so no age to show).
+  const catalogCapturedAt = currentHarness?.models_captured_at ?? null
+  // Capture this harness's catalog again from the model menu's footer. Only
+  // this machine can: the daemon runs the harness's own CLI. The list is
+  // replaced in place; a refusal (a chat is running) or a failed capture is
+  // the daemon's sentence, shown in the footer where the age was.
+  const refreshCatalog = async () => {
+    if (!currentHarness || catalogRefreshing) return
+    setCatalogRefreshing(true)
+    setCatalogError(null)
+    try {
+      const list = (await refreshModels(currentHarness.id, target)) ?? []
+      setModels(list)
+      setModelsPending(false)
+    } catch (err) {
+      // The daemon's own sentence, quoted as its words: a chat is running on
+      // the harness, or the capture failed.
+      setCatalogError(errorCopy(err))
+    } finally {
+      setCatalogRefreshing(false)
+    }
+  }
   const defaultEndpoint = endpoints.find((e) => e.is_default) ?? null
   const chosenEndpoint = endpointId ? endpoints.find((e) => e.id === endpointId) ?? null : null
   const endpointWord = chosenEndpoint?.name ?? (defaultEndpoint ? `Default (${defaultEndpoint.name})` : "App provider")
@@ -1467,16 +1500,30 @@ export default function NewChat({
                       m.group ? <span className="nc-item-sub">via {m.group}</span> : null
                     }
                     footer={
-                      currentHarness?.custom_endpoint_supported ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPicker(null)
-                            setManageModels(true)
-                          }}
-                        >
-                          Manage models…
-                        </button>
+                      catalogCapturedAt || currentHarness?.custom_endpoint_supported ? (
+                        <>
+                          {catalogCapturedAt && (
+                            <span className="nc-catalog-age" role="status">
+                              {catalogError ?? `Captured ${relativeTime(catalogCapturedAt, Date.now())}`}
+                            </span>
+                          )}
+                          {catalogCapturedAt && !target && (
+                            <button type="button" onClick={refreshCatalog} disabled={catalogRefreshing}>
+                              {catalogRefreshing ? 'Refreshing…' : 'Refresh'}
+                            </button>
+                          )}
+                          {currentHarness?.custom_endpoint_supported && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPicker(null)
+                                setManageModels(true)
+                              }}
+                            >
+                              Manage models…
+                            </button>
+                          )}
+                        </>
                       ) : null
                     }
                   />

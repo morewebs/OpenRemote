@@ -173,6 +173,24 @@
   text-overflow: ellipsis;
 }
 
+/* A row that carries a second fact about itself (a model's cost tier): the
+   main line wraps so the fact can take the row's full width under the name
+   and its marks instead of pushing them aside. Only those rows wrap, so a
+   long name in any other picker keeps its single line. */
+.nc-item.has-detail .nc-item-main {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+.nc-item-detail {
+  order: 1;
+  flex-basis: 100%;
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
 .nc-menu--wide {
   width: 340px;
 }

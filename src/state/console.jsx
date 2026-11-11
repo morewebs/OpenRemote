@@ -884,6 +884,43 @@ export function ConsoleProvider({ children }) {
     [api, modelsByHarness, stillCurrent],
   )
 
+  // Capture a harness's model catalog again. Only this console's own machine
+  // can: the daemon runs the harness's CLI in the plugin's folder, which is
+  // the job of the machine that holds it.
+  const refreshModels = useCallback(
+    async (harnessId, deviceId = null) => {
+      // Another device's catalog is that device's own answer; the list it
+      // advertised is all this console can offer from here.
+      if (deviceId) return modelsFor(harnessId, deviceId)
+      // A refusal here is the daemon's own sentence (a chat is running, or
+      // the capture failed) and rides to the caller unchanged.
+      await api.catalogRefresh(harnessId)
+      // The footer's capture age comes off the harness row the daemon just
+      // reprobed, so the capabilities land before the list is read.
+      await refreshCapabilities()
+      // Asking modelsFor again here would answer from the state this render
+      // closed over, which is the list the capture just replaced. The daemon
+      // is asked directly and its answer becomes the cache, as
+      // refreshEndpoints does for its rows.
+      const key = `:${harnessId}`
+      const list = (await api.models(harnessId)) ?? []
+      if (!stillCurrent(api)) return list
+      setModelsByHarness((current) => {
+        // An empty answer is not cached, the rule modelsFor keeps: a machine
+        // still starting gets asked again.
+        if (!list.length) {
+          if (!(key in current)) return current
+          const next = { ...current }
+          delete next[key]
+          return next
+        }
+        return { ...current, [key]: list }
+      })
+      return list
+    },
+    [api, modelsFor, refreshCapabilities, stillCurrent],
+  )
+
   // The custom model endpoints on a machine, metadata only (the keys
   // never leave the daemon). Cached per device and harness; saving or
   // removing refreshes the row.
@@ -1639,6 +1676,7 @@ export function ConsoleProvider({ children }) {
       ensureChat,
       createChat,
       modelsFor,
+      refreshModels,
       endpointsFor,
       refreshEndpoints,
       endpointModelsFor,
@@ -1733,6 +1771,7 @@ export function ConsoleProvider({ children }) {
       ensureChat,
       createChat,
       modelsFor,
+      refreshModels,
       endpointsFor,
       refreshEndpoints,
       endpointModelsFor,

@@ -42,7 +42,9 @@ my-harness/
     },
     "args": [],
     "models": null,
-    "default_model": null
+    "default_model": null,
+    "models_file": "models.json",
+    "settings": "live"
   }
 }
 ```
@@ -62,8 +64,27 @@ my-harness/
 - `models` is optional. When present it is an array in the shape the console
   already uses: `{"model": "...", "display_name": "...", "reasoning_efforts":
   ["..."], "is_default": true}`. `null` means the harness advertises nothing
-  before a chat runs, and the console leaves the model slot reserved.
+  before a chat runs, and the console leaves the model slot reserved. Two more
+  fields are optional on each entry: `detail`, a short second line in the
+  harness's own words (a cost tier such as `3x · Recommended`), and `note`, the
+  notice the harness prints under a name (`May use data for AI training`), which
+  is shown as the row's hover title.
 - `default_model` is optional and is shown before the first turn.
+- `models_file` is optional. It names a file inside the plugin folder that the
+  driver writes a model catalog into, in the shape `{"captured_at": <ms>,
+  "default": "...", "models": [...]}`. The daemon reads it whenever it re-probes
+  the harness, and a usable file wins over `models`: it is this machine's own
+  reading, and `captured_at` is what the console's capture age shows. A file
+  that is missing, malformed, empty or outside the plugin folder is not an
+  error; the manifest's `models` list stands in. The Freebuff plugin is the
+  example: its driver's `--catalog` mode writes `models.json`.
+- `settings` is optional. The only word it takes is `"live"`, which says the
+  driver can change the model on a running chat, between turns. The daemon then
+  passes a model change straight to the driver and refuses it while a turn is
+  working, because the driver cannot see the session's status. Without the key
+  a change is stored on the chat and takes effect when the chat is resumed. Any
+  other word is refused at install, naming `live`, rather than being read as
+  start-time.
 
 ## Probe
 
@@ -112,6 +133,8 @@ Events from the driver:
 | type | fields |
 |------|--------|
 | `initialized` | `session_ref`, `model`, `permission_mode` |
+| `model_reported` | `model` |
+| `settings_refused` | `message` |
 | `text` | `text` |
 | `text_delta` | `text` |
 | `reasoning`, `reasoning_delta` | `text` |
@@ -129,6 +152,11 @@ Rules:
 - `spawn` is answered by `initialized`. `session_ref` is the harness's own
   conversation id, which `resume` will be given on a later start. Without one,
   send an empty string.
+- `model_reported` is the harness's own reading of the model a chat is on, after
+  a start or a change; the console's chip follows it. `settings_refused` is one
+  sentence saying why a change did not happen, and it lands as a note in the
+  chat. Both are optional, and a driver that cannot read the model sends
+  neither.
 - `turn_completed.coarse` is `completed`, `interrupted` or `failed`, and
   `subtype` is the harness's own final word. A turn that ended in an error
   says `is_error: true` and puts the harness's own explanation in
