@@ -34,6 +34,11 @@ recorded as dropped below.
 | Images, console: API attachments and `blob()`, reducer pictures, `ChatImages` | br-images 2b770c1 | 6662c73 |
 | Composer attachments (paste, drop, pick; `honors.attachments`; errorCopy) | br-images 5f59a28 | a545687 |
 | Pictures in the chat view (user, OriginChip, tool screenshots, queue) | br-images 1a2ab3d (pictures half) | 007e28e |
+| Browser tool cards (`browserTool`, `BrowserFacts`, folding `OutRow`, work-row labels, approvals) | browser 1a2ab3d (tool cards) | d50fcdc |
+| Web console pictures: the peer link answers `blob()` | browser 1a2ab3d (pictures in the chat view) | e1f99f9 |
+| Picture ahead on address focus and the star / Ctrl+D | br-console 52705e9 (f118e43 was in main) | 4862afa |
+| Browser keys in the shortcut catalog, own scope, focus gate | browser f6668d2, br-console 11944a8 | 286508a |
+| Settings > Browser: search engine, bookmarks bar, Clear browsing data | browser 015ea58 | 114b65f |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 `wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`,
@@ -49,22 +54,20 @@ Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 - Obsolete: separate Pinned group, inline rename, row dots, DESIGN.md.
 
 ### Browser (browser, br-console, br-android, br-images)
-- The browser half of br-images 1a2ab3d (its pictures half is done): browser
-  tool cards and approvals, the header's Browser button, the phone's "is
-  browsing". Screenshot-to-composer adds through `attachments.js`
-  (`addAttachment`, focused composer).
-- Browser tool cards in `ChatView.jsx` (`browserTool`, `BrowserFacts`, the
-  folding `OutRow`): main's tool card has neither yet; the team tools render
-  through `ToolIo` meanwhile.
 - Console gaps in main's `BrowserView.jsx`: permission bar, private tabs, full
   screen, session restore (+01aee56), put away past 10, agent badge and take
   over, new-tab shortcuts and dev-server row, inline completion, bookmarks
-  manager, screenshot/region to composer, recording.
-- Settings > Browser additions (015ea58), browser keys in the catalog
-  (f6668d2, 11944a8 gate), focus/Ctrl+D picture-ahead (52705e9).
+  manager, screenshot/region to composer (through `attachments.js`
+  `addAttachment`, focused composer), recording. Each brings its Settings or
+  key piece from 015ea58 / f6668d2: "On startup" with session restore, site
+  permissions with Reset with the permission bar, the New private tab key
+  with private tabs.
 - Android phone browser, as one block (5df13bd, f768051, 25aee6d, 1c6f04b,
-  56371d7, cc0080f, 546c420). Regenerate Cargo.lock and capabilities.
-- Obsolete: `openremote://` pages, useBrowserPage refactor, split-pane browser.
+  56371d7, cc0080f, 546c420), with 1a2ab3d's phone "<agent> is browsing"
+  pill. Regenerate Cargo.lock and capabilities.
+- Obsolete: `openremote://` pages, useBrowserPage refactor, split-pane browser,
+  1a2ab3d's header Browser button (main's FloatingBar toggles the pane), the
+  bookmarks-bar key (Ctrl+Shift+B is main's show/hide-browser key).
 
 ### br-live, br-adblock, br-sync, br-ssh
 - Live views: protocol, mesh binary notes, daemon routing and `Tier::Browser`,
