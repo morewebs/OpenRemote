@@ -5,7 +5,7 @@
 // the shell's `browser:*` events.
 
 import { hasTauri, isMobile } from './platform.js'
-import { insertAfter, newTab, popupBelongs, restoredTabs, sessionOf, withRestored } from './browser-tabs.js'
+import { insertAfter, newTab, popupBelongs, putAway, restoredTabs, sessionOf, toDiscard, withRestored } from './browser-tabs.js'
 import { bookmarkFor, inFolder, positionAt, stepPosition, withBookmark, withoutBookmark } from './browser-bookmarks.js'
 import { HISTORY_CAP, recordVisit as pushVisit, visitsBefore } from './browser-history.js'
 import { linkAbort, loadConnection } from './api/daemon.js'
@@ -254,6 +254,11 @@ export function getState() {
 export function setState(change) {
   const before = state
   state = { ...state, ...change(state) }
+  // The tab shown last is the one kept longest when pages are put away.
+  if (state.active !== before.active) {
+    const now = Date.now()
+    state = { ...state, tabs: state.tabs.map((t) => (t.key === state.active ? { ...t, seen: now } : t)) }
+  }
   rememberActive()
   for (const fn of listeners) fn()
   if (state.tabs !== before.tabs || state.active !== before.active) scheduleSave()
@@ -352,6 +357,22 @@ export function adopt(key, native) {
   const said = early.get(native) ?? {}
   early.delete(native)
   patchTab(key, { native, ...said })
+  enforceMemory()
+}
+
+/// Past ten open pages, the least recently shown are put away to entries
+/// (browser-tabs.js `toDiscard`): their pages close in the shell, and each
+/// opens again when it is next shown.
+export function enforceMemory() {
+  const doomed = toDiscard(state.tabs, state.active)
+  if (!doomed.length) return
+  const keys = new Set(doomed.map((t) => t.key))
+  const natives = new Set(doomed.map((t) => t.native))
+  for (const t of doomed) call('browser_close', { tab: t.native })
+  setState((s) => ({
+    tabs: s.tabs.map((t) => (keys.has(t.key) ? putAway(t) : t)),
+    prompts: s.prompts.filter((p) => !natives.has(p.tab)),
+  }))
 }
 
 function fieldsOf(p) {
@@ -538,6 +559,7 @@ async function wire() {
       const tab = newTab({ native: p.id, ...fields })
       return { tabs: insertAfter(s.tabs, tab, opener.key), active: tab.key }
     })
+    enforceMemory()
   })
   listen('browser:download', ({ payload: d }) => {
     setState((s) => {

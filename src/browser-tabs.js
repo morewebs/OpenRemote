@@ -108,6 +108,32 @@ export function withRestored(tabs, active, restored) {
   return { tabs: [...restored.tabs, ...kept], active: busy ? active : restored.tabs[restored.active].key }
 }
 
+// ---- putting pages away ----
+
+// Pages kept open at once. Past this the least recently shown are put away
+// to entries that open again when shown: each open page holds memory, an
+// entry holds an address.
+export const LIVE_LIMIT = 10
+
+// When more than `limit` pages are open, the ones to put away: the least
+// recently shown first (`seen`), never the tab on screen, one an agent
+// holds, or a private one (putting it away would end its private session).
+export function toDiscard(tabs, active, limit = LIVE_LIMIT) {
+  const live = (tabs ?? []).filter((t) => t.native)
+  const extra = live.length - limit
+  if (extra <= 0) return []
+  return live
+    .filter((t) => t.key !== active && !t.controller && !t.private)
+    .sort((a, b) => (a.seen ?? 0) - (b.seen ?? 0))
+    .slice(0, extra)
+}
+
+// A tab put away: its address and title stay, its page and what the page
+// said about itself go.
+export function putAway(tab) {
+  return { ...tab, native: null, loading: false, canBack: false, canForward: false, find: null }
+}
+
 // ---- the closed tabs a window remembers ----
 //
 // A closed tab leaves its address and title, never its shell page: that page
