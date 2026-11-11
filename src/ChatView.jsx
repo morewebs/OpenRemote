@@ -702,14 +702,31 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
     setText((t) => (t ? `${t}\n\n${snippet}` : snippet))
     requestAnimationFrame(() => inputRef.current?.focus())
   }
-  useEffect(() => {
-    claimInserter(attach)
-  }, [])
+  // Both claims belong to this composer and end with it: a chat that closed
+  // must not take the browser's text or pictures. A new claim releases the
+  // one it replaces, so only the latest is outstanding.
+  const claims = useRef({ text: null, pictures: null })
+  const claimText = () => {
+    claims.current.text?.()
+    claims.current.text = claimInserter(attach)
+  }
   // The browser's pictures go to the composer the user is in, like its text
   // (claimInserter): this one while it is the focused pane's, or the moment
   // its text gains focus.
+  const claimPictures = () => {
+    claims.current.pictures?.()
+    claims.current.pictures = setFocusedComposer(composerKey)
+  }
   useEffect(() => {
-    if (focused) setFocusedComposer(composerKey)
+    claimText()
+    return () => {
+      claims.current.text?.()
+      claims.current.pictures?.()
+      claims.current = { text: null, pictures: null }
+    }
+  }, [])
+  useEffect(() => {
+    if (focused) claimPictures()
   }, [focused, composerKey])
   const attachInput = useAttachInput(composerKey, {
     enabled: takesImages && alive && reachable,
@@ -1461,8 +1478,8 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
             ref={inputRef}
             value={text}
             onFocus={() => {
-              claimInserter(attach)
-              setFocusedComposer(composerKey)
+              claimText()
+              claimPictures()
             }}
             onPaste={attachInput.onPaste}
             onChange={(e) => {

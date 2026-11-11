@@ -997,6 +997,43 @@ html[data-reduce-motion] .bw-btn {
   color: var(--text-3);
   font-size: 12.5px;
 }
+/* ---- screenshot a region ---- */
+/* Over the page's picture (the page steps aside while it is open): a shade
+   to drag a rectangle on, the chosen part left clear. */
+.bw-region {
+  position: absolute;
+  z-index: 2;
+  overflow: hidden;
+  outline: 0;
+  cursor: crosshair;
+  touch-action: none;
+}
+.bw-region-shade {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 6, 9, 0.55);
+}
+/* The chosen part stays clear; everything around it is shaded by its
+   outline, which reaches past the picker's edges (clipped there). */
+.bw-region-rect {
+  position: absolute;
+  border: 1px solid var(--accent);
+  outline: 200vmax solid rgba(4, 6, 9, 0.55);
+}
+.bw-region-hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #1c1c1c;
+  color: var(--text-1);
+  font-size: 12.5px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
 /* ---- the bookmarks manager (the history dialog's family) ---- */
 .bw-marks-search {
   display: flex;

@@ -4,8 +4,11 @@
 
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { errorCopy } from './error-copy.js'
 import {
+  NO_COMPOSER,
   addAttachment,
+  addToFocused,
   attachments,
   clearAttachments,
   focusedComposer,
@@ -37,4 +40,31 @@ test("the home screen's attachments move to the chat it starts", () => {
   assert.deepEqual(attachments('new'), [])
   assert.deepEqual(attachments('chat-2').map((a) => a.name), ['a'])
   clearAttachments('chat-2')
+})
+
+test('a composer that goes ends its claim, so a picture added later is refused, not hidden in a closed chat', () => {
+  const release = setFocusedComposer('chat-3')
+  assert.deepEqual(addToFocused({ kind: 'image', name: 'one' }).key, 'chat-3')
+  release()
+  assert.equal(focusedComposer(), null, 'no composer holds the claim once its own closed')
+  assert.throws(() => addToFocused({ kind: 'image', name: 'two' }), (err) => {
+    assert.equal(err.voice, 'console')
+    assert.equal(errorCopy(err), `The console could not do this: ${NO_COMPOSER}.`)
+    return true
+  })
+  // The closed chat's composer got only what was added while it was open.
+  assert.deepEqual(attachments('chat-3').map((a) => a.name), ['one'])
+  clearAttachments('chat-3')
+})
+
+test("a release is only its own claim's: the composer that took over keeps it", () => {
+  const first = setFocusedComposer('chat-4')
+  const second = setFocusedComposer('chat-5')
+  first()
+  assert.equal(focusedComposer(), 'chat-5')
+  const { key } = addToFocused({ kind: 'image', name: 'x' })
+  assert.equal(key, 'chat-5')
+  second()
+  assert.equal(focusedComposer(), null)
+  clearAttachments('chat-5')
 })

@@ -12,6 +12,7 @@ import {
   ArrowRight,
   ArrowSquareOut,
   ArrowsClockwise,
+  Camera,
   CaretDown,
   CaretUp,
   Code,
@@ -28,6 +29,7 @@ import {
   MagnifyingGlassPlus,
   Plus,
   Printer,
+  Selection,
   Trash,
   Star,
   Warning,
@@ -43,7 +45,10 @@ import { adopt, answerPrompt, browserCall, call, closePage, dropPromptsFor, focu
 import { FLOATING, covered } from './browser-occlusion.js'
 import { DEVICES, browserHasFocus, fitDevice, fileName, nextZoom, permissionName, permissionRows, zoomLabel } from './browser-chrome.js'
 import { AgentBadge, AgentBar, PermissionBar } from './BrowserInfobar.jsx'
-import { errorCopy } from './error-copy.js'
+import { consoleError, errorCopy } from './error-copy.js'
+import { NO_COMPOSER, addToFocused, focusedComposer } from './attachments.js'
+import { cameWhole, clipFor, regionScale, screenshotAttachment } from './browser-attach.js'
+import BrowserRegion from './BrowserRegion.jsx'
 import ContextMenu from './ContextMenu.jsx'
 import { bookmarkFor, labelFor } from './browser-bookmarks.js'
 import { shownVisitUrl, visitLabel } from './browser-history.js'
@@ -103,6 +108,31 @@ function frames(n) {
     const step = (left) => (left ? requestAnimationFrame(() => step(left - 1)) : resolve())
     step(n)
   })
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = reject
+    img.src = src
+  })
+}
+
+// A part of a picture of the page: `r` in the on-screen box `box`.
+async function crop(picture, r, box) {
+  try {
+    const img = await loadImage(picture)
+    const sx = img.naturalWidth / box.width
+    const sy = img.naturalHeight / box.height
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(r.width * sx))
+    canvas.height = Math.max(1, Math.round(r.height * sy))
+    canvas.getContext('2d').drawImage(img, r.x * sx, r.y * sy, r.width * sx, r.height * sy, 0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL('image/jpeg', 0.9)
+  } catch {
+    return null
+  }
 }
 
 // A menu anchored under a toolbar button.
@@ -172,6 +202,9 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   // the chat. `notice` is the pane's own confirm - it sits in the chrome,
   // never over the page.
   const [picking, setPicking] = useState(false)
+  // "Screenshot a region": the page's picture with a rectangle to drag, over
+  // the page box ({ tab, url, scale, box }), or null.
+  const [region, setRegion] = useState(null)
   const [notice, setNotice] = useState(null)
   const noticeTimer = useRef(0)
   const shownNative = useRef(null)
@@ -879,6 +912,95 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     standDownPick(native)
   }
 
+  // ---- pictures of the page, to the chat ----
+
+  // A picture lands in the composer the user is in (attachments.js), and the
+  // pane says which; with none on screen it says so instead of keeping the
+  // picture where nobody is looking. A private tab's picture is taken only
+  // because the user asked for it here, and it is never kept in history.
+  const attachPicture = (item, what) => {
+    try {
+      const { key } = addToFocused(item)
+      notify(key === 'new' ? `${what} added to the new chat` : `${what} added to the chat`)
+    } catch (err) {
+      notify(errorCopy(err))
+    }
+  }
+
+  // Said before anything is taken: no composer, no picture.
+  const composerReady = () => {
+    if (focusedComposer()) return true
+    notify(errorCopy(consoleError(NO_COMPOSER)))
+    return false
+  }
+
+  const screenshot = async () => {
+    const tab = activeTab()
+    if (!tab?.native) return
+    if (!can('cdp')) {
+      notify('Screenshots are not in this build yet')
+      return
+    }
+    if (!composerReady()) return
+    const dataUrl = await call('browser_capture', { tab: tab.native })
+    if (!dataUrl) {
+      notify("The page's picture couldn't be taken.")
+      return
+    }
+    attachPicture(screenshotAttachment(dataUrl, tab.url), 'Screenshot')
+  }
+
+  const startRegion = async () => {
+    const tab = activeTab()
+    if (!tab?.native || region) return
+    if (!can('cdp')) {
+      notify('Screenshots are not in this build yet')
+      return
+    }
+    if (!composerReady()) return
+    // A fresh picture to drag over: the swap shows it in the page's place
+    // once the picker covers the page.
+    await picture$(tab.native, 0)
+    const pageBox = pageRef.current?.getBoundingClientRect()
+    const at = rect()
+    if (!pageBox || !at || activeTab()?.native !== tab.native) return
+    const fit = tab.device ? fitDevice(tab.device, { width: pageBox.width - 32, height: pageBox.height - 32 }).scale : 1
+    setRegion({
+      tab: tab.native,
+      url: tab.url,
+      scale: regionScale(tab.zoom ?? 1, fit),
+      box: { left: at.x - pageBox.left, top: at.y - pageBox.top, width: at.width, height: at.height },
+    })
+  }
+
+  const finishRegion = async (r) => {
+    const reg = region
+    setRegion(null)
+    if (!reg) return
+    const clip = clipFor(r, reg.scale)
+    let dataUrl = await call('browser_capture', { tab: reg.tab, clip })
+    // A shell that sent the whole page (or nothing): the part is cut from
+    // the page's picture here instead.
+    if (dataUrl) {
+      const img = await loadImage(dataUrl).catch(() => null)
+      const size = img ? { width: img.naturalWidth, height: img.naturalHeight } : null
+      if (cameWhole(size, clip, r, window.devicePixelRatio || 1)) dataUrl = await crop(dataUrl, r, reg.box)
+    } else if (shotRef.current.tab === reg.tab && shotRef.current.url) {
+      dataUrl = await crop(shotRef.current.url, r, reg.box)
+    }
+    if (!dataUrl) {
+      notify("That part of the page couldn't be taken.")
+      return
+    }
+    attachPicture(screenshotAttachment(dataUrl, reg.url), 'Screenshot')
+  }
+
+  // The picker belongs to the page it was opened on: another tab, or the
+  // page going, ends it.
+  useEffect(() => {
+    if (region && region.tab !== current?.native) setRegion(null)
+  }, [current?.native, region])
+
   const toggleDevice = () => {
     const tab = activeTab()
     if (!tab?.native) return
@@ -1010,6 +1132,21 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
           hint: can('print') ? '' : 'Not in this build',
           disabled: !live || !can('print'),
           onSelect: () => onNative('browser_print'),
+        },
+        { divider: true },
+        {
+          label: 'Screenshot to chat',
+          icon: <Camera size={14} />,
+          hint: can('cdp') ? '' : 'Not in this build',
+          disabled: !live || !can('cdp'),
+          onSelect: screenshot,
+        },
+        {
+          label: 'Screenshot a region',
+          icon: <Selection size={14} />,
+          hint: can('cdp') ? '' : 'Not in this build',
+          disabled: !live || !can('cdp'),
+          onSelect: startRegion,
         },
         { divider: true },
         { label: 'Downloads', icon: <DownloadSimple size={14} />, hint: 'Ctrl+J', onSelect: () => setTimeout(() => setMenu({ kind: 'downloads', ...anchorFor('downloads') }), 0) },
@@ -1394,6 +1531,15 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
         </button>
         <button
           type="button"
+          className="bw-btn"
+          title={can('cdp') ? 'Screenshot to chat' : 'Screenshots are not in this build yet'}
+          disabled={!live || !can('cdp')}
+          onClick={screenshot}
+        >
+          <Camera size={17} />
+        </button>
+        <button
+          type="button"
           className={`bw-btn${busy ? ' busy' : ''}`}
           data-bw-anchor="downloads"
           title="Downloads (Ctrl+J)"
@@ -1534,6 +1680,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
 
       <div className={`bw-page${device ? ' device' : ''}`} ref={pageRef}>
         <img ref={pictureRef} className="bw-picture" alt="" />
+        {region && live && <BrowserRegion box={region.box} onPick={finishRegion} onCancel={() => setRegion(null)} />}
         {!live && (
           <div className="bw-ntp">
             <div className="bw-ntp-col">

@@ -1064,10 +1064,12 @@ export default function NewChat({
   // The same moment names this the focused composer for attachments.js, so
   // the browser's text (claimInserter) and its pictures (addAttachment)
   // land in the one composer the user is in.
+  const releasePictures = useRef(null)
   const takeInserter = () => {
     releaseInserter.current?.()
     releaseInserter.current = claimInserter(attach)
-    setFocusedComposer('new')
+    releasePictures.current?.()
+    releasePictures.current = setFocusedComposer('new')
   }
   // Paste, drop and the attach button; off where the app reads no pictures.
   const attachInput = useAttachInput('new', {
@@ -1080,6 +1082,8 @@ export default function NewChat({
     return () => {
       releaseInserter.current?.()
       releaseInserter.current = null
+      releasePictures.current?.()
+      releasePictures.current = null
     }
   }, [])
   const openPickerAt = (kind) => {

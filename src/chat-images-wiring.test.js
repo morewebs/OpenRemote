@@ -56,9 +56,20 @@ test('a no-picture app refuses a pasted or dropped picture in its own name', () 
 
 test("the browser's text bus and its picture bus follow the same focus", () => {
   const chat = read('ChatView.jsx')
-  assert.match(chat, /claimInserter\(attach\)\s*\n\s*setFocusedComposer\(composerKey\)/)
+  assert.match(chat, /onFocus=\{\(\) => \{\s*\n\s*claimText\(\)\s*\n\s*claimPictures\(\)/)
+  assert.match(chat, /claims\.current\.pictures = setFocusedComposer\(composerKey\)/)
   const fresh = read('NewChat.jsx')
-  assert.match(fresh, /releaseInserter\.current = claimInserter\(attach\)\s*\n\s*setFocusedComposer\('new'\)/)
+  assert.match(
+    fresh,
+    /releaseInserter\.current = claimInserter\(attach\)\s*\n\s*releasePictures\.current\?\.\(\)\s*\n\s*releasePictures\.current = setFocusedComposer\('new'\)/,
+  )
+})
+
+test('both claims end when their composer goes, so nothing lands in a closed chat', () => {
+  const chat = read('ChatView.jsx')
+  assert.match(chat, /return \(\) => \{\s*\n\s*claims\.current\.text\?\.\(\)\s*\n\s*claims\.current\.pictures\?\.\(\)/)
+  const fresh = read('NewChat.jsx')
+  assert.match(fresh, /releasePictures\.current\?\.\(\)\s*\n\s*releasePictures\.current = null/)
 })
 
 test('sending refuses what the app cannot carry before anything runs, and says it through errorCopy', () => {
