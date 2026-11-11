@@ -36,7 +36,7 @@ import {
 import { hasTauri, isMobile } from './platform.js'
 import { PICKER_CANCEL, PICKER_SOURCE, formatPicked } from './browser-pick.js'
 import { insertToComposer } from './composer-insert.js'
-import { SEARCH_ENGINES, omnibox, security, shownAddress, suggest } from './browser-omnibox.js'
+import { SEARCH_ENGINES, inlineFor, omnibox, security, shownAddress, suggest } from './browser-omnibox.js'
 import { browserSetting, setSitePermission, useBrowserPrefs } from './browser-prefs.js'
 import { closeOthers, closeTab, closeToRight, cycle, canUse, extrasMissing, isDormant, newTab, openBelongs, rememberClosed, stripPlan, takeClosed, tabTitle } from './browser-tabs.js'
 import { adopt, answerPrompt, browserCall, call, closePage, dropPromptsFor, focusTab, onFullscreen, startSession, clearHistory, getState, onKey, patchTab, recordVisit, registerReopen, removeBookmark, saveBookmark, setState, subscribe, updateBookmark } from './browser-store.js'
@@ -138,12 +138,21 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   const pageRef = useRef(null)
   const addressRef = useRef(null)
   const findRef = useRef(null)
+  // What the field shows, and what the person typed: the same, or the typed
+  // beginning followed by its inline completion, selected so the next key
+  // replaces it (Tab or Right takes it, Enter opens it).
   const [address, setAddress] = useState('')
+  const [typed, setTyped] = useState('')
+  const setField = (text) => {
+    setAddress(text)
+    setTyped(text)
+  }
+  const completedRange = useRef(null)
   const [editing, setEditing] = useState(false)
   const [suggestion, setSuggestion] = useState(-1)
   // Rows only while the field is being typed in, never on a field showing the
   // page's own address: the list is for where the person is going.
-  const typedLine = editing && address && address !== shownAddress(current?.url) ? address : ''
+  const typedLine = editing && typed && typed !== shownAddress(current?.url) ? typed : ''
   const suggestionRows = typedLine
     ? [...suggest({ typed: typedLine, marks: bookmarks, visits: history }), { url: typedLine, title: 'Open in a new tab', newTab: true }]
     : []
@@ -208,8 +217,20 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
 
   // The address bar follows the tab unless the user is typing in it.
   useEffect(() => {
-    if (!editing) setAddress(shownAddress(current?.url))
+    if (!editing) setField(shownAddress(current?.url))
   }, [current?.url, current?.key, editing])
+
+  // The completion is selected once it is in the field: the typed part stays
+  // as typed, the rest is chosen, so typing on replaces it. After every
+  // render, not on `address` alone: typing the next letter of a completion
+  // leaves the field's value as it was, and the selection still has to
+  // come back.
+  useLayoutEffect(() => {
+    const range = completedRange.current
+    if (!range || !addressRef.current) return
+    completedRange.current = null
+    addressRef.current.setSelectionRange(range[0], range[1])
+  })
 
   // Where the page sits: the whole placeholder, or a device's size
   // centred in it.
@@ -485,7 +506,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     const tab = newTab(priv ? { private: true } : {})
     setState((s) => ({ tabs: [...s.tabs, tab], active: tab.key }))
     setEditing(true)
-    setAddress('')
+    setField('')
     requestAnimationFrame(() => addressRef.current?.focus())
   }
   const openPrivate = () => openTab({ private: true })
@@ -1266,14 +1287,21 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
             spellCheck={false}
             role="combobox"
             aria-label="Address"
-            aria-autocomplete="list"
+            aria-autocomplete="both"
             aria-expanded={suggestionRows.length > 0}
             aria-controls="bw-suggest"
             aria-activedescendant={suggestion >= 0 ? `bw-suggest-${suggestion}` : undefined}
             onChange={(e) => {
               setEditing(true)
               setSuggestion(-1)
-              setAddress(e.target.value)
+              const next = e.target.value
+              setTyped(next)
+              // Only typing forward at the end completes: a deletion, or an
+              // edit in the middle, keeps exactly what is in the field.
+              const forward = Boolean(e.nativeEvent?.inputType?.startsWith('insert')) && e.target.selectionStart === next.length
+              const inline = forward ? inlineFor(next, suggest({ typed: next, marks: bookmarks, visits: history })) : null
+              if (inline) completedRange.current = [next.length, inline.length]
+              setAddress(inline ?? next)
             }}
             onFocus={(e) => {
               setEditing(true)
@@ -1286,8 +1314,22 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
               if (e.key === 'Escape') {
                 setSuggestion(-1)
                 setEditing(false)
-                setAddress(shownAddress(current?.url))
+                setField(shownAddress(current?.url))
                 leaveAddress()
+                return
+              }
+              // Tab or Right on a completion still selected to the end takes it:
+              // the field then holds it as typed.
+              const el = e.currentTarget
+              if (
+                ((e.key === 'Tab' && !e.shiftKey) || e.key === 'ArrowRight') &&
+                address !== typed &&
+                el.selectionStart === typed.length &&
+                el.selectionEnd === address.length
+              ) {
+                e.preventDefault()
+                setTyped(address)
+                el.setSelectionRange(address.length, address.length)
                 return
               }
               // The list is driven from the field, which keeps the focus: the

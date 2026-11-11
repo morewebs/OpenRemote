@@ -117,3 +117,31 @@ export function suggest({ typed = '', marks = [], visits = [], limit = SUGGEST_L
     .sort((a, b) => a.score - b.score || (a.kept ? 0 : 1) - (b.kept ? 0 : 1) || b.at - a.at || a.url.localeCompare(b.url))
     .slice(0, Math.max(0, limit))
 }
+// ---- inline completion ----
+//
+// Chrome completes a typed beginning in the field itself: "git" shows
+// "github.com" with "hub.com" selected, so the next key replaces it, Tab or
+// Right takes it, and Enter opens it. The completion is the site, or the
+// whole address once the typing reaches past the site. Words (a search) and
+// a typed scheme are never completed.
+
+/** What `typed` completes to from one suggested address, or null. */
+export function completion(typed, url) {
+  const text = String(typed ?? '')
+  if (!text || /\s/.test(text) || text.includes('://')) return null
+  const lower = text.toLowerCase().replace(/^www\./, '')
+  const bare = bareAddress(url).replace(/\/$/, '')
+  if (!lower || !bare.startsWith(lower)) return null
+  const whole = lower.includes('/') ? bare : bare.split('/')[0]
+  if (whole.length <= lower.length) return null
+  return text + whole.slice(lower.length)
+}
+
+/** The first completion the suggestion rows offer for `typed`, or null. */
+export function inlineFor(typed, rows) {
+  for (const row of rows ?? []) {
+    const done = completion(typed, row?.url)
+    if (done) return done
+  }
+  return null
+}
