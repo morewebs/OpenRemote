@@ -57,6 +57,26 @@ fn refuse_live_mid_turn(settings_live: bool, status: SessionStatus) -> Option<&'
     .then_some("wait for this turn to finish, then change the model")
 }
 
+/// What a live harness's chat said before its latest settings change, kept
+/// until the driver answers. The live wire has no acknowledgement, so the
+/// change is stored when it is written; a `settings_refused` puts these
+/// values back. Only the latest change is held: a driver answers its
+/// commands in order, and the values before the latest change are the ones a
+/// refusal of it restores.
+#[derive(Clone, Debug, PartialEq)]
+struct PriorSettings {
+    model: Option<String>,
+    effort: Option<String>,
+    fast: bool,
+}
+
+fn prior_live_settings() -> &'static StdMutex<std::collections::HashMap<SessionId, PriorSettings>> {
+    static PRIOR: std::sync::OnceLock<
+        StdMutex<std::collections::HashMap<SessionId, PriorSettings>>,
+    > = std::sync::OnceLock::new();
+    PRIOR.get_or_init(Default::default)
+}
+
 /// The chats being moved right now. A second move of the same chat is refused
 /// rather than queued, so two moves never stop and restart one harness at once.
 fn moving_chats() -> &'static StdMutex<std::collections::HashSet<SessionId>> {
@@ -1957,6 +1977,19 @@ impl Supervisor {
             // live wire carries only what a harness can apply now.
             let mut live = settings.clone();
             live.permission_mode = None;
+            // Kept before the write: a refusal can arrive on the pump as
+            // soon as the driver reads the command.
+            let live_harness = self.settings_are_live(&session.harness);
+            if live_harness {
+                prior_live_settings().lock().expect("prior settings").insert(
+                    id.clone(),
+                    PriorSettings {
+                        model: session.model.clone(),
+                        effort: session.effort.clone(),
+                        fast: session.fast,
+                    },
+                );
+            }
             match entry.driver.lock().await.apply_settings(&live).await {
                 Ok(()) => false,
                 Err(openremote_harness::DriverError::Harness(message))
@@ -1974,7 +2007,13 @@ impl Supervisor {
                     }
                     true
                 }
-                Err(error) => return Err(error.into()),
+                Err(error) => {
+                    // Nothing reached the driver, so nothing can be refused.
+                    if live_harness {
+                        prior_live_settings().lock().expect("prior settings").remove(id);
+                    }
+                    return Err(error.into());
+                }
             }
         } else if session.status.is_alive() {
             return Err(SupervisorError::Conflict(
@@ -2975,7 +3014,21 @@ impl Supervisor {
             DriverEvent::SettingsRefused { message } => {
                 // The driver would not take a live change, and said why in one
                 // sentence. It lands in the transcript as a note so the user
-                // reads the reason where they asked for the change.
+                // reads the reason where they asked for the change. The change
+                // was stored when it was written, so it is undone here: the
+                // chip and a later resume keep what the harness actually runs.
+                let prior = prior_live_settings()
+                    .lock()
+                    .expect("prior settings")
+                    .remove(id);
+                if let Some(prior) = prior {
+                    let restored = self
+                        .with_store(|s| {
+                            s.restore_session_settings(id, prior.model, prior.effort, prior.fast)
+                        })
+                        .map_err(store_error)?;
+                    self.emit_all(id, vec![EventPayload::SessionUpdated { session: restored }])?;
+                }
                 self.emit_all(id, vec![EventPayload::DaemonError { message }])?;
             }
             DriverEvent::AssistantText { text } => {

@@ -25,13 +25,17 @@ fn fixture_driver() -> PathBuf {
                 "fixture-driver"
             };
             let path = target.join("debug").join(name);
-            if !path.is_file() {
-                let status = std::process::Command::new("cargo")
-                    .args(["build", "-p", "fixture-driver"])
-                    .status()
-                    .expect("spawn cargo to build the fixture driver");
-                assert!(status.success(), "cargo build -p fixture-driver failed");
-            }
+            // Built every test process, not only when missing: `cargo test`
+            // does not rebuild another package's binary, so a binary left
+            // from an older run would be tested in place of today's source.
+            // Once per process (the OnceLock), and a no-op when it is fresh.
+            // The PATH cargo, as the agent fixture's rescue uses.
+            let status = std::process::Command::new("cargo")
+                .args(["build", "-p", "fixture-driver"])
+                .current_dir(env!("CARGO_MANIFEST_DIR"))
+                .status()
+                .expect("spawn cargo to build the fixture driver");
+            assert!(status.success(), "cargo build -p fixture-driver failed");
             assert!(
                 path.is_file(),
                 "fixture driver binary not found at {}",
@@ -540,16 +544,19 @@ async fn a_refused_live_setting_lands_as_a_note_in_the_chat() {
     .await;
     assert_eq!(created.status, 201, "{}", created.raw);
     let id = created.body["id"].as_str().expect("session id").to_string();
-    until_status(&daemon, &id, &["idle"]).await;
+    let before = until_status(&daemon, &id, &["idle"]).await;
 
     let accepted = call(
         &daemon,
         "POST",
         &format!("/sessions/{id}/settings"),
-        Some(json!({"request_id": "refuse-settings", "model": "missing-model"})),
+        Some(json!({"request_id": "refuse-settings", "model": "missing-model", "fast": true})),
     )
     .await;
     assert_eq!(accepted.status, 200, "{}", accepted.raw);
+    // The live wire has no acknowledgement, so the change is stored when it
+    // is written; the refusal below is what undoes it.
+    assert_eq!(accepted.body["model"], "missing-model", "{}", accepted.raw);
 
     let events = until_kinds(
         &daemon,
@@ -564,6 +571,27 @@ async fn a_refused_live_setting_lands_as_a_note_in_the_chat() {
     assert_eq!(
         note.1["message"],
         "fixture-driver has no model by that name",
+        "{}",
+        dump(&events)
+    );
+    // The refused change is rolled back before the note lands, so the chip and
+    // a later resume keep what the harness actually runs.
+    let after = call(&daemon, "GET", &format!("/sessions/{id}"), None).await;
+    assert_ne!(after.body["model"], "missing-model", "{}", after.raw);
+    assert_eq!(after.body["model"], before["model"], "{}", after.raw);
+    assert_eq!(after.body["effort"], before["effort"], "{}", after.raw);
+    assert_eq!(after.body["fast"], before["fast"], "{}", after.raw);
+    let restored = events
+        .iter()
+        .rposition(|(_, payload)| kind(payload) == "session.updated")
+        .expect("the rollback is announced");
+    let noted = events
+        .iter()
+        .position(|(_, payload)| kind(payload) == "daemon.error")
+        .expect("the note");
+    assert!(restored < noted, "{}", dump(&events));
+    assert_ne!(
+        events[restored].1["session"]["model"], "missing-model",
         "{}",
         dump(&events)
     );

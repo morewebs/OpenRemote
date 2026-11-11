@@ -646,6 +646,31 @@ impl Store {
         Ok(updated)
     }
 
+    /// Put a chat's model, effort and fast back exactly as they were, `None`
+    /// included. A live harness that refuses a change it was handed has the
+    /// change undone this way, so the store never claims a model the harness
+    /// did not take.
+    pub fn restore_session_settings(
+        &mut self,
+        id: &SessionId,
+        model: Option<String>,
+        effort: Option<String>,
+        fast: bool,
+    ) -> Result<Session, StoreError> {
+        let session = self
+            .state
+            .sessions
+            .get_mut(id)
+            .ok_or_else(|| StoreError::NotFound(format!("session {id}")))?;
+        session.model = model;
+        session.effort = effort;
+        session.fast = fast;
+        session.updated_at = crate::now_ms();
+        let updated = session.clone();
+        self.persist()?;
+        Ok(updated)
+    }
+
     pub fn decisions(&self, session_id: &SessionId) -> Vec<&Decision> {
         self.state
             .decisions
