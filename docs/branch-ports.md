@@ -39,6 +39,12 @@ recorded as dropped below.
 | Picture ahead on address focus and the star / Ctrl+D | br-console 52705e9 (f118e43 was in main) | 4862afa |
 | Browser keys in the shortcut catalog, own scope, focus gate | browser f6668d2, br-console 11944a8 | 286508a, 1b8f209 |
 | Settings > Browser: search engine, bookmarks bar, Clear browsing data | browser 015ea58 | 114b65f, 762a244 |
+| Private tabs (Ctrl+Shift+N, Detective mark, kept from closed list and history, share with agents) | browser 0d3211a, f6668d2 (the key) | 2d0311b |
+| Permission bar; site permissions in the site menu and Settings > Browser with Reset | browser 0d3211a, 015ea58 (site permissions) | ea36bfd |
+| Full screen: a page in full screen fills the window | browser 0d3211a | 0c703f2 |
+| Session restore, "On startup" in Settings > Browser | browser 0d3211a, 01aee56, 015ea58 (On startup) | f9c17fd |
+| Put pages away past ten open | browser 0d3211a | a36a3a6 |
+| Agent badge and take over (an agent's tab joins without taking the view) | browser 0d3211a | 5fffff9 |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 `wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`,
@@ -54,14 +60,9 @@ Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 - Obsolete: separate Pinned group, inline rename, row dots, DESIGN.md.
 
 ### Browser (browser, br-console, br-android, br-images)
-- Console gaps in main's `BrowserView.jsx`: permission bar, private tabs, full
-  screen, session restore (+01aee56), put away past 10, agent badge and take
-  over, new-tab shortcuts and dev-server row, inline completion, bookmarks
-  manager, screenshot/region to composer (through `attachments.js`
-  `addAttachment`, focused composer), recording. Each brings its Settings or
-  key piece from 015ea58 / f6668d2: "On startup" with session restore, site
-  permissions with Reset with the permission bar, the New private tab key
-  with private tabs.
+- Console gaps in main's `BrowserView.jsx`: new-tab shortcuts and dev-server
+  row, inline completion, bookmarks manager, screenshot/region to composer
+  (through `attachments.js` `addAttachment`, focused composer), recording.
 - Android phone browser, as one block (5df13bd, f768051, 25aee6d, 1c6f04b,
   56371d7, cc0080f, 546c420), with 1a2ab3d's phone "<agent> is browsing"
   pill. Regenerate Cargo.lock and capabilities.
