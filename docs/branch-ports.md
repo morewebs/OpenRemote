@@ -29,6 +29,8 @@ recorded as dropped below.
 | Agent teams, Settings > Agents tab | br-teams 0b7548a | 6df81cf |
 | Agent teams, lead archive/delete asks about its workers | br-teams 7272ecc | c13b253 |
 | Agent teams, workers nest under their lead in the sidebar | br-teams 7297baf | 5d18d73 |
+| Images, daemon: blob store, `Prompt{text,images}`, `/blobs` routes, refusal by `honors.attachments` | br-images 01b3d02 | a51039c |
+| Codex MCP tool cards (`mcpToolCall`), screenshots kept | br-images e5fccc5 | c17f429 |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 `wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`,
@@ -44,10 +46,10 @@ Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 - Obsolete: separate Pinned group, inline rename, row dots, DESIGN.md.
 
 ### Browser (browser, br-console, br-android, br-images)
-- Images: daemon blob store and `Prompt{text,images}` (01b3d02), console images
-  (2b770c1), composer attachments (5f59a28), codex `mcpToolCall` (e5fccc5).
-  Teams went in first, so thread `images` through `prompt_as`, `queue_add_as`
-  and `steer_as`, and show `ChatImages` on an agent's message (OriginChip).
+- Images, console only (the daemon side is done): console images (2b770c1)
+  and composer attachments (5f59a28). The daemon states picture support as
+  `honors.attachments`, not the branch's `image_input`, so the console must
+  read that; show `ChatImages` on an agent's message (OriginChip) too.
 - Browser tool cards in `ChatView.jsx` (`browserTool`, `BrowserFacts`, the
   folding `OutRow`): main's tool card has neither yet; the team tools render
   through `ToolIo` meanwhile.
