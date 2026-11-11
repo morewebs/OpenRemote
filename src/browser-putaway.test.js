@@ -57,3 +57,28 @@ test('the view reopens a put-away tab when shown', () => {
   const store = read('./browser-store.js')
   assert.match(store, /patchTab\(key, \{ native, \.\.\.said \}\)\s+enforceMemory\(\)/)
 })
+
+test('the tab just left ranks as recently shown, so it is not among the first put away', async () => {
+  const tick = () => new Promise((r) => setTimeout(r, 3))
+  const tabs = pages(11).map((t) => ({ ...t, seen: undefined }))
+  setState(() => ({ tabs, active: 'k0', prompts: [] }))
+  // Visit k1..k9 briefly, then sit in k10 and leave it for k0.
+  for (let i = 1; i <= 10; i += 1) {
+    await tick()
+    setState(() => ({ active: `k${i}` }))
+  }
+  await tick()
+  setState(() => ({ active: 'k0' }))
+  const seen = Object.fromEntries(getState().tabs.map((t) => [t.key, t.seen]))
+  // k10 was left at the moment k0 was shown: newer than every brief visit.
+  assert.equal(seen.k10, seen.k0)
+  for (let i = 1; i <= 9; i += 1) assert.ok(seen.k10 > seen[`k${i}`], `k10 newer than k${i}`)
+  // k1 was left first, so it is the oldest.
+  assert.ok([2, 3, 4, 5, 6, 7, 8, 9].every((i) => seen.k1 < seen[`k${i}`]))
+  assert.deepEqual(toDiscard(getState().tabs, 'k0').map((t) => t.key), ['k1'])
+})
+
+test('the first tab is stamped as shown from the start', () => {
+  const store = read('./browser-store.js')
+  assert.match(store, /const first = newTab\(\{ seen: Date\.now\(\) \}\)/)
+})

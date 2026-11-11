@@ -186,7 +186,8 @@ function newBookmarkId() {
 
 let started = false
 let state = (() => {
-  const first = newTab()
+  // Stamped as shown from the start, so it is not the first put away.
+  const first = newTab({ seen: Date.now() })
   return {
     tabs: [first],
     active: first.key,
@@ -254,10 +255,16 @@ export function getState() {
 export function setState(change) {
   const before = state
   state = { ...state, ...change(state) }
-  // The tab shown last is the one kept longest when pages are put away.
+  // Least recently shown is put away first: `seen` is when a tab was last
+  // on screen, so both the tab being left and the one shown are stamped -
+  // a tab the user sat in for an hour ranks by when they left it, not by
+  // when they entered it.
   if (state.active !== before.active) {
     const now = Date.now()
-    state = { ...state, tabs: state.tabs.map((t) => (t.key === state.active ? { ...t, seen: now } : t)) }
+    state = {
+      ...state,
+      tabs: state.tabs.map((t) => (t.key === state.active || t.key === before.active ? { ...t, seen: now } : t)),
+    }
   }
   rememberActive()
   for (const fn of listeners) fn()
@@ -426,7 +433,14 @@ export function answerPrompt(prompt, allow, remember) {
 /// A site asked (`browser:permission`): a remembered answer is given at
 /// once; otherwise the bar asks. A private tab always asks.
 export async function onPermission(p) {
-  const priv = getState().tabs.some((t) => t.native === p.tab && t.private)
+  // Private unless known otherwise: a request can arrive before the console
+  // tab has adopted its page, so the tab list alone can't say. The shell's
+  // own word about the page (kept in `early` until adopt) is used then, and
+  // a page nobody has described yet is treated as private - it always asks
+  // and nothing it answers is remembered.
+  const tab = getState().tabs.find((t) => t.native === p.tab)
+  const said = early.get(p.tab)
+  const priv = tab ? Boolean(tab.private) : said ? said.private !== false : true
   if (!priv) {
     if (!getBrowserPrefs().loaded) await loadBrowserPrefs(browserCall)
     const kept = rememberedAnswer(getBrowserPrefs().permissions, p)

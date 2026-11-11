@@ -9,7 +9,7 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { hostOf, permissionAsk, permissionName, permissionRows, rememberedAnswer } from './browser-chrome.js'
 import { getBrowserPrefs, loadBrowserPrefs, setSitePermission } from './browser-prefs.js'
-import { answerPrompt, dropPromptsFor, getState, onPermission, setState } from './browser-store.js'
+import { answerPrompt, dropPromptsFor, getState, onPermission, onTab, setState } from './browser-store.js'
 import { SETTINGS_ENTRIES, searchSettings } from './settings-search.js'
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8')
@@ -103,4 +103,20 @@ test('Settings finds Site permissions, and every surface is wired', () => {
   assert.match(settings, /data-stg="browser-permissions"/)
   assert.match(settings, /setSitePermission\(browserCall, p\.origin, p\.kind, null\)\.catch\(\(err\) => setBrowserNote\(errorCopy\(err\)\)\)/)
   assert.match(settings, /keys\.add\('browser-permissions'\)/)
+})
+
+test('a request that beats adopt is never answered from memory for a private or unknown page', async () => {
+  await loadBrowserPrefs(async () => ({ settings: {}, permissions: { 'https://a.test|camera': 'allow' } }))
+  setState(() => ({ tabs: [{ key: 'n', native: 'tab-1' }], active: 'n', prompts: [] }))
+  // No console tab and no word from the shell yet: asked, as private.
+  await onPermission({ tab: 'tab-60', id: 10, origin: 'https://a.test', kind: 'camera' })
+  assert.deepEqual(getState().prompts.map((p) => [p.id, p.private]), [[10, true]])
+  // The shell said the page is private before the console adopted it.
+  onTab({ id: 'tab-61', url: 'https://a.test/', private: true })
+  await onPermission({ tab: 'tab-61', id: 11, origin: 'https://a.test', kind: 'camera' })
+  assert.deepEqual(getState().prompts.map((p) => [p.id, p.private]), [[10, true], [11, true]])
+  // The shell said it is a normal page: the remembered answer is given.
+  onTab({ id: 'tab-62', url: 'https://a.test/', private: false })
+  await onPermission({ tab: 'tab-62', id: 12, origin: 'https://a.test', kind: 'camera' })
+  assert.deepEqual(getState().prompts.map((p) => p.id), [10, 11])
 })
