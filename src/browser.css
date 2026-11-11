@@ -997,6 +997,86 @@ html[data-reduce-motion] .bw-btn {
   color: var(--text-3);
   font-size: 12.5px;
 }
+/* ---- the bookmarks manager (the history dialog's family) ---- */
+.bw-marks-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  margin-top: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text-3);
+}
+.bw-marks-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+}
+.bw-marks-lead {
+  margin: 8px 0 4px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.bw-mark-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 7px;
+  outline: 0;
+}
+.bw-mark-row:hover,
+.bw-mark-row:focus-visible {
+  background: var(--bg-hover);
+}
+.bw-mark-row.dragging {
+  opacity: 0.5;
+}
+/* Where a dragged bookmark will land: a line above the row, or under the
+   folder's last row. */
+.bw-mark-row.drop {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+.bw-history-day.drop-end {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.bw-mark-grip {
+  flex: none;
+  margin-left: 4px;
+  color: var(--text-3);
+  cursor: grab;
+}
+.bw-mark-open {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-1);
+  text-align: left;
+  cursor: default;
+}
+.bw-mark-rename {
+  flex: 1;
+  margin: 4px 0;
+}
+.bw-mark-more {
+  flex: none;
+  opacity: 0;
+}
+.bw-mark-row:hover .bw-mark-more,
+.bw-mark-row:focus-within .bw-mark-more {
+  opacity: 1;
+}
 /* ---- the address bar's suggestions ---- */
 .bw-bar {
   position: relative;

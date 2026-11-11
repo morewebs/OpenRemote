@@ -97,3 +97,31 @@ export function withBookmark(marks, mark) {
 export function withoutBookmark(marks, id) {
   return (marks ?? []).filter((m) => m.id !== id)
 }
+
+// ---- the bookmarks manager ----
+
+// A folder's bookmarks that match what was typed in the manager's search: by
+// name or by address, ignoring case. An empty search is the whole folder.
+export function matching(marks, folder, query = '') {
+  const needle = String(query ?? '').trim().toLowerCase()
+  const list = inFolder(marks, folder)
+  if (!needle) return list
+  return list.filter((m) => String(m.title ?? '').toLowerCase().includes(needle) || String(m.url ?? '').toLowerCase().includes(needle))
+}
+
+// Where a bookmark lands when it is dropped at `index` of `folder`, counted
+// as the folder shows now with the moving bookmark still in it: its folder
+// and its new position. Only the moved bookmark is written.
+export function placeAt(marks, mark, folder, index) {
+  const to = folder === 'other' ? 'other' : 'bar'
+  const full = inFolder(marks, to)
+  const from = full.findIndex((m) => m.id === mark.id)
+  const at = from !== -1 && from < index ? index - 1 : index
+  const rest = full.filter((m) => m.id !== mark.id)
+  return { folder: to, position: positionAt(rest, Math.max(0, Math.min(at, rest.length))) }
+}
+
+// The other folder, for "Move to ...".
+export function otherFolder(mark) {
+  return folderOf(mark) === 'other' ? 'bar' : 'other'
+}

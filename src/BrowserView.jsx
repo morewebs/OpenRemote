@@ -51,6 +51,7 @@ import { recentFor } from './browser-newtab.js'
 import BrowserBookmarksBar from './BrowserBookmarksBar.jsx'
 import BrowserBookmarkEditor from './BrowserBookmarkEditor.jsx'
 import BrowserHistoryModal from './BrowserHistoryModal.jsx'
+import BrowserBookmarksModal from './BrowserBookmarksModal.jsx'
 import BrowserSuggestions from './BrowserSuggestions.jsx'
 import BrowserShortcuts from './BrowserShortcuts.jsx'
 import { isMac, useKeyboard } from './keyboard.jsx'
@@ -164,6 +165,9 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   // just made it (a fresh bookmark says so in the title).
   const [editor, setEditor] = useState(null)
   const [historyOpen, setHistoryOpen] = useState(false)
+  // The bookmarks manager: both folders, searchable, reordered and renamed
+  // in place.
+  const [marksOpen, setMarksOpen] = useState(false)
   // Element picking: the page waits for a click, and the pick lands in
   // the chat. `notice` is the pane's own confirm - it sits in the chrome,
   // never over the page.
@@ -1010,6 +1014,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
         { divider: true },
         { label: 'Downloads', icon: <DownloadSimple size={14} />, hint: 'Ctrl+J', onSelect: () => setTimeout(() => setMenu({ kind: 'downloads', ...anchorFor('downloads') }), 0) },
         { label: 'History', icon: <ClockCounterClockwise size={14} />, disabled: !history.length, onSelect: () => setHistoryOpen(true) },
+        { label: 'Bookmarks', icon: <Star size={14} />, onSelect: () => setMarksOpen(true) },
         { label: 'Open in your default browser', icon: <ArrowSquareOut size={14} />, disabled: !live || !/^https?:/.test(current?.url ?? ''), onSelect: () => call('browser_open_external', { url: current.url }) },
         ...(import.meta.env.DEV
           ? [{
@@ -1081,6 +1086,8 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
       return [
         { header: 'Bookmarks' },
         ...(menu.marks ?? []).map((m) => ({ label: labelFor(m), onSelect: () => openUrl(m.url) })),
+        { divider: true },
+        { label: 'All bookmarks', icon: <Star size={14} />, onSelect: () => setMarksOpen(true) },
       ]
     }
     if (menu.kind === 'downloads') {
@@ -1592,6 +1599,20 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
           }}
           onClear={clearHistory}
           onClose={() => setHistoryOpen(false)}
+        />
+      )}
+      {marksOpen && (
+        <BrowserBookmarksModal
+          marks={bookmarks}
+          onOpen={(url, { newTab: inNewTab = false } = {}) => {
+            // A row opened here closes the manager; one sent to a new tab
+            // leaves it open for the next.
+            if (!inNewTab) setMarksOpen(false)
+            openUrl(url, { newTab: inNewTab })
+          }}
+          onUpdate={updateBookmark}
+          onRemove={removeBookmark}
+          onClose={() => setMarksOpen(false)}
         />
       )}
       {editor && (
