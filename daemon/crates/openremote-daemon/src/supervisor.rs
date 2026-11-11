@@ -44,6 +44,19 @@ fn store_error(e: openremote_core::store::StoreError) -> SupervisorError {
     }
 }
 
+/// A live harness applies a change on its running process, but not while a
+/// turn is open: the driver is reading its own screen then, and a write would
+/// land between two frames. The daemon's status is the fact the driver cannot
+/// see, so the refusal is decided here, before any write.
+fn refuse_live_mid_turn(settings_live: bool, status: SessionStatus) -> Option<&'static str> {
+    (settings_live
+        && matches!(
+            status,
+            SessionStatus::Starting | SessionStatus::Working | SessionStatus::Waiting
+        ))
+    .then_some("wait for this turn to finish, then change the model")
+}
+
 /// The chats being moved right now. A second move of the same chat is refused
 /// rather than queued, so two moves never stop and restart one harness at once.
 fn moving_chats() -> &'static StdMutex<std::collections::HashSet<SessionId>> {
@@ -897,6 +910,28 @@ impl Supervisor {
     /// plugin routes; chats already running keep their driver process.
     pub async fn reprobe_harnesses(&self) {
         self.swap_in_fresh_registry().await;
+    }
+
+    /// The installed plugin's spec behind a harness id, when a plugin
+    /// provides it. A catalog refresh runs the driver itself, so it needs
+    /// the folder and the executable, which only the spec carries.
+    pub fn plugin_spec(&self, id: &str) -> Option<crate::plugins::HarnessSpec> {
+        match self.backend(id) {
+            Some(Backend::Plugin(plugin)) => Some(plugin.spec),
+            _ => None,
+        }
+    }
+
+    /// Whether this harness's driver can change a setting on a running chat.
+    /// Read from the probed row, which the plugin's manifest decided, so the
+    /// session's own stored word never decides it.
+    fn settings_are_live(&self, harness: &str) -> bool {
+        self.registry
+            .read()
+            .expect("registry lock")
+            .harnesses()
+            .into_iter()
+            .any(|row| row.id == harness && row.settings_live)
     }
 
     /// The live chats running a plugin's harnesses, by session id. A plugin
@@ -1906,6 +1941,14 @@ impl Supervisor {
         }
         self.ensure_here(id)?;
         let session = self.session(id)?;
+        // A live driver applies the change to the process it already runs,
+        // which it can only do between turns. Decided from the probed row
+        // and the session's status before any driver write.
+        if let Some(message) =
+            refuse_live_mid_turn(self.settings_are_live(&session.harness), session.status)
+        {
+            return Err(SupervisorError::Conflict(message.into()));
+        }
         // A start-time harness has no live wire. The stored word still
         // changes; an idle process is restarted onto it below so the
         // user does not have to stop and resume by hand.
@@ -2928,6 +2971,12 @@ impl Supervisor {
                         self.emit_all(id, vec![EventPayload::SessionUpdated { session }])?;
                     }
                 }
+            }
+            DriverEvent::SettingsRefused { message } => {
+                // The driver would not take a live change, and said why in one
+                // sentence. It lands in the transcript as a note so the user
+                // reads the reason where they asked for the change.
+                self.emit_all(id, vec![EventPayload::DaemonError { message }])?;
             }
             DriverEvent::AssistantText { text } => {
                 let turn = self.current_turn(id);
@@ -4072,5 +4121,30 @@ mod tests {
             Some(&"session.status_changed"),
             "the arm's settle is the final event; the pump appended nothing after it"
         );
+    }
+
+    /// A live harness is refused mid-turn before the driver is written to,
+    /// because the driver reads its own screen between turns. A start-time
+    /// harness keeps its own path: the driver answers, and an idle process
+    /// is restarted (a working one gets the same sentence).
+    #[test]
+    fn a_live_model_change_is_refused_while_a_turn_works() {
+        for status in [
+            SessionStatus::Starting,
+            SessionStatus::Working,
+            SessionStatus::Waiting,
+        ] {
+            let err = refuse_live_mid_turn(true, status).expect("a live harness is refused");
+            assert!(err.contains("wait for this turn to finish"), "{err}");
+            // A start-time harness is not refused here; its driver decides.
+            assert!(refuse_live_mid_turn(false, status).is_none(), "{status:?}");
+        }
+        for status in [
+            SessionStatus::Idle,
+            SessionStatus::Stopped,
+            SessionStatus::Failed,
+        ] {
+            assert!(refuse_live_mid_turn(true, status).is_none(), "{status:?}");
+        }
     }
 }

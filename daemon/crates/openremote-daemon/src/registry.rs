@@ -469,6 +469,10 @@ fn harness_from(id: &str, name: &str, resolution: &Resolution, version: Option<&
         custom_endpoint_supported: custom_endpoint_supported(id),
         permission_modes: permission_modes(id).to_vec(),
         default_permission: default_permission(id).map(String::from),
+        // A built-in harness keeps its list in code, which is always the
+        // build's own; nothing on this machine captured it.
+        models_captured_at: None,
+        settings_live: false,
     }
 }
 
@@ -608,6 +612,10 @@ impl HarnessRegistry {
                     custom_endpoint_supported: false,
                     permission_modes: Vec::new(),
                     default_permission: None,
+                    // A plugin harness's list is measured: the driver's
+                    // capture beats the manifest, and the stamp says when.
+                    models_captured_at: spec.models_captured_at,
+                    settings_live: spec.settings_live,
                 },
                 backend: available.then(|| Backend::Plugin(PluginBackend { spec: spec.clone() })),
             });
@@ -1115,8 +1123,12 @@ mod tests {
                 resolved_model: None,
                 reasoning_efforts: vec!["high".into()],
                 is_default: true,
+                detail: None,
+                note: None,
             }]),
             default_model: Some("toy-1".into()),
+            models_captured_at: None,
+            settings_live: false,
             enabled: true,
             problem: None,
         };

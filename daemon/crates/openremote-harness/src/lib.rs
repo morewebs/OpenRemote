@@ -266,6 +266,17 @@ pub struct ModelDescriptor {
     /// its config says nothing.
     #[serde(default)]
     pub is_default: bool,
+    /// A short second line for the row, in the harness's own words: a cost
+    /// tier with its flags (`3x · Recommended`), or the tagline the picker
+    /// prints under a name. Optional, so a harness that fills neither field
+    /// keeps a one line row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    /// The notice the harness prints under a model (`May use data for AI
+    /// training`), shown as the row's hover title rather than as its second
+    /// line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 /// A command a harness runs when a prompt starts with `/name`, in its own
@@ -293,6 +304,32 @@ pub struct AgentDescriptor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_descriptor_with_a_detail_and_a_note_round_trips_and_the_old_shape_still_parses() {
+        // The new shape: a cost line and a data-use notice, neither required.
+        let json = r#"{"model":"DeepSeek V4.1 Flash 10/17 • high","display_name":"DeepSeek V4.1 Flash 10/17 • high","detail":"3x · Recommended","note":"May use data for AI training","is_default":true}"#;
+        let descriptor: ModelDescriptor = serde_json::from_str(json).expect("the new shape");
+        assert_eq!(descriptor.detail.as_deref(), Some("3x · Recommended"));
+        assert_eq!(
+            descriptor.note.as_deref(),
+            Some("May use data for AI training")
+        );
+        assert!(descriptor.is_default);
+        let encoded = serde_json::to_value(&descriptor).expect("serialize");
+        assert_eq!(encoded["detail"], "3x · Recommended");
+        assert_eq!(encoded["note"], "May use data for AI training");
+
+        // The old shape, written before the two fields existed, still reads.
+        let old = r#"{"model":"opus","display_name":"Opus"}"#;
+        let descriptor: ModelDescriptor = serde_json::from_str(old).expect("the old shape");
+        assert_eq!(descriptor.detail, None);
+        assert_eq!(descriptor.note, None);
+        // And a descriptor with neither never serializes them.
+        let encoded = serde_json::to_value(&descriptor).expect("serialize");
+        assert!(encoded.get("detail").is_none());
+        assert!(encoded.get("note").is_none());
+    }
 
     #[tokio::test]
     async fn a_version_probe_reads_the_first_line_of_both_answers() {

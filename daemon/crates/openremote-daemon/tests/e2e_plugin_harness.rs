@@ -54,6 +54,8 @@ fn spec(folder: &Path) -> HarnessSpec {
         args: Vec::new(),
         models: None,
         default_model: None,
+        models_captured_at: None,
+        settings_live: false,
         enabled: true,
         problem: None,
     }
@@ -280,6 +282,301 @@ async fn installing_a_harness_plugin_adds_its_harness_without_a_restart() {
     assert_eq!(created.status, 201, "raw: {}", created.raw);
 }
 
+/// The spec a plugin with live settings would produce: the driver takes the
+/// change on the running process, and the test's flag makes it hold a turn.
+fn live_spec(folder: &Path, args: &[&str]) -> HarnessSpec {
+    HarnessSpec {
+        args: args.iter().map(|arg| (*arg).to_string()).collect(),
+        settings_live: true,
+        ..spec(folder)
+    }
+}
+
+/// The plugin fixture's folder as a harness plugin whose driver captures a
+/// catalog: the shipped list, the file it writes, and the live settings word.
+fn catalog_plugin_folder(driver: &Path) -> tempfile::TempDir {
+    let windows = "bin/windows-x64/fixture-driver.exe";
+    let default = "bin/fixture-driver";
+    let folder = tempfile::tempdir().expect("plugin folder");
+    std::fs::create_dir_all(folder.path().join("bin/windows-x64")).expect("driver folder");
+    std::fs::copy(driver, folder.path().join(windows)).expect("windows driver");
+    std::fs::copy(driver, folder.path().join(default)).expect("default driver");
+    std::fs::write(
+        folder.path().join("openremote.json"),
+        json!({
+            "api": 1,
+            "name": "fixture-catalog",
+            "version": "0.1.0",
+            "description": "A harness plugin whose driver captures a catalog",
+            "runtime": "process",
+            "powers": ["run_programs"],
+            "harness": {
+                "api": 1,
+                "id": "fixture-catalog-harness",
+                "name": "Fixture Catalog",
+                "driver": {"windows": windows, "default": default},
+                "args": [],
+                "models": [{"model": "shipped-model", "display_name": "Shipped"}],
+                "models_file": "models.json",
+                "settings": "live"
+            }
+        })
+        .to_string(),
+    )
+    .expect("manifest");
+    folder
+}
+
+/// The whole catalog seam: a plugin's shipped list, the driver's own capture
+/// replacing it, and a refusal while a chat holds the folder.
+#[tokio::test]
+async fn the_refresh_route_returns_the_harness_row_and_refuses_while_a_chat_runs() {
+    let driver = fixture_driver();
+    let folder = catalog_plugin_folder(&driver);
+    let daemon = start_daemon_with_plugins(&[], &[]).await;
+
+    let staged = call(
+        &daemon,
+        "POST",
+        "/plugins/stage",
+        Some(json!({
+            "request_id": "cat-stage",
+            "source": {"kind": "folder", "path": folder.path()}
+        })),
+    )
+    .await;
+    assert_eq!(staged.status, 200, "{}", staged.raw);
+    let stage_id = staged.body["result"]["stage_id"]
+        .as_str()
+        .expect("stage id")
+        .to_string();
+    let installed = call(
+        &daemon,
+        "POST",
+        &format!("/plugins/stage/{stage_id}/install"),
+        Some(json!({"request_id": "cat-install"})),
+    )
+    .await;
+    assert_eq!(installed.status, 200, "{}", installed.raw);
+
+    // Before any capture the row carries the manifest's shipped list and no
+    // capture time.
+    let before = call(&daemon, "GET", "/capabilities", None).await;
+    let row = before.body["harnesses"]
+        .as_array()
+        .expect("harnesses")
+        .iter()
+        .find(|harness| harness["id"] == "fixture-catalog-harness")
+        .expect("the harness");
+    assert!(row["models_captured_at"].is_null(), "{}", before.raw);
+    assert_eq!(row["settings_live"], true, "{}", before.raw);
+    let shipped = call(
+        &daemon,
+        "GET",
+        "/harnesses/fixture-catalog-harness/models",
+        None,
+    )
+    .await;
+    assert_eq!(shipped.body[0]["model"], "shipped-model", "{}", shipped.raw);
+
+    // The driver's --catalog writes models.json beside itself; the re-probe
+    // reads it, and the answer is the row that now carries the capture time.
+    let refreshed = call(
+        &daemon,
+        "POST",
+        "/harnesses/fixture-catalog-harness/catalog/refresh",
+        Some(json!({"request_id": "cat-refresh"})),
+    )
+    .await;
+    assert_eq!(refreshed.status, 200, "{}", refreshed.raw);
+    let harness = &refreshed.body["result"]["harness"];
+    assert_eq!(harness["id"], "fixture-catalog-harness");
+    assert_eq!(harness["models_captured_at"], 1_699_999_999_000u64);
+    let captured = call(
+        &daemon,
+        "GET",
+        "/harnesses/fixture-catalog-harness/models",
+        None,
+    )
+    .await;
+    assert_eq!(
+        captured.body[0]["model"], "fixture-model-a",
+        "{}",
+        captured.raw
+    );
+    assert_eq!(
+        captured.body[0]["detail"], "3x · Recommended",
+        "{}",
+        captured.raw
+    );
+    assert_eq!(
+        captured.body[0]["note"], "May use data for AI training",
+        "{}",
+        captured.raw
+    );
+
+    // A chat on the harness refuses a capture: the driver is running in the
+    // folder the capture would run from.
+    let workspace = tempfile::tempdir().expect("workspace");
+    let created = call(
+        &daemon,
+        "POST",
+        "/sessions",
+        Some(json!({
+            "request_id": "cat-chat",
+            "harness": "fixture-catalog-harness",
+            "workspace": workspace.path()
+        })),
+    )
+    .await;
+    assert_eq!(created.status, 201, "{}", created.raw);
+    let id = created.body["id"].as_str().expect("session id").to_string();
+    let refused = call(
+        &daemon,
+        "POST",
+        "/harnesses/fixture-catalog-harness/catalog/refresh",
+        Some(json!({"request_id": "cat-refused"})),
+    )
+    .await;
+    assert_eq!(refused.status, 409, "{}", refused.raw);
+    assert!(
+        refused.body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("refresh when it stops"),
+        "{}",
+        refused.raw
+    );
+    let _ = call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/stop"),
+        Some(json!({"request_id": "cat-stop"})),
+    )
+    .await;
+}
+
+/// A live harness takes a model change on the running process, but only
+/// between turns: the daemon's own status decides, before any driver write.
+#[tokio::test]
+async fn a_live_model_change_is_refused_while_a_turn_works() {
+    let folder = tempfile::tempdir().expect("plugin folder");
+    let daemon = start_daemon_with_plugins(&[], &[live_spec(folder.path(), &["--hold"])]).await;
+
+    let workspace = tempfile::tempdir().expect("workspace");
+    let created = call(
+        &daemon,
+        "POST",
+        "/sessions",
+        Some(json!({
+            "request_id": "live-create",
+            "harness": "fixture-harness",
+            "workspace": workspace.path()
+        })),
+    )
+    .await;
+    assert_eq!(created.status, 201, "{}", created.raw);
+    let id = created.body["id"].as_str().expect("session id").to_string();
+    until_status(&daemon, &id, &["idle"]).await;
+
+    let prompted = call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "live-prompt", "text": "stay busy"})),
+    )
+    .await;
+    assert_eq!(prompted.status, 200, "{}", prompted.raw);
+    until_status(&daemon, &id, &["working"]).await;
+
+    let refused = call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/settings"),
+        Some(json!({"request_id": "live-settings", "model": "another-model"})),
+    )
+    .await;
+    assert_eq!(refused.status, 409, "{}", refused.raw);
+    assert!(
+        refused.body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("wait for this turn to finish"),
+        "{}",
+        refused.raw
+    );
+    // The change was never accepted: the stored word is still unpicked.
+    let session = call(&daemon, "GET", &format!("/sessions/{id}"), None).await;
+    assert!(session.body["model"].is_null(), "{}", session.raw);
+    let _ = call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/stop"),
+        Some(json!({"request_id": "live-stop"})),
+    )
+    .await;
+}
+
+/// A driver that refuses a live change answers with one sentence, and that
+/// sentence lands in the chat as a note: the console never claims a change
+/// the harness did not make.
+#[tokio::test]
+async fn a_refused_live_setting_lands_as_a_note_in_the_chat() {
+    let folder = tempfile::tempdir().expect("plugin folder");
+    let daemon =
+        start_daemon_with_plugins(&[], &[live_spec(folder.path(), &["--refuse-settings"])]).await;
+
+    let workspace = tempfile::tempdir().expect("workspace");
+    let created = call(
+        &daemon,
+        "POST",
+        "/sessions",
+        Some(json!({
+            "request_id": "refuse-create",
+            "harness": "fixture-harness",
+            "workspace": workspace.path()
+        })),
+    )
+    .await;
+    assert_eq!(created.status, 201, "{}", created.raw);
+    let id = created.body["id"].as_str().expect("session id").to_string();
+    until_status(&daemon, &id, &["idle"]).await;
+
+    let accepted = call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/settings"),
+        Some(json!({"request_id": "refuse-settings", "model": "missing-model"})),
+    )
+    .await;
+    assert_eq!(accepted.status, 200, "{}", accepted.raw);
+
+    let events = until_kinds(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        &["daemon.error"],
+    )
+    .await;
+    let note = events
+        .iter()
+        .find(|(_, payload)| kind(payload) == "daemon.error")
+        .expect("the driver's refusal lands as a note");
+    assert_eq!(
+        note.1["message"],
+        "fixture-driver has no model by that name",
+        "{}",
+        dump(&events)
+    );
+    let _ = call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/stop"),
+        Some(json!({"request_id": "refuse-stop"})),
+    )
+    .await;
+}
+
+///
 /// A harness plugin whose name is also its harness id - which is the shape
 /// every official plugin has, freebuff included - can be installed and then
 /// staged again for an update.

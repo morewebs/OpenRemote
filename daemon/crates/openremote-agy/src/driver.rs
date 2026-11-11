@@ -485,6 +485,9 @@ pub async fn models(
             resolved_model: None,
             reasoning_efforts: Vec::new(),
             is_default: false,
+            // Antigravity's list carries names only: no cost line, no notice.
+            detail: None,
+            note: None,
         });
     }
     Ok(models)

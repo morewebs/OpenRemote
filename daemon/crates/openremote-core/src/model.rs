@@ -108,6 +108,17 @@ pub struct Harness {
     /// has no words at all.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_permission: Option<String>,
+    /// When this harness's model list was captured from the harness itself,
+    /// in milliseconds since the epoch. `None` means the list is the
+    /// manifest's shipped one and has never been measured on this machine;
+    /// the console shows the age so a stale list is visible.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub models_captured_at: Option<u64>,
+    /// Whether this harness's driver can change the model on a running chat.
+    /// False keeps today's behaviour: the change is stored and the chat is
+    /// restarted onto it.
+    #[serde(default)]
+    pub settings_live: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]

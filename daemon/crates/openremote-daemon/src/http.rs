@@ -213,6 +213,10 @@ fn api_routes() -> Router<Arc<App>> {
         .route("/sync/sessions/{id}/events", get(sync_range))
         .route("/harnesses/{id}/models", get(harness_models))
         .route(
+            "/harnesses/{id}/catalog/refresh",
+            post(refresh_harness_catalog),
+        )
+        .route(
             "/harnesses/{id}/signin",
             post(start_sign_in).get(sign_in_view),
         )
@@ -385,6 +389,67 @@ async fn harness_models(State(app): State<Arc<App>>, AxumPath(id): AxumPath<Stri
         ),
         Err(err) => supervisor_error(err),
     }
+}
+
+/// Capture this harness's model catalog again through its driver's own
+/// `--catalog`. The driver writes the catalog file the next probe reads, so
+/// the answer is the harness row as it now reads, not the file itself; the
+/// console asks `/harnesses/{id}/models` for the list.
+///
+/// A chat on the harness refuses first: the capture drives the same CLI in
+/// the plugin's folder, so a running chat and a capture cannot share it.
+async fn refresh_harness_catalog(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<RequestBody>,
+) -> Response {
+    let task = {
+        let app = Arc::clone(&app);
+        async move {
+            let row = app
+                .supervisor
+                .harnesses()
+                .into_iter()
+                .find(|harness| harness.id == id)
+                .ok_or_else(|| (StatusCode::NOT_FOUND, format!("no such harness '{id}'")))?;
+            let Some(plugin) = row.plugin.clone() else {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "'{}' ships its model list with OpenRemote; there is nothing to capture",
+                        row.name
+                    ),
+                ));
+            };
+            let chats = app.supervisor.plugin_chats(&plugin).await;
+            if !chats.is_empty() {
+                return Err((
+                    StatusCode::CONFLICT,
+                    format!("a {} chat is running; refresh when it stops", row.name),
+                ));
+            }
+            let spec = app.supervisor.plugin_spec(&id).ok_or_else(|| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    format!("'{}' has no driver to capture a catalog with", row.name),
+                )
+            })?;
+            crate::plugin_driver::capture_catalog(&spec)
+                .await
+                .map_err(|sentence| (StatusCode::SERVICE_UNAVAILABLE, sentence))?;
+            // The new file and its capture time are the row's, so the probe
+            // is what the answer reads, never the driver's own line.
+            app.supervisor.reprobe_harnesses().await;
+            let row = app
+                .supervisor
+                .harnesses()
+                .into_iter()
+                .find(|harness| harness.id == id)
+                .ok_or_else(|| (StatusCode::NOT_FOUND, format!("no such harness '{id}'")))?;
+            Ok(json!({ "harness": row }))
+        }
+    };
+    receipted_plain(&app, body.request_id, task).await
 }
 
 // ---- custom model endpoints (machine-local) ----

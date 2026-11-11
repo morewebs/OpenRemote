@@ -29,6 +29,11 @@ const PROBE_DEADLINE: Duration = Duration::from_secs(5);
 /// the daemon kills the driver. A TUI may need to restore the terminal.
 const SHUTDOWN_DEADLINE: Duration = Duration::from_secs(3);
 
+/// How long a driver's `--catalog` may take before the capture reads as
+/// failed. It drives the harness's own picker screen, so it is minutes where
+/// a probe is seconds.
+const CATALOG_DEADLINE: Duration = Duration::from_secs(60);
+
 /// What a plugin driver answered to `--probe`.
 #[derive(Clone, Debug, Default)]
 pub struct ProbeAnswer {
@@ -116,11 +121,76 @@ async fn probe_driver(spec: &HarnessSpec) -> ProbeAnswer {
     }
 }
 
+/// Run `<driver> --catalog` and decide whether it captured a catalog.
+///
+/// The driver writes the catalog file beside itself, where the next probe
+/// reads it; this only needs the driver's own answer, because a failed
+/// capture prints the same shape with a `reason` sentence and still exits 0.
+/// That sentence is what the console shows, so a failed run is never a
+/// silent stale list.
+pub async fn capture_catalog(spec: &HarnessSpec) -> Result<(), String> {
+    if let Some(problem) = spec.problem.clone() {
+        return Err(problem);
+    }
+    let mut command = Command::new(&spec.driver);
+    command
+        .args(&spec.args)
+        .arg("--catalog")
+        .current_dir(&spec.dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        // A driver prints its picker's own screen to stderr; it can carry
+        // balance text and the signed-in address, so it never reaches an
+        // answer the console or a peer can read.
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    command.creation_flags(openremote_harness::creation_flags());
+    let output = match tokio::time::timeout(CATALOG_DEADLINE, command.output()).await {
+        Ok(Ok(output)) => output,
+        Ok(Err(err)) => {
+            return Err(format!(
+                "the driver did not start: {} ({err})",
+                spec.driver.display()
+            ));
+        }
+        Err(_) => {
+            return Err(format!(
+                "the driver did not finish its catalog within {} seconds",
+                CATALOG_DEADLINE.as_secs()
+            ));
+        }
+    };
+    if !output.status.success() {
+        // The contract says a failure still exits 0 and carries its reason;
+        // a non-zero exit is a broken driver, and its stderr is not safe to
+        // quote, so the sentence names only the exit.
+        return Err(format!(
+            "the driver exited with {} while capturing its catalog",
+            output.status
+        ));
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let Some(line) = text.lines().map(str::trim).find(|line| !line.is_empty()) else {
+        return Err("the driver printed no catalog".into());
+    };
+    let value: Value = serde_json::from_str(line)
+        .map_err(|err| format!("the driver's catalog answer is not JSON: {err}"))?;
+    match value.get("reason").and_then(Value::as_str) {
+        Some(reason) if !reason.trim().is_empty() => Err(reason.to_string()),
+        _ => Ok(()),
+    }
+}
+
 /// A live driver. The daemon writes commands; the pump task turns its events
 /// into `DriverEvent`s the supervisor already understands.
 pub struct PluginDriver {
     child: Child,
     stdin: ChildStdin,
+    /// Whether this harness's driver can apply a settings change to a running
+    /// chat. Read from the manifest at spawn, so the refusal is decided by
+    /// what the plugin declared, not by guessing from the driver's answer.
+    settings_live: bool,
 }
 
 impl PluginDriver {
@@ -160,7 +230,11 @@ impl PluginDriver {
         let (tx, rx) = mpsc::channel(256);
         tokio::spawn(pump_stdout(stdout, tx.clone()));
         tokio::spawn(pump_stderr(stderr, tx));
-        let mut driver = Self { child, stdin };
+        let mut driver = Self {
+            child,
+            stdin,
+            settings_live: spec.settings_live,
+        };
         driver
             .write(&json!({
                 "type": "spawn",
@@ -183,15 +257,26 @@ impl PluginDriver {
         self.write(&json!({"type": "interrupt"})).await
     }
 
-    /// A plugin harness starts every chat with its stored facts. Changing one
-    /// live is not part of v1: the supervisor restarts the chat onto the
-    /// stored word, and the console hides a control the manifest does not
-    /// declare.
-    pub async fn apply_settings(&mut self, _settings: &SessionSettings) -> Result<(), DriverError> {
-        Err(DriverError::Harness(
-            "this harness applies model and effort when the chat starts - stop it and resume to change them"
-                .into(),
-        ))
+    /// A plugin harness starts every chat with its stored facts. A driver that
+    /// declared `"settings": "live"` in its manifest takes a later change on
+    /// the running process; any other keeps the stored word and is restarted
+    /// onto it, which is what the supervisor recognises by the sentence.
+    pub async fn apply_settings(&mut self, settings: &SessionSettings) -> Result<(), DriverError> {
+        if !self.settings_live {
+            return Err(DriverError::Harness(
+                "this harness applies model and effort when the chat starts - stop it and resume to change them"
+                    .into(),
+            ));
+        }
+        // The driver decides what a word it cannot apply means, and answers
+        // a refusal in one sentence; the daemon does not pre-filter fields.
+        self.write(&json!({
+            "type": "settings",
+            "model": settings.model,
+            "effort": settings.effort,
+            "fast": settings.fast,
+        }))
+        .await
     }
 
     /// A plugin that asked for an approval gets the answer on the same pipe,
@@ -304,6 +389,12 @@ pub fn parse_event(line: &str) -> Result<DriverEvent, String> {
             session_ref: text("session_ref"),
             model: optional("model"),
             permission_mode: optional("permission_mode"),
+        },
+        "model_reported" => DriverEvent::ModelReported {
+            model: text("model"),
+        },
+        "settings_refused" => DriverEvent::SettingsRefused {
+            message: text("message"),
         },
         "text" => DriverEvent::AssistantText { text: text("text") },
         "text_delta" => DriverEvent::TextDelta { text: text("text") },
@@ -436,6 +527,18 @@ mod tests {
         assert_eq!(tool_use_id, "t1");
         assert_eq!(name, "write_file");
         assert_eq!(input["path"], "a");
+    }
+
+    #[test]
+    fn a_reported_model_and_a_refused_setting_map_to_the_drivers_own_words() {
+        assert!(matches!(
+            parse_event(r#"{"type":"model_reported","model":"m"}"#),
+            Ok(DriverEvent::ModelReported { model }) if model == "m"
+        ));
+        assert!(matches!(
+            parse_event(r#"{"type":"settings_refused","message":"no"}"#),
+            Ok(DriverEvent::SettingsRefused { message }) if message == "no"
+        ));
     }
 
     #[test]
