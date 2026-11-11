@@ -50,6 +50,7 @@ recorded as dropped below.
 | Bookmarks manager (a dialog: search, reorder, move, rename, delete) | browser 0d3211a | bcceeb0 |
 | Screenshot and region to the focused composer; `setFocusedComposer` released on unmount | browser 0d3211a, b06f02d (`screenshotAttachment`) | c0df86f |
 | Recording a tab to Downloads (WebM, 90 s, pill) | browser 0d3211a | 8f2e720 |
+| Freebuff model catalogs: `models_file` and capture age, `settings: "live"`, catalog refresh route, model rows with `detail`/`note` | br-freebuff-tui 53c803a, 31380b8, 3450ccb | 67350a3, 5d24a5f |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 `wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`,
@@ -107,7 +108,7 @@ tag keeps it.
 ### Plugins (br-plugins, br-plugin-ui, br-zcode, br-freebuff-tui)
 Main's `plugin_driver` stays the harness base (documented, tested, used by
 Freebuff). `plugin_runtime/harness.rs` is dropped; the rest is ported on top.
-1. Freebuff model catalogs and live settings (53c803a, 31380b8, 3450ccb).
+1. ~~Freebuff model catalogs and live settings~~ (done: 67350a3, 5d24a5f).
 2. Harness contract additions from `harness.rs` (MCP servers and allowed tools
    on spawn, commands catalog, extra events and manifest fields).
 3. Model and store: `contributes`, scopes, `project`.
