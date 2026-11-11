@@ -50,3 +50,10 @@ export function fileName(pathOrUrl) {
 export function clearKinds({ cookies = false, cache = false } = {}) {
   return [...(cookies ? ['cookies', 'storage'] : []), ...(cache ? ['cache'] : [])]
 }
+
+/// Whether a key event belongs to the browser: its target is the browser's
+/// own element (focused when the address bar lets go) or inside it. The page
+/// body, or a chat beside the browser, keeps the app's keys.
+export function browserHasFocus(root, target) {
+  return Boolean(root && target && (root === target || root.contains(target)))
+}

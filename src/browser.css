@@ -9,6 +9,12 @@
   background: var(--bg-app);
 }
 
+/* Focusable so the browser keeps its keys after the address bar lets go;
+   the focus itself draws nothing. */
+.bw:focus {
+  outline: none;
+}
+
 /* ---- tab strip ---- */
 
 .bw-tabs {

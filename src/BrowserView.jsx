@@ -40,7 +40,7 @@ import { browserSetting, loadBrowserPrefs, useBrowserPrefs } from './browser-pre
 import { closeOthers, closeTab, closeToRight, cycle, canUse, extrasMissing, newTab, openBelongs, rememberClosed, stripPlan, takeClosed, tabTitle } from './browser-tabs.js'
 import { adopt, browserCall, call, clearHistory, getState, onKey, patchTab, recordVisit, registerReopen, removeBookmark, saveBookmark, setState, subscribe, updateBookmark } from './browser-store.js'
 import { FLOATING, covered } from './browser-occlusion.js'
-import { DEVICES, fitDevice, fileName, nextZoom, zoomLabel } from './browser-chrome.js'
+import { DEVICES, browserHasFocus, fitDevice, fileName, nextZoom, zoomLabel } from './browser-chrome.js'
 import ContextMenu from './ContextMenu.jsx'
 import { bookmarkFor, labelFor } from './browser-bookmarks.js'
 import { shownVisitUrl, visitLabel } from './browser-history.js'
@@ -415,11 +415,19 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
 
   const activeTab = () => getState().tabs.find((t) => t.key === getState().active)
 
+  // Leaving the address bar (Enter, Esc) hands the focus to the browser
+  // itself rather than to the page body: the browser's keys act only while
+  // the focus is inside it, so Ctrl+L, Ctrl+T and Ctrl+W keep working.
+  const leaveAddress = () => {
+    if (rootRef.current) rootRef.current.focus({ preventScroll: true })
+    else addressRef.current?.blur()
+  }
+
   const go = async (line) => {
     const url = omnibox(line, engine)
     if (!url) return
     setEditing(false)
-    addressRef.current?.blur()
+    leaveAddress()
     const tab = activeTab()
     if (!tab) return
     if (tab.native) {
@@ -817,7 +825,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     // browser, so beside a chat the app's keys stay the app's (Ctrl+L
     // focuses the composer, Ctrl+W closes the pane, Ctrl+F searches chats).
     const fromChrome = (e) => {
-      if (!rootRef.current?.contains(e.target)) return
+      if (!browserHasFocus(rootRef.current, e.target)) return
       const chord = comboFromEvent(e, isMac)
       if (!chord || !runKeyRef.current(chord)) return
       e.preventDefault()
@@ -1003,7 +1011,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   const shownTabs = tabs.slice(plan.start, plan.start + plan.shown)
 
   return (
-    <div className="bw" ref={rootRef}>
+    <div className="bw" ref={rootRef} tabIndex={-1}>
       <div className="bw-tabs" role="tablist" aria-label="Tabs" onPointerEnter={precapture}>
         <div className="bw-tabs-scroll" ref={stripRef}>
           {shownTabs.map((t) => (
@@ -1144,7 +1152,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
                 setSuggestion(-1)
                 setEditing(false)
                 setAddress(shownAddress(current?.url))
-                e.currentTarget.blur()
+                leaveAddress()
                 return
               }
               // The list is driven from the field, which keeps the focus: the

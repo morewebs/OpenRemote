@@ -112,8 +112,8 @@ test('the browser runs its keys from the catalog, and only while it has focus', 
   assert.match(view, /bound\.current = kb\?\.browserBindings \?\? browserBindings\(\{\}, isMac\)/)
   assert.match(view, /keys\.current\[actionForCombo\(bound\.current, chord\)\]/)
   for (const a of BROWSER_ACTIONS) assert.ok(view.includes(`'${a.id}':`), `the view handles ${a.id}`)
-  assert.match(view, /if \(!rootRef\.current\?\.contains\(e\.target\)\) return/)
-  assert.match(view, /<div className="bw" ref=\{rootRef\}>/)
+  assert.match(view, /if \(!browserHasFocus\(rootRef\.current, e\.target\)\) return/)
+  assert.match(view, /<div className="bw" ref=\{rootRef\} tabIndex=\{-1\}>/)
   assert.doesNotMatch(view, /function chordOf/)
 })
 
@@ -132,4 +132,28 @@ test('Settings and the cheat sheet list the Browser group only in the desktop ap
   }
   assert.match(settings, /if \(!BROWSER_KEYS\) for \(const a of BROWSER_ACTIONS\) keys\.add\(`keyboard-\$\{a\.id\}`\)/)
   assert.match(settings, /These act while the browser has focus\./)
+})
+
+test('the browser owns a key whose target is its own element or inside it', async () => {
+  const { browserHasFocus } = await import('./browser-chrome.js')
+  const inside = { name: 'address' }
+  const root = { contains: (node) => node === root || node === inside }
+  const body = { name: 'body' }
+  assert.equal(browserHasFocus(root, inside), true)
+  // The address bar let go and the browser itself holds the focus.
+  assert.equal(browserHasFocus(root, root), true)
+  assert.equal(browserHasFocus(root, body), false)
+  assert.equal(browserHasFocus(null, inside), false)
+  assert.equal(browserHasFocus(root, null), false)
+})
+
+test('Enter and Esc in the address bar hand the focus to the browser, not the body', () => {
+  const view = read('./BrowserView.jsx')
+  assert.match(view, /const leaveAddress = \(\) => \{\s*if \(rootRef\.current\) rootRef\.current\.focus\(\{ preventScroll: true \}\)/)
+  // go() (Enter, a suggestion, the new tab page) and Esc both leave this way.
+  assert.match(view, /const go = async \(line\) => \{[\s\S]{0,160}?setEditing\(false\)\s*leaveAddress\(\)/)
+  assert.match(view, /if \(e\.key === 'Escape'\) \{[\s\S]{0,200}?leaveAddress\(\)\s*return/)
+  assert.doesNotMatch(view, /e\.currentTarget\.blur\(\)/)
+  const css = read('./browser.css')
+  assert.match(css, /\.bw:focus \{\s*outline: none;/)
 })
