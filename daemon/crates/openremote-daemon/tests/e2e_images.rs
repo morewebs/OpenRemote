@@ -221,13 +221,21 @@ async fn a_harness_that_reads_no_pictures_refuses_them_before_anything_is_writte
         .join(&id)
         .join("events.jsonl");
     let before = std::fs::read_to_string(&log).expect("the chat's log");
+    // A mention is a write too (the chat's grant to read another): a
+    // refused message must not leave one behind.
+    let other = uuid::Uuid::new_v4().to_string();
 
     for (route, request) in [("prompts", "i-g1"), ("queue", "i-g2"), ("steer", "i-g3")] {
         let refused = call(
             &daemon,
             "POST",
             &format!("/sessions/{id}/{route}"),
-            Some(json!({"request_id": request, "text": "look", "attachments": attachment()})),
+            Some(json!({
+                "request_id": request,
+                "text": "look",
+                "mentioned_chats": [other],
+                "attachments": attachment()
+            })),
         )
         .await;
         assert_eq!(refused.status, 409, "{route}: {}", refused.raw);
@@ -247,7 +255,23 @@ async fn a_harness_that_reads_no_pictures_refuses_them_before_anything_is_writte
     assert_eq!(before, after, "the refusals wrote nothing to the log");
     let session = call(&daemon, "GET", &format!("/sessions/{id}"), None).await;
     assert_eq!(queue_len(&session.body), 0, "{}", session.raw);
+    assert!(
+        session.body["mentioned_chats"].is_null(),
+        "no chat was granted: {}",
+        session.raw
+    );
     assert!(!daemon.data_dir().join("blobs").exists());
+
+    // No receipt was kept either: the same request without its picture
+    // is a new message, not the refusal again.
+    let words = call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "i-g1", "text": "look"})),
+    )
+    .await;
+    assert_eq!(words.status, 200, "{}", words.raw);
 }
 
 #[tokio::test]

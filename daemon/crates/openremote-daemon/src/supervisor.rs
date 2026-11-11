@@ -1636,17 +1636,17 @@ impl Supervisor {
             .await
     }
 
-    /// Keep a message's pictures for its chat. A harness that reads no
-    /// pictures refuses them here, before anything is kept or written.
-    fn keep_images(
+    /// Refuse a message's pictures when the chat's harness reads none, in
+    /// a sentence naming the app. The routes ask this before they write
+    /// anything for the message (its receipt, the chats it mentions).
+    pub fn refuse_pictures(
         &self,
         id: &SessionId,
         images: &[NewImage],
-    ) -> Result<Vec<ImageRef>, SupervisorError> {
+    ) -> Result<(), SupervisorError> {
         if images.is_empty() {
-            return Ok(Vec::new());
+            return Ok(());
         }
-        self.ensure_here(id)?;
         let harness = self.session(id)?.harness;
         let reads_pictures = self
             .registry
@@ -1662,6 +1662,21 @@ impl Supervisor {
                 self.harness_name(&harness)
             )));
         }
+        Ok(())
+    }
+
+    /// Keep a message's pictures for its chat, refusing them first where
+    /// the harness reads none - before anything is kept or written.
+    fn keep_images(
+        &self,
+        id: &SessionId,
+        images: &[NewImage],
+    ) -> Result<Vec<ImageRef>, SupervisorError> {
+        if images.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.ensure_here(id)?;
+        self.refuse_pictures(id, images)?;
         crate::images::keep(&self.blobs, *id, images).map_err(|e| SupervisorError::Store(e.into()))
     }
 

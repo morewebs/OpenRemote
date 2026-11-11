@@ -2775,6 +2775,17 @@ fn mentioned(body: &PromptBody) -> Vec<SessionId> {
         .collect()
 }
 
+/// A message's pictures refused before anything is written for it, where
+/// the chat's harness reads none. An id that is no chat id at all is left
+/// to the route's own answer.
+fn refused_pictures(app: &App, id: &str, images: &[crate::images::NewImage]) -> Option<Response> {
+    let chat = SessionId::parse(id)?;
+    app.supervisor
+        .refuse_pictures(&chat, images)
+        .err()
+        .map(supervisor_error)
+}
+
 /// The body limit of the routes a message takes: its pictures ride as
 /// base64.
 fn message_body_limit() -> axum::extract::DefaultBodyLimit {
@@ -2908,6 +2919,9 @@ async fn post_prompt(
         Ok(images) => images,
         Err(why) => return error(StatusCode::BAD_REQUEST, &why),
     };
+    if let Err(err) = app.supervisor.refuse_pictures(&session_id, &images) {
+        return supervisor_error(err);
+    }
     let accepted = Receipt {
         request_id: body.request_id.clone(),
         session_id: Some(session_id),
@@ -3018,6 +3032,9 @@ async fn post_queue(
         Ok(images) => images,
         Err(why) => return error(StatusCode::BAD_REQUEST, &why),
     };
+    if let Some(err) = refused_pictures(&app, &id, &images) {
+        return err;
+    }
     let sup = Arc::clone(&app.supervisor);
     let pointed = mentioned(&body);
     receipted(&app, body.request_id, &id, |sid| async move {
@@ -3082,6 +3099,9 @@ async fn post_steer(
         Ok(images) => images,
         Err(why) => return error(StatusCode::BAD_REQUEST, &why),
     };
+    if let Some(err) = refused_pictures(&app, &id, &images) {
+        return err;
+    }
     let sup = Arc::clone(&app.supervisor);
     let pointed = mentioned(&body);
     receipted(&app, body.request_id, &id, |sid| async move {
