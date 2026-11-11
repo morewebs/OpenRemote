@@ -29,7 +29,7 @@ my-harness/
   "version": "0.1.0",
   "description": "My harness as an OpenRemote harness",
   "runtime": "process",
-  "powers": ["run_programs", "network"],
+  "powers": ["run_programs", "network", "agent_tools"],
   "harness": {
     "api": 1,
     "id": "my-harness",
@@ -108,10 +108,18 @@ my-harness/
   of its own and the driver reads `spawn.fast`; the console then offers the
   fast toggle.
 - `mcp` is optional (default `false`). `true` says the driver hands
-  `spawn.mcp_servers` and `spawn.allowed_tools` to its CLI, so the agent can
-  call OpenRemote's own tools (the browser, the team tools) and the user's MCP
-  servers. The lists are sent either way; without `mcp` the daemon does not
-  tell the agent the tools exist and offers no team tools for the chat.
+  `spawn.mcp_servers` and `spawn.allowed_tools` to its CLI. Without it both
+  lists arrive empty. With it the driver gets the user's own MCP servers;
+  OpenRemote's own tools also need powers the user approved at install (the
+  top-level `powers`, shown on the install screen like `run_programs`):
+  - `agent_tools`: OpenRemote's per-chat server (id `openremote`: the
+    browser, the team and chat tools) and its pre-approved browser tools. Only
+    then does the daemon tell the agent about the tools and offer team tools.
+  - `agent_tools` and `read_chats`: also its pre-approved tools that read
+    other chats (`mcp__openremote__agents_*`).
+
+  A user server's command can carry a key, so a plugin should declare `mcp`
+  only when its driver really hands the servers to its CLI.
 - `commands` is optional (default `false`). `true` says the driver answers
   `--commands <folder>` (see "Commands" below), and the composer's `/` and `@`
   menus list what it answers. Without it no process starts for a menu, and the
@@ -224,12 +232,11 @@ Rules:
   sentence saying why a change did not happen, and it lands as a note in the
   chat. Both are optional, and a driver that cannot read the model sends
   neither.
-- `spawn.mcp_servers` is a list of `{"id", "command", "args"}`: the user's MCP
-  servers on this machine and OpenRemote's own per-chat server (id
-  `openremote`). `spawn.allowed_tools` names the tools that may run without
-  asking, as `mcp__<server>__<tool>`. Both are always lists, empty when there
-  is nothing. Hand them to your CLI's own MCP configuration and declare
-  `"mcp": true` in the manifest; a driver that cannot ignores them.
+- `spawn.mcp_servers` is a list of `{"id", "command", "args"}` and
+  `spawn.allowed_tools` names the tools that may run without asking, as
+  `mcp__<server>__<tool>`. What they hold depends on the manifest's `mcp` and
+  the approved powers (see `mcp` above); both are always lists, empty when
+  nothing is handed. Hand them to your CLI's own MCP configuration.
 - `commands_listed.names` are the command names the harness listed as the chat
   started. It is optional; it only tells the daemon its cached `/` menu is
   behind.
@@ -271,7 +278,9 @@ no cost row. That is deliberate: a dead control is worse than a missing one.
 A harness plugin runs a program as you, outside any sandbox. The install
 screen says so because the plugin declares `run_programs`; read it before
 approving. The daemon passes the driver no Cloud secrets, no daemon token and
-no store: it inherits your environment, as every harness child does.
+no store: it inherits your environment, as every harness child does. Your MCP
+servers and OpenRemote's own tools reach it only as far as its manifest's
+`mcp` and the `agent_tools` / `read_chats` powers you approved allow.
 
 While a chat on the plugin's harness is running, the driver executable lives
 inside the plugin folder, so on Windows the plugin cannot be updated or

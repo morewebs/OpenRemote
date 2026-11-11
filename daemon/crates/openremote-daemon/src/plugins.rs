@@ -181,6 +181,30 @@ pub struct HarnessTraits {
     pub commands: bool,
     pub one_prompt_at_a_time: bool,
     pub steers_mid_turn: bool,
+    /// The powers the user approved for the plugin at install (the
+    /// top-level `powers` of openremote.json, not the harness block). They
+    /// decide which of OpenRemote's own tools a driver with `mcp` is handed.
+    pub powers: Vec<PluginPower>,
+}
+
+impl HarnessTraits {
+    /// The chat's MCP servers and pre-approved tools reach the driver at
+    /// all: the manifest says `mcp`.
+    pub fn takes_mcp(&self) -> bool {
+        self.mcp
+    }
+
+    /// OpenRemote's own per-chat server (browser, team and chat tools) and
+    /// its pre-approved tools: `mcp`, and the approved `agent_tools` power.
+    pub fn takes_openremote_tools(&self) -> bool {
+        self.mcp && self.powers.contains(&PluginPower::AgentTools)
+    }
+
+    /// The pre-approved tools that read other chats (the team's `agents_*`
+    /// reading tools) also need the approved `read_chats` power.
+    pub fn takes_chat_reading_tools(&self) -> bool {
+        self.takes_openremote_tools() && self.powers.contains(&PluginPower::ReadChats)
+    }
 }
 
 impl Default for HarnessTraits {
@@ -195,6 +219,7 @@ impl Default for HarnessTraits {
             commands: false,
             one_prompt_at_a_time: true,
             steers_mid_turn: false,
+            powers: Vec::new(),
         }
     }
 }
@@ -215,6 +240,9 @@ impl HarnessManifest {
             // A driver that steers takes the second message by definition.
             one_prompt_at_a_time: self.one_prompt_at_a_time.unwrap_or(!self.steers_mid_turn),
             steers_mid_turn: self.steers_mid_turn,
+            // The manifest cannot grant itself a power: the install record
+            // fills this from what the user approved.
+            powers: Vec::new(),
         }
     }
 
@@ -340,7 +368,10 @@ pub fn installed_harnesses(data_dir: &Path, installed: &[&InstalledPlugin]) -> V
             });
             continue;
         };
-        let traits = harness.traits();
+        let traits = HarnessTraits {
+            powers: plugin.powers.clone(),
+            ..harness.traits()
+        };
         let (driver, problem) = match harness.resolved_driver(&dir) {
             Ok(path) => (path, None),
             Err(reason) => (PathBuf::new(), Some(reason)),
@@ -3478,6 +3509,40 @@ mod tests {
             HarnessTraits::default()
         );
         assert!(HarnessTraits::default().one_prompt_at_a_time);
+    }
+
+    #[test]
+    fn a_harness_spec_carries_the_powers_the_user_approved_not_the_manifests() {
+        let data = tempfile::tempdir().unwrap();
+        let dir = data.path().join("plugins/local/freebuff");
+        std::fs::create_dir_all(dir.join("bin")).unwrap();
+        std::fs::write(dir.join(driver_path()), "driver").unwrap();
+        std::fs::write(
+            dir.join("openremote.json"),
+            harness_manifest_json(driver_path(), r#","mcp":true"#),
+        )
+        .unwrap();
+        let mut record = installed_record(data.path(), "freebuff", "freebuff");
+        let specs = installed_harnesses(data.path(), &[&record]);
+        let traits = &specs.first().expect("one harness").traits;
+        assert!(traits.takes_mcp());
+        assert!(
+            !traits.takes_openremote_tools(),
+            "no approved agent_tools, no OpenRemote server"
+        );
+
+        record.powers = vec![PluginPower::AgentTools];
+        let specs = installed_harnesses(data.path(), &[&record]);
+        let traits = &specs.first().expect("one harness").traits;
+        assert!(traits.takes_openremote_tools());
+        assert!(
+            !traits.takes_chat_reading_tools(),
+            "read_chats not approved"
+        );
+
+        record.powers = vec![PluginPower::AgentTools, PluginPower::ReadChats];
+        let specs = installed_harnesses(data.path(), &[&record]);
+        assert!(specs[0].traits.takes_chat_reading_tools());
     }
 
     #[test]

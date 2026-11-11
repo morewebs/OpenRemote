@@ -7,6 +7,7 @@ mod common;
 use std::path::{Path, PathBuf};
 
 use common::*;
+use openremote_core::PluginPower;
 use openremote_core::model::PermissionWord;
 use openremote_daemon::plugins::{HarnessSpec, HarnessTraits};
 use serde_json::json;
@@ -926,14 +927,48 @@ async fn a_plugin_harness_without_commands_lists_none_of_its_own() {
     );
 }
 
-/// The spawn command carries the chat's MCP servers (OpenRemote's own among
-/// them) and the tools that run without asking.
-#[tokio::test]
-async fn a_plugin_harness_spawn_carries_the_chats_mcp_servers_and_allowed_tools() {
+/// This machine's id, which a hand-written MCP server is installed on.
+async fn this_machine_id(daemon: &TestDaemon) -> String {
+    let machines = call(daemon, "GET", "/machines", None).await;
+    machines
+        .body
+        .as_array()
+        .expect("machines")
+        .iter()
+        .find(|m| m["machine"]["this_machine"] == json!(true))
+        .expect("this machine")["machine"]["id"]
+        .as_str()
+        .expect("machine id")
+        .to_string()
+}
+
+/// Start a chat on an `echo-spawn` driver with these traits, after the user
+/// set up one MCP server of their own (`github`), and answer what the driver
+/// says its spawn command carried.
+async fn what_the_spawn_carried(traits: HarnessTraits, tag: &str) -> String {
     let folder = tempfile::tempdir().expect("plugin folder");
-    let mut echo = spec(folder.path());
-    echo.args = vec!["echo-spawn".into()];
+    let echo = HarnessSpec {
+        args: vec!["echo-spawn".into()],
+        traits,
+        ..spec(folder.path())
+    };
     let daemon = start_daemon_with_plugins(&[], &[echo]).await;
+    let machine = this_machine_id(&daemon).await;
+    let installed = call(
+        &daemon,
+        "POST",
+        "/mcp-servers",
+        Some(json!({
+            "request_id": format!("{tag}-mcp"),
+            "machine": machine,
+            "name": "GitHub",
+            "detail": "Issues and pull requests.",
+            "command": "npx -y @modelcontextprotocol/server-github",
+            "needs_key": false
+        })),
+    )
+    .await;
+    assert_eq!(installed.status, 201, "raw: {}", installed.raw);
 
     let workspace = tempfile::tempdir().expect("workspace");
     let created = call(
@@ -941,7 +976,7 @@ async fn a_plugin_harness_spawn_carries_the_chats_mcp_servers_and_allowed_tools(
         "POST",
         "/sessions",
         Some(json!({
-            "request_id": "ph-echo-create",
+            "request_id": format!("{tag}-create"),
             "harness": "fixture-harness",
             "workspace": workspace.path(),
         })),
@@ -953,7 +988,7 @@ async fn a_plugin_harness_spawn_carries_the_chats_mcp_servers_and_allowed_tools(
         &daemon,
         "POST",
         &format!("/sessions/{id}/prompts"),
-        Some(json!({"request_id": "ph-echo-p1", "text": "what did you get"})),
+        Some(json!({"request_id": format!("{tag}-p1"), "text": "what did you get"})),
     )
     .await;
     let events = until_kinds(
@@ -962,20 +997,72 @@ async fn a_plugin_harness_spawn_carries_the_chats_mcp_servers_and_allowed_tools(
         &["message.added", "turn.completed"],
     )
     .await;
-    let text = events
+    events
         .iter()
         .find(|(_, payload)| {
             kind(payload) == "message.added" && payload["message"]["role"] == "assistant"
         })
         .and_then(|(_, payload)| payload["message"]["text"].as_str().map(String::from))
-        .expect("an assistant message");
+        .expect("an assistant message")
+}
+
+/// A driver that declares `mcp` and holds `agent_tools` and `read_chats` is
+/// handed every server the chat has, OpenRemote's own among them, and its
+/// pre-approved reading tools.
+#[tokio::test]
+async fn a_plugin_harness_with_mcp_and_powers_gets_the_chats_servers_and_tools() {
+    let text = what_the_spawn_carried(
+        HarnessTraits {
+            mcp: true,
+            powers: vec![PluginPower::AgentTools, PluginPower::ReadChats],
+            ..HarnessTraits::default()
+        },
+        "mcp-full",
+    )
+    .await;
     assert!(
-        text.contains("mcp=[openremote]"),
-        "OpenRemote's per-chat server rides the spawn: {text}"
+        text.contains("mcp=[github,openremote]"),
+        "the user's server and OpenRemote's per-chat server: {text}"
     );
     assert!(
-        !text.contains("allowed=0") && !text.contains("allowed=missing"),
-        "the reading tools ride the spawn: {text}"
+        text.contains("mcp__openremote__browser_") && text.contains("mcp__openremote__agents_"),
+        "the browser and chat-reading tools are pre-approved: {text}"
+    );
+}
+
+/// A driver that does not declare `mcp` is handed nothing: no user server
+/// (whose command can carry a key), no OpenRemote server, no pre-approval.
+#[tokio::test]
+async fn a_plugin_harness_without_mcp_is_handed_no_servers_or_tools() {
+    let text = what_the_spawn_carried(
+        HarnessTraits {
+            powers: vec![PluginPower::AgentTools, PluginPower::ReadChats],
+            ..HarnessTraits::default()
+        },
+        "mcp-none",
+    )
+    .await;
+    assert!(
+        text.contains("mcp=[] allowed=[]"),
+        "both lists arrive empty: {text}"
+    );
+}
+
+/// `mcp` without the powers: the user's own servers ride, OpenRemote's
+/// per-chat server and its pre-approved tools do not.
+#[tokio::test]
+async fn a_plugin_harness_with_mcp_but_no_powers_gets_only_the_users_servers() {
+    let text = what_the_spawn_carried(
+        HarnessTraits {
+            mcp: true,
+            ..HarnessTraits::default()
+        },
+        "mcp-bare",
+    )
+    .await;
+    assert!(
+        text.contains("mcp=[github] allowed=[]"),
+        "the user's server only, nothing pre-approved: {text}"
     );
 }
 

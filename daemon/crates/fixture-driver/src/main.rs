@@ -97,9 +97,14 @@ fn main() {
                             .collect()
                     })
                     .unwrap_or_default();
+                // Each list as `[a,b]`, or `missing` when the key was absent.
                 let allowed = spawned["allowed_tools"]
                     .as_array()
-                    .map(|tools| tools.len().to_string())
+                    .map(|tools| {
+                        let names: Vec<&str> =
+                            tools.iter().filter_map(|tool| tool.as_str()).collect();
+                        format!("[{}]", names.join(","))
+                    })
                     .unwrap_or_else(|| "missing".into());
                 emit(
                     &mut stdout,

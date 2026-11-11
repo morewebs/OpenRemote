@@ -23,7 +23,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::mpsc;
 
-use crate::plugins::HarnessSpec;
+use crate::plugins::{HarnessSpec, HarnessTraits};
 
 /// How long a driver's `--probe` may take before the harness reads as
 /// unavailable. A probe is a print-and-exit, never a chat.
@@ -340,7 +340,17 @@ type OpenAsks = Arc<StdMutex<HashMap<String, AskTerms>>>;
 
 /// The spawn command, as the driver reads it. Public for the tests: the wire
 /// is a contract.
-pub fn spawn_line(opts: &SpawnOptions) -> Value {
+///
+/// The chat's MCP servers can carry the user's own commands and keys, and
+/// OpenRemote's per-chat server drives the browser, the team and other chats,
+/// so a driver gets only what its plugin declared and the user approved:
+/// - no `mcp` in the manifest: both lists are empty;
+/// - `mcp`: the user's MCP servers, and tools pre-approved for them;
+/// - `mcp` and the `agent_tools` power: OpenRemote's own server too, and its
+///   pre-approved browser tools;
+/// - plus the `read_chats` power: its pre-approved tools that read other chats.
+pub fn spawn_line(opts: &SpawnOptions, traits: &HarnessTraits) -> Value {
+    let (mcp_servers, allowed_tools) = handed_mcp(opts, traits);
     json!({
         "type": "spawn",
         "cwd": opts.cwd.display().to_string(),
@@ -349,10 +359,8 @@ pub fn spawn_line(opts: &SpawnOptions) -> Value {
         "effort": opts.effort,
         "resume": opts.resume,
         "fast": opts.fast,
-        // OpenRemote's MCP servers for this chat (its own per-chat server
-        // among them), for a driver that hands them to its CLI.
-        "mcp_servers": opts
-            .mcp_servers
+        // The chat's MCP servers this driver may hand to its CLI.
+        "mcp_servers": mcp_servers
             .iter()
             .map(|server| json!({
                 "id": server.id,
@@ -361,8 +369,45 @@ pub fn spawn_line(opts: &SpawnOptions) -> Value {
             }))
             .collect::<Vec<_>>(),
         // Tools that run without asking, in the MCP servers' own names.
-        "allowed_tools": opts.allowed_tools,
+        "allowed_tools": allowed_tools,
     })
+}
+
+/// The id of OpenRemote's own per-chat MCP server.
+const OPENREMOTE_SERVER: &str = "openremote";
+
+/// The pre-approved tools on OpenRemote's own server that read other chats.
+const CHAT_READING_PREFIX: &str = "mcp__openremote__agents_";
+
+/// The servers and pre-approved tools a driver with these traits is handed.
+fn handed_mcp<'a>(
+    opts: &'a SpawnOptions,
+    traits: &HarnessTraits,
+) -> (Vec<&'a openremote_harness::McpServer>, Vec<&'a str>) {
+    if !traits.takes_mcp() {
+        return (Vec::new(), Vec::new());
+    }
+    let own_prefix = format!("mcp__{OPENREMOTE_SERVER}__");
+    let servers = opts
+        .mcp_servers
+        .iter()
+        .filter(|server| server.id != OPENREMOTE_SERVER || traits.takes_openremote_tools())
+        .collect();
+    let tools = opts
+        .allowed_tools
+        .iter()
+        .map(String::as_str)
+        .filter(|tool| {
+            if tool.starts_with(CHAT_READING_PREFIX) {
+                traits.takes_chat_reading_tools()
+            } else if tool.starts_with(&own_prefix) {
+                traits.takes_openremote_tools()
+            } else {
+                true
+            }
+        })
+        .collect();
+    (servers, tools)
 }
 
 /// A live driver. The daemon writes commands; the pump task turns its events
@@ -425,12 +470,14 @@ impl PluginDriver {
             child,
             stdin,
             settings_live: spec.settings_live,
-            mcp: spec.traits.mcp,
+            // The team tools and the prompt note need OpenRemote's own
+            // server, which only an approved `agent_tools` plugin is handed.
+            mcp: spec.traits.takes_openremote_tools(),
             one_prompt_at_a_time: spec.traits.one_prompt_at_a_time,
             steers_mid_turn: spec.traits.steers_mid_turn,
             asks,
         };
-        driver.write(&spawn_line(&opts)).await?;
+        driver.write(&spawn_line(&opts, &spec.traits)).await?;
         Ok((driver, rx))
     }
 
@@ -904,7 +951,8 @@ mod tests {
     }
 
     #[test]
-    fn the_spawn_line_carries_the_chats_mcp_servers_and_allowed_tools() {
+    fn the_spawn_line_hands_mcp_only_as_far_as_the_manifest_and_powers_allow() {
+        use openremote_core::PluginPower;
         let opts = SpawnOptions {
             cwd: std::path::PathBuf::from("work"),
             model: Some("m".into()),
@@ -914,31 +962,100 @@ mod tests {
             resume: None,
             include_deltas: false,
             fast: true,
-            mcp_servers: vec![openremote_harness::McpServer {
-                id: "openremote".into(),
-                command: "openremote".into(),
-                args: vec!["mcp-chat".into(), "--session".into(), "s-1".into()],
-            }],
+            mcp_servers: vec![
+                openremote_harness::McpServer {
+                    id: "github".into(),
+                    command: "npx".into(),
+                    args: vec!["-y".into(), "server-github".into()],
+                },
+                openremote_harness::McpServer {
+                    id: "openremote".into(),
+                    command: "openremote".into(),
+                    args: vec!["mcp-chat".into(), "--session".into(), "s-1".into()],
+                },
+            ],
             plugin_dirs: Vec::new(),
-            allowed_tools: vec!["mcp__openremote__browser_read".into()],
+            allowed_tools: vec![
+                "mcp__openremote__browser_snapshot".into(),
+                "mcp__openremote__agents_read".into(),
+                "mcp__github__list_issues".into(),
+            ],
         };
-        let line = spawn_line(&opts);
+        let ids = |line: &Value| -> Vec<String> {
+            line["mcp_servers"]
+                .as_array()
+                .expect("a list")
+                .iter()
+                .map(|server| server["id"].as_str().unwrap_or_default().to_string())
+                .collect()
+        };
+        let tools = |line: &Value| -> Vec<String> {
+            line["allowed_tools"]
+                .as_array()
+                .expect("a list")
+                .iter()
+                .map(|tool| tool.as_str().unwrap_or_default().to_string())
+                .collect()
+        };
+
+        // No `mcp`: nothing, whatever the powers. Empty lists, never absent.
+        let silent = HarnessTraits {
+            powers: vec![PluginPower::AgentTools, PluginPower::ReadChats],
+            ..HarnessTraits::default()
+        };
+        let line = spawn_line(&opts, &silent);
         assert_eq!(line["type"], "spawn");
         assert_eq!(line["model"], "m");
         assert_eq!(line["permission_mode"], "ask");
         assert_eq!(line["fast"], true);
-        assert_eq!(line["mcp_servers"][0]["id"], "openremote");
-        assert_eq!(line["mcp_servers"][0]["command"], "openremote");
-        assert_eq!(line["mcp_servers"][0]["args"][2], "s-1");
-        assert_eq!(line["allowed_tools"][0], "mcp__openremote__browser_read");
-        // An empty list is still a list: a driver never has to guess absence.
-        let bare = spawn_line(&SpawnOptions {
-            mcp_servers: Vec::new(),
-            allowed_tools: Vec::new(),
-            ..opts
-        });
-        assert_eq!(bare["mcp_servers"], json!([]));
-        assert_eq!(bare["allowed_tools"], json!([]));
+        assert_eq!(line["mcp_servers"], json!([]));
+        assert_eq!(line["allowed_tools"], json!([]));
+
+        // `mcp` without powers: the user's servers, not OpenRemote's own.
+        let mcp_only = HarnessTraits {
+            mcp: true,
+            ..HarnessTraits::default()
+        };
+        let line = spawn_line(&opts, &mcp_only);
+        assert_eq!(ids(&line), vec!["github"]);
+        assert_eq!(line["mcp_servers"][0]["command"], "npx");
+        assert_eq!(tools(&line), vec!["mcp__github__list_issues"]);
+
+        // `agent_tools`: OpenRemote's server and its browser tools, but not
+        // the tools that read other chats.
+        let agent = HarnessTraits {
+            mcp: true,
+            powers: vec![PluginPower::AgentTools],
+            ..HarnessTraits::default()
+        };
+        let line = spawn_line(&opts, &agent);
+        assert_eq!(ids(&line), vec!["github", "openremote"]);
+        assert_eq!(line["mcp_servers"][1]["args"][2], "s-1");
+        assert_eq!(
+            tools(&line),
+            vec![
+                "mcp__openremote__browser_snapshot",
+                "mcp__github__list_issues"
+            ]
+        );
+
+        // `read_chats` alone does not bring OpenRemote's server.
+        let reader = HarnessTraits {
+            mcp: true,
+            powers: vec![PluginPower::ReadChats],
+            ..HarnessTraits::default()
+        };
+        assert_eq!(ids(&spawn_line(&opts, &reader)), vec!["github"]);
+
+        // Both powers: everything the chat has.
+        let both = HarnessTraits {
+            mcp: true,
+            powers: vec![PluginPower::AgentTools, PluginPower::ReadChats],
+            ..HarnessTraits::default()
+        };
+        let line = spawn_line(&opts, &both);
+        assert_eq!(ids(&line), vec!["github", "openremote"]);
+        assert_eq!(tools(&line).len(), 3);
     }
 
     #[test]
