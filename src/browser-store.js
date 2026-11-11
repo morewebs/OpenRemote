@@ -780,17 +780,28 @@ export function recordVisit({ url, title = '', at = Date.now() } = {}) {
   storeHistory(visits)
 }
 
-export function clearHistory() {
+// The daemon keeps a reading record of its own (the shell's pages, never a
+// private one), and the new tab page's most-visited shortcuts are ranked
+// from it: clearing history clears it there too, over the same range, or a
+// cleared page would still be a shortcut. This window's record goes first,
+// whatever the daemon says; a refusal is then thrown for the caller to say.
+async function clearDaemonHistory(since, caller) {
+  await caller('POST', '/browser/history/clear', since == null ? {} : { since })
+}
+
+export async function clearHistory(caller = browserCall) {
   setState(() => ({ history: [] }))
   storeHistory([])
+  await clearDaemonHistory(null, caller)
 }
 
 // "Clear browsing data" over a time range: the visits from `since` on go,
 // older ones stay (null clears it all).
-export function clearHistorySince(since) {
+export async function clearHistorySince(since, caller = browserCall) {
   const visits = visitsBefore(getState().history, since)
   setState(() => ({ history: visits }))
   storeHistory(visits)
+  await clearDaemonHistory(since, caller)
 }
 
 // Editing this module in development reloads the console (the restore

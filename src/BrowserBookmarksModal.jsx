@@ -7,10 +7,10 @@
 // daemon keeps the rows and a refusal puts the list back with the bar's
 // stale note.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, DotsSixVertical, DotsThreeVertical, FolderSimple, MagnifyingGlass, PencilSimple, Plus, Trash, X } from '@phosphor-icons/react'
 import ContextMenu from './ContextMenu.jsx'
-import { FOLDERS, inFolder, labelFor, matching, otherFolder, placeAt } from './browser-bookmarks.js'
+import { FOLDERS, inFolder, labelFor, matching, otherFolder, placeAt, renameEnding } from './browser-bookmarks.js'
 import { bareAddress } from './browser-omnibox.js'
 import { useDialog } from './dialog-focus.js'
 import { useBack } from './use-back.js'
@@ -22,6 +22,10 @@ function MarkRow({ mark, renaming, dropBefore, dragging, drag, onOpen, onRename,
   const privacy = usePrivacyMode()
   const [title, setTitle] = useState(mark.title ?? '')
   useEffect(() => setTitle(mark.title ?? ''), [mark.title, renaming])
+  // One ending per rename: Enter, Esc or a blur, whichever comes first.
+  const latestRename = useRef(onRename)
+  latestRename.current = onRename
+  const ending = useMemo(() => renameEnding((m, t) => latestRename.current(m, t)), [renaming])
   return (
     <div
       className={`bw-mark-row${dropBefore ? ' drop' : ''}${dragging ? ' dragging' : ''}`}
@@ -45,16 +49,16 @@ function MarkRow({ mark, renaming, dropBefore, dragging, drag, onOpen, onRename,
           aria-label="Bookmark name"
           onFocus={(e) => e.target.select()}
           onChange={(e) => setTitle(e.target.value)}
-          onBlur={() => onRename(mark, title)}
+          onBlur={() => ending.blur(mark, title)}
           onKeyDown={(e) => {
             e.stopPropagation()
             if (e.key === 'Enter') {
               e.preventDefault()
-              onRename(mark, title)
+              ending.enter(mark, title)
             } else if (e.key === 'Escape') {
               // This Esc ends the rename, not the dialog.
               e.preventDefault()
-              onRename(mark, null)
+              ending.escape(mark)
             }
           }}
         />

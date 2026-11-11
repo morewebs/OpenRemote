@@ -590,9 +590,12 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
   // clear (its own), and a bookmark is removed by the same call the bar's
   // editor uses, so neither rule is restated here.
   const clearTheHistory = () => {
-    clearHistory()
     setArmedBrowser(clearRow())
-    setBrowserNote('History cleared.')
+    // This window's record goes at once; the daemon's (which ranks the new
+    // tab page's shortcuts) with it, and a refusal is said.
+    clearHistory()
+      .then(() => setBrowserNote('History cleared.'))
+      .catch((err) => setBrowserNote(errorCopy(err)))
   }
   const clearTheBookmarks = () => {
     for (const mark of getBrowserState().bookmarks) removeBookmark(mark.id)

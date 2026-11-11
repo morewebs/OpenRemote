@@ -40,9 +40,11 @@ export default function BrowserClearData({ onClose, onCleared }) {
         const { invoke } = await import('@tauri-apps/api/core')
         await invoke('browser_clear_data', { kinds })
       }
-      // The reading record is this console's own: cleared after the shell
-      // answered, so a refusal leaves everything as it was.
-      if (history) clearHistorySince(since)
+      // The reading record: cleared after the shell answered, so a refusal
+      // leaves everything as it was. This window's record and the daemon's
+      // (which ranks the new tab page's shortcuts) go together; a daemon
+      // refusal is said here.
+      if (history) await clearHistorySince(since)
       onCleared?.()
       onClose()
     } catch (err) {

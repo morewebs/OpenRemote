@@ -138,7 +138,7 @@ test('the dialog is the dialog family, clears through the shell, and says refusa
   assert.match(dialog, /invoke\('browser_clear_data', \{ kinds \}\)/)
   // The range is read before anything is cleared, so a bad one stops the lot.
   assert.match(dialog, /const since = history \? sinceFor\(range\) : null\s*const kinds = clearKinds/)
-  assert.match(dialog, /if \(history\) clearHistorySince\(since\)/)
+  assert.match(dialog, /if \(history\) await clearHistorySince\(since\)/)
   assert.match(dialog, /setError\(errorCopy\(err\)\)/)
   assert.doesNotMatch(dialog, /addEventListener\('keydown'/)
 })

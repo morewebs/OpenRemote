@@ -125,3 +125,23 @@ export function placeAt(marks, mark, folder, index) {
 export function otherFolder(mark) {
   return folderOf(mark) === 'other' ? 'bar' : 'other'
 }
+
+// A rename in the manager ends once. Enter saves and Esc cancels, and each
+// ends the rename, which takes the focused field off the page; the engine
+// may then fire a blur on it, and that blur is not a second ending (it
+// would save a rename the person cancelled, or write a saved one twice). A
+// blur on its own - a click elsewhere - saves, as it does in Chrome.
+export function renameEnding(onRename) {
+  let settled = false
+  const end = (mark, title) => {
+    if (settled) return false
+    settled = true
+    onRename(mark, title)
+    return true
+  }
+  return {
+    enter: (mark, title) => end(mark, title),
+    escape: (mark) => end(mark, null),
+    blur: (mark, title) => end(mark, title),
+  }
+}

@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
-import { inFolder, matching, otherFolder, placeAt } from './browser-bookmarks.js'
+import { inFolder, matching, otherFolder, placeAt, renameEnding } from './browser-bookmarks.js'
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
@@ -66,7 +66,39 @@ test('the manager opens from the More menu and the bar, and writes through the s
   // A filtered list cannot be dragged: a drop between hidden rows lies.
   assert.match(modal, /enabled: !filter/)
   // The rename's own Esc ends the rename, not the dialog.
-  assert.match(modal, /e\.key === 'Escape'\) \{\s*\n\s*\/\/[^\n]*\n\s*e\.preventDefault\(\)/)
+  // Every ending of a rename goes through the one-shot renameEnding.
+  assert.match(modal, /e\.key === 'Escape'\) \{\s*\n\s*\/\/[^\n]*\n\s*e\.preventDefault\(\)\s*\n\s*ending\.escape\(mark\)/)
+  assert.match(modal, /onBlur=\{\(\) => ending\.blur\(mark, title\)\}/)
+  assert.match(modal, /ending\.enter\(mark, title\)/)
+  assert.match(modal, /useMemo\(\(\) => renameEnding\(.*\), \[renaming\]\)/)
+  assert.doesNotMatch(modal, /onBlur=\{\(\) => onRename/)
   // Names and addresses blur in privacy mode.
   assert.match(modal, /className="bw-history-title pv"/)
+})
+
+test('a rename ends once: the blur after Esc does not save, the blur after Enter does not write again', () => {
+  const mark = marks[0]
+  const heard = []
+  const rename = () => renameEnding((m, title) => heard.push([m.id, title]))
+
+  // Esc, then the blur the field's removal fires: cancelled, nothing saved.
+  let ending = rename()
+  assert.equal(ending.escape(mark), true)
+  assert.equal(ending.blur(mark, 'Typed then cancelled'), false)
+  assert.deepEqual(heard, [['a', null]])
+
+  // Enter, then the blur: one write.
+  heard.length = 0
+  ending = rename()
+  ending.enter(mark, 'Renamed')
+  ending.blur(mark, 'Renamed')
+  ending.enter(mark, 'Renamed')
+  assert.deepEqual(heard, [['a', 'Renamed']])
+
+  // A blur alone (a click elsewhere) saves, as Chrome does.
+  heard.length = 0
+  ending = rename()
+  ending.blur(mark, 'Clicked away')
+  ending.escape(mark)
+  assert.deepEqual(heard, [['a', 'Clicked away']])
 })

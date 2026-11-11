@@ -1790,7 +1790,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
             setHistoryOpen(false)
             openUrl(url)
           }}
-          onClear={clearHistory}
+          onClear={() => clearHistory().catch((err) => notify(errorCopy(err)))}
           onClose={() => setHistoryOpen(false)}
         />
       )}
