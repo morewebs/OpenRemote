@@ -69,6 +69,7 @@ const TAKEN: &[&str] = &[
     "Mod+Shift+Tab",
     "Mod+Shift+T",
     "Mod+Shift+N",
+    "Mod+Shift+B",
     "Alt+Left",
     "Alt+Right",
     "F12",

@@ -63,10 +63,18 @@
   color: var(--text-1);
 }
 
+/* A row's text column may shrink, and a long path (a harness's program)
+   wraps instead of pushing the row's button out of its panel - which the
+   narrower popup windows made show as a stray horizontal scrollbar. */
+.pn-row > :first-child {
+  min-width: 0;
+}
+
 .pn-detail {
   margin-top: 3px;
   font-size: 12.5px;
   color: var(--text-3);
+  overflow-wrap: anywhere;
 }
 
 .pn-actions {

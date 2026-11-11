@@ -52,13 +52,23 @@ import './browser.css'
 
 // The app's own global keys pressed while a page had focus: handed to the
 // app's shortcut layer as if typed in the console.
-const APP_KEYS = { 'Mod+K': 'KeyK', 'Mod+/': 'Slash', 'Mod+N': 'KeyN', 'Mod+B': 'KeyB', 'Mod+,': 'Comma' }
+const APP_KEYS = {
+  'Mod+K': 'KeyK',
+  'Mod+/': 'Slash',
+  'Mod+N': 'KeyN',
+  'Mod+B': 'KeyB',
+  'Mod+,': 'Comma',
+  // Show or hide the browser: the shell hands it over while a page has focus.
+  'Mod+Shift+B': 'KeyB',
+}
 
 function replayAppKey(chord) {
   const code = APP_KEYS[chord]
   if (!code) return false
+  const shiftKey = chord.includes('Shift+')
+  const key = code.replace(/^Key/, '')
   window.dispatchEvent(
-    new KeyboardEvent('keydown', { code, key: code.replace(/^Key/, '').toLowerCase(), ctrlKey: true, bubbles: true }),
+    new KeyboardEvent('keydown', { code, key: shiftKey ? key : key.toLowerCase(), ctrlKey: true, shiftKey, bubbles: true }),
   )
   return true
 }

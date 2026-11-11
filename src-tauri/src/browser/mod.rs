@@ -127,16 +127,21 @@ pub struct KeyPress {
     pub chord: String,
 }
 
+/// The names Tauri answers on `<name>.localhost` in every webview of the
+/// app: the console's own pages, its IPC and its assets.
+const APP_HOSTS: [&str; 3] = ["tauri.localhost", "ipc.localhost", "asset.localhost"];
+
 /// Whether a tab may load this address. The console is served from
 /// `tauri.localhost` (and in development from the dev server), and Tauri
-/// answers its IPC and asset schemes on other `*.localhost` names in every
-/// webview of the app, so those stay out of reach. Plain `localhost` and
-/// 127.0.0.1 stay open: they are the user's own dev servers.
+/// answers its IPC and asset schemes on a few `*.localhost` names in every
+/// webview of the app, so those stay out of reach. Every other address on
+/// this machine stays open - plain `localhost`, 127.0.0.1 and names like
+/// `myapp.localhost` are the user's own dev servers.
 pub fn allowed(url: &Url, dev: Option<&Url>) -> bool {
     match url.scheme() {
         "http" | "https" => {
             let host = url.host_str().unwrap_or("").trim_end_matches('.');
-            if host.ends_with(".localhost") {
+            if APP_HOSTS.iter().any(|app| host.eq_ignore_ascii_case(app)) {
                 return false;
             }
             !dev.is_some_and(|dev| dev.origin() == url.origin())
@@ -998,6 +1003,7 @@ mod tests {
         for page in [
             "https://example.com/",
             "http://localhost:5173/",
+            "http://myapp.localhost:3000/",
             "http://127.0.0.1:3000/",
             "http://127.0.0.1:5176/",
             "about:blank",
