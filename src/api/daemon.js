@@ -7,6 +7,7 @@
 
 import { seg } from '../shape.js'
 import { TOO_LONG_SENTENCE } from '../send-bound.js'
+import { consoleError } from '../error-copy.js'
 
 const TOKEN_KEY = 'openremote-daemon-token'
 const URL_KEY = 'openremote-daemon-url'
@@ -32,6 +33,22 @@ const BOOT_TIMEOUT_MS = 120000
 // so a daemon that was alive but wedged left the install spinner going with no way
 // out but a cancel that not every caller passes. Same ceiling, one second of slack.
 const INSTALL_TIMEOUT_MS = 601000
+
+// A message carrying pictures (tens of megabytes at most, as base64), or a
+// picture coming back from another device over Cloud: more than a plain
+// call's budget, still bounded.
+const UPLOAD_TIMEOUT_MS = 60000
+
+/// What a 413 means when the message carried pictures. This daemon takes
+/// 72 MiB on the message routes, far over ten 5 MB pictures, so the refusal
+/// is the 4 MiB a request may carry to another device (`/devices/{id}`, or a
+/// synced chat that runs elsewhere), not the 2 MB text bound.
+export const PICTURES_TOO_LARGE =
+  'These pictures are too large to send to a chat on another device - Cloud carries about 4 MB in one message. Send fewer or smaller pictures'
+
+/// What a 413 means for a picture coming back from another device: the
+/// answer is past the 16 MiB a device sends back over Cloud.
+export const PICTURE_TOO_LARGE_TO_FETCH = 'This picture is too large to bring over from the device that keeps it'
 
 /// The failure of a request that never answered, as one object with the fields the
 /// rest of this file's errors carry: `status` 0 (nothing came back) and a `code` the
@@ -444,14 +461,71 @@ export class DaemonApi {
     return this.call('GET', `/fs/dirs${path ? `?path=${encodeURIComponent(path)}` : ''}`, null, { signal })
   }
 
-  // `mentionedChats`: the chats this message points at with @ - from now
-  // on the chat's agent may read them, and only them.
-  prompt(id, text, mentionedChats = []) {
-    return this.call('POST', `/sessions/${seg(id)}/prompts`, {
+  // A message's body: its words, the chats it points at with @ (from now on
+  // the chat's agent may read them, and only them), and the pictures riding
+  // it as `attachments` - `{ kind: 'image', mime, data }` with the bytes in
+  // base64 (or a whole data URL). Text may be empty when pictures ride.
+  //
+  // Limits: this daemon takes 5 MB a picture and 10 a message (it answers
+  // 400 in words), and refuses pictures to an app that reads none (409, a
+  // sentence naming the app). A chat on another device is reached through
+  // `/devices/{id}/{*rest}` (or the synced chat's forward), capped at 4 MiB
+  // a request and 16 MiB an answer: a message over that is answered 413 and
+  // thrown as PICTURES_TOO_LARGE, never as the text bound's sentence.
+  messageBody(text, mentionedChats = [], attachments = []) {
+    return {
       request_id: newRequestId(),
       text,
       ...(mentionedChats.length ? { mentioned_chats: mentionedChats } : {}),
-    })
+      ...(attachments.length ? { attachments } : {}),
+    }
+  }
+
+  async sendMessage(path, body, timeoutMs) {
+    try {
+      return await this.call('POST', path, body, { timeoutMs })
+    } catch (err) {
+      if (body.attachments?.length && err?.status === 413) throw consoleError(PICTURES_TOO_LARGE)
+      throw err
+    }
+  }
+
+  prompt(id, text, mentionedChats = [], attachments = []) {
+    return this.sendMessage(
+      `/sessions/${seg(id)}/prompts`,
+      this.messageBody(text, mentionedChats, attachments),
+      attachments.length ? UPLOAD_TIMEOUT_MS : CALL_TIMEOUT_MS,
+    )
+  }
+
+  // A picture from the daemon's blob store, as a Blob of its own type. The
+  // token rides the header, which an <img> can't send - the caller turns it
+  // into an object URL. `session` asks through the chat's own route, the one
+  // another device answers for a synced chat it runs (aim the client there
+  // with device(id) first). A 413 there is the 16 MiB answer cap.
+  async blob(sha, { session = null, mime = null } = {}) {
+    const path = session ? `/sessions/${seg(session)}/blobs/${seg(sha)}` : `/blobs/${seg(sha)}`
+    const linked = linkAbort({ timeoutMs: UPLOAD_TIMEOUT_MS })
+    let response
+    let bytes
+    try {
+      response = await this.fetch(`${this.url}${this.prefix}${path}`, {
+        headers: { Authorization: `Bearer ${this.token}` },
+        signal: linked.signal ?? undefined,
+      })
+      if (response.ok) bytes = await response.blob()
+    } catch (err) {
+      if (linked.timedOut || err?.name === 'TimeoutError' || err?.name === 'AbortError') throw timedOut()
+      throw err
+    } finally {
+      linked.detach()
+    }
+    if (!response.ok) {
+      const error = new Error(response.status === 413 ? PICTURE_TOO_LARGE_TO_FETCH : `HTTP ${response.status}`)
+      error.status = response.status
+      throw error
+    }
+    return mime && bytes.type !== mime ? new Blob([bytes], { type: mime }) : bytes
   }
 
   // Rename a chat (the composer's /rename).
@@ -522,12 +596,12 @@ export class DaemonApi {
 
   // The chat's queue - the daemon keeps it, so every device sees the same
   // one. A queued message runs as its own turn when the running one ends.
-  queue(id, text, mentionedChats = []) {
-    return this.call('POST', `/sessions/${seg(id)}/queue`, {
-      request_id: newRequestId(),
-      text,
-      ...(mentionedChats.length ? { mentioned_chats: mentionedChats } : {}),
-    })
+  queue(id, text, mentionedChats = [], attachments = []) {
+    return this.sendMessage(
+      `/sessions/${seg(id)}/queue`,
+      this.messageBody(text, mentionedChats, attachments),
+      attachments.length ? UPLOAD_TIMEOUT_MS : CALL_TIMEOUT_MS,
+    )
   }
 
   queueRemove(id, item) {
@@ -549,12 +623,11 @@ export class DaemonApi {
   }
 
   // A message straight into the running turn, never through the queue.
-  steer(id, text, mentionedChats = []) {
-    return this.call(
-      'POST',
+  steer(id, text, mentionedChats = [], attachments = []) {
+    return this.sendMessage(
       `/sessions/${seg(id)}/steer`,
-      { request_id: newRequestId(), text, ...(mentionedChats.length ? { mentioned_chats: mentionedChats } : {}) },
-      { timeoutMs: BOOT_TIMEOUT_MS },
+      this.messageBody(text, mentionedChats, attachments),
+      BOOT_TIMEOUT_MS,
     )
   }
 

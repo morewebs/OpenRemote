@@ -771,3 +771,64 @@ test('batching does not double a replayed event or lose a settled one', () => {
   const framed = foldPerFrame(chatFromSession(session({ status: 'working' })), stream, 5)
   assert.equal(framed.timeline.filter((item) => item.kind === 'message').length, once.timeline.filter((item) => item.kind === 'message').length)
 })
+// ---- pictures riding a chat (br-images 2b770c1) ----
+
+const picture = (blob) => ({ blob, mime: 'image/png' })
+
+test('a user message keeps the pictures that rode it, and a picture alone does not title the chat', () => {
+  const chat = foldEvents(chatFromSession(session()), [
+    event(1, {
+      type: 'message.added',
+      message: { id: 'm1', turn: 0, role: 'user', text: '', images: [picture('a'.repeat(64))] },
+    }),
+    event(2, {
+      type: 'message.added',
+      message: { id: 'm2', turn: 1, role: 'user', text: 'and this one', images: [picture('b'.repeat(64)), picture('c'.repeat(64))] },
+    }),
+  ])
+  const [first, second] = railItems(chat).filter((item) => item.kind === 'message')
+  assert.deepEqual(first.images, [picture('a'.repeat(64))])
+  assert.equal(second.images.length, 2)
+  assert.equal(chat.title, 'and this one', 'the first words, not the picture, name the chat')
+})
+
+test('a message with no pictures carries an empty list, never undefined', () => {
+  const chat = foldEvents(chatFromSession(session()), [
+    event(1, { type: 'message.added', message: { id: 'm1', turn: 0, role: 'user', text: 'hi' } }),
+    event(2, { type: 'message.added', message: { id: 'm2', turn: 0, role: 'assistant', text: 'hello' } }),
+  ])
+  for (const item of railItems(chat).filter((i) => i.kind === 'message')) assert.deepEqual(item.images, [])
+})
+
+test("another agent's message keeps its origin and its pictures together", () => {
+  const origin = { kind: 'agent', chat: 'lead', title: 'Release triage', report: true }
+  const chat = foldEvents(chatFromSession(session()), [
+    event(1, {
+      type: 'message.added',
+      message: { id: 'm1', turn: 0, role: 'user', text: 'the page now', origin, images: [picture('d'.repeat(64))] },
+    }),
+  ])
+  const message = railItems(chat).find((i) => i.kind === 'message')
+  assert.deepEqual(message.origin, origin)
+  assert.deepEqual(message.images, [picture('d'.repeat(64))])
+})
+
+test("a tool result's pictures land on its card, and a result without any leaves it empty", () => {
+  const chat = foldEvents(chatFromSession(session()), [
+    event(1, { type: 'tool.started', turn: 0, name: 'mcp__openremote__browser_screenshot', input: {} }),
+    event(2, { type: 'tool.started', turn: 0, name: 'Bash', input: { command: 'ls' } }),
+    event(3, {
+      type: 'tool.result',
+      turn: 0,
+      name: 'mcp__openremote__browser_screenshot',
+      output: 'captured',
+      is_error: false,
+      images: [picture('e'.repeat(64))],
+    }),
+    event(4, { type: 'tool.result', turn: 0, name: 'Bash', output: 'a.txt', is_error: false }),
+  ])
+  const tools = chat.timeline.filter((i) => i.kind === 'tool')
+  assert.deepEqual(tools[0].images, [picture('e'.repeat(64))])
+  assert.equal(tools[0].result, 'captured')
+  assert.deepEqual(tools[1].images, [])
+})

@@ -1288,3 +1288,104 @@ html[data-reduce-motion] .cv-tool-actions button {
 html[data-reduce-motion] .cv-dev-chip {
   transition: none;
 }
+
+/* ── pictures in the transcript: what the user attached, an agent's
+   screenshots. Thumbnails in the flow; a click opens one large. ── */
+.ci-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.cv-user .ci-strip:first-child {
+  margin-top: 0;
+}
+
+.ci-thumb {
+  display: block;
+  max-width: min(100%, 360px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  cursor: default;
+  transition: border-color 0.12s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.ci-thumb:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.ci-thumb img {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+}
+
+.ci-wait {
+  display: block;
+  width: 160px;
+  height: 100px;
+  background: var(--bg-hover);
+}
+
+.ci-missing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.ci-viewer {
+  position: relative;
+  display: grid;
+  place-items: center;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.ci-viewer img {
+  display: block;
+  max-width: min(92vw, 1600px);
+  max-height: 86vh;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-app);
+}
+
+.ci-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  background: var(--bg-side);
+}
+
+@media (max-width: 639px) {
+  .ci-backdrop {
+    align-items: center;
+    padding: 16px;
+  }
+
+  .ci-viewer img {
+    max-width: 100%;
+    max-height: 80vh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ci-thumb {
+    transition: none;
+  }
+}
+
+html[data-reduce-motion] .ci-thumb {
+  transition: none;
+}

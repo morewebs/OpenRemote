@@ -598,3 +598,85 @@ test('a 413 names the limit instead of the code', async () => {
     globalThis.fetch = real
   }
 })
+
+// ---- pictures riding a message, and coming back (br-images 2b770c1) ----
+
+const recording = (respond) => {
+  const seen = []
+  const fetchImpl = async (url, init) => {
+    seen.push({ url, init })
+    return respond(url, init)
+  }
+  return { seen, fetchImpl }
+}
+
+test('prompt, queue and steer carry the pictures as attachments, and leave the key out without any', async () => {
+  const { seen, fetchImpl } = recording(() => new Response('{"ok":true}', { status: 200 }))
+  const api = new DaemonApi('http://127.0.0.1:9', 'token', '', fetchImpl)
+  const pics = [{ kind: 'image', mime: 'image/png', data: 'iVBORw0KGgo=' }]
+  await api.prompt('s1', 'look', [], pics)
+  await api.queue('s1', '', ['s2'], pics)
+  await api.steer('s1', 'now', [], pics)
+  await api.prompt('s1', 'words only')
+  const bodies = seen.map((r) => JSON.parse(r.init.body))
+  assert.deepEqual(
+    seen.map((r) => new URL(r.url).pathname),
+    ['/sessions/s1/prompts', '/sessions/s1/queue', '/sessions/s1/steer', '/sessions/s1/prompts'],
+  )
+  for (const body of bodies.slice(0, 3)) assert.deepEqual(body.attachments, pics)
+  assert.equal(bodies[1].text, '', 'a message of pictures alone sends empty words')
+  assert.deepEqual(bodies[1].mentioned_chats, ['s2'])
+  assert.equal('attachments' in bodies[3], false)
+})
+
+test('a 413 on a message with pictures names the cross-device cap, not the text bound', async () => {
+  const { fetchImpl } = recording(() => new Response('', { status: 413 }))
+  const api = new DaemonApi('http://127.0.0.1:9', 'token', '', fetchImpl)
+  await assert.rejects(
+    () => api.prompt('s1', 'look', [], [{ kind: 'image', mime: 'image/png', data: 'AAAA' }]),
+    (err) => {
+      assert.equal(err.voice, 'console')
+      assert.match(err.message, /another device/)
+      assert.match(err.message, /4 MB/)
+      assert.doesNotMatch(err.message, /too long/)
+      return true
+    },
+  )
+  // Words alone keep the text bound's sentence.
+  await assert.rejects(() => api.queue('s1', 'long'), /too long/)
+})
+
+test("the daemon's refusal of pictures keeps its own words and status", async () => {
+  const said = "Grok Build doesn't read pictures - send the message without them"
+  const { fetchImpl } = recording(() => new Response(JSON.stringify({ error: said }), { status: 409 }))
+  const api = new DaemonApi('http://127.0.0.1:9', 'token', '', fetchImpl)
+  await assert.rejects(
+    () => api.steer('s1', '', [], [{ kind: 'image', mime: 'image/png', data: 'AAAA' }]),
+    (err) => err.status === 409 && err.message === said,
+  )
+})
+
+test("a picture is fetched with the token, through the chat's own route on another device", async () => {
+  const { seen, fetchImpl } = recording(
+    () => new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { 'Content-Type': 'image/png' } }),
+  )
+  const api = new DaemonApi('http://127.0.0.1:9', 'token', '', fetchImpl)
+  const here = await api.blob('a'.repeat(64))
+  assert.equal(here.type, 'image/png')
+  assert.equal(here.size, 3)
+  await api.device('d1').blob('b'.repeat(64), { session: 's1', mime: 'image/png' })
+  assert.deepEqual(
+    seen.map((r) => new URL(r.url).pathname),
+    [`/blobs/${'a'.repeat(64)}`, `/devices/d1/sessions/s1/blobs/${'b'.repeat(64)}`],
+  )
+  for (const r of seen) assert.equal(r.init.headers.Authorization, 'Bearer token')
+})
+
+test("a picture past another device's 16 MiB answer says so, with its status", async () => {
+  const { fetchImpl } = recording(() => new Response('{"error":"too large"}', { status: 413 }))
+  const api = new DaemonApi('http://127.0.0.1:9', 'token', '/devices/d1', fetchImpl)
+  await assert.rejects(
+    () => api.blob('c'.repeat(64), { session: 's1' }),
+    (err) => err.status === 413 && /too large to bring over/.test(err.message),
+  )
+})

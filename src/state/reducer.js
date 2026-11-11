@@ -349,8 +349,13 @@ export function foldEvent(chat, event) {
         // Set when another agent sent it (a lead's brief, a worker's
         // report): { kind: 'agent', chat, title, report }.
         origin: message.origin ?? null,
+        // The pictures that rode it - the user's, or the ones another agent
+        // sent with its brief or report - as the blob store names them
+        // ({ blob, mime }); the bytes are fetched when the message shows.
+        images: Array.isArray(message.images) ? message.images : [],
       })
-      if (message.role === 'user' && !chat.title) chat.title = titleFrom(message.text)
+      // A message of pictures alone does not name the chat.
+      if (message.role === 'user' && !chat.title && message.text?.trim()) chat.title = titleFrom(message.text)
       break
     }
     case 'message.delta': {
@@ -379,6 +384,7 @@ export function foldEvent(chat, event) {
         input: payload.input,
         state: 'ok',
         result: null,
+        images: [],
       })
       break
     }
@@ -460,6 +466,9 @@ export function foldEvent(chat, event) {
         if (item.kind === 'tool' && item.turn === payload.turn && item.name === payload.name && item.result == null) {
           item.result = typeof payload.output === 'string' ? payload.output : JSON.stringify(payload.output)
           item.state = payload.is_error ? 'failed' : 'ok'
+          // What the tool answered with besides words (an agent's
+          // screenshot of a page), named in the blob store.
+          item.images = Array.isArray(payload.images) ? payload.images : []
           break
         }
       }
