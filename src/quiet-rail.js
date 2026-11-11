@@ -7,7 +7,7 @@ import { browserTool, isBrowserTool } from './browser-tools.js'
 /// How one tool call reads in that row. The browser's tools say what they did to a page
 /// ("Browser · read page") rather than the MCP name they arrive under, which is the one
 /// place a person meets the agent's browser work.
-function toolLabel(tool) {
+export function toolLabel(tool) {
   if (!isBrowserTool(tool?.name)) return tool?.name
   return browserTool(tool.name, tool.input).label
 }
@@ -68,6 +68,14 @@ export function workIsLive(items, running) {
 export function toolHint(item) {
   const input = item.input
   if (!input || typeof input !== 'object') return null
+  // A browser step names what it acted on: the element as the agent named
+  // it, else the page, else the one argument worth reading (a key, a size).
+  if (isBrowserTool(item.name)) {
+    const facts = browserTool(item.name, input)
+    if (facts.description) return clip(facts.description)
+    if (facts.url) return urlLabel(facts.url)
+    return facts.detail ? clip(facts.detail) : null
+  }
   if (typeof input.url === 'string') return urlLabel(input.url)
   if (typeof input.file_path === 'string') return input.file_path
   if (typeof input.command === 'string') return input.command

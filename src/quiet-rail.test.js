@@ -33,3 +33,15 @@ test('a live step names the tool that is running', () => {
   )
   assert.equal(workLabel([{ kind: 'reasoning-stream' }], true), 'Thinking…')
 })
+
+test('a browser step names what it acted on in the opened work row', async () => {
+  const { toolLabel } = await import('./quiet-rail.js')
+  const click = { kind: 'tool', id: 'b1', name: 'mcp__openremote__browser_click', input: { element: 'Sign in', url: 'https://a.test/' } }
+  const nav = { kind: 'tool', id: 'b2', name: 'mcp__openremote__browser_navigate', input: { url: 'https://docs.rs/serde' } }
+  const press = { kind: 'tool', id: 'b3', name: 'mcp__openremote__browser_press', input: { key: 'Enter' } }
+  assert.equal(toolLabel(click), 'Browser · click')
+  assert.equal(toolLabel({ name: 'bash' }), 'bash')
+  assert.equal(toolHint(click), 'Sign in')
+  assert.equal(toolHint(nav), 'docs.rs/serde')
+  assert.equal(toolHint(press), 'Enter')
+})

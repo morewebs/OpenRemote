@@ -10,6 +10,8 @@ import {
   Trash,
   CloudArrowUp,
   Globe,
+  CaretDown,
+  CaretRight,
   PencilSimple,
   X,
   ArrowBendUpLeft,
@@ -18,7 +20,8 @@ import {
 import { useConsole } from './state/console.jsx'
 import { chatAccess, deviceName, signedIn } from './cloud.js'
 import { railItems } from './state/reducer.js'
-import { quietRail, toolHint, workIsLive, workLabel } from './quiet-rail.js'
+import { quietRail, toolHint, toolLabel, workIsLive, workLabel } from './quiet-rail.js'
+import { browserTool, foldsResult, isBrowserTool } from './browser-tools.js'
 import { harnessLabel } from './harness-names.js'
 import { findModel, modelDisplayName, prettyModelName } from './model-display.js'
 import { HarnessMark } from './brand-marks.jsx'
@@ -90,6 +93,30 @@ function OriginChip({ origin, chatId, started }) {
 /// starts a worker with, the message it sends), in the words it was written.
 function TeamFacts({ facts }) {
   return facts.detail ? <p className="cv-bt-detail pv">{facts.detail}</p> : null
+}
+
+/// What a browser tool did, in words: the element as the agent named it,
+/// the address, and the argument worth reading (typed text, a script) -
+/// never a JSON dump.
+function BrowserFacts({ facts }) {
+  return (
+    <>
+      {(facts.description || facts.url) && (
+        <p className="cv-bt pv">
+          {facts.description && <span className="cv-bt-desc">{facts.description}</span>}
+          {facts.url && <code className="cv-bt-url">{facts.url}</code>}
+        </p>
+      )}
+      {facts.detail &&
+        (facts.mono ? (
+          <div className="cv-cmd pv">
+            <code className="cv-cmd-text">{facts.detail}</code>
+          </div>
+        ) : (
+          <p className="cv-bt-detail pv">{facts.detail}</p>
+        ))}
+    </>
+  )
 }
 
 const STATUS_LABEL = {
@@ -192,7 +219,11 @@ function WorkCluster({ items, running, chat }) {
         <ul className="cv-work-list">
           {tools.map((item) => (
             <li key={item.id}>
-              <span className="cv-work-name">{item.name}</span>
+              {/* A browser step reads "Browser · click"; its MCP name
+                  stays on hover. */}
+              <span className="cv-work-name" title={isBrowserTool(item.name) ? item.name : undefined}>
+                {toolLabel(item)}
+              </span>
               {toolHint(item) && <span className="cv-work-hint pv">{toolHint(item)}</span>}
               {/* What the tool answered with besides words - an agent's
                   screenshot of a page - large on a click. */}
@@ -228,6 +259,35 @@ function ToolIo({ label, raw }) {
   const parsed = readJson(raw)
   if (parsed) return <JsonPane label={label} value={parsed} />
   return <TextIo label={label} raw={typeof raw === 'string' ? raw : JSON.stringify(raw)} />
+}
+
+/// A tool's Out row. Every tool's output reads through ToolIo (fields, or
+/// text that folds behind its size); a page read as text (the browser's
+/// snapshot) runs long, so it folds whole until asked for.
+function OutRow({ raw, fold }) {
+  const [open, setOpen] = useState(!fold)
+  if (!open) {
+    return (
+      <div className="cv-io-row">
+        <span className="cv-io-label">Out</span>
+        <button type="button" className="cv-fold" onClick={() => setOpen(true)} aria-expanded={false}>
+          <CaretRight size={11} />
+          Show the page text
+        </button>
+      </div>
+    )
+  }
+  return (
+    <>
+      <ToolIo label="Out" raw={raw} />
+      {fold && (
+        <button type="button" className="cv-fold cv-fold--under" onClick={() => setOpen(false)} aria-expanded>
+          <CaretDown size={11} />
+          Fold the page text
+        </button>
+      )}
+    </>
+  )
 }
 
 function JsonPane({ label, value }) {
@@ -376,6 +436,9 @@ function DecisionCard({ item, onAnswer, chatId }) {
     !question && isTeamTool(item.toolName)
       ? teamTool(item.toolName, item.input, { ask: true, sessions, chatId })
       : null
+  // A browser action asks in words too: what it acts on, where, and what
+  // it types or runs.
+  const browser = !question && isBrowserTool(item.toolName) ? browserTool(item.toolName, item.input) : null
   // An approval's input rides its tool card once the answer settles it -
   // the run card is the one full record, so the settled card keeps the
   // answer line alone (never the same command twice). The 0.3s fade
@@ -394,7 +457,8 @@ function DecisionCard({ item, onAnswer, chatId }) {
         </div>
       )}
       {keepBody && team && <TeamFacts facts={team} />}
-      {keepBody && item.input && !question && !command && !team && (
+      {keepBody && browser && <BrowserFacts facts={browser} />}
+      {keepBody && item.input && !question && !command && !team && !browser && (
         <div className="cv-decision-io pv">
           <span className="cv-io-label">In</span>
           <code>{typeof item.input === 'string' ? item.input : JSON.stringify(item.input, null, 2)}</code>
@@ -1291,7 +1355,10 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
                     result: item.result,
                   })
                 : null
-              const shownIn = item.input && !command && !edit && !team ? item.input : null
+              // One of OpenRemote's browser tools reads as "Browser ·
+              // click" with what it acted on, never as a JSON dump.
+              const browser = isBrowserTool(item.name) ? browserTool(item.name, item.input) : null
+              const shownIn = item.input && !command && !edit && !team && !browser ? item.input : null
               const shownOut = item.result ? item.result : null
               // The status rides the name line, right-aligned - the beat of
               // agent work: a breathing green dot and Running while the tool
@@ -1303,8 +1370,8 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
               return (
                 <div key={item.id} className={`cv-node cv-node--${item.state}`}>
                   <div className="cv-tool-line">
-                    <span className="cv-tool-name" title={team ? item.name : undefined}>
-                      {team ? team.label : item.name}
+                    <span className="cv-tool-name" title={team || browser ? item.name : undefined}>
+                      {team ? team.label : browser ? browser.label : item.name}
                     </span>
                     {inFlight ? (
                       <span className="cv-tool-status">
@@ -1350,10 +1417,13 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
                     </div>
                   )}
                   {team && <TeamFacts facts={team} />}
+                  {browser && <BrowserFacts facts={browser} />}
                   {(shownIn || shownOut) && !edit && (
                     <div className="cv-io pv">
                       {shownIn && <ToolIo label="In" raw={shownIn} />}
-                      {shownOut && <ToolIo label="Out" raw={shownOut} />}
+                      {/* Team and browser tools alike answer in the one Out
+                          row; a page read as text folds until asked for. */}
+                      {shownOut && <OutRow raw={shownOut} fold={Boolean(browser) && foldsResult(item.name)} />}
                     </div>
                   )}
                 </div>
@@ -1379,10 +1449,15 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
             return (
               <div key={item.id} className={`cv-node cv-node--${item.pending ? 'pending' : 'done'}`}>
                 <div className="cv-tool-line">
-                  <span className="cv-tool-name" title={isTeamTool(item.toolName) ? item.toolName : undefined}>
+                  <span
+                    className="cv-tool-name"
+                    title={isTeamTool(item.toolName) || isBrowserTool(item.toolName) ? item.toolName : undefined}
+                  >
                     {isTeamTool(item.toolName)
                       ? teamTool(item.toolName, item.input, { ask: true, sessions, chatId: chat.id }).label
-                      : item.toolName ?? 'Decision'}
+                      : isBrowserTool(item.toolName)
+                        ? browserTool(item.toolName, item.input).label
+                        : item.toolName ?? 'Decision'}
                   </span>
                   <span className="cv-tool-state">
                     {item.pending ? (
