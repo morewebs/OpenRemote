@@ -12,6 +12,7 @@ import {
   Plugs,
   Power,
   Robot,
+  UsersThree,
   Shapes,
   Sparkle,
   X,
@@ -20,6 +21,7 @@ import AboutModal from './AboutModal.jsx'
 import McpServersSection from './McpServersSection.jsx'
 import EndpointManager from './EndpointManager.jsx'
 import { EndpointManagerModal } from './EndpointManager.jsx'
+import AgentsSection from './AgentsSection.jsx'
 import DeleteChatModal from './DeleteChatModal.jsx'
 import SignInModal from './SignInModal.jsx'
 import PickerMenu from './PickerMenu.jsx'
@@ -70,6 +72,7 @@ const SECTION_ICONS = {
   keyboard: KeyboardIcon,
   cloud: Cloud,
   harnesses: Robot,
+  agents: UsersThree,
   'mcp-servers': Plugs,
   models: Shapes,
   browser: Globe,
@@ -1614,6 +1617,22 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
             </div>
           </section>
           </>
+        )}
+
+        {!isMobile && (
+          <section
+            className="stg-section"
+            id="stg-agents"
+            role="tabpanel"
+            aria-labelledby="stg-tab-agents"
+            data-stg="agents"
+            hidden={!!query || active !== 'agents'}
+          >
+            <header className="stg-head">
+              <h2 className="stg-title">Agents</h2>
+            </header>
+            <AgentsSection />
+          </section>
         )}
 
         {!isMobile && (

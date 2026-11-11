@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CaretDown, CaretRight, Stop } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
+import { errorCopy } from './error-copy.js'
 import { chatStatus } from './state/reducer.js'
 import { HarnessMark } from './brand-marks.jsx'
 import { descendantsOf, isAlive, nameOf, stateWord, teamDot, teamSummary } from './team.js'
@@ -26,7 +27,7 @@ export default function TeamBar({ chat, canAct }) {
     try {
       await run()
     } catch (err) {
-      setError(err.message ?? String(err))
+      setError(errorCopy(err))
     }
   }
 
