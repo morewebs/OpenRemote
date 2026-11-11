@@ -97,7 +97,7 @@ const ROWS = [
   row('daemon-restart', 'this-install', 'Restart', 'Stops running chats and starts a fresh daemon.', ['stop', 'start', 'daemon']),
   row('install-first-run', 'this-install', 'First-run steps', 'Shows them again. The chats stay.', ['onboarding', 'setup', 'replay', 'welcome']),
 
-  // The built-in browser's two settings (the daemon keeps them, the open
+  // The built-in browser's own settings (the daemon keeps them, the open
   // browser reads them), then the four things it keeps on this computer. The
   // facts come first so a person can find out what is kept before they find
   // the buttons that take it back; each row says where the thing lives.
@@ -105,6 +105,7 @@ const ROWS = [
   // (Settings drops the row elsewhere), so no button does nothing.
   row('browser-search', 'browser', 'Search engine', 'What the address bar searches when you type words, not an address.', ['search', 'search engine', 'google', 'duckduckgo', 'bing', 'brave', 'startpage', 'address bar', 'omnibox']),
   row('browser-bookmarks-bar', 'browser', 'Show bookmarks bar', 'On every page. Off, it shows on the new tab page only.', ['bookmarks bar', 'bookmarks', 'bar', 'show', 'hide', 'toolbar']),
+  row('browser-startup', 'browser', 'On startup', 'Your tabs from last time come back as you left them (private tabs never do), or the browser starts on a new tab.', ['startup', 'on startup', 'session', 'restore', 'continue', 'tabs', 'last time', 'reopen', 'new tab']),
   row('browser-permissions', 'browser', 'Site permissions', 'What you told sites they may or may not use. Reset and the site asks again.', ['permissions', 'site permissions', 'camera', 'microphone', 'location', 'notifications', 'allow', 'block', 'reset', 'sites']),
   row('browser-bookmarks', 'browser', 'Bookmarks', 'Pages kept on this computer, in this console. Nothing is sent anywhere.', ['bookmark', 'bookmarks', 'favourites', 'saved', 'star', 'kept', 'where', 'where kept']),
   row('browser-history', 'browser', 'Pages read', "This window's reading record, on this computer only. A private tab is never recorded.", ['history', 'visited', 'pages', 'reading', 'record', 'private', 'where']),

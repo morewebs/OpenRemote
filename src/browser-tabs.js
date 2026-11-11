@@ -65,6 +65,49 @@ export function popupBelongs(tabs, opener) {
   return tabs.some((t) => t.native && t.native === opener)
 }
 
+// ---- tabs waiting as entries, and the session saved for the next start ----
+
+// A tab waiting for its page: it has an address but no page yet, and is
+// not opening one or refused one. Restored tabs and tabs put away wait like
+// this until they are shown.
+export function isDormant(tab) {
+  return Boolean(tab?.url) && tab.url !== 'about:blank' && !tab.native && !tab.loading && !tab.failed
+}
+
+// Only web addresses come back: anything else a page reached is not worth
+// reopening at a start, and nothing that runs script ever is.
+const RESTORABLE = /^(https?|file):/i
+
+// The tabs saved for the next start: every tab with an address, never a
+// private one, and which of them was showing.
+export function sessionOf(tabs, active) {
+  const kept = (tabs ?? []).filter((t) => !t.private && t.url && RESTORABLE.test(t.url))
+  const at = kept.findIndex((t) => t.key === active)
+  return { tabs: kept.map((t) => ({ url: t.url, title: t.title ?? '' })), active: Math.max(0, at) }
+}
+
+// A saved session as tabs again: entries with their address and title,
+// which open their pages when first shown. Anything malformed is dropped.
+export function restoredTabs(session) {
+  const saved = Array.isArray(session?.tabs) ? session.tabs : []
+  const tabs = saved
+    .filter((t) => t && typeof t.url === 'string' && RESTORABLE.test(t.url))
+    .map((t) => newTab({ url: t.url, title: typeof t.title === 'string' ? t.title : '' }))
+  const at = Number.isInteger(session?.active) ? session.active : 0
+  return { tabs, active: Math.min(Math.max(0, at), Math.max(0, tabs.length - 1)) }
+}
+
+// The tab list once the last session is back: the restored tabs first, then
+// any that opened meanwhile (an agent's, one the user is already in); the
+// empty new tab page the browser started with gives way. One the user is in
+// stays shown, else the session's shown tab is.
+export function withRestored(tabs, active, restored) {
+  if (!restored.tabs.length) return { tabs, active }
+  const kept = tabs.filter((t) => t.native || t.url)
+  const busy = kept.some((t) => t.key === active)
+  return { tabs: [...restored.tabs, ...kept], active: busy ? active : restored.tabs[restored.active].key }
+}
+
 // ---- the closed tabs a window remembers ----
 //
 // A closed tab leaves its address and title, never its shell page: that page

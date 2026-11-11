@@ -5,11 +5,11 @@
 // the shell's `browser:*` events.
 
 import { hasTauri, isMobile } from './platform.js'
-import { insertAfter, newTab, popupBelongs } from './browser-tabs.js'
+import { insertAfter, newTab, popupBelongs, restoredTabs, sessionOf, withRestored } from './browser-tabs.js'
 import { bookmarkFor, inFolder, positionAt, stepPosition, withBookmark, withoutBookmark } from './browser-bookmarks.js'
 import { HISTORY_CAP, recordVisit as pushVisit, visitsBefore } from './browser-history.js'
 import { linkAbort, loadConnection } from './api/daemon.js'
-import { getBrowserPrefs, loadBrowserPrefs, setSitePermission } from './browser-prefs.js'
+import { browserSetting, getBrowserPrefs, loadBrowserPrefs, setSitePermission } from './browser-prefs.js'
 import { rememberedAnswer } from './browser-chrome.js'
 
 // A bookmark call waits this long for the daemon before it is treated as a
@@ -252,9 +252,11 @@ export function getState() {
 }
 
 export function setState(change) {
+  const before = state
   state = { ...state, ...change(state) }
   rememberActive()
   for (const fn of listeners) fn()
+  if (state.tabs !== before.tabs || state.active !== before.active) scheduleSave()
 }
 
 export function subscribe(fn) {
@@ -425,6 +427,88 @@ export function onFullscreen({ tab, on } = {}) {
   setState((s) => ({ fullscreen: on ? tab : s.fullscreen === tab ? null : s.fullscreen }))
 }
 
+// ---- the session: brought back once per run, saved as it changes ----
+
+// Per run of the app (it survives a console reload, not a restart): the
+// last session comes back once.
+const RESTORED_KEY = 'openremote-browser-restored'
+const SAVE_MS = 1000
+const RETRY_MS = 5000
+const RETRIES = 12
+
+// Nothing is saved until the last session has been brought back (or passed
+// over), so a fresh start never writes over it.
+let restoring = true
+let lastSaved = ''
+let saveTimer = 0
+let sessionStarted = null
+let retries = 0
+// The daemon's browser routes (browser-store's own `browserCall`; a test
+// hands in its own).
+let daemon = browserCall
+
+function restoredThisRun() {
+  try {
+    return sessionStorage.getItem(RESTORED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function markRestored() {
+  try {
+    sessionStorage.setItem(RESTORED_KEY, '1')
+  } catch {
+    // No storage: a console reload would restore again.
+  }
+}
+
+/// Bring the last session back (once per run, when "On startup" says
+/// continue) and start saving the tabs. Called as the browser view mounts;
+/// a daemon that does not answer yet is asked again a little later.
+export function startSession(caller = browserCall) {
+  daemon = caller
+  sessionStarted ??= (async () => {
+    await wired
+    const prefs = await loadBrowserPrefs(daemon)
+    if (!prefs.loaded) {
+      sessionStarted = null
+      if (retries < RETRIES) {
+        retries += 1
+        const timer = setTimeout(() => startSession(caller), RETRY_MS)
+        timer?.unref?.()
+      }
+      return
+    }
+    const first = !restoredThisRun()
+    markRestored()
+    if (first && browserSetting(prefs.settings, 'startup') === 'continue') {
+      const restored = restoredTabs(prefs.session)
+      setState((s) => withRestored(s.tabs, s.active, restored))
+    }
+    lastSaved = JSON.stringify(prefs.session ?? null)
+    restoring = false
+    scheduleSave()
+  })()
+  return sessionStarted
+}
+
+function scheduleSave() {
+  if (restoring) return
+  const session = sessionOf(state.tabs, state.active)
+  const json = JSON.stringify(session)
+  if (json === lastSaved) return
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(() => {
+    lastSaved = json
+    // A save that did not land is tried again at the next change.
+    Promise.resolve(daemon('POST', '/browser/session', session)).catch(() => {
+      if (lastSaved === json) lastSaved = ''
+    })
+  }, SAVE_MS)
+  saveTimer?.unref?.()
+}
+
 async function wire() {
   const { listen } = await import('@tauri-apps/api/event')
   listen('browser:tab', ({ payload: p }) => {
@@ -479,18 +563,23 @@ async function wire() {
   // drawing controls that would do nothing.
   const features = await call('browser_features')
   setState(() => ({ features: features ?? {} }))
-  // The console reloaded while the shell kept its pages (a development
-  // reload, a crash of the console's page): take them back, hidden until
-  // the view shows one, rather than leave them on screen, orphaned.
+  // Pages the shell already holds, taken back hidden until the view shows
+  // one rather than left on screen, orphaned. After a console reload (a
+  // development reload, a crash of the console's page) they are the tabs as
+  // they were. Before the browser's first open in a run they are tabs agents
+  // opened: they join behind the new tab page, which the last session may
+  // yet replace (01aee56) - read as a reload, the restore was skipped and
+  // the session then saved over.
   const open = await call('browser_tabs')
   if (open?.length) {
     for (const t of open) await call('browser_hide', { tab: t.id })
     const tabs = open.map((t) => newTab({ native: t.id, ...fieldsOf(t) }))
-    setState(() => ({ tabs, active: restoredActive(tabs, wasActive()) }))
+    if (restoredThisRun()) setState(() => ({ tabs, active: restoredActive(tabs, wasActive()) }))
+    else setState((s) => ({ tabs: [...s.tabs, ...tabs] }))
   }
 }
 
-if (hasTauri && !isMobile) wire()
+const wired = hasTauri && !isMobile ? wire() : Promise.resolve()
 
 // The browser's view is the only thing that can reopen a tab (it builds the
 // page and places it), so it registers that one action while it is mounted and

@@ -37,9 +37,9 @@ import { hasTauri, isMobile } from './platform.js'
 import { PICKER_CANCEL, PICKER_SOURCE, formatPicked } from './browser-pick.js'
 import { insertToComposer } from './composer-insert.js'
 import { SEARCH_ENGINES, omnibox, security, shownAddress, suggest } from './browser-omnibox.js'
-import { browserSetting, loadBrowserPrefs, setSitePermission, useBrowserPrefs } from './browser-prefs.js'
-import { closeOthers, closeTab, closeToRight, cycle, canUse, extrasMissing, newTab, openBelongs, rememberClosed, stripPlan, takeClosed, tabTitle } from './browser-tabs.js'
-import { adopt, answerPrompt, browserCall, call, dropPromptsFor, onFullscreen, clearHistory, getState, onKey, patchTab, recordVisit, registerReopen, removeBookmark, saveBookmark, setState, subscribe, updateBookmark } from './browser-store.js'
+import { browserSetting, setSitePermission, useBrowserPrefs } from './browser-prefs.js'
+import { closeOthers, closeTab, closeToRight, cycle, canUse, extrasMissing, isDormant, newTab, openBelongs, rememberClosed, stripPlan, takeClosed, tabTitle } from './browser-tabs.js'
+import { adopt, answerPrompt, browserCall, call, dropPromptsFor, onFullscreen, startSession, clearHistory, getState, onKey, patchTab, recordVisit, registerReopen, removeBookmark, saveBookmark, setState, subscribe, updateBookmark } from './browser-store.js'
 import { FLOATING, covered } from './browser-occlusion.js'
 import { DEVICES, browserHasFocus, fitDevice, fileName, nextZoom, permissionName, permissionRows, zoomLabel } from './browser-chrome.js'
 import { PermissionBar } from './BrowserInfobar.jsx'
@@ -124,7 +124,9 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   // shows on every page or on the new tab page only.
   const prefs = useBrowserPrefs()
   useEffect(() => {
-    if (hasTauri && !isMobile) loadBrowserPrefs(browserCall)
+    // The settings, the sites' answers and, once per run, the last
+    // session's tabs (startSession loads the first two too).
+    if (hasTauri && !isMobile) startSession()
   }, [])
   const engine = browserSetting(prefs.settings, 'search')
   const barEverywhere = browserSetting(prefs.settings, 'bookmarks_bar')
@@ -442,9 +444,16 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
       await call('browser_navigate', { tab: tab.native, url })
       return
     }
+    await openIn(tab, url)
+  }
+
+  // A tab with no page yet gets one at `url`. Also how a tab waiting as an
+  // entry (brought back from the last session, or put away) opens its page
+  // when it is first shown.
+  const openIn = async (tab, url) => {
     const bounds = rect()
     if (!bounds) return
-    patchTab(tab.key, { url, loading: true })
+    patchTab(tab.key, { url, loading: true, failed: false })
     // The page is built hidden: the layout effect places and shows it once
     // the tab has it, so the console is the only thing that decides a page
     // is visible. A private tab's page is built in the shell's throwaway
@@ -456,7 +465,9 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     // console. Either way the tab is no longer loading anything, or it would
     // spin for the rest of the session.
     if (!native || !openBelongs(getState().tabs, tab.key, mounted.current)) {
-      patchTab(tab.key, { loading: false })
+      // A page the shell would not build is marked, so a waiting tab is not
+      // asked for again and again.
+      patchTab(tab.key, { loading: false, failed: !native })
       if (native) call('browser_close', { tab: native })
       return
     }
@@ -553,6 +564,16 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     if (!url || !/^https?:\/\//i.test(url)) return
     recordVisit({ url, title: current?.title ?? '' })
   }, [active, current?.url, current?.title, current?.private])
+
+  // A tab waiting as an entry (brought back from the last session, or put
+  // away past ten open pages) opens its page when it is shown, not before:
+  // an entry costs an address, a page costs memory.
+  const openInRef = useRef(openIn)
+  openInRef.current = openIn
+  useEffect(() => {
+    if (!hasTauri || isMobile || !isDormant(current)) return
+    openInRef.current(current, current.url)
+  }, [current?.key, current?.native, current?.url, current?.loading, current?.failed])
 
   const close = (key) => {
     const tab = getState().tabs.find((t) => t.key === key)

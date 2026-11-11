@@ -31,7 +31,7 @@ import { projectName } from './projects.js'
 import { chatTitle } from './shape.js'
 import { armRow, clearRow, rowIsArmed } from './row-confirm.js'
 import { browserCall, call as callShell, clearHistory, getState as getBrowserState, removeBookmark, subscribe as subscribeBrowser } from './browser-store.js'
-import { browserSetting, loadBrowserPrefs, setBrowserPref, setSitePermission, useBrowserPrefs } from './browser-prefs.js'
+import { STARTUP_CHOICES, browserSetting, loadBrowserPrefs, setBrowserPref, setSitePermission, useBrowserPrefs } from './browser-prefs.js'
 import { hostOf, permissionName, permissionRows } from './browser-chrome.js'
 import { SEARCH_ENGINES } from './browser-omnibox.js'
 import BrowserClearData from './BrowserClearData.jsx'
@@ -569,6 +569,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
   }, [])
   const searchEngine = browserSetting(browserPrefs.settings, 'search')
   const barEverywhere = browserSetting(browserPrefs.settings, 'bookmarks_bar')
+  const browserStartup = browserSetting(browserPrefs.settings, 'startup')
   // Shown at once; a write the daemon refuses goes back and says why.
   const changeBrowserSetting = (key, value) => {
     setBrowserNote(null)
@@ -670,6 +671,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
       keys.add('browser-search')
       keys.add('browser-bookmarks-bar')
       keys.add('browser-permissions')
+      keys.add('browser-startup')
     }
     if (!profileClearable) keys.add('browser-clear-data')
     // The Browser key group is listed only where there is a browser.
@@ -1789,6 +1791,40 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                       selectedId={searchEngine}
                       onChoose={(id) => {
                         changeBrowserSetting('search', id)
+                        setPicker(null)
+                      }}
+                      leaving={pickerLeaving}
+                      onClose={hidePicker}
+                      anchor={{ left: picker.x, top: picker.y }}
+                    />
+                  )}
+                </div>
+                <div className="pn-row" data-stg="browser-startup">
+                  <div>
+                    <div className="pn-name">On startup</div>
+                    <div className="pn-detail">
+                      Your tabs from last time come back as you left them (private tabs never do), or the
+                      browser starts on a new tab.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="pn-btn"
+                    data-picker="settings" onClick={openPicker('browser-startup')}
+                    aria-haspopup="listbox"
+                    aria-expanded={picker?.kind === 'browser-startup'}
+                  >
+                    {STARTUP_CHOICES.find((c) => c.id === browserStartup)?.name}
+                  </button>
+                  {picker?.kind === 'browser-startup' && (
+                    <PickerMenu
+                      label="On startup"
+                      searchPlaceholder="Search"
+                      items={STARTUP_CHOICES}
+                      groups={null}
+                      selectedId={browserStartup}
+                      onChoose={(id) => {
+                        changeBrowserSetting('startup', id)
                         setPicker(null)
                       }}
                       leaving={pickerLeaving}

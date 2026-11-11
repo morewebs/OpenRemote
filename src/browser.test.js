@@ -111,7 +111,7 @@ test('the pane is what closes a page it cannot place, and drops the spinner with
     source,
     /if \(!native \|\| !openBelongs\(getState\(\)\.tabs, tab\.key, mounted\.current\)\) \{/,
   )
-  assert.match(source, /patchTab\(tab\.key, \{ loading: false \}\)/)
+  assert.match(source, /patchTab\(tab\.key, \{ loading: false, failed: !native \}\)/)
 })
 
 test('a popup lands beside a tab this console has, and nowhere otherwise', () => {
