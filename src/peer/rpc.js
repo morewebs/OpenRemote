@@ -235,6 +235,8 @@ export function shaped(answer) {
     },
     text,
     json: () => text().then((value) => JSON.parse(value)),
+    // A picture: the API client's blob(sha) reads it, typed by the answer.
+    blob: () => Promise.resolve(new Blob([answer.body], { type: answer.contentType ?? '' })),
   }
 }
 
