@@ -30,7 +30,10 @@ import { SECTIONS, SETTING_GROUPS, SETTINGS_ENTRIES, dynamicEntries, resultToOpe
 import { projectName } from './projects.js'
 import { chatTitle } from './shape.js'
 import { armRow, clearRow, rowIsArmed } from './row-confirm.js'
-import { call as callShell, clearHistory, getState as getBrowserState, removeBookmark, subscribe as subscribeBrowser } from './browser-store.js'
+import { browserCall, call as callShell, clearHistory, getState as getBrowserState, removeBookmark, subscribe as subscribeBrowser } from './browser-store.js'
+import { browserSetting, loadBrowserPrefs, setBrowserPref, useBrowserPrefs } from './browser-prefs.js'
+import { SEARCH_ENGINES } from './browser-omnibox.js'
+import BrowserClearData from './BrowserClearData.jsx'
 import { useBack } from './use-back.js'
 import { useConsole } from './state/console.jsx'
 import { signedIn } from './cloud.js'
@@ -546,6 +549,30 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
   const browserStore = useSyncExternalStore(subscribeBrowser, getBrowserState)
   const [armedBrowser, setArmedBrowser] = useState(null)
   const [browserNote, setBrowserNote] = useState(null)
+  // The browser's own settings (the daemon keeps them; browser-prefs.js
+  // shares them with the open browser), and whether this build's shell can
+  // clear the profile's data (Windows today: it answers `clear_site`).
+  const browserPrefs = useBrowserPrefs()
+  const [profileClearable, setProfileClearable] = useState(false)
+  const [clearingData, setClearingData] = useState(false)
+  useEffect(() => {
+    if (!hasTauri || isMobile) return undefined
+    let live = true
+    loadBrowserPrefs(browserCall)
+    callShell('browser_features').then((features) => {
+      if (live) setProfileClearable(Boolean(features?.clear_site))
+    })
+    return () => {
+      live = false
+    }
+  }, [])
+  const searchEngine = browserSetting(browserPrefs.settings, 'search')
+  const barEverywhere = browserSetting(browserPrefs.settings, 'bookmarks_bar')
+  // Shown at once; a write the daemon refuses goes back and says why.
+  const changeBrowserSetting = (key, value) => {
+    setBrowserNote(null)
+    setBrowserPref(browserCall, key, value).catch((err) => setBrowserNote(errorCopy(err)))
+  }
   const bookmarkCount = browserStore.bookmarks.length
   const historyCount = browserStore.history.length
   const downloadCount = (browserStore.downloads ?? []).length
@@ -629,6 +656,13 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
     // "Reset every shortcut" is in the bar only while some key has been
     // changed with the defaults gone, there is nothing to reset.
     if (!(Object.keys(kb?.overrides ?? {}).length > 0)) keys.add('keyboard-reset')
+    // The browser's settings live where there is a browser; clearing its
+    // profile needs a shell that can.
+    if (!hasTauri || isMobile) {
+      keys.add('browser-search')
+      keys.add('browser-bookmarks-bar')
+    }
+    if (!profileClearable) keys.add('browser-clear-data')
     // The Browser key group is listed only where there is a browser.
     if (!BROWSER_KEYS) for (const a of BROWSER_ACTIONS) keys.add(`keyboard-${a.id}`)
     // This install is a phone tab, but the daemon rows and the first-run step
@@ -646,7 +680,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
       }
     }
     return keys
-  }, [models, effortTiers, permissionWords, autoStart, tray, above, daemonDetail, onManualConnect, connection.state, kb])
+  }, [models, effortTiers, permissionWords, autoStart, tray, above, daemonDetail, onManualConnect, connection.state, kb, profileClearable])
 
   const searchable = useMemo(() => {
     const ids = new Set(tabs.map((s) => s.id))
@@ -1717,10 +1751,56 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
             <header className="stg-head">
               <h2 className="stg-title">Browser</h2>
               <p className="stg-lead">
-                What the built-in browser keeps on this computer, and where to take it
-                back. Nothing here is sent anywhere.
+                How the built-in browser searches, what it keeps on this computer, and
+                where to take it back. Nothing here is sent anywhere.
               </p>
             </header>
+            {hasTauri && !isMobile && (
+              <div className="pn-list pn-list--tight">
+                <div className="pn-row" data-stg="browser-search">
+                  <div>
+                    <div className="pn-name">Search engine</div>
+                    <div className="pn-detail">What the address bar searches when you type words, not an address.</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="pn-btn"
+                    data-picker="settings" onClick={openPicker('browser-search')}
+                    aria-haspopup="listbox"
+                    aria-expanded={picker?.kind === 'browser-search'}
+                  >
+                    {SEARCH_ENGINES[searchEngine].name}
+                  </button>
+                  {picker?.kind === 'browser-search' && (
+                    <PickerMenu
+                      label="Search engine"
+                      searchPlaceholder="Search engines"
+                      items={Object.entries(SEARCH_ENGINES).map(([id, engine]) => ({ id, name: engine.name }))}
+                      groups={null}
+                      selectedId={searchEngine}
+                      onChoose={(id) => {
+                        changeBrowserSetting('search', id)
+                        setPicker(null)
+                      }}
+                      leaving={pickerLeaving}
+                      onClose={hidePicker}
+                      anchor={{ left: picker.x, top: picker.y }}
+                    />
+                  )}
+                </div>
+                <div className="pn-row" data-stg="browser-bookmarks-bar">
+                  <div>
+                    <div className="pn-name">Show bookmarks bar</div>
+                    <div className="pn-detail">On every page. Off, it shows on the new tab page only.</div>
+                  </div>
+                  <Toggle
+                    checked={barEverywhere}
+                    onChange={() => changeBrowserSetting('bookmarks_bar', !barEverywhere)}
+                    label="Show bookmarks bar"
+                  />
+                </div>
+              </div>
+            )}
             {/* The facts first: each names what is kept and where it lives, so
                 a person can find out before they find the buttons. */}
             <div className="pn-list pn-list--tight">
@@ -1752,7 +1832,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                     The profile the browser's tabs share on this computer: cookies,
                     site data, cache and service workers. It is cleared per site
                     from the browser's own menu, where the shell has the tab to
-                    clear.
+                    clear{profileClearable ? ', or for every site with Clear browsing data below' : ''}.
                   </div>
                 </div>
               </div>
@@ -1832,6 +1912,21 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                   </button>
                 )}
               </div>
+              {/* Every site at once: the shell clears the shared profile
+                  whole, so this shows only where the shell says it can. */}
+              {profileClearable && (
+                <div className="pn-row" data-stg="browser-clear-data">
+                  <div>
+                    <div className="pn-name">Clear browsing data</div>
+                    <div className="pn-detail">
+                      Pages read over a time range, and every site's cookies, site data and cached files.
+                    </div>
+                  </div>
+                  <button type="button" className="pn-btn" onClick={() => setClearingData(true)}>
+                    Clear…
+                  </button>
+                </div>
+              )}
               <div className="pn-row" data-stg="browser-downloads-open">
                 <div>
                   <div className="pn-name">Show the last download</div>
@@ -1852,6 +1947,12 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
               <p className="stg-note" role="status">
                 {browserNote}
               </p>
+            )}
+            {clearingData && (
+              <BrowserClearData
+                onClose={() => setClearingData(false)}
+                onCleared={() => setBrowserNote('Browsing data cleared.')}
+              />
             )}
           </section>
         )}

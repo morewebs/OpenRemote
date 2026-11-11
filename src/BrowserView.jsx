@@ -35,9 +35,10 @@ import {
 import { hasTauri, isMobile } from './platform.js'
 import { PICKER_CANCEL, PICKER_SOURCE, formatPicked } from './browser-pick.js'
 import { insertToComposer } from './composer-insert.js'
-import { omnibox, security, shownAddress, suggest } from './browser-omnibox.js'
+import { SEARCH_ENGINES, omnibox, security, shownAddress, suggest } from './browser-omnibox.js'
+import { browserSetting, loadBrowserPrefs, useBrowserPrefs } from './browser-prefs.js'
 import { closeOthers, closeTab, closeToRight, cycle, canUse, extrasMissing, newTab, openBelongs, rememberClosed, stripPlan, takeClosed, tabTitle } from './browser-tabs.js'
-import { adopt, call, clearHistory, getState, onKey, patchTab, recordVisit, registerReopen, removeBookmark, saveBookmark, setState, subscribe, updateBookmark } from './browser-store.js'
+import { adopt, browserCall, call, clearHistory, getState, onKey, patchTab, recordVisit, registerReopen, removeBookmark, saveBookmark, setState, subscribe, updateBookmark } from './browser-store.js'
 import { FLOATING, covered } from './browser-occlusion.js'
 import { DEVICES, fitDevice, fileName, nextZoom, zoomLabel } from './browser-chrome.js'
 import ContextMenu from './ContextMenu.jsx'
@@ -110,6 +111,15 @@ function anchorOf(el) {
 export default function BrowserView({ onClosePane = null, askToShow = null }) {
   const { tabs, active, downloads, finds, closed, features, bookmarks, bookmarksStale, bookmarksNote, history } = useSyncExternalStore(subscribe, getState)
   const current = tabs.find((t) => t.key === active) ?? tabs[0]
+  // Settings > Browser's choices, shared through browser-prefs.js: the
+  // engine the address bar searches with, and whether the bookmarks bar
+  // shows on every page or on the new tab page only.
+  const prefs = useBrowserPrefs()
+  useEffect(() => {
+    if (hasTauri && !isMobile) loadBrowserPrefs(browserCall)
+  }, [])
+  const engine = browserSetting(prefs.settings, 'search')
+  const barEverywhere = browserSetting(prefs.settings, 'bookmarks_bar')
   // What the new tab page shows under its search box: the same reading record
   // the history list draws, newest first, one row per address, six at most.
   // browser-newtab.js owns the rule, and a private tab never reaches history.
@@ -406,7 +416,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   const activeTab = () => getState().tabs.find((t) => t.key === getState().active)
 
   const go = async (line) => {
-    const url = omnibox(line)
+    const url = omnibox(line, engine)
     if (!url) return
     setEditing(false)
     addressRef.current?.blur()
@@ -454,7 +464,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     if (!row?.url) return
     setSuggestion(-1)
     setEditing(false)
-    openUrl(omnibox(row.url), { newTab: inNewTab || row.newTab })
+    openUrl(omnibox(row.url, engine), { newTab: inNewTab || row.newTab })
   }
 
   // A bookmark's address, here or in a new tab (the bar's middle click and
@@ -1063,7 +1073,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
           {bookmarksNote ?? 'Bookmarks are the list this window last saw: the daemon did not answer.'}
         </p>
       )}
-      {bookmarks.length > 0 && (
+      {bookmarks.length > 0 && (barEverywhere || !live) && (
         <BrowserBookmarksBar
           marks={bookmarks}
           precapture={precapture}
@@ -1333,7 +1343,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
                 }}
               >
                 <MagnifyingGlass size={18} className="bw-ntp-icon" />
-                <input name="q" placeholder="Search Google or type a URL" spellCheck={false} autoFocus />
+                <input name="q" placeholder={`Search ${SEARCH_ENGINES[engine].name} or type a URL`} spellCheck={false} autoFocus />
               </form>
               {recent.length > 0 && (
                 // The addresses this window has read, newest first: the same

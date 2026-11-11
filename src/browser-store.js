@@ -7,7 +7,7 @@
 import { hasTauri, isMobile } from './platform.js'
 import { insertAfter, newTab, popupBelongs } from './browser-tabs.js'
 import { bookmarkFor, inFolder, positionAt, stepPosition, withBookmark, withoutBookmark } from './browser-bookmarks.js'
-import { HISTORY_CAP, recordVisit as pushVisit } from './browser-history.js'
+import { HISTORY_CAP, recordVisit as pushVisit, visitsBefore } from './browser-history.js'
 import { linkAbort, loadConnection } from './api/daemon.js'
 
 // A bookmark call waits this long for the daemon before it is treated as a
@@ -45,7 +45,7 @@ function storeBookmarks(marks) {
 
 /// A call to the browser's own routes, on the daemon this console is connected
 /// to. Throws the daemon's sentence when it refuses, so the caller can say it.
-async function browserCall(method, path, body = null) {
+export async function browserCall(method, path, body = null) {
   const { url, token } = loadConnection()
   if (!url || !token) throw new Error('The console is not connected to its daemon yet.')
   const base = /^https?:\/\//.test(url) ? url : `http://${url}`
@@ -472,6 +472,14 @@ export function recordVisit({ url, title = '', at = Date.now() } = {}) {
 export function clearHistory() {
   setState(() => ({ history: [] }))
   storeHistory([])
+}
+
+// "Clear browsing data" over a time range: the visits from `since` on go,
+// older ones stay (null clears it all).
+export function clearHistorySince(since) {
+  const visits = visitsBefore(getState().history, since)
+  setState(() => ({ history: visits }))
+  storeHistory(visits)
 }
 
 // Editing this module in development reloads the console (the restore

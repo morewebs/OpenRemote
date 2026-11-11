@@ -49,7 +49,7 @@ const BLURBS = {
   agents: "What a chat's agent may do with other chats: workers, how many, on which apps.",
   'mcp-servers': 'Tools a session can call.',
   models: 'Custom model endpoints on this computer, which a chat can run through.',
-  browser: 'What the built-in browser keeps on this computer, and where to clear it.',
+  browser: 'How the built-in browser searches, what it keeps on this computer, and where to clear it.',
   archived: 'Chats hidden on this computer.',
   'this-install': 'The build you are running, its daemon, and the first-run steps.',
 }
@@ -97,17 +97,21 @@ const ROWS = [
   row('daemon-restart', 'this-install', 'Restart', 'Stops running chats and starts a fresh daemon.', ['stop', 'start', 'daemon']),
   row('install-first-run', 'this-install', 'First-run steps', 'Shows them again. The chats stay.', ['onboarding', 'setup', 'replay', 'welcome']),
 
-  // The built-in browser keeps four things on this computer. The facts come
-  // first so a person can find out what is kept before they find the buttons
-  // that take it back; each row says where the thing lives, and the two that
-  // can only be cleared from the browser itself say so rather than offering a
-  // button that would do nothing from here.
+  // The built-in browser's two settings (the daemon keeps them, the open
+  // browser reads them), then the four things it keeps on this computer. The
+  // facts come first so a person can find out what is kept before they find
+  // the buttons that take it back; each row says where the thing lives.
+  // Clearing every site's data at once is offered only where the shell can
+  // (Settings drops the row elsewhere), so no button does nothing.
+  row('browser-search', 'browser', 'Search engine', 'What the address bar searches when you type words, not an address.', ['search', 'search engine', 'google', 'duckduckgo', 'bing', 'brave', 'startpage', 'address bar', 'omnibox']),
+  row('browser-bookmarks-bar', 'browser', 'Show bookmarks bar', 'On every page. Off, it shows on the new tab page only.', ['bookmarks bar', 'bookmarks', 'bar', 'show', 'hide', 'toolbar']),
   row('browser-bookmarks', 'browser', 'Bookmarks', 'Pages kept on this computer, in this console. Nothing is sent anywhere.', ['bookmark', 'bookmarks', 'favourites', 'saved', 'star', 'kept', 'where', 'where kept']),
   row('browser-history', 'browser', 'Pages read', "This window's reading record, on this computer only. A private tab is never recorded.", ['history', 'visited', 'pages', 'reading', 'record', 'private', 'where']),
   row('browser-profile', 'browser', 'Cookies and site data', "The profile the browser's tabs share: cookies, site data, cache and service workers. Cleared per site from the browser's own menu.", ['cookies', 'cookie', 'site data', 'storage', 'cache', 'profile', 'sign out', 'clear']),
   row('browser-downloads', 'browser', 'Downloads', 'Files the tabs saved, in your Downloads folder. The list is the browser\'s own Downloads page.', ['downloads', 'download', 'files', 'saved', 'folder', 'where']),
   row('browser-history-clear', 'browser', 'Clear history', "Empties this window's reading record. It asks once.", ['history', 'clear', 'delete', 'empty', 'forget', 'visited', 'erase']),
   row('browser-bookmarks-clear', 'browser', 'Clear bookmarks', 'Removes every kept page. It asks once.', ['bookmarks', 'bookmark', 'clear', 'remove', 'delete', 'empty', 'favourites']),
+  row('browser-clear-data', 'browser', 'Clear browsing data', "Pages read over a time range, and every site's cookies, site data and cached files.", ['clear', 'browsing data', 'cookies', 'cache', 'site data', 'history', 'sign out', 'delete', 'erase']),
   row('browser-downloads-open', 'browser', 'Show the last download', 'Opens the folder of the newest finished download.', ['downloads', 'download', 'open', 'show', 'reveal', 'folder', 'file']),
 ]
 
@@ -127,7 +131,7 @@ const KEYBOARD = CATALOG.map((a) =>
 // for what lives inside it are the section's too, so "cookies" reaches the
 // Browser tab before it reaches a row inside it.
 const SECTION_TERMS = {
-  browser: ['history', 'cookies', 'bookmarks', 'downloads', 'clear', 'profile'],
+  browser: ['history', 'cookies', 'bookmarks', 'downloads', 'clear', 'profile', 'search engine'],
   // The daemon lives inside This install now: someone typing "daemon" should
   // not have to know that the tab it moved into is named after the build.
   'this-install': ['daemon', 'sidecar', 'build', 'update', 'first-run', 'onboarding'],

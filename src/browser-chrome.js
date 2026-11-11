@@ -43,3 +43,10 @@ export function fileName(pathOrUrl) {
   }
   return tail || 'Download'
 }
+
+/// What "Clear browsing data" asks the shell to clear (browser_clear_data's
+/// kinds) for what was ticked: cookies come with the sites' storage, since a
+/// site keeps its sign-in in both.
+export function clearKinds({ cookies = false, cache = false } = {}) {
+  return [...(cookies ? ['cookies', 'storage'] : []), ...(cache ? ['cache'] : [])]
+}

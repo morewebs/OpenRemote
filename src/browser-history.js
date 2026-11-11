@@ -73,3 +73,27 @@ export function visitLabel(entry) {
 export function shownVisitUrl(url) {
   return String(url ?? '').replace(/^https?:\/\//i, '').replace(/\/$/, '')
 }
+
+const DAY = 24 * 60 * 60 * 1000
+
+// Chrome's time ranges for "Clear browsing data".
+export const CLEAR_RANGES = [
+  { id: 'hour', label: 'Last hour', ms: 60 * 60 * 1000 },
+  { id: 'day', label: 'Last 24 hours', ms: DAY },
+  { id: 'week', label: 'Last 7 days', ms: 7 * DAY },
+  { id: 'month', label: 'Last 4 weeks', ms: 28 * DAY },
+  { id: 'all', label: 'All time', ms: null },
+]
+
+// Where a range starts, or null for all of it.
+export function sinceFor(range, now = Date.now()) {
+  const found = CLEAR_RANGES.find((r) => r.id === range)
+  return found?.ms ? now - found.ms : null
+}
+
+// The record with the visits from `since` on taken out (all of it when
+// `since` is null): what is left is older than the range.
+export function visitsBefore(entries, since) {
+  if (since == null) return []
+  return (entries ?? []).filter((entry) => entry.at < since)
+}
