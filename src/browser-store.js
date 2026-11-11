@@ -9,6 +9,8 @@ import { insertAfter, newTab, popupBelongs } from './browser-tabs.js'
 import { bookmarkFor, inFolder, positionAt, stepPosition, withBookmark, withoutBookmark } from './browser-bookmarks.js'
 import { HISTORY_CAP, recordVisit as pushVisit, visitsBefore } from './browser-history.js'
 import { linkAbort, loadConnection } from './api/daemon.js'
+import { getBrowserPrefs, loadBrowserPrefs, setSitePermission } from './browser-prefs.js'
+import { rememberedAnswer } from './browser-chrome.js'
 
 // A bookmark call waits this long for the daemon before it is treated as a
 // daemon that did not answer. A write that never settles is the worst case for
@@ -191,6 +193,9 @@ let state = (() => {
     closed: [],
     downloads: [],
     finds: {},
+    // Sites' requests waiting for the user's answer (the permission bar):
+    // { tab, id, origin, kind, label, private }.
+    prompts: [],
     features: null,
     bookmarks: loadBookmarks(),
     // Whether the list is the daemon's, or only this window's last cache, and
@@ -361,6 +366,54 @@ function fieldsOf(p) {
   }
 }
 
+// ---- site permissions ----
+
+// How long the shell holds a request before it turns it down (win.rs).
+const PROMPT_MS = 60_000
+
+export function dropPrompt(tab, id) {
+  setState((s) => ({ prompts: s.prompts.filter((p) => !(p.tab === tab && p.id === id)) }))
+}
+
+// Every request a closed page left: its bar goes with the tab.
+export function dropPromptsFor(native) {
+  if (!native) return
+  setState((s) => ({ prompts: s.prompts.filter((p) => p.tab !== native) }))
+}
+
+/// The user's answer to a site's request, remembered for the site when they
+/// asked for that (never for a private tab). Resolves once the answer is
+/// kept; a remembering the daemon refused rejects, so the bar's owner can
+/// say why (the page still got its answer).
+export function answerPrompt(prompt, allow, remember) {
+  call('browser_permission', { tab: prompt.tab, id: prompt.id, allow })
+  dropPrompt(prompt.tab, prompt.id)
+  if (!remember || prompt.private) return Promise.resolve()
+  return setSitePermission(browserCall, prompt.origin, prompt.kind, allow ? 'allow' : 'deny')
+}
+
+/// A site asked (`browser:permission`): a remembered answer is given at
+/// once; otherwise the bar asks. A private tab always asks.
+export async function onPermission(p) {
+  const priv = getState().tabs.some((t) => t.native === p.tab && t.private)
+  if (!priv) {
+    if (!getBrowserPrefs().loaded) await loadBrowserPrefs(browserCall)
+    const kept = rememberedAnswer(getBrowserPrefs().permissions, p)
+    if (kept) {
+      call('browser_permission', { tab: p.tab, id: p.id, allow: kept === 'allow' })
+      return
+    }
+  }
+  setState((s) => ({
+    prompts: [...s.prompts.filter((q) => !(q.tab === p.tab && q.id === p.id)), { ...p, private: priv }],
+  }))
+  // The shell turns an unanswered request down after a minute; its bar
+  // goes then too.
+  const timer = setTimeout(() => dropPrompt(p.tab, p.id), PROMPT_MS)
+  // (Node's tests: a waiting bar must not hold the process open.)
+  timer?.unref?.()
+}
+
 async function wire() {
   const { listen } = await import('@tauri-apps/api/event')
   listen('browser:tab', ({ payload: p }) => {
@@ -404,6 +457,7 @@ async function wire() {
   listen('browser:key', ({ payload }) => {
     for (const fn of keyHandlers) fn(payload.chord)
   })
+  listen('browser:permission', ({ payload }) => onPermission(payload))
   // What this build's shell can do with a tab: find in page, the DevTools
   // bridge (element picking), device view and forgetting a site are written
   // against Windows' engine, and a control the shell would refuse must not

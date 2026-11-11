@@ -57,3 +57,65 @@ export function clearKinds({ cookies = false, cache = false } = {}) {
 export function browserHasFocus(root, target) {
   return Boolean(root && target && (root === target || root.contains(target)))
 }
+
+
+// ---- site permissions ----
+
+// A page's host ("example.com:8080"), or '' for an address that has none.
+export function hostOf(url) {
+  try {
+    return new URL(url).host
+  } catch {
+    return ''
+  }
+}
+
+// What a site asks for, as the permission bar says it: "<host> wants to
+// <ask>". The shell names the kind (win.rs `permission_kind`).
+const ASKS = {
+  camera: 'use your camera',
+  microphone: 'use your microphone',
+  geolocation: 'know your location',
+  notifications: 'show notifications',
+  'clipboard-read': 'see what you copy',
+  midi: 'use your MIDI devices',
+}
+
+export function permissionAsk(kind, label) {
+  return ASKS[kind] ?? (label ? `use ${label}` : 'use a feature of this computer')
+}
+
+// A remembered permission's name in a list.
+const NAMES = {
+  camera: 'Camera',
+  microphone: 'Microphone',
+  geolocation: 'Location',
+  notifications: 'Notifications',
+  'clipboard-read': 'Clipboard',
+  midi: 'MIDI devices',
+}
+
+export function permissionName(kind) {
+  const name = NAMES[kind] ?? String(kind ?? '').replace(/-/g, ' ')
+  return name.charAt(0).toUpperCase() + name.slice(1)
+}
+
+// The remembered answers (the daemon's `origin|kind` -> allow or deny) as
+// rows, sorted by site; only one site's when `origin` is given.
+export function permissionRows(permissions, origin = null) {
+  return Object.entries(permissions ?? {})
+    .map(([key, state]) => {
+      const cut = key.lastIndexOf('|')
+      return { origin: key.slice(0, cut), kind: key.slice(cut + 1), state }
+    })
+    .filter((r) => r.origin && (r.state === 'allow' || r.state === 'deny') && (!origin || r.origin === origin))
+    .sort((a, b) => a.origin.localeCompare(b.origin) || a.kind.localeCompare(b.kind))
+}
+
+// The answer remembered for a site's request, or null when the site must
+// ask. A private tab never has one: it always asks and remembers nothing.
+export function rememberedAnswer(permissions, { origin, kind, private: priv = false } = {}) {
+  if (priv) return null
+  const state = permissions?.[`${origin}|${kind}`]
+  return state === 'allow' || state === 'deny' ? state : null
+}

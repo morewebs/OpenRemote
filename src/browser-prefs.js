@@ -1,6 +1,7 @@
 // The browser's own settings - the search engine, whether the bookmarks
-// bar shows on every page - kept by the daemon (`/browser/settings`, which
-// stores only what was changed) and cached here for the app's lifetime.
+// bar shows on every page - and the sites' remembered permissions, kept by
+// the daemon (`/browser`, which stores only what was changed) and cached
+// here for the app's lifetime.
 // Settings > Browser and the open browser share the cache, so a change in
 // one shows in the other at once. It asks the daemon only when one of them
 // mounts, so the app pays nothing for it at start.
@@ -23,7 +24,13 @@ export function browserSetting(settings, key) {
   return value
 }
 
-let prefs = { loaded: false, settings: {} }
+// An object the daemon answered, or an empty one.
+function plain(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+}
+
+// `permissions` is the daemon's `origin|kind` -> 'allow' | 'deny' map.
+let prefs = { loaded: false, settings: {}, permissions: {} }
 const listeners = new Set()
 
 function set(change) {
@@ -44,13 +51,19 @@ export function useBrowserPrefs() {
   return useSyncExternalStore(subscribeBrowserPrefs, getBrowserPrefs)
 }
 
-/// The daemon's settings, fetched again through `call(method, path, body)`
-/// (browser-store's `browserCall`). A failed read keeps the cache: the
-/// defaults stand until the daemon answers.
+/// The daemon's settings and remembered permissions, fetched again through
+/// `call(method, path, body)` (browser-store's `browserCall`). A failed read
+/// keeps the cache: the defaults stand until the daemon answers.
 export async function loadBrowserPrefs(call) {
   try {
-    const settings = await call('GET', '/browser/settings')
-    if (settings && typeof settings === 'object') set({ loaded: true, settings })
+    const got = await call('GET', '/browser')
+    if (got && typeof got === 'object') {
+      set({
+        loaded: true,
+        settings: plain(got.settings),
+        permissions: plain(got.permissions),
+      })
+    }
   } catch {
     /* the cache stays as it was; the next mount asks again */
   }
@@ -67,6 +80,25 @@ export async function setBrowserPref(call, key, value) {
     if (settings && typeof settings === 'object') set({ settings })
   } catch (err) {
     set({ settings: before })
+    throw err
+  }
+}
+
+/// A site's answer remembered ('allow' or 'deny'), or forgotten (null) so the
+/// site asks again. Shown at once; a write the daemon does not take puts the
+/// list back and throws, so the caller can say why.
+export async function setSitePermission(call, origin, kind, state) {
+  const before = prefs.permissions
+  const key = `${origin}|${kind}`
+  const next = { ...before }
+  if (state) next[key] = state
+  else delete next[key]
+  set({ permissions: next })
+  try {
+    const saved = await call('POST', '/browser/permissions', { origin, kind, state: state ?? null })
+    if (saved && typeof saved === 'object') set({ permissions: plain(saved) })
+  } catch (err) {
+    set({ permissions: before })
     throw err
   }
 }

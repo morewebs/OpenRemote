@@ -37,11 +37,13 @@ import { hasTauri, isMobile } from './platform.js'
 import { PICKER_CANCEL, PICKER_SOURCE, formatPicked } from './browser-pick.js'
 import { insertToComposer } from './composer-insert.js'
 import { SEARCH_ENGINES, omnibox, security, shownAddress, suggest } from './browser-omnibox.js'
-import { browserSetting, loadBrowserPrefs, useBrowserPrefs } from './browser-prefs.js'
+import { browserSetting, loadBrowserPrefs, setSitePermission, useBrowserPrefs } from './browser-prefs.js'
 import { closeOthers, closeTab, closeToRight, cycle, canUse, extrasMissing, newTab, openBelongs, rememberClosed, stripPlan, takeClosed, tabTitle } from './browser-tabs.js'
-import { adopt, browserCall, call, clearHistory, getState, onKey, patchTab, recordVisit, registerReopen, removeBookmark, saveBookmark, setState, subscribe, updateBookmark } from './browser-store.js'
+import { adopt, answerPrompt, browserCall, call, dropPromptsFor, clearHistory, getState, onKey, patchTab, recordVisit, registerReopen, removeBookmark, saveBookmark, setState, subscribe, updateBookmark } from './browser-store.js'
 import { FLOATING, covered } from './browser-occlusion.js'
-import { DEVICES, browserHasFocus, fitDevice, fileName, nextZoom, zoomLabel } from './browser-chrome.js'
+import { DEVICES, browserHasFocus, fitDevice, fileName, nextZoom, permissionName, permissionRows, zoomLabel } from './browser-chrome.js'
+import { PermissionBar } from './BrowserInfobar.jsx'
+import { errorCopy } from './error-copy.js'
 import ContextMenu from './ContextMenu.jsx'
 import { bookmarkFor, labelFor } from './browser-bookmarks.js'
 import { shownVisitUrl, visitLabel } from './browser-history.js'
@@ -110,8 +112,10 @@ function anchorOf(el) {
 // ---- the view ----
 
 export default function BrowserView({ onClosePane = null, askToShow = null }) {
-  const { tabs, active, downloads, finds, closed, features, bookmarks, bookmarksStale, bookmarksNote, history } = useSyncExternalStore(subscribe, getState)
+  const { tabs, active, downloads, finds, prompts, closed, features, bookmarks, bookmarksStale, bookmarksNote, history } = useSyncExternalStore(subscribe, getState)
   const current = tabs.find((t) => t.key === active) ?? tabs[0]
+  // The shown page's waiting request, if a site asked for something.
+  const prompt = (current?.native && prompts.find((p) => p.tab === current.native)) || null
   // Settings > Browser's choices, shared through browser-prefs.js: the
   // engine the address bar searches with, and whether the bookmarks bar
   // shows on every page or on the new tab page only.
@@ -550,6 +554,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   const close = (key) => {
     const tab = getState().tabs.find((t) => t.key === key)
     if (tab?.native) call('browser_close', { tab: tab.native })
+    dropPromptsFor(tab?.native)
     setState((s) => {
       const next = closeTab(s.tabs, key, s.active)
       return { tabs: next.tabs, active: next.active, closed: rememberClosed(s.closed, next.closed) }
@@ -562,7 +567,12 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   const closeMany = (keys, keep = null) => {
     if (!keys.length) return
     const gone = new Set(keys)
-    for (const t of getState().tabs) if (gone.has(t.key) && t.native) call('browser_close', { tab: t.native })
+    for (const t of getState().tabs) {
+      if (gone.has(t.key) && t.native) {
+        call('browser_close', { tab: t.native })
+        dropPromptsFor(t.native)
+      }
+    }
     setState((s) => {
       let closed = s.closed
       for (const t of s.tabs) if (gone.has(t.key)) closed = rememberClosed(closed, t)
@@ -672,6 +682,19 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     if (!tab) return
     patchTab(tab.key, { find: null })
     if (tab.native) call('browser_find', { tab: tab.native, term: '', step: 0 })
+  }
+
+  // A remembered answer forgotten, so the site asks again. A refusal puts
+  // the row back and says why.
+  const resetPermission = (p) => {
+    setSitePermission(browserCall, p.origin, p.kind, null).catch((err) => notify(errorCopy(err)))
+  }
+
+  // The bar's answer: the page gets it at once; remembering it is the
+  // daemon's, and a refusal is said.
+  const answer = (allow, remember) => {
+    if (!prompt) return
+    answerPrompt(prompt, allow, remember).catch((err) => notify(errorCopy(err)))
   }
 
   const notify = (text) => {
@@ -917,11 +940,16 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     }
     if (menu.kind === 'site') {
       let origin = ''
+      let siteOrigin = ''
       try {
         origin = new URL(current.url).host
+        siteOrigin = new URL(current.url).origin
       } catch {
         origin = current?.url ?? ''
       }
+      // What this site was told it may or may not use; Reset and it asks
+      // again. A private tab remembers nothing, so it lists nothing.
+      const kept = current?.private ? [] : permissionRows(prefs.permissions, siteOrigin)
       const said = {
         secure: 'Connection is secure',
         local: 'A page on this computer',
@@ -933,6 +961,16 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
         { label: said, icon: lock === 'insecure' ? <Warning size={14} /> : <Lock size={14} />, disabled: true },
         { divider: true },
         ...(zoomed ? [{ label: `Zoom ${zoomLabel(current.zoom)}: reset`, icon: <ArrowsClockwise size={14} />, onSelect: () => zoom(0) }] : []),
+        ...(kept.length
+          ? [
+              ...kept.map((p) => ({
+                label: `${permissionName(p.kind)}: ${p.state === 'allow' ? 'allowed' : 'blocked'}`,
+                hint: 'Reset',
+                onSelect: () => resetPermission(p),
+              })),
+              { divider: true },
+            ]
+          : []),
         // A private tab is hidden from agents until the user hands it over.
         ...(current?.private
           ? [{
@@ -1259,6 +1297,12 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
           <DotsThreeVertical size={18} weight="bold" />
         </button>
       </div>
+
+      {prompt && (
+        // A site asking for the camera, the microphone, the location...: in
+        // the pane's flow, so it never covers the page it speaks for.
+        <PermissionBar key={`${prompt.tab}:${prompt.id}`} prompt={prompt} onAnswer={answer} />
+      )}
 
       {picking && live && (
         <div className="bw-strip">

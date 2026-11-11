@@ -31,7 +31,8 @@ import { projectName } from './projects.js'
 import { chatTitle } from './shape.js'
 import { armRow, clearRow, rowIsArmed } from './row-confirm.js'
 import { browserCall, call as callShell, clearHistory, getState as getBrowserState, removeBookmark, subscribe as subscribeBrowser } from './browser-store.js'
-import { browserSetting, loadBrowserPrefs, setBrowserPref, useBrowserPrefs } from './browser-prefs.js'
+import { browserSetting, loadBrowserPrefs, setBrowserPref, setSitePermission, useBrowserPrefs } from './browser-prefs.js'
+import { hostOf, permissionName, permissionRows } from './browser-chrome.js'
 import { SEARCH_ENGINES } from './browser-omnibox.js'
 import BrowserClearData from './BrowserClearData.jsx'
 import { useBack } from './use-back.js'
@@ -573,6 +574,13 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
     setBrowserNote(null)
     setBrowserPref(browserCall, key, value).catch((err) => setBrowserNote(errorCopy(err)))
   }
+  // The sites' remembered answers (the permission bar's "Remember for this
+  // site"): Reset and the site asks again.
+  const sitePermissions = permissionRows(browserPrefs.permissions)
+  const resetSitePermission = (p) => {
+    setBrowserNote(null)
+    setSitePermission(browserCall, p.origin, p.kind, null).catch((err) => setBrowserNote(errorCopy(err)))
+  }
   const bookmarkCount = browserStore.bookmarks.length
   const historyCount = browserStore.history.length
   const downloadCount = (browserStore.downloads ?? []).length
@@ -661,6 +669,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
     if (!hasTauri || isMobile) {
       keys.add('browser-search')
       keys.add('browser-bookmarks-bar')
+      keys.add('browser-permissions')
     }
     if (!profileClearable) keys.add('browser-clear-data')
     // The Browser key group is listed only where there is a browser.
@@ -1798,6 +1807,31 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                     onChange={() => changeBrowserSetting('bookmarks_bar', !barEverywhere)}
                     label="Show bookmarks bar"
                   />
+                </div>
+                <div className="pn-row pn-row--stack" data-stg="browser-permissions">
+                  <div>
+                    <div className="pn-name">Site permissions</div>
+                    <div className="pn-detail">
+                      {sitePermissions.length
+                        ? 'What you told sites they may or may not use. Reset and the site asks again.'
+                        : 'Sites ask before using your camera, microphone, location and the like. Answers you remember show here.'}
+                    </div>
+                  </div>
+                  {sitePermissions.length > 0 && (
+                    <div className="bws-sites">
+                      {sitePermissions.map((p) => (
+                        <div key={`${p.origin}|${p.kind}`} className="bws-site">
+                          <span className="bws-site-host pv">{hostOf(p.origin) || p.origin}</span>
+                          <span className="bws-site-kind">
+                            {permissionName(p.kind)}: {p.state === 'allow' ? 'allowed' : 'blocked'}
+                          </span>
+                          <button type="button" className="pn-btn" onClick={() => resetSitePermission(p)}>
+                            Reset
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

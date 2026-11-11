@@ -105,6 +105,7 @@ const ROWS = [
   // (Settings drops the row elsewhere), so no button does nothing.
   row('browser-search', 'browser', 'Search engine', 'What the address bar searches when you type words, not an address.', ['search', 'search engine', 'google', 'duckduckgo', 'bing', 'brave', 'startpage', 'address bar', 'omnibox']),
   row('browser-bookmarks-bar', 'browser', 'Show bookmarks bar', 'On every page. Off, it shows on the new tab page only.', ['bookmarks bar', 'bookmarks', 'bar', 'show', 'hide', 'toolbar']),
+  row('browser-permissions', 'browser', 'Site permissions', 'What you told sites they may or may not use. Reset and the site asks again.', ['permissions', 'site permissions', 'camera', 'microphone', 'location', 'notifications', 'allow', 'block', 'reset', 'sites']),
   row('browser-bookmarks', 'browser', 'Bookmarks', 'Pages kept on this computer, in this console. Nothing is sent anywhere.', ['bookmark', 'bookmarks', 'favourites', 'saved', 'star', 'kept', 'where', 'where kept']),
   row('browser-history', 'browser', 'Pages read', "This window's reading record, on this computer only. A private tab is never recorded.", ['history', 'visited', 'pages', 'reading', 'record', 'private', 'where']),
   row('browser-profile', 'browser', 'Cookies and site data', "The profile the browser's tabs share: cookies, site data, cache and service workers. Cleared per site from the browser's own menu.", ['cookies', 'cookie', 'site data', 'storage', 'cache', 'profile', 'sign out', 'clear']),

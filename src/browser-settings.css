@@ -1,3 +1,36 @@
+/* Settings > Browser's site permissions: one row per remembered answer,
+   with Reset. */
+
+.bws-sites {
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+}
+
+.bws-site {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  border-top: 1px solid var(--line);
+}
+
+.bws-site-host {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-1);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bws-site-kind {
+  flex: none;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
 /* Settings > Browser's "Clear browsing data" dialog. */
 
 .bw-dialog {

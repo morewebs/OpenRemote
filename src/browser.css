@@ -499,6 +499,53 @@
   font-size: 13px;
 }
 
+/* ---- info bars: a site's request (and, below, an agent's hold) ---- */
+
+/* Main's strip, a little taller, with words and text buttons. */
+.bw-info {
+  gap: 10px;
+  min-height: 40px;
+  padding: 5px 10px 5px 14px;
+  color: var(--text-2);
+}
+
+.bw-info-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.bw-info-text strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.bw-check {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bw-check input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* The one primary button of a bar: amber, the app's accent. */
+.pn-btn.bw-primary {
+  border-color: rgba(220, 162, 75, 0.35);
+  background: rgba(220, 162, 75, 0.07);
+  color: var(--accent);
+}
+
+.pn-btn.bw-primary:hover:not(:disabled) {
+  background: rgba(220, 162, 75, 0.14);
+  color: var(--accent);
+}
+
 /* ---- private tabs ---- */
 
 /* The Detective mark: in the strip, beside the address, and on the new tab

@@ -37,9 +37,10 @@ test('the cache loads the daemon\'s settings and tells its subscribers', async (
   const asked = []
   await loadBrowserPrefs(async (method, path) => {
     asked.push(`${method} ${path}`)
-    return { search: 'bing' }
+    return { settings: { search: 'bing' }, permissions: { 'https://a.test|camera': 'allow' }, tabs: [] }
   })
-  assert.deepEqual(asked, ['GET /browser/settings'])
+  assert.deepEqual(asked, ['GET /browser'])
+  assert.deepEqual(getBrowserPrefs().permissions, { 'https://a.test|camera': 'allow' })
   assert.equal(getBrowserPrefs().loaded, true)
   assert.equal(browserSetting(getBrowserPrefs().settings, 'search'), 'bing')
   // A failed read keeps what was there.
