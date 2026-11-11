@@ -117,6 +117,13 @@ impl App {
             port: OnceLock::new(),
             sync: crate::sync::SyncState::default(),
         });
+        // Each message a harness receives carries a short note of the
+        // browser's open tabs (information, never instructions; never in
+        // what is stored or shown). A weak link, so the app and its
+        // supervisor don't keep each other alive.
+        let weak = Arc::downgrade(&app);
+        app.supervisor
+            .set_prompt_note(move || weak.upgrade().and_then(|app| app.browser.tabs_note()));
         crate::sync::start_pusher(&app);
         crate::browser::start_sweeper(&app);
         app.start_cloud();

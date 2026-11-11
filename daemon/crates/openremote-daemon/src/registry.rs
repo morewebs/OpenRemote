@@ -53,6 +53,13 @@ pub enum SessionDriver {
 }
 
 impl SessionDriver {
+    /// Whether the chat's MCP servers ride this harness (claude's
+    /// `--mcp-config`, codex's config overrides) - OpenRemote's own tools,
+    /// the browser's among them, with them.
+    pub fn rides_mcp(&self) -> bool {
+        matches!(self, SessionDriver::Claude(_) | SessionDriver::Codex(_))
+    }
+
     pub async fn send_prompt(&mut self, text: &str) -> Result<(), DriverError> {
         match self {
             SessionDriver::Claude(driver) => driver.send_prompt(text).await,

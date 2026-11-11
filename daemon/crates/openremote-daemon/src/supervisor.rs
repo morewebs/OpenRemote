@@ -374,7 +374,14 @@ pub struct Supervisor {
     /// binary in its `mcp-chat` mode, told the API's port. Unset, chats
     /// run without it (the e2e suites without a daemon binary).
     controls: std::sync::OnceLock<composer::Controls>,
+    /// A short note for the agent added to each message as the harness
+    /// receives it - never to what is stored or shown (the browser's open
+    /// tabs). Set once by whoever assembles the app.
+    prompt_note: std::sync::OnceLock<PromptNote>,
 }
+
+/// Where the note riding each delivered message comes from.
+type PromptNote = Box<dyn Fn() -> Option<String> + Send + Sync>;
 
 /// One poisoning policy for every mutex that routes through this helper
 /// (the store, the sync maps, the schedule's arming, the webhooks'
@@ -414,6 +421,7 @@ impl Supervisor {
             this_machine,
             command_cache: StdMutex::new(HashMap::new()),
             controls: std::sync::OnceLock::new(),
+            prompt_note: std::sync::OnceLock::new(),
         });
         supervisor.spawn_presence_ticker(this_machine);
         supervisor.spawn_schedule_engine();
@@ -1603,6 +1611,28 @@ impl Supervisor {
         Ok(())
     }
 
+    /// The note added to each delivered message, from here on.
+    pub fn set_prompt_note(&self, note: impl Fn() -> Option<String> + Send + Sync + 'static) {
+        let _ = self.prompt_note.set(Box::new(note));
+    }
+
+    /// A message as its harness receives it: the words, then the open-tabs
+    /// note where this harness has OpenRemote's tools. The note is never
+    /// stored or shown, and a message that starts with a / command goes
+    /// without it, so it never becomes that command's arguments.
+    fn with_prompt_note(&self, rides_mcp: bool, text: &str) -> String {
+        let mut words = text.to_string();
+        if rides_mcp && self.controls.get().is_some() && !text.trim_start().starts_with('/') {
+            if let Some(note) = self.prompt_note.get().and_then(|note| note()) {
+                if !words.is_empty() {
+                    words.push_str("\n\n");
+                }
+                words.push_str(&note);
+            }
+        }
+        words
+    }
+
     /// Write a prompt whose turn is already open to the harness. A failed
     /// write settles that turn (and the session, when the process died).
     async fn send_prompt_text(
@@ -1611,7 +1641,11 @@ impl Supervisor {
         entry: &SessionEntry,
         text: &str,
     ) -> Result<(), SupervisorError> {
-        if let Err(e) = entry.driver.lock().await.send_prompt(text).await {
+        let mut driver = entry.driver.lock().await;
+        let words = self.with_prompt_note(driver.rides_mcp(), text);
+        let sent = driver.send_prompt(&words).await;
+        drop(driver);
+        if let Err(e) = sent {
             // The turn's existence is already durable: a write that
             // failed must not leave it open forever. The boundary rides
             // through open_turn_boundary (a no-op when the turn is
