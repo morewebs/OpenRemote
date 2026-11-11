@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  ArrowsInLineVertical,
   CaretDown,
   ChartBar,
   ChatCircle,
@@ -16,6 +17,7 @@ import {
   Copy,
   Desktop,
   DeviceMobile,
+  FolderOpen,
   FolderSimple,
   Gear,
   House,
@@ -38,7 +40,7 @@ import { attentionTitle, needsYou } from './needs-you.js'
 import { duplicatedNames, folderless, projectIndex, projectLine, projectName, sections, unreadProjects, waitingProjects } from './projects.js'
 import { activeSessions } from './archive.js'
 import { deviceName, isPhone, sessionsForMode } from './cloud.js'
-import { isMobile } from './platform.js'
+import { hasTauri, isMobile } from './platform.js'
 import { CHAT_DRAG_TYPE, chatDragPayload } from './split.js'
 import { armRow, clearRow, rowIsArmed } from './row-confirm.js'
 import { listHasUnread, loadSeen, markSeen, recordSeen, seedSeen, storeSeen, unreadIds } from './unread.js'
@@ -333,6 +335,65 @@ export default function Sidebar({
       storeCollapsed(next)
       return next
     })
+  }
+
+  // A project's menu - right-click its head (or the keyboard's menu key on
+  // it). "Remove project" arms the same in-row confirm the trash does, so
+  // unregistering still takes a second press on the head itself.
+  const revealFolder = async (folder) => {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core')
+      await invoke('reveal_in_folder', { path: folder })
+    } catch (err) {
+      setCopyNote(`Couldn't open the folder: ${err?.message ?? err}`)
+    }
+  }
+  const collapseOthers = (id) => {
+    setCollapsed(() => {
+      const next = {}
+      for (const { project } of grouped.projects) if (project.id !== id) next[project.id] = true
+      storeCollapsed(next)
+      return next
+    })
+  }
+  const projectMenuItems = (project, shownName, folderIsGone) => {
+    const folder = project.folders?.[0]
+    return [
+      { label: 'New chat here', icon: <Plus size={14} />, onSelect: () => onNewChatIn?.(project.id) },
+      // The file manager is the desktop app's: the phone and the web console
+      // have no folder of this computer's to show.
+      ...(hasTauri && !isMobile && !web && !folderIsGone
+        ? [{ label: 'Open folder', icon: <FolderOpen size={14} />, onSelect: () => revealFolder(folder) }]
+        : []),
+      ...(folder
+        ? [
+            {
+              label: 'Copy path',
+              icon: <Copy size={14} />,
+              onSelect: () =>
+                navigator.clipboard?.writeText(folder).then(
+                  () => setCopyNote('Path copied.'),
+                  () => setCopyNote("Couldn't copy the path."),
+                ),
+            },
+          ]
+        : []),
+      { divider: true },
+      {
+        label: 'Collapse all others',
+        icon: <ArrowsInLineVertical size={14} />,
+        disabled: !grouped.projects.some(({ project: other }) => other.id !== project.id && !collapsed[other.id]),
+        onSelect: () => collapseOthers(project.id),
+      },
+      { divider: true },
+      {
+        label: 'Remove project',
+        icon: <TrashSimple size={14} />,
+        hint: 'Chats stay',
+        danger: true,
+        onSelect: () => setArmed((current) => armRow(current, project.id)),
+      },
+    ]
   }
 
   // A search opens the projects it matches, whatever the person had folded
@@ -1069,6 +1130,10 @@ export default function Sidebar({
                 // the head's own sentence about what the project holds, below.
                 data-unread={unreadIn.has(project.id) ? 'true' : undefined}
                 onClick={() => toggleProject(project.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  setMenu({ x: e.clientX, y: e.clientY, items: projectMenuItems(project, shownName, folderIsGone) })
+                }}
                 aria-expanded={!isCollapsed}
               >
                 <span className={`project-caret${isCollapsed ? ' closed' : ''}`}>

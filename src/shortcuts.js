@@ -32,6 +32,7 @@ export const ACTIONS = [
   // from inside a field would lose text the dispatcher cannot see. The rule is
   // here, in the catalog, rather than in each handler: see blocksWhileTyping.
   { id: 'new-chat', group: 'navigation', label: 'New chat', keys: 'Mod+N', navigates: true },
+  { id: 'new-chat-in-project', group: 'navigation', label: 'New chat in this project', keys: 'Mod+Shift+N', navigates: true },
   { id: 'palette', group: 'navigation', label: 'Command palette', keys: 'Mod+K' },
   { id: 'cheat-sheet', group: 'navigation', label: 'Keyboard shortcuts', keys: 'Mod+/' },
   { id: 'search-chats', group: 'navigation', label: 'Search chats', keys: 'Mod+F' },

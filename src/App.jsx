@@ -819,6 +819,19 @@ function Shell() {
   const focusPrimary = () =>
     setLayout((l) => focusLeaf(l, leaves(l.root).find((p) => p.view === null).id))
   useShortcut('new-chat', () => openInFocus('new'), desk)
+  // A new chat in the focused chat's project, by the same path as the
+  // sidebar's + on that project. A chat outside any registered project (or
+  // no chat in focus) gets the ordinary New chat.
+  useShortcut(
+    'new-chat-in-project',
+    () => {
+      const record = focusedChatId ? (chats?.[focusedChatId] ?? (sessions ?? []).find((s) => s.id === focusedChatId)) : null
+      const setup = record ? chatSetup(record, { projects: projects ?? [], thisDevice }) : null
+      if (setup?.projectId) newChatIn(setup.projectId)
+      else openInFocus('new')
+    },
+    desk,
+  )
   useShortcut('palette', () => setPalette(true), desk)
   useShortcut('cheat-sheet', () => setSheet(true), desk)
   useShortcut('view-settings', () => goView('settings'), desk)
