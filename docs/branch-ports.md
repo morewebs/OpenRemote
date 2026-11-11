@@ -34,11 +34,11 @@ recorded as dropped below.
 | Images, console: API attachments and `blob()`, reducer pictures, `ChatImages` | br-images 2b770c1 | 6662c73 |
 | Composer attachments (paste, drop, pick; `honors.attachments`; errorCopy) | br-images 5f59a28 | a545687 |
 | Pictures in the chat view (user, OriginChip, tool screenshots, queue) | br-images 1a2ab3d (pictures half) | 007e28e |
-| Browser tool cards (`browserTool`, `BrowserFacts`, folding `OutRow`, work-row labels, approvals) | browser 1a2ab3d (tool cards) | d50fcdc |
+| Browser tool steps (`browserTool`, `BrowserFacts`, folding `OutRow` in the work row, approvals) | browser 1a2ab3d (tool cards) | d50fcdc, 5bce97b |
 | Web console pictures: the peer link answers `blob()` | browser 1a2ab3d (pictures in the chat view) | e1f99f9 |
 | Picture ahead on address focus and the star / Ctrl+D | br-console 52705e9 (f118e43 was in main) | 4862afa |
-| Browser keys in the shortcut catalog, own scope, focus gate | browser f6668d2, br-console 11944a8 | 286508a |
-| Settings > Browser: search engine, bookmarks bar, Clear browsing data | browser 015ea58 | 114b65f |
+| Browser keys in the shortcut catalog, own scope, focus gate | browser f6668d2, br-console 11944a8 | 286508a, 1b8f209 |
+| Settings > Browser: search engine, bookmarks bar, Clear browsing data | browser 015ea58 | 114b65f, 762a244 |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 `wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`,
