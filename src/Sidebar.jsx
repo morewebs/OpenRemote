@@ -209,7 +209,10 @@ export default function Sidebar({
           // console's one word for "nothing yet" (shape.js) when neither does.
           chatTitle({ title: chats[session.id]?.title ?? session.title }),
         ),
-        status: liveStatus ?? 'idle',
+        // A chat nobody has opened here still shows what the poll knows, so a
+        // chat running in the background brightens like an open one. A copy
+        // whose device is away has no trustworthy status, so it rests.
+        status: liveStatus ?? (elsewhere && !device?.online ? 'idle' : chatStatus(session.status) ?? 'idle'),
         liveStatus,
         polledStatus: chatStatus(session.status),
         harness: session.harness,
@@ -599,6 +602,26 @@ export default function Sidebar({
     remember(recordSeen(seenRef.current, row.id, row.updatedAt))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watched, active, rows])
+
+  // Archiving from anywhere else - the pane's menu, its shortcut, the chat's
+  // header - offers the same way back: the sidebar watches the archived set
+  // and names the one chat that just left the list. The rows of the render
+  // before are read, because the chat is no longer in this render's rows.
+  // Several at once (a bulk change) is not one slip, so it offers nothing.
+  const archivedBefore = useRef(archived)
+  const rowsBefore = useRef(rows)
+  useEffect(() => {
+    const before = archivedBefore.current
+    archivedBefore.current = archived
+    if (!before || before === archived) return
+    const added = [...archived].filter((id) => !before.has(id))
+    if (added.length !== 1) return
+    const row = rowsBefore.current.find((r) => r.id === added[0])
+    if (row) setUndo({ id: row.id, title: row.title })
+  }, [archived])
+  useEffect(() => {
+    rowsBefore.current = rows
+  }, [rows])
 
   const archive = (id) => {
     const row = rows.find((r) => r.id === id)
