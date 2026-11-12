@@ -1,6 +1,8 @@
 //! `openremote-daemon mcp-chat`: OpenRemote's MCP server for one chat - its
-//! read-a-chat tool (the first of OpenRemote Controls) and the built-in
-//! browser's tools. A chat's harness starts it over stdio (MCP's
+//! read-a-chat tool (the first of OpenRemote Controls), the built-in
+//! browser's tools, and the agent tools of the installed plugins approved to
+//! give agents tools (`<plugin>__<tool>`, run by the daemon in the plugin's
+//! program or WASM module). A chat's harness starts it over stdio (MCP's
 //! newline-delimited JSON-RPC). It reads the API token from the data
 //! folder, never from its command line, and asks the daemon on loopback:
 //! for a chat the user pointed this chat at with @ (the daemon refuses any
@@ -92,6 +94,7 @@ pub async fn run(args: &[String]) -> ExitCode {
                 let mut tools = vec![tool()];
                 tools.extend(browser_tools(&config, &token).await);
                 tools.extend(agent_tools(&config, &token).await);
+                tools.extend(plugin_tools(&config, &token).await);
                 Ok(json!({"tools": tools}))
             }
             "tools/call" => Ok(call(&config, &token, &params).await),
@@ -165,6 +168,28 @@ async fn agent_tools(config: &Config, token: &str) -> Vec<Value> {
         .unwrap_or_default()
 }
 
+/// The installed plugins' agent tools (`<plugin>__<tool>`), as the daemon
+/// lists them for this chat.
+async fn plugin_tools(config: &Config, token: &str) -> Vec<Value> {
+    let url = format!(
+        "http://127.0.0.1:{}/sessions/{}/plugins/tools",
+        config.port,
+        encode(&config.session)
+    );
+    let bearer = format!("Bearer {token}");
+    let http = openremote_cloud::https::Http::new();
+    let Ok(response) = http
+        .request("GET", &url, &[("authorization", bearer.as_str())], None)
+        .await
+    else {
+        return Vec::new();
+    };
+    serde_json::from_slice::<Value>(&response.body)
+        .ok()
+        .and_then(|v| v.get("tools").and_then(Value::as_array).cloned())
+        .unwrap_or_default()
+}
+
 /// A browser tool: the daemon runs it in the app's browser and answers the
 /// tool's result as MCP shapes it.
 async fn browser_call(config: &Config, token: &str, params: &Value) -> Value {
@@ -179,6 +204,10 @@ async fn agents_call(config: &Config, token: &str, params: &Value) -> Value {
 /// A tool the daemon runs for this chat (`/sessions/{id}/<kind>/call`),
 /// answered as the MCP result it came back as.
 async fn call_daemon(config: &Config, token: &str, kind: &str, params: &Value) -> Value {
+    // Longer than the daemon's own wait on the browser, so the daemon's
+    // answer (even "the browser didn't answer in time") is what arrives;
+    // a plugin tool may take up to ten minutes.
+    let wait = if kind == "plugins" { 660 } else { 75 };
     let url = format!(
         "http://127.0.0.1:{}/sessions/{}/{kind}/call",
         config.port,
@@ -191,11 +220,9 @@ async fn call_daemon(config: &Config, token: &str, kind: &str, params: &Value) -
     });
     let body = serde_json::to_vec(&body).expect("a call serializes");
     let http = openremote_cloud::https::Http::new();
-    // Longer than the daemon's own wait on the browser, so the daemon's
-    // answer (even "the browser didn't answer in time") is what arrives.
     match http
         .request_within(
-            std::time::Duration::from_secs(75),
+            std::time::Duration::from_secs(wait),
             "POST",
             &url,
             &[("authorization", bearer.as_str())],
@@ -221,6 +248,12 @@ async fn call_daemon(config: &Config, token: &str, kind: &str, params: &Value) -
 /// tool error the agent can read.
 async fn call(config: &Config, token: &str, params: &Value) -> Value {
     let name = params.get("name").and_then(Value::as_str).unwrap_or("");
+    // A plugin's tools are named `<plugin>__<tool>`; OpenRemote's own never
+    // carry a double underscore, so this is asked first (a plugin named
+    // `agents` can't reach the team tools' route).
+    if name.contains("__") {
+        return call_daemon(config, token, "plugins", params).await;
+    }
     if name.starts_with("browser_") {
         return browser_call(config, token, params).await;
     }

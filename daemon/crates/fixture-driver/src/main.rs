@@ -13,6 +13,11 @@
 //! `--commands <folder>` prints the composer's lists, naming the folder it
 //! was asked about; the `echo-spawn` argument makes a turn's reply name the
 //! MCP servers and allowed tools the spawn command carried.
+//!
+//! `--plugin-rpc` makes it a process plugin's program instead: OpenRemote's
+//! plugin protocol (JSON-RPC lines) with two agent tools - `echo`, which
+//! names what it was handed, and `ask`, which asks OpenRemote for its chats
+//! and answers what came back - and one view request, `ping`.
 
 use std::io::{BufRead, Write};
 
@@ -23,6 +28,10 @@ const CATALOG: &str = r#"{"captured_at":1699999999000,"default":"fixture-model-b
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|argument| argument == "--plugin-rpc") {
+        plugin_rpc();
+        return;
+    }
     if args.iter().any(|argument| argument == "--probe") {
         // A probe is one line and an exit: no chat, no account reached.
         println!(r#"{{"available":true,"version":"0.0.1","signed_in":true,"reason":null}}"#);
@@ -246,4 +255,72 @@ fn main() {
 fn emit(stdout: &mut impl Write, value: serde_json::Value) {
     writeln!(stdout, "{value}").expect("write an event");
     stdout.flush().expect("flush an event");
+}
+
+/// A process plugin's program: answers `initialize`, `tools/call` and
+/// `ui/request`; `ask` makes its own call to OpenRemote and waits for it.
+fn plugin_rpc() {
+    use serde_json::{Value, json};
+    let stdin = std::io::stdin();
+    let mut stdout = std::io::stdout();
+    let mut lines = stdin.lock().lines();
+    let mut settings = Value::Null;
+    let mut powers = Value::Null;
+    while let Some(Ok(line)) = lines.next() {
+        let Ok(message) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
+        let Some(id) = message.get("id").cloned() else {
+            // settings/changed and other notifications.
+            if message["method"] == "settings/changed" {
+                settings = message["params"]["settings"].clone();
+            }
+            continue;
+        };
+        let params = &message["params"];
+        let result = match message["method"].as_str().unwrap_or_default() {
+            "initialize" => {
+                settings = params["settings"].clone();
+                powers = params["powers"].clone();
+                json!({"protocol": 1})
+            }
+            "tools/call" if params["name"] == "ask" => {
+                emit(
+                    &mut stdout,
+                    json!({"jsonrpc": "2.0", "id": "ask-1", "method": "chats/list", "params": {}}),
+                );
+                let mut answer = Value::Null;
+                for line in lines.by_ref() {
+                    let Ok(line) = line else { break };
+                    let Ok(reply) = serde_json::from_str::<Value>(&line) else {
+                        continue;
+                    };
+                    if reply["id"] == "ask-1" {
+                        answer = reply;
+                        break;
+                    }
+                }
+                json!(format!("asked: {answer}"))
+            }
+            "tools/call" => json!({"content": [{"type": "text", "text": format!(
+                "echo {} token:{} powers:{} chat:{}",
+                params["arguments"],
+                if settings["token"].as_str().is_some_and(|t| !t.is_empty()) { "yes" } else { "no" },
+                powers,
+                params["chat"]["id"],
+            )}]}),
+            "ui/request" => json!({"pong": params["name"]}),
+            other => {
+                emit(
+                    &mut stdout,
+                    json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": format!("no {other}")}}),
+                );
+                continue;
+            }
+        };
+        emit(
+            &mut stdout,
+            json!({"jsonrpc": "2.0", "id": id, "result": result}),
+        );
+    }
 }

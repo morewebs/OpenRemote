@@ -86,6 +86,13 @@ pub struct Manifest {
     pub not_sandboxed: bool,
     /// The harness this plugin provides, when it provides one.
     pub harness: Option<HarnessManifest>,
+    /// What it runs, in a line: its program and arguments, or its file
+    /// (openremote.json's `entry`, checked to be inside the folder).
+    pub entry: Option<String>,
+    /// What it adds to OpenRemote: its harness (from the harness block),
+    /// agent tools, composer inputs, views, settings - what the review
+    /// shows and the install record keeps.
+    pub contributes: openremote_core::PluginContributions,
 }
 
 /// The `harness` block of `openremote.json`: the seam that lets a plugin add
@@ -694,6 +701,20 @@ pub fn read_manifest(dir: &Path, builtin_ids: &[String]) -> Result<Manifest, Plu
     if runtime == PluginRuntime::Process || has_hooks || has_mcp || has_lsp {
         powers.push(PluginPower::RunPrograms);
     }
+    // What it runs and adds (openremote.json's entry and contributes).
+    let section = match read_json::<Value>(&dir.join("openremote.json"))? {
+        Some(raw) => crate::plugin_runtime::manifest::read_section(&raw, dir, &name, runtime)?,
+        None => Default::default(),
+    };
+    powers.extend(section.implied.iter().copied());
+    let mut contributes = section.contributes;
+    contributes.harnesses = harness
+        .iter()
+        .map(|h| openremote_core::PluginHarnessRef {
+            id: h.id.clone(),
+            name: h.name.clone(),
+        })
+        .collect();
     powers.sort();
     powers.dedup();
     let not_sandboxed = powers.contains(&PluginPower::RunPrograms)
@@ -714,6 +735,8 @@ pub fn read_manifest(dir: &Path, builtin_ids: &[String]) -> Result<Manifest, Plu
         claude_parts,
         not_sandboxed,
         harness,
+        entry: section.entry.as_ref().map(|e| e.describe()),
+        contributes,
     })
 }
 
@@ -1130,6 +1153,7 @@ impl PluginHost {
                 apply_entry(&root, entry)?;
             }
             let manifest = read_manifest(&root, &builtin_ids)?;
+            crate::plugin_runtime::check_staged(&root, &manifest)?;
             write_bare_claude_manifest(&root, &manifest)?;
             Ok((root, manifest, resolved))
         }

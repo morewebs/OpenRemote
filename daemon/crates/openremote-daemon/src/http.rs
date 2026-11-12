@@ -56,6 +56,11 @@ pub fn router(app: Arc<App>) -> Router {
         // Agent teams: the user's limits, a chat's team tools, Stop all.
         // This device's console and its chats' MCP server only.
         .merge(crate::team::routes())
+        // The installed plugins' settings, files, view requests and agent
+        // tools: this device's console and its chats' MCP server only,
+        // never another device (not in `api_routes`, so no peer reaches
+        // them).
+        .merge(crate::plugin_runtime::routes::routes())
         // The console reaches another device's API through this one.
         .route(
             "/devices/{id}/{*rest}",
@@ -1281,22 +1286,27 @@ async fn list_plugins(State(app): State<Arc<App>>) -> Response {
             })
         })
         .collect();
-    let installed: Vec<Value> = {
+    let installed: Vec<openremote_core::InstalledPlugin> = {
         let store = crate::supervisor::lock_recovering(&app.store);
-        store
-            .installed_plugins()
-            .into_iter()
-            .map(installed_json)
-            .collect()
+        store.installed_plugins().into_iter().cloned().collect()
     };
+    let installed: Vec<Value> = installed.iter().map(|p| installed_json(&app, p)).collect();
     Json(json!({"builtin": builtin, "installed": installed})).into_response()
 }
 
-/// An installed plugin as the console reads it: its record and its id.
-fn installed_json(plugin: &openremote_core::InstalledPlugin) -> Value {
+/// An installed plugin as the console reads it: its record, its id, and
+/// for a process plugin how its program stands.
+fn installed_json(app: &App, plugin: &openremote_core::InstalledPlugin) -> Value {
     let mut value = serde_json::to_value(plugin).unwrap_or(Value::Null);
     if let Some(fields) = value.as_object_mut() {
         fields.insert("id".into(), Value::String(plugin.id()));
+        if plugin.runtime == openremote_core::PluginRuntime::Process {
+            fields.insert(
+                "process".into(),
+                serde_json::to_value(app.plugin_runtime.processes.status(&plugin.id()))
+                    .unwrap_or(Value::Null),
+            );
+        }
     }
     value
 }
@@ -1480,6 +1490,10 @@ async fn install_staged(
             let marketplace = staged.marketplace.clone();
             let resolved = staged.resolved.clone();
             let command = staged.command.clone();
+            // Its program (if it runs one) holds the folder too: it stops
+            // before the folder is replaced, and the next need starts the
+            // new version.
+            app.plugin_runtime.changed(&plugin_id).await;
             app.plugins.install(staged).map_err(plugin_failure)?;
             let now = openremote_core::now_ms();
             let harness =
@@ -1490,10 +1504,10 @@ async fn install_staged(
                         id: harness.id.clone(),
                         name: harness.name.clone(),
                     });
-            let contributes = openremote_core::PluginContributions {
-                harnesses: harness.iter().cloned().collect(),
-                ..Default::default()
-            };
+            // What the review showed and the user approved: the harness,
+            // tools, composer inputs, views and settings. The runtime reads
+            // what a plugin may do from here, never from its folder.
+            let contributes = manifest.contributes.clone();
             let plugin = {
                 let mut store = crate::supervisor::lock_recovering(&app.store);
                 let before = store.installed_plugin(&plugin_id).ok().cloned();
@@ -1527,7 +1541,7 @@ async fn install_staged(
             };
             // The plugin's harness appears (or changes) without a restart.
             app.supervisor.reprobe_harnesses().await;
-            Ok(installed_json(&plugin))
+            Ok(installed_json(&app, &plugin))
         }
     };
     receipted_plain(&app, body.request_id, task).await
@@ -1567,17 +1581,18 @@ async fn set_plugin_enabled(
     let task = {
         let app = Arc::clone(&app);
         async move {
-            let mut store = crate::supervisor::lock_recovering(&app.store);
             if builtin {
-                store
+                crate::supervisor::lock_recovering(&app.store)
                     .set_builtin_enabled(&id, body.enabled)
                     .map_err(store_failure)?;
                 Ok(json!({"id": id, "enabled": body.enabled}))
             } else {
-                let plugin = store
+                let plugin = crate::supervisor::lock_recovering(&app.store)
                     .set_installed_plugin_enabled(&id, body.enabled)
                     .map_err(store_failure)?;
-                Ok(installed_json(&plugin))
+                // Off stops its program; on, the next need starts it.
+                app.plugin_runtime.changed(&id).await;
+                Ok(installed_json(&app, &plugin))
             }
         }
     };
@@ -1624,6 +1639,8 @@ async fn remove_plugin(
                     ),
                 ));
             }
+            // Its program stops first: it holds the folder open too.
+            app.plugin_runtime.changed(&id).await;
             app.plugins
                 .uninstall(&plugin.marketplace, &plugin.name)
                 .map_err(plugin_failure)?;
@@ -1631,6 +1648,8 @@ async fn remove_plugin(
                 let mut store = crate::supervisor::lock_recovering(&app.store);
                 store.remove_installed_plugin(&id).map_err(store_failure)?;
             }
+            // Its settings go with it, secrets too.
+            app.plugin_runtime.removed(&id).await;
             app.supervisor.reprobe_harnesses().await;
             Ok(json!({"removed": id}))
         }

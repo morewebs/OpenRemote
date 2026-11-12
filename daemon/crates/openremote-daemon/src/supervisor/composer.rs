@@ -372,9 +372,15 @@ impl Supervisor {
                     "this chat was not pointed at {wanted}; the user points a chat at another with @"
                 ))
             })?;
-        let chat = self.session(&target)?;
+        self.condensed_chat(&target)
+    }
+
+    /// A chat condensed to its messages, as an agent or a plugin with the
+    /// power to read chats is handed it.
+    pub fn condensed_chat(&self, id: &SessionId) -> Result<String, SupervisorError> {
+        let chat = self.session(id)?;
         let events = self
-            .with_store(|s| s.events_after(&target, None))
+            .with_store(|s| s.events_after(id, None))
             .map_err(store_error)?;
         Ok(condensed(&chat, &events, None))
     }

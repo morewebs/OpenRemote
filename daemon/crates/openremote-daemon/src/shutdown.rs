@@ -63,6 +63,8 @@ pub async fn leave(app: Arc<App>, why: &str, data_dir: PathBuf) {
     let sweep = tokio::spawn(async move {
         app.browser.disconnect();
         app.supervisor.shutdown_all().await;
+        // Plugin programs go with the daemon.
+        app.plugin_runtime.shutdown().await;
     });
     let _ = tokio::time::timeout(SWEEP_BOUND, sweep).await;
     // The published port is no longer true, and the next start publishes

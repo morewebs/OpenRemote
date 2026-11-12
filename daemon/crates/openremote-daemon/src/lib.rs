@@ -18,6 +18,7 @@ pub mod mcp_chat;
 pub mod pairing;
 pub mod pairing_page;
 pub mod plugin_driver;
+pub mod plugin_runtime;
 pub mod plugins;
 pub mod registry;
 pub mod shutdown;

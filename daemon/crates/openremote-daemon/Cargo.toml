@@ -47,6 +47,11 @@ sha2 = "0.10"
 sha1 = "0.10"
 base64 = "0.22"
 semver = "1"
+# WASM plugins' agent tools run inside the daemon on a small pure-Rust
+# interpreter, with fuel and memory limits so a plugin can't hang it, and
+# no WASI: a module sees only the host functions its approved powers give.
+# 0.46 is the newest that builds on the workspace's rust-version.
+wasmi = { version = "0.46", default-features = false, features = ["std"] }
 
 [target.'cfg(unix)'.dependencies]
 # setsid for installers: no controlling terminal to prompt into
@@ -74,6 +79,8 @@ tokio-tungstenite = { version = "0.29", default-features = false, features = ["h
 # the schedule e2e computes the machine's local HH:MM the same way the
 # engine does
 chrono = "0.4"
+# the WASM runtime's tests write their modules in the text format
+wat = "1"
 
 [lints]
 workspace = true

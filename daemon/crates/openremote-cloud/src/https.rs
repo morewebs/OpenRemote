@@ -71,6 +71,18 @@ impl Http {
 
     /// A TCP stream to `uri`'s host, wrapped in TLS for `https`/`wss`.
     pub async fn connect(&self, uri: &http::Uri) -> Result<Box<dyn Io>, HttpError> {
+        self.connect_via(uri, None).await
+    }
+
+    /// As `connect`, but to `addr` when one is given: the TCP stream goes
+    /// to exactly that address while TLS still checks `uri`'s host name.
+    /// A caller that vetted the address it looked up uses this, so a
+    /// second lookup can't answer with another one.
+    async fn connect_via(
+        &self,
+        uri: &http::Uri,
+        addr: Option<std::net::SocketAddr>,
+    ) -> Result<Box<dyn Io>, HttpError> {
         let host = uri
             .host()
             .ok_or_else(|| HttpError::Url(uri.to_string()))?
@@ -79,7 +91,13 @@ impl Http {
             .to_string();
         let secure = matches!(uri.scheme_str(), Some("https" | "wss"));
         let port = uri.port_u16().unwrap_or(if secure { 443 } else { 80 });
-        let tcp = tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect((host.as_str(), port)))
+        let connecting = async {
+            match addr {
+                Some(addr) => TcpStream::connect(addr).await,
+                None => TcpStream::connect((host.as_str(), port)).await,
+            }
+        };
+        let tcp = tokio::time::timeout(CONNECT_TIMEOUT, connecting)
             .await
             .map_err(|_| HttpError::Timeout)?
             .map_err(|_| HttpError::Connect(host.clone()))?;
@@ -118,20 +136,38 @@ impl Http {
         headers: &[(&str, &str)],
         body: Option<(&str, Vec<u8>)>,
     ) -> Result<Response, HttpError> {
-        tokio::time::timeout(limit, self.send(method, url, headers, body))
+        tokio::time::timeout(limit, self.send(None, method, url, headers, body))
+            .await
+            .map_err(|_| HttpError::Timeout)?
+    }
+
+    /// A request whose connection goes to `addr`, an address the caller
+    /// already looked up for the url's host and vetted (a sandboxed
+    /// plugin's request: public addresses only). Never redirected.
+    pub async fn request_to(
+        &self,
+        limit: Duration,
+        addr: std::net::SocketAddr,
+        method: &str,
+        url: &str,
+        headers: &[(&str, &str)],
+        body: Option<(&str, Vec<u8>)>,
+    ) -> Result<Response, HttpError> {
+        tokio::time::timeout(limit, self.send(Some(addr), method, url, headers, body))
             .await
             .map_err(|_| HttpError::Timeout)?
     }
 
     async fn send(
         &self,
+        addr: Option<std::net::SocketAddr>,
         method: &str,
         url: &str,
         headers: &[(&str, &str)],
         body: Option<(&str, Vec<u8>)>,
     ) -> Result<Response, HttpError> {
         let uri: http::Uri = url.parse().map_err(|_| HttpError::Url(url.to_string()))?;
-        let stream = self.connect(&uri).await?;
+        let stream = self.connect_via(&uri, addr).await?;
         let (mut sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
             .await
             .map_err(|e| HttpError::Protocol(e.to_string()))?;
