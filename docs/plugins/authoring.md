@@ -20,16 +20,17 @@ Examples in this repository:
   `bin/toy`, `bin/toy.exe` on Windows) answers two agent tools,
   `word_count` and `greet`, and is also the driver of a toy harness,
   "Toy CLI", that echoes and asks before it shouts.
-- [`examples/plugins/worktrunk`](../../examples/plugins/worktrunk):
-  OpenRemote's official Worktrunk plugin, a process plugin with ten agent
-  tools, a sidebar view and a composer button whose pages ask its program,
-  and its own install and update of the tool it drives;
-  [worktrunk.md](worktrunk.md) is its design.
 - [`examples/harness-plugin`](../../examples/harness-plugin): a copyable
   template for a harness plugin's driver.
 
 The official catalog is the repository's own
-`.claude-plugin/marketplace.json`.
+`.claude-plugin/marketplace.json`. OpenRemote's official plugins also
+live in [OpenRemote-plugins](https://github.com/morewebs/OpenRemote-plugins),
+each in a folder of its own beside that repository's catalog: its
+`worktrunk` is a process plugin with ten agent tools, a sidebar view and a
+composer button whose pages ask its program, and its own install and
+update of the tool it drives (its `DESIGN.md` says why each part is the
+way it is).
 
 The protocol a plugin's code speaks is in [protocol.md](protocol.md); the
 JavaScript API is in [js-api.md](js-api.md); a harness driver's contract

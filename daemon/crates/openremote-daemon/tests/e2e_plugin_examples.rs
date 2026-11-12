@@ -517,8 +517,23 @@ async fn the_text_tools_module_answers_from_a_chat_and_reaches_public_addresses_
     assert!(text(&mine).starts_with("could not fetch"), "{mine}");
 }
 
+/// OpenRemote's official plugins repository (OpenRemote-plugins), found at
+/// `OPENREMOTE_PLUGINS_DIR` or beside this repository, or None when this
+/// machine has no copy (the test that needs it then says so and stops).
+fn plugins_repo() -> Option<PathBuf> {
+    let found = std::env::var("OPENREMOTE_PLUGINS_DIR")
+        .map(PathBuf::from)
+        .ok()
+        .or_else(|| Some(repo().join("../OpenRemote-plugins")))?;
+    found
+        .join(".claude-plugin/marketplace.json")
+        .is_file()
+        .then_some(found)
+}
+
 /// OpenRemote's official Worktrunk plugin, installed from a copy of the
-/// catalog with its program built as build.sh builds it, and Worktrunk
+/// OpenRemote-plugins catalog with its program built from its own source
+/// (as build.sh builds it), and Worktrunk
 /// stood in for by the plugin's own fake `wt` (a real one is not needed to
 /// test the plugin, and may not be on the machine):
 ///
@@ -533,7 +548,13 @@ async fn the_text_tools_module_answers_from_a_chat_and_reaches_public_addresses_
 /// - the console reads each chat folder's branch and worktree.
 #[tokio::test]
 async fn worktrunk_installs_from_openremotes_catalog_and_its_tools_drive_wt_from_a_chat() {
-    let source = repo().join("examples/plugins/worktrunk");
+    let Some(plugins) = plugins_repo() else {
+        eprintln!(
+            "skipped: no OpenRemote-plugins checkout beside this repository; set OPENREMOTE_PLUGINS_DIR"
+        );
+        return;
+    };
+    let source = plugins.join("worktrunk");
     build_or_skip!(
         &source.join("program/Cargo.toml"),
         &["--bins", "--examples"]
@@ -547,10 +568,11 @@ async fn worktrunk_installs_from_openremotes_catalog_and_its_tools_drive_wt_from
     };
 
     // The catalog as it ships, under a local name, with the plugin's folder
-    // and its built program (bin/ is what build.sh leaves).
+    // and its program built here, where its manifest names it for this
+    // system.
     let market = tempfile::tempdir().unwrap();
     let mut catalog: Value = serde_json::from_slice(
-        &std::fs::read(repo().join(".claude-plugin/marketplace.json")).unwrap(),
+        &std::fs::read(plugins.join(".claude-plugin/marketplace.json")).unwrap(),
     )
     .unwrap();
     catalog["name"] = json!("openremote-local");
@@ -572,12 +594,20 @@ async fn worktrunk_installs_from_openremotes_catalog_and_its_tools_drive_wt_from
     )
     .unwrap();
     copy_tree(&source, &folder);
-    std::fs::create_dir_all(folder.join("bin")).unwrap();
+    let manifest: Value =
+        serde_json::from_slice(&std::fs::read(source.join("openremote.json")).unwrap()).unwrap();
+    let program = if cfg!(windows) {
+        manifest["entry"]["windows"]["command"].as_str()
+    } else {
+        manifest["entry"]["command"].as_str()
+    }
+    .expect("the program for this system");
+    std::fs::create_dir_all(folder.join(program).parent().unwrap()).unwrap();
     std::fs::copy(
         examples_target()
             .join("debug")
             .join(exe("worktrunk-plugin")),
-        folder.join("bin").join(exe("worktrunk-plugin")),
+        folder.join(program),
     )
     .unwrap();
     // The stand-in wt, in a folder of its own: it logs each command line

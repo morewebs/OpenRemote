@@ -284,7 +284,9 @@ their own:
 
 Its chats and its network are its program's, which the daemon gates by the
 install record: from its pages, `chats.*` and `fetch` are refused. The
-Worktrunk plugin (`examples/plugins/worktrunk`) is a complete example.
+Worktrunk plugin (`worktrunk` in
+[OpenRemote-plugins](https://github.com/morewebs/OpenRemote-plugins)) is a
+complete example.
 
 ## How it works
 
