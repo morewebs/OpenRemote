@@ -259,8 +259,8 @@ export default function ChangesModal({ chat }) {
         {folded.empty === 'no-edit' && (
           <p className="chg-empty">
             {folded.unread > 0
-              ? `No file changes this console could read. ${folded.unread === 1 ? 'One report named a file' : `${folded.unread} reports named files`} in a shape it does not recognise, so this says what this window could show, not that the chat changed nothing.`
-              : 'No file changes in this chat. An app that edits from a shell command or a script reports no file list at all, so this is what it reported rather than everything a turn did.'}
+              ? 'No file changes this window can read. Some changes are in a format it does not recognise.'
+              : "No file changes in this chat. Edits made through shell commands or scripts don't show here."}
           </p>
         )}
         {folded.empty === 'no-transcript' && (

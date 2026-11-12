@@ -194,8 +194,7 @@ export default function InstallPluginModal({ onClose, entry = null, source = nul
 
         {busy && (
           <p className="pg-note" role="status">
-            This step has to finish or fail before the dialog can close: cancelling it would pull the
-            copy out from under it.
+            This dialog can close once this step is done.
           </p>
         )}
 
@@ -207,8 +206,9 @@ export default function InstallPluginModal({ onClose, entry = null, source = nul
             </p>
             {updating && (
               <p className="pg-note">
-                This replaces the installed {staged.id}
-                {staged.replaces ? ` ${staged.replaces}` : ''}.
+                {staged.replaces
+                  ? `This replaces version ${staged.replaces}, the one you have now.`
+                  : 'This replaces the copy you have now.'}
               </p>
             )}
             {newPowers.length > 0 && (
@@ -258,7 +258,7 @@ export default function InstallPluginModal({ onClose, entry = null, source = nul
                     ))}
                   </ul>
                 ) : (
-                  <span>Nothing beyond itself</span>
+                  <span>Nothing extra: no programs, chats, network or microphone</span>
                 )}
               </div>
               {manifest.adapted?.length > 0 && (
@@ -286,7 +286,7 @@ export default function InstallPluginModal({ onClose, entry = null, source = nul
               )}
               {staged.command && (
                 <div className="pg-review-row">
-                  <span className="pg-review-label">Made by</span>
+                  <span className="pg-review-label">Built with</span>
                   <span>
                     <code className="pg-command pv">{staged.command.command}</code>
                     <span className="pg-review-sub">Runs again each time a Claude chat starts.</span>

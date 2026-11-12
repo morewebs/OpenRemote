@@ -235,9 +235,9 @@ export default function MachineModal({ device, onOpenChat, onClose }) {
               className={`dv-act${device.kind === 'machine' ? '' : ' primary'}`}
               disabled={busy}
               onClick={() => act(() => setDeviceKind(device.id, device.kind === 'machine' ? 'desktop' : 'machine'))}
-              title={device.kind === 'machine' ? 'Stop running chats for your other devices' : 'Let your other devices run chats on it'}
+              title={device.kind === 'machine' ? 'Your other devices stop starting chats on it; it stays in your Cloud' : 'Let your other devices run chats on it'}
             >
-              {device.kind === 'machine' ? 'Make it a desktop' : 'Make it a machine'}
+              {device.kind === 'machine' ? 'Stop running chats for other devices' : 'Make it a machine'}
             </button>
           )}
           {confirmRemove ? (

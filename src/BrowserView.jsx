@@ -270,7 +270,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     if (saidExtras.current || !extrasMissing(features)) return
     saidExtras.current = true
     notify(
-      "Find in page, the element picker, device view and forgetting a site need this build's shell support; they are not available here.",
+      'Find in page, selecting an element, device view and clearing site data are not available on this platform.',
     )
   }, [features])
 
@@ -789,7 +789,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     const tab = activeTab()
     if (!tab?.native) return
     if (!can('find')) {
-      notify('Find in page is not in this build yet')
+      notify('Find in page is not available on this platform')
       return
     }
     patchTab(tab.key, { find: { term: tab.find?.term ?? '' } })
@@ -878,7 +878,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     const tab = activeTab()
     if (!tab?.native || picking) return
     if (!can('cdp')) {
-      notify('Selecting an element is not in this build yet')
+      notify('Selecting an element is not available on this platform')
       return
     }
     setPicking(true)
@@ -898,7 +898,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
       // No answer at all: the tab closed under the pick. Say so, so the strip
       // is not left armed with nothing coming.
       if (!res) {
-        notify('The page went away - the pick was cancelled')
+        notify('The page closed, so selecting an element stopped')
         return
       }
       const pick = res.result?.subtype === 'error' ? null : (res.result?.value ?? null)
@@ -915,10 +915,10 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
       if (insertToComposer(line)) {
         sharedWith(target, tellDaemon)
         notify('Attached to the chat')
-      } else notify('No chat open - open one first, then pick again')
+      } else notify('No chat is open. Open one, then select the element again')
     } catch {
       // The console could not reach the shell at all: back out, and say it.
-      notify('The page could not be reached - the pick was cancelled')
+      notify('The page could not be reached, so selecting an element stopped')
     } finally {
       pickingTab.current = null
       setPicking(false)
@@ -965,7 +965,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     const tab = activeTab()
     if (!tab?.native) return
     if (!can('cdp')) {
-      notify('Screenshots are not in this build yet')
+      notify('Screenshots are not available on this platform')
       return
     }
     if (!composerReady()) return
@@ -981,7 +981,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     const tab = activeTab()
     if (!tab?.native || region) return
     if (!can('cdp')) {
-      notify('Screenshots are not in this build yet')
+      notify('Screenshots are not available on this platform')
       return
     }
     if (!composerReady()) return
@@ -1037,7 +1037,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     const tab = activeTab()
     if (!tab?.native || rec) return
     if (!can('cdp') || !canRecord()) {
-      notify('Recording is not in this build yet')
+      notify('Recording is not available on this platform')
       return
     }
     recordTab(tab.native, notify)
@@ -1047,7 +1047,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     const tab = activeTab()
     if (!tab?.native) return
     if (!can('viewport')) {
-      notify('Device view is not in this build yet')
+      notify('Device view is not available on this platform')
       return
     }
     patchTab(tab.key, { device: tab.device ? null : { ...DEVICES[0] } })
@@ -1072,12 +1072,10 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     'browser-reload': () => onNative('browser_reload'),
     'browser-reload-key': () => onNative('browser_reload'),
     'browser-find': openFind,
-    'browser-history': () => {
-      if (getState().history.length) setHistoryOpen(true)
-    },
+    'browser-history': () => setHistoryOpen(true),
     'browser-downloads': () => setMenu({ kind: 'downloads', ...anchorFor('downloads') }),
     'browser-devtools': () =>
-      can('devtools') ? onNative('browser_devtools') : notify('Developer tools are not in this build'),
+      can('devtools') ? onNative('browser_devtools') : notify('Developer tools are only in developer builds'),
     'browser-zoom-in': () => zoom(1),
     'browser-zoom-out': () => zoom(-1),
     'browser-zoom-reset': () => zoom(0),
@@ -1157,21 +1155,21 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
         {
           label: 'Find in page',
           icon: <MagnifyingGlass size={14} />,
-          hint: can('find') ? 'Ctrl+F' : 'Not in this build',
+          hint: can('find') ? 'Ctrl+F' : 'Not available on this platform',
           disabled: !live || !can('find'),
           onSelect: openFind,
         },
         {
           label: device ? 'Leave device view' : 'Device view',
           icon: <DeviceMobile size={14} />,
-          hint: can('viewport') ? '' : 'Not in this build',
+          hint: can('viewport') ? '' : 'Not available on this platform',
           disabled: !live || !can('viewport'),
           onSelect: toggleDevice,
         },
         {
           label: 'Print',
           icon: <Printer size={14} />,
-          hint: can('print') ? '' : 'Not in this build',
+          hint: can('print') ? '' : 'Not available on this platform',
           disabled: !live || !can('print'),
           onSelect: () => onNative('browser_print'),
         },
@@ -1179,14 +1177,14 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
         {
           label: 'Screenshot to chat',
           icon: <Camera size={14} />,
-          hint: can('cdp') ? '' : 'Not in this build',
+          hint: can('cdp') ? '' : 'Not available on this platform',
           disabled: !live || !can('cdp'),
           onSelect: screenshot,
         },
         {
           label: 'Screenshot a region',
           icon: <Selection size={14} />,
-          hint: can('cdp') ? '' : 'Not in this build',
+          hint: can('cdp') ? '' : 'Not available on this platform',
           disabled: !live || !can('cdp'),
           onSelect: startRegion,
         },
@@ -1195,20 +1193,20 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
           : {
               label: 'Record this tab',
               icon: <Record size={14} />,
-              hint: can('cdp') && canRecord() ? '90 seconds at most' : 'Not in this build',
+              hint: can('cdp') && canRecord() ? '90 seconds at most' : 'Not available on this platform',
               disabled: !live || !can('cdp') || !canRecord(),
               onSelect: record,
             },
         { divider: true },
         { label: 'Downloads', icon: <DownloadSimple size={14} />, hint: 'Ctrl+J', onSelect: () => setTimeout(() => setMenu({ kind: 'downloads', ...anchorFor('downloads') }), 0) },
-        { label: 'History', icon: <ClockCounterClockwise size={14} />, disabled: !history.length, onSelect: () => setHistoryOpen(true) },
+        { label: 'History', icon: <ClockCounterClockwise size={14} />, onSelect: () => setHistoryOpen(true) },
         { label: 'Bookmarks', icon: <Star size={14} />, onSelect: () => setMarksOpen(true) },
         { label: 'Open in your default browser', icon: <ArrowSquareOut size={14} />, disabled: !live || !/^https?:/.test(current?.url ?? ''), onSelect: () => call('browser_open_external', { url: current.url }) },
         ...(import.meta.env.DEV
           ? [{
               label: 'Developer tools',
               icon: <Code size={14} />,
-              hint: can('devtools') ? 'F12' : 'Not in this build',
+              hint: can('devtools') ? 'F12' : 'Only in developer builds',
               disabled: !live || !can('devtools'),
               onSelect: () => onNative('browser_devtools'),
             }]
@@ -1256,7 +1254,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
               onSelect: () => share(!current.shared),
             }]
           : []),
-        { label: 'Clear cookies and site data', icon: <Trash size={14} />, hint: can('clearSite') ? '' : 'Not in this build', danger: true, disabled: !can('clearSite'), onSelect: () => onNative('browser_clear_site') },
+        { label: 'Clear cookies and site data', icon: <Trash size={14} />, hint: can('clear_site') ? '' : 'Not available on this platform', danger: true, disabled: !can('clear_site'), onSelect: () => onNative('browser_clear_site') },
       ]
     }
     if (menu.kind === 'mark') {
@@ -1403,15 +1401,15 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
         <button
           type="button"
           className={plan.hidden ? 'bw-btn bw-tabsearch is-more' : 'bw-btn bw-tabsearch'}
-          title={plan.hidden ? `${plan.hidden} more ${plan.hidden === 1 ? 'tab' : 'tabs'}` : 'Your tabs'}
-          aria-label={plan.hidden ? `${plan.hidden} more tabs` : 'Your tabs'}
+          title={plan.hidden ? `${plan.hidden} more ${plan.hidden === 1 ? 'tab' : 'tabs'}` : 'All tabs'}
+          aria-label={plan.hidden ? `${plan.hidden} more tabs` : 'All tabs'}
           onClick={(e) => setMenu({ kind: 'tabs', ...anchorOf(e.currentTarget) })}
         >
           <CaretDown size={14} />
           {plan.hidden > 0 && <span className="bw-tab-more-count">{plan.hidden}</span>}
         </button>
         {onClosePane && (
-          <button type="button" className="bw-btn bw-tabsearch" title="Close the browser pane" onClick={onClosePane}>
+          <button type="button" className="bw-btn bw-tabsearch" title="Hide the browser (your tabs stay open)" aria-label="Hide the browser" onClick={onClosePane}>
             <X size={14} />
           </button>
         )}
@@ -1423,7 +1421,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
         // and with the reason the store found (no answer, no route, or the
         // daemon's own refusal).
         <p className="bw-marks-empty" role="status">
-          {bookmarksNote ?? 'Bookmarks are the list this window last saw: the daemon did not answer.'}
+          {bookmarksNote ?? "Bookmarks couldn't be synced. Showing your last saved list."}
         </p>
       )}
       {bookmarks.length > 0 && (barEverywhere || !live) && (
@@ -1470,7 +1468,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
             {lock === 'insecure' && <span className="bw-site-word">Not secure</span>}
           </button>
           {current?.private && (
-            <span className="bw-private" title="Private: no history, not saved for next time, nothing kept when it closes">
+            <span className="bw-private" title="Private: not saved to history, and its cookies and site data are not kept. Agents can't use it unless you allow it.">
               <Detective size={13} />
               Private
             </span>
@@ -1478,7 +1476,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
           <input
             ref={addressRef}
             value={address}
-            placeholder="Search Google or type a URL"
+            placeholder={`Search ${SEARCH_ENGINES[engine].name} or type a URL`}
             spellCheck={false}
             role="combobox"
             aria-label="Address"
@@ -1552,7 +1550,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
             type="button"
             data-bw-anchor="star"
             className={current?.url && bookmarkFor(bookmarks, current.url) ? 'bw-btn bw-star on' : 'bw-btn bw-star'}
-            title="Bookmark this page (Ctrl+D)"
+            title={current?.url && bookmarkFor(bookmarks, current.url) ? 'Edit bookmark (Ctrl+D)' : 'Bookmark this page (Ctrl+D)'}
             aria-label={current?.url && bookmarkFor(bookmarks, current.url) ? 'Edit this page bookmark' : 'Bookmark this page'}
             aria-pressed={Boolean(current?.url && bookmarkFor(bookmarks, current.url))}
             disabled={!current?.url}
@@ -1566,7 +1564,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
         <button
           type="button"
           className={`bw-btn${device ? ' on' : ''}`}
-          title={can('viewport') ? 'Device view' : 'Device view is not in this build yet'}
+          title={can('viewport') ? 'Device view' : 'Device view is not available on this platform'}
           disabled={!live || !can('viewport')}
           onClick={toggleDevice}
         >
@@ -1575,7 +1573,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
         <button
           type="button"
           className={`bw-btn${picking ? ' on' : ''}`}
-          title={can('cdp') ? 'Select an element to attach to the chat' : 'Selecting an element is not in this build yet'}
+          title={can('cdp') ? 'Select an element to attach to the chat' : 'Selecting an element is not available on this platform'}
           disabled={!live || !can('cdp')}
           onClick={picking ? cancelPick : startPick}
         >
@@ -1584,7 +1582,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
         <button
           type="button"
           className="bw-btn"
-          title={can('cdp') ? 'Screenshot to chat' : 'Screenshots are not in this build yet'}
+          title={can('cdp') ? 'Screenshot to chat' : 'Screenshots are not available on this platform'}
           disabled={!live || !can('cdp')}
           onClick={screenshot}
         >

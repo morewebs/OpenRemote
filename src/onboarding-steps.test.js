@@ -52,7 +52,7 @@ test('the offer line names what is missing and what the button does', () => {
   const { line } = installOffer(caps())
   assert.equal(
     line,
-    'No agent is installed on this computer yet. Install one and it appears in the app picker.',
+    'No App is installed on this computer yet. Install one and it appears in the App picker.',
   )
   // Nothing is preselected and nothing installs on its own: the line offers
   // the install, it does not promise one.
@@ -89,28 +89,28 @@ test('the ready step has a sentence for each state it can be reached in', () => 
   // Skipped the offer, or could not install yet: still able to continue.
   assert.equal(
     readyLine([], { known: true }),
-    'No agent is installed yet. Add one from the app picker whenever you are ready.',
+    'No App is installed yet. Add one from the App picker whenever you are ready.',
   )
   // An agent that can start a chat.
-  assert.equal(readyLine([harness()]), 'These agents are ready. Describe the work, pick a folder, and start a chat.')
+  assert.equal(readyLine([harness()]), 'These Apps are ready. Describe the work, pick a folder, and start a chat.')
   // Installed but needing the owner's login, singular and plural.
   assert.equal(
     readyLine([harness({ signed_in: false })]),
-    'Claude Code is installed but not signed in yet. Sign in from the app picker, then start a chat.',
+    'Claude Code is installed but not signed in yet. Sign in from the App picker, then start a chat.',
   )
   assert.equal(
     readyLine([harness({ signed_in: false }), harness({ id: 'codex', name: 'Codex', signed_in: false })]),
-    'Your agents are installed but not signed in yet. Sign in from the app picker, then start a chat.',
+    'Your Apps are installed but not signed in yet. Sign in from the App picker, then start a chat.',
   )
   // One usable is enough for the ready sentence.
   assert.equal(
     readyLine([harness(), harness({ id: 'codex', signed_in: false })]),
-    'These agents are ready. Describe the work, pick a folder, and start a chat.',
+    'These Apps are ready. Describe the work, pick a folder, and start a chat.',
   )
   // An API key stands in for a sign-in.
   assert.equal(
     readyLine([harness({ signed_in: false, using_api_key: true })]),
-    'These agents are ready. Describe the work, pick a folder, and start a chat.',
+    'These Apps are ready. Describe the work, pick a folder, and start a chat.',
   )
   assert.equal(readyLine(null), readyLine([]))
 })

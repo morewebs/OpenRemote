@@ -69,17 +69,6 @@ export function PluginDetailModal({ entry, onClose, onInstall }) {
             <div className="pg-detail-modal-header-info">
               <div className="pg-detail-modal-title-row">
                 <h2 className="dv-modal-title pg-details-name">{displayName}</h2>
-                {entry.version && (
-                  <span className="pg-version pg-version-badge">{entry.version}</span>
-                )}
-              </div>
-              <div className="pg-detail-modal-meta">
-                {technicalId && (
-                  <span className="pg-details-id pv">{technicalId}</span>
-                )}
-                {entry.author && (
-                  <span className="pg-detail-modal-author">by {entry.author}</span>
-                )}
               </div>
             </div>
           </div>
@@ -100,6 +89,12 @@ export function PluginDetailModal({ entry, onClose, onInstall }) {
           )}
 
           <div className="pg-review">
+            {technicalId && (
+              <div className="pg-review-row">
+                <span className="pg-review-label">Id</span>
+                <span className="pg-details-id pv">{technicalId}</span>
+              </div>
+            )}
             {entry.version && (
               <div className="pg-review-row">
                 <span className="pg-review-label">Version</span>
@@ -145,7 +140,7 @@ export function PluginDetailModal({ entry, onClose, onInstall }) {
                   ))}
                 </ul>
               ) : (
-                <span>Nothing beyond itself</span>
+                <span>Nothing extra: no programs, chats, network or microphone</span>
               )}
             </div>
           </div>

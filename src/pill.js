@@ -34,7 +34,7 @@ export function parsePill(text, ctx) {
   if (!wantsRule) {
     return {
       reply:
-        'Describe when it should fire and what the chat should do - e.g. "When the api pipeline on main fails, open a chat to bisect the flaky test."',
+        'Describe when it should fire and what the chat should do - e.g. "Create a rule: every day at 09:00, open a chat to triage new issues."',
     }
   }
 

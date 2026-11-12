@@ -77,7 +77,7 @@ test('every row the palette had is still offered', () => {
     "name: 'Race a prompt across apps'",
     "name: 'Since your last look'",
     "name: 'Changes in this chat'",
-    "name: 'Turn this chat into a recurring job'",
+    "name: 'Make an automation from this chat'",
   ]) {
     assert.ok(palette.includes(name), `${name} is still offered`)
   }

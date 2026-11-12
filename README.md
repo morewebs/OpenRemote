@@ -1,8 +1,9 @@
 # OpenRemote
 
-One window for the harnesses on this computer - run Claude Code, Codex,
-and the other harnesses side by side. A Rust daemon on this machine; a
-desktop console (Tauri 2 + React 19) for everything else.
+One window for your coding agents: run Claude Code, Codex, Grok Build and more
+side by side, approve what they do, and put routine work on a schedule.
+Local chats need no account. Cloud mode, if you sign in, syncs chats across
+your own computers, end to end encrypted.
 
 ## Install
 
@@ -46,7 +47,8 @@ Windows portable pair has its own `SHA256SUMS-portable-windows-x64`.
 
 ## Layout
 
-- `src/` + `src-tauri/` - the console (Vite + React 19), frameless Tauri 2 shell
+- `src/` + `src-tauri/` - the console (Vite + React 19), frameless Tauri 2 shell,
+  which runs a Rust daemon in the background
 - `daemon/` - the Rust workspace that wraps the harness CLIs and serves the
   console
 
@@ -81,7 +83,7 @@ bearer token lives in `~/.openremote/token`.
 Tests:
 
 ```sh
-npm test               # console tests: 1155 when this line was last checked
+npm test               # console tests
 node scripts/check-tab-acl.mjs   # what the desktop webview's capabilities grant
 cd daemon && cargo test --locked   # unit + e2e (drives the fixture agent)
 ```
@@ -89,11 +91,9 @@ cd daemon && cargo test --locked   # unit + e2e (drives the fixture agent)
 The first two run from the repo root and take no arguments. The console
 suite covers the rules behind each view and reads a few source files for
 the wiring only a browser could show; the daemon suite drives a real
-sidecar. Two further gates, `cd daemon && cargo fmt --all --check` and
-`cd daemon && cargo clippy --all-targets --locked -- -D warnings`, are red
-in this tree on eight unformatted files and three lints, none of them in
-the shell, so read their output before blaming your own change. AGENTS.md
-lists both.
+sidecar. CI also runs `cd daemon && cargo fmt --all --check` and
+`cd daemon && cargo clippy --all-targets --locked -- -D warnings` on every
+push to main and on pull requests; AGENTS.md lists both.
 
 ## Cloud mode
 

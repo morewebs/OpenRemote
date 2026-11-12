@@ -80,7 +80,7 @@ function MarkRow({ mark, renaming, dropBefore, dragging, drag, onOpen, onRename,
           <span className="bw-history-url pv">{bareAddress(mark.url)}</span>
         </button>
       )}
-      <button type="button" className="bw-btn bw-mark-more" title="More" aria-label="More" onClick={(e) => onMenu(e, mark)}>
+      <button type="button" className="bw-btn bw-mark-more" title="More actions for this bookmark" aria-label="More actions for this bookmark" onClick={(e) => onMenu(e, mark)}>
         <DotsThreeVertical size={14} weight="bold" />
       </button>
     </div>
@@ -185,7 +185,7 @@ export default function BrowserBookmarksModal({ marks, onOpen, onUpdate, onRemov
         onSelect: () => moveTo(mark, there, inFolder(marks, there).length),
       },
       { divider: true },
-      { label: 'Delete', icon: <Trash size={14} />, hint: 'Del', danger: true, onSelect: () => onRemove(mark.id) },
+      { label: 'Remove', icon: <Trash size={14} />, hint: 'Del', danger: true, onSelect: () => onRemove(mark.id) },
     ]
   }
 
@@ -214,7 +214,7 @@ export default function BrowserBookmarksModal({ marks, onOpen, onUpdate, onRemov
           <MagnifyingGlass size={14} />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search bookmarks" spellCheck={false} aria-label="Search bookmarks" />
         </label>
-        <p className="bw-marks-lead">Drag to reorder, or focus a bookmark and use Alt+Up and Alt+Down. F2 renames, Delete removes.</p>
+        <p className="bw-marks-lead">Drag to reorder, or focus a bookmark and use Alt+Up and Alt+Down. F2 renames, the Delete key removes.</p>
         <div className="bw-history-list">
           {Object.entries(FOLDERS).map(([folder, label]) => {
             const list = matching(marks, folder, filter)

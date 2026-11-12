@@ -84,7 +84,9 @@ export function PluginCard({ entry, onInstall, onInspect }) {
           <span className="pg-card-status pg-card-status--installed">Installed</span>
         )}
         {state === 'unavailable' && (
-          <span className="pg-card-status">Can&apos;t install</span>
+          <span className="pg-card-status" title={entry.why_not || undefined}>
+            Can&apos;t install
+          </span>
         )}
       </div>
     </div>

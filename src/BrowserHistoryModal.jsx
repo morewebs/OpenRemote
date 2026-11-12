@@ -40,7 +40,7 @@ export default function BrowserHistoryModal({ entries, onOpen, onClear, onClose 
           </button>
         </div>
         {!entries.length ? (
-          <p className="bw-history-empty">Nothing visited in this window yet.</p>
+          <p className="bw-history-empty">Pages you visit show here.</p>
         ) : (
           <div className="bw-history-list">
             {groups.map((group) => (

@@ -81,13 +81,12 @@ export default function HarnessManagerModal({ onClose, onSignIn }) {
           </button>
         </div>
         <p className="dv-modal-hint">
-          The coding agents on this machine. Install any that are missing - each one
-          comes from its maker&apos;s official installer.
+          The Apps on this computer. Install any that are missing - each one comes from its
+          maker&apos;s official installer.
         </p>
         {busy != null && (
           <p className="dv-modal-hint" role="status">
-            One install at a time: {harnessName(busy)} is installing. This stays open until the daemon
-            answers, so its words are not lost.
+            {harnessName(busy)} is installing. Only one App installs at a time.
           </p>
         )}
         <div className="dv-hm-list">

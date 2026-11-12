@@ -675,6 +675,21 @@ export default function NewChat({
   const canSend =
     (text.trim().length > 0 || attached.length > 0) && !busy && currentHarness && connection.state === 'connected'
     && !needsSignIn && !targetOffline && !bound
+  // A disabled send says why, the way the rule composer's does; the enabled one
+  // names the key.
+  const sendWhy = !currentHarness
+    ? 'Pick an App first.'
+    : connection.state !== 'connected'
+      ? 'Not connected.'
+      : needsSignIn
+        ? `Sign in to ${harnessLabel(currentHarness)} first.`
+        : targetOffline
+          ? 'That machine is offline.'
+          : bound
+            ? bound
+            : text.trim().length === 0 && attached.length === 0
+              ? 'Describe the task first.'
+              : null
   // The harness's own pre-send facts, each in its own words: what its
   // config says a fresh chat runs (grok's config.toml, agy's settings,
   // claude's priority chain), then its catalog's default marker (codex's
@@ -1337,8 +1352,8 @@ export default function NewChat({
                 type="button"
                 className="nc-preset-hover nc-preset-star"
                 aria-pressed={preset.default === true}
-                aria-label={preset.default ? 'New chats open on this setup' : 'Open new chats with this setup'}
-                title={preset.default ? 'New chats open on this setup' : 'Open new chats with this setup'}
+                aria-label={preset.default ? 'New chats open on this setup' : 'Make this the default for new chats'}
+                title={preset.default ? 'New chats open on this setup' : 'Make this the default for new chats'}
                 onClick={() => toggleDefaultPreset(preset.id)}
               >
                 <Star size={11} weight={preset.default ? 'fill' : 'regular'} />
@@ -1369,7 +1384,7 @@ export default function NewChat({
             className="nc-preset nc-preset-save"
             onClick={beginSave}
             disabled={!currentHarness}
-            title="Save the setup above as a preset"
+            title={currentHarness ? 'Save the current App, model, effort and permission as a setup' : 'Pick an App first.'}
           >
             <Plus size={12} weight="bold" />
             Save this setup
@@ -1409,8 +1424,8 @@ export default function NewChat({
           the console does not ship. */}
       {connection.state === 'connected' && !available.length && (
         <p className="nc-first-run" key="no-agent">
-          No agent is installed on this computer yet, so a chat has nowhere to run. Install one from
-          the app picker under the box; it scans this computer each time it opens.
+          No App is installed on this computer yet, so a chat has nowhere to run. Install one from
+          the App picker under the box.
         </p>
       )}
       <div
@@ -1715,7 +1730,7 @@ export default function NewChat({
               />
             )}
             {attachInput.button}
-            <button className="nc-send" onClick={start} disabled={!canSend} title="Start task">
+            <button className="nc-send" onClick={start} disabled={!canSend} title={sendWhy ?? 'Start chat (Enter)'}>
               <ArrowUp size={16} weight="bold" />
             </button>
           </div>
@@ -1726,7 +1741,7 @@ export default function NewChat({
             chatbox - its mark, the fact, and the way in. Not a card. */}
         {usingApiKey && (
           <div className="nc-auth nc-auth--key">
-            <p className="nc-auth-note">Using API Key</p>
+            <p className="nc-auth-note">{harnessLabel(currentHarness)} is using an API key</p>
             {SIGNIN_HARNESSES.has(currentHarness.id) && (
               <button type="button" className="nc-auth-btn nc-auth-btn--quiet" onClick={() => setSignInFor(currentHarness.id)}>
                 Sign in

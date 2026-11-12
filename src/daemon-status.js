@@ -20,9 +20,9 @@ export function detailOf(text) {
 // and quiet are three different pieces of news. Only the last is not
 // already being retried by the shell, so the second sentence differs.
 const TITLES = {
-  start: 'The daemon did not start',
-  stopped: 'The daemon exited',
-  silent: 'The daemon is running but silent',
+  start: "OpenRemote's background service did not start",
+  stopped: "OpenRemote's background service stopped",
+  silent: "OpenRemote's background service is running but not answering",
 }
 
 const RETRIED = 'It keeps trying on its own, every half minute at worst. Try now skips the wait.'
@@ -64,7 +64,7 @@ export function daemonStatus(info) {
   }
   return {
     tone: 'starting',
-    title: 'Waiting for the daemon',
+    title: "Waiting for OpenRemote's background service",
     detail: null,
     note: 'It starts with the app and usually takes a moment.',
     action: mobile ? null : 'try-now',

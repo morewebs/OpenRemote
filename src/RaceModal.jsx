@@ -120,10 +120,10 @@ export default function RaceModal({ free, onClose, onStarted }) {
       const name = plan.offerable.find((h) => h.id === stoppedAt.harness)?.name ?? stoppedAt.harness
       const opened =
         started.length === 0
-          ? 'Nothing else opened, and every app stays switched on.'
+          ? 'Nothing opened. Press Start to try again.'
           : started.length === 1
-            ? 'The one chat that opened is behind this dialog, and only the apps that did not start stay switched on.'
-            : `The ${started.length} chats that opened are behind this dialog, and only the apps that did not start stay switched on.`
+            ? 'The chat that started is open behind this dialog. Press Start to retry the rest.'
+            : `The ${started.length} chats that started are open behind this dialog. Press Start to retry the rest.`
       setChosen((current) => raceRetry(current, raced))
       setBusy(false)
       setFailure(`${name} could not start: ${stoppedAt.message}. ${opened}`)

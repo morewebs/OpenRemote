@@ -48,15 +48,15 @@ const BLURBS = {
   startup: 'What the app does when it opens.',
   keyboard: 'Keys for every action.',
   cloud: 'Your account and this device.',
-  harnesses: 'The apps OpenRemote can drive on this machine.',
+  harnesses: 'The apps OpenRemote can drive on this computer.',
   agents: "What a chat's agent may do with other chats: workers, how many, on which apps.",
-  'mcp-servers': 'Tools a session can call.',
+  'mcp-servers': 'Tools a chat can call.',
   plugins: "Each installed plugin's own settings. A secret stays with this computer.",
   models: 'Custom model endpoints on this computer, which a chat can run through.',
   browser: 'How the built-in browser searches, what it keeps on this computer, and where to clear it.',
   archived: 'Chats hidden on this computer.',
   confirmations: 'What OpenRemote asks before it acts on a chat.',
-  'this-install': 'The build you are running, its daemon, and the first-run steps.',
+  'this-install': 'The build you are running, its background service, and the first-run steps.',
 }
 
 const SECTION_LABEL = Object.fromEntries(SECTIONS.map((s) => [s.id, s.label]))
@@ -97,14 +97,14 @@ const ROWS = [
   // The daemon is part of this install, not a tab of its own: the rows read in
   // the section that says which build and which process are running, in the
   // order the section draws them.
-  row('install-version', 'this-install', 'OpenRemote version', 'The build and the daemon it talks to.', ['about', 'build', 'release', 'update', 'daemon']),
+  row('install-version', 'this-install', 'OpenRemote version', 'The build and the background service it talks to.', ['about', 'build', 'release', 'update', 'daemon']),
   row('install-updates', 'this-install', 'Updates', 'Looks for a newer signed release, and installs it when you say so.', ['update', 'updates', 'upgrade', 'new version', 'release', 'check']),
   row('install-updates-auto', 'this-install', 'Look for updates automatically', 'Once a day. Installing still waits for you.', ['update', 'updates', 'automatic', 'daily', 'check']),
-  row('daemon-connection', 'this-install', 'Daemon connection', 'The local process the chats run through.', ['connect', 'connection', 'token', 'local']),
-  row('daemon-connect', 'this-install', 'Connect by address', 'The address and token of a daemon you run yourself.', ['connect', 'address', 'token', 'manual', 'elsewhere']),
-  row('daemon-chats', 'this-install', 'Chats on record', 'Sessions survive daemon restarts; stopped ones can resume.', ['sessions', 'record', 'history', 'resume']),
-  row('daemon-address', 'this-install', 'Daemon address', 'The local address the console talks to.', ['url', 'port', 'data', 'folder', 'path']),
-  row('daemon-restart', 'this-install', 'Restart', 'Stops running chats and starts a fresh daemon.', ['stop', 'start', 'daemon']),
+  row('daemon-connection', 'this-install', 'Connection', 'The background service the chats run through.', ['connect', 'connection', 'token', 'local']),
+  row('daemon-connect', 'this-install', 'Connect by address', 'An OpenRemote service you run yourself, by its address and access key.', ['connect', 'address', 'token', 'manual', 'elsewhere']),
+  row('daemon-chats', 'this-install', 'Chats on record', 'Chats survive a restart of the background service; stopped ones can resume.', ['sessions', 'record', 'history', 'resume']),
+  row('daemon-address', 'this-install', 'Service address', 'The local address this window talks to.', ['url', 'port', 'data', 'folder', 'path']),
+  row('daemon-restart', 'this-install', 'Restart the background service', 'Stops running chats and starts the service again.', ['stop', 'start', 'daemon']),
   row('install-first-run', 'this-install', 'First-run steps', 'Shows them again. The chats stay.', ['onboarding', 'setup', 'replay', 'welcome']),
 
   // The built-in browser's own settings (the daemon keeps them, the open
@@ -115,7 +115,7 @@ const ROWS = [
   // (Settings drops the row elsewhere), so no button does nothing.
   row('browser-search', 'browser', 'Search engine', 'What the address bar searches when you type words, not an address.', ['search', 'search engine', 'google', 'duckduckgo', 'bing', 'brave', 'startpage', 'address bar', 'omnibox']),
   row('browser-bookmarks-bar', 'browser', 'Show bookmarks bar', 'On every page. Off, it shows on the new tab page only.', ['bookmarks bar', 'bookmarks', 'bar', 'show', 'hide', 'toolbar']),
-  row('browser-agent-tabs', 'browser', 'Give every chat my tabs and browser tools', "Each chat's agent hears which tabs you have open and gets every browser tool. Off, only a chat whose agent has used the browser does; the others can still list them. A chat already running picks this up at its next OpenRemote tool call, or when it next starts.", ['agents', 'agent', 'tabs', 'open tabs', 'tell', 'chats', 'browser tools', 'note', 'tokens']),
+  row('browser-agent-tabs', 'browser', 'Give every chat my tabs and browser tools', 'Every chat can see your open tabs and use the browser. Off, only chats that already used the browser can. Running chats pick this up shortly.', ['agents', 'agent', 'tabs', 'open tabs', 'tell', 'chats', 'browser tools', 'note', 'tokens']),
   row('browser-startup', 'browser', 'On startup', 'Your tabs from last time come back as you left them (private tabs never do), or the browser starts on a new tab.', ['startup', 'on startup', 'session', 'restore', 'continue', 'tabs', 'last time', 'reopen', 'new tab']),
   row('browser-import', 'browser', 'Import from another browser', 'Bookmarks and history from Chrome, Edge, Brave, Firefox or Safari on this computer. Never sign-ins, passwords or site data.', ['import', 'chrome', 'edge', 'brave', 'firefox', 'safari', 'vivaldi', 'opera', 'bookmarks', 'history', 'migrate', 'move', 'switch']),
   row('browser-adblock', 'browser', 'Block ads and trackers', 'Off until you turn it on and pick a filter list. Nothing is downloaded before then.', ['ads', 'ad block', 'adblock', 'block ads', 'trackers', 'tracking', 'privacy', 'filter', 'easylist', 'easyprivacy']),
@@ -123,12 +123,12 @@ const ROWS = [
   row('browser-adblock-sites', 'browser', 'Sites allowed to show ads', 'Nothing is blocked on these sites.', ['allow', 'allowed', 'whitelist', 'allowlist', 'exceptions', 'sites', 'ads', 'unblock']),
   row('browser-permissions', 'browser', 'Site permissions', 'What you told sites they may or may not use. Reset and the site asks again.', ['permissions', 'site permissions', 'camera', 'microphone', 'location', 'notifications', 'allow', 'block', 'reset', 'sites']),
   row('browser-bookmarks', 'browser', 'Bookmarks', 'Pages you keep on this computer. With it in Cloud they follow your account to your other devices; history never does.', ['bookmark', 'bookmarks', 'favourites', 'saved', 'star', 'kept', 'where', 'where kept']),
-  row('browser-history', 'browser', 'Pages read', "This window's reading record, on this computer only. A private tab is never recorded.", ['history', 'visited', 'pages', 'reading', 'record', 'private', 'where']),
-  row('browser-profile', 'browser', 'Cookies and site data', "The profile the browser's tabs share: cookies, site data, cache and service workers. Cleared per site from the browser's own menu.", ['cookies', 'cookie', 'site data', 'storage', 'cache', 'profile', 'sign out', 'clear']),
+  row('browser-history', 'browser', 'History', 'Pages in history, on this computer only. A private tab is never recorded.', ['history', 'visited', 'pages', 'reading', 'record', 'private', 'where']),
+  row('browser-profile', 'browser', 'Cookies and site data', "Cookies, site data and cache, shared by every tab on this computer. Clear one site from the browser's own menu.", ['cookies', 'cookie', 'site data', 'storage', 'cache', 'profile', 'sign out', 'clear']),
   row('browser-downloads', 'browser', 'Downloads', 'Files the tabs saved, in your Downloads folder. The list is the browser\'s own Downloads page.', ['downloads', 'download', 'files', 'saved', 'folder', 'where']),
-  row('browser-history-clear', 'browser', 'Clear history', "Empties this window's reading record. It asks once.", ['history', 'clear', 'delete', 'empty', 'forget', 'visited', 'erase']),
+  row('browser-history-clear', 'browser', 'Clear history', 'Empties the browser history. It asks once.', ['history', 'clear', 'delete', 'empty', 'forget', 'visited', 'erase']),
   row('browser-bookmarks-clear', 'browser', 'Clear bookmarks', 'Removes every kept page. It asks once.', ['bookmarks', 'bookmark', 'clear', 'remove', 'delete', 'empty', 'favourites']),
-  row('browser-clear-data', 'browser', 'Clear browsing data', "Pages read over a time range, and every site's cookies, site data and cached files.", ['clear', 'browsing data', 'cookies', 'cache', 'site data', 'history', 'sign out', 'delete', 'erase']),
+  row('browser-clear-data', 'browser', 'Clear browsing data', "History over a time range, and every site's cookies, site data and cached files.", ['clear', 'browsing data', 'cookies', 'cache', 'site data', 'history', 'sign out', 'delete', 'erase']),
   row('browser-downloads-open', 'browser', 'Show the last download', 'Opens the folder of the newest finished download.', ['downloads', 'download', 'open', 'show', 'reveal', 'folder', 'file']),
 ]
 

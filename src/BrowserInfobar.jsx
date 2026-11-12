@@ -31,7 +31,7 @@ export function PermissionBar({ prompt, onAnswer }) {
         <strong>{host}</strong> wants to {permissionAsk(prompt.kind, prompt.label)}
       </span>
       {!prompt.private && (
-        <label className="bw-check">
+        <label className="bw-check" title="Unticked, the site asks again next time">
           <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
           Remember for this site
         </label>
@@ -64,8 +64,8 @@ export function AgentBadge({ controller }) {
 }
 
 // A chat's agent in this tab. "Take over" pauses the agent's actions here
-// (it can still read the page); "Hand back" lets it go on; "Stop sharing"
-// ends its hold.
+// (it can still read the page); "Hand back" lets it go on; "Release" ends
+// its hold, which the agent takes again if it acts in the tab later.
 export function AgentBar({ controller, onControl }) {
   const paused = controller.kind === 'paused'
   const name = controller.title || 'A chat'
@@ -85,15 +85,30 @@ export function AgentBar({ controller, onControl }) {
       </span>
       {paused ? (
         <>
-          <button type="button" className="pn-btn" onClick={() => onControl('release')}>
-            Stop sharing
+          <button
+            type="button"
+            className="pn-btn"
+            title="Clear the agent's hold on this tab. It can take the tab again if it acts here."
+            onClick={() => onControl('release')}
+          >
+            Release
           </button>
-          <button type="button" className="pn-btn bw-primary" onClick={() => onControl('hand_back')}>
+          <button
+            type="button"
+            className="pn-btn bw-primary"
+            title="Let the agent act in this tab again"
+            onClick={() => onControl('hand_back')}
+          >
             Hand back
           </button>
         </>
       ) : (
-        <button type="button" className="pn-btn bw-primary" onClick={() => onControl('take_over')}>
+        <button
+          type="button"
+          className="pn-btn bw-primary"
+          title="Pause the agent here so you can use the page. It can still read it."
+          onClick={() => onControl('take_over')}
+        >
           Take over
         </button>
       )}

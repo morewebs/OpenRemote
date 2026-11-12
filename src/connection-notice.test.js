@@ -20,7 +20,7 @@ test('the two states that are not a fault yet say nothing', () => {
 test('a daemon that answered and then stopped says so, with the way to start it again', () => {
   const stopped = notice({ everConnected: true })
   assert.equal(stopped.tone, 'stopped')
-  assert.equal(stopped.title, 'The daemon stopped answering')
+  assert.equal(stopped.title, "OpenRemote's background service stopped answering")
   assert.equal(stopped.note, 'It may have exited. Starting it again usually brings the lists back.')
   assert.equal(stopped.action, 'restart')
 })
@@ -28,7 +28,7 @@ test('a daemon that answered and then stopped says so, with the way to start it 
 test('a daemon this window never reached has its own words, not the stopped ones', () => {
   const never = notice({ everConnected: false })
   assert.equal(never.tone, 'never')
-  assert.equal(never.title, 'The console is not connected to the daemon')
+  assert.equal(never.title, "OpenRemote is not connected to its background service")
   assert.notEqual(never.title, notice({ everConnected: true }).title, 'the two are never the same sentence')
   assert.equal(never.action, 'restart')
 })

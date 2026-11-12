@@ -148,7 +148,7 @@ export default function MetricsView() {
 
       {presence && (
         <>
-          <h2 className="pn-section">Agent presence</h2>
+          <h2 className="pn-section">This computer online</h2>
           <div className="mx-band">
             {presence.map((on, i) => (
               <span key={i} className={`mx-cell${on ? ' mx-cell--on' : ''}`} />

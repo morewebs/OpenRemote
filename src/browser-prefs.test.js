@@ -135,11 +135,10 @@ test('Settings draws the rows, writes through the shared cache, and hides what c
   assert.match(view, /data-stg="browser-agent-tabs"/)
   assert.match(view, /changeBrowserSetting\('agent_tabs', !agentTabs\)/)
   assert.match(view, /keys\.add\('browser-agent-tabs'\)/)
-  // The switch says what it gives, that the others can still list the tabs,
-  // and that a running chat picks it up at its next OpenRemote tool call or
-  // when it next starts; the search row reads the same.
+  // The switch says what it gives, what Off leaves, and that a running chat
+  // picks it up; the search row reads the same.
   const title = 'Give every chat my tabs and browser tools'
-  const detail = "Each chat's agent hears which tabs you have open and gets every browser tool. Off, only a chat whose agent has used the browser does; the others can still list them. A chat already running picks this up at its next OpenRemote tool call, or when it next starts."
+  const detail = 'Every chat can see your open tabs and use the browser. Off, only chats that already used the browser can. Running chats pick this up shortly.'
   assert.ok(view.includes(`<div className="pn-name">${title}</div>`), 'the switch is named')
   assert.ok(view.replace(/\s+/g, ' ').includes(detail), 'the switch explains itself')
   const row = SETTINGS_ENTRIES.find((e) => e.key === 'browser-agent-tabs')

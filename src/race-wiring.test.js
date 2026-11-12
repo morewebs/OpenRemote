@@ -61,7 +61,7 @@ test('the failure sentence says the opened chats are behind the dialog', () => {
     'a person is told where the chats that opened are, so closing the dialog shows them',
   )
   assert.ok(
-    modal.includes('stay switched on'),
+    modal.includes('Press Start to retry the rest'),
     'and that the harnesses that did not start are still selected for the retry',
   )
 })

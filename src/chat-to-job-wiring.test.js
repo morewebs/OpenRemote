@@ -20,7 +20,7 @@ test('the palette offers the command for the chat on screen, when a chat can see
   assert.match(palette, /projects: projects \?\? \[\]/)
   // Offered only when the plan says a chat can seed one.
   assert.match(palette, /const jobRow = job\.offer/)
-  assert.match(palette, /name: 'Turn this chat into a recurring job'/)
+  assert.match(palette, /name: 'Make an automation from this chat'/)
   assert.match(palette, /run: \{ job: job\.draft \}/)
 })
 

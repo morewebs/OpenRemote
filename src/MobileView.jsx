@@ -110,7 +110,7 @@ export default function MobileView({ onOpenChat }) {
               <div>
                 <div className="pn-name">Your Cloud did not answer.</div>
                 <div className="pn-detail">
-                  {connection?.error ?? 'The console could not read the account.'} Your phones are
+                  {connection?.error ?? 'OpenRemote could not read your account.'} Your phones are
                   not lost; this screen just cannot list them right now.
                 </div>
               </div>

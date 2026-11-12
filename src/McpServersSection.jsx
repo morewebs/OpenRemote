@@ -19,7 +19,7 @@ function serverState(p) {
   return 'running'
 }
 
-const STATE_LABEL = { running: 'Running', 'needs-key': 'Needs a key', off: 'Off' }
+const STATE_LABEL = { running: 'On', 'needs-key': 'Needs a key', off: 'Off' }
 
 function machineName(machines, id) {
   return (machines ?? []).find((m) => m.machine.id === id)?.machine.name ?? id
@@ -53,7 +53,6 @@ export default function McpServersSection() {
   // One machine is the honest local state - the plural, the hostname, and
   // the install picker return by themselves when remote machines check in.
   const oneMachine = (machines ?? []).length <= 1
-  const machineWord = oneMachine ? 'machine' : 'machines'
 
   const run = async (action, ...args) => {
     setError(null)
@@ -87,8 +86,8 @@ export default function McpServersSection() {
     <>
       <p className="pn-lead">
         {oneMachine
-          ? 'Tools a session can call, set up by hand. Each runs on this computer, and a key never leaves it.'
-          : 'Tools a session can call, set up by hand. Each runs on a machine, and a key never leaves that machine.'}
+          ? 'Tools a chat can call, set up by hand. Each runs on this computer, and a key never leaves it.'
+          : 'Tools a chat can call, set up by hand. Each runs on a machine, and a key never leaves that machine.'}
       </p>
       {installed.length > 0 && (
       <div className="pn-list pn-list--wide">
@@ -116,7 +115,7 @@ export default function McpServersSection() {
                   )}
                   {state === 'needs-key' && (
                     <button type="button" className="pn-btn on" onClick={() => run(() => acknowledgeMcpServerKey(p.id))}>
-                      Add key
+                      I&apos;ve set the key
                     </button>
                   )}
                   {state === 'off' && (
@@ -156,7 +155,7 @@ export default function McpServersSection() {
               <code className="pn-command pv">{p.command}</code>
               {state === 'needs-key' && (
                 <p className="pn-note">
-                  The key stays on {oneMachine ? 'this computer' : <span className="pv">{host}</span>}. Adding it here only records that {oneMachine ? 'it has' : 'the machine has'} one.
+                  Put the key where the server reads it on {oneMachine ? 'this computer' : <span className="pv">{host}</span>}, then press I&apos;ve set the key.
                 </p>
               )}
             </div>
@@ -168,7 +167,9 @@ export default function McpServersSection() {
         {installed.length === 0 && (
           <p className="pn-empty mcp-none">
             {mcpServersAnswered
-              ? `No MCP servers on your ${machineWord} yet.`
+              ? oneMachine
+                ? 'No MCP servers on this computer yet. Add one below.'
+                : 'No MCP servers on your machines yet. Add one below.'
               : 'Loading your MCP servers…'}
           </p>
         )}

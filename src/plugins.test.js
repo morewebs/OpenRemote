@@ -443,18 +443,17 @@ test('category filter options and searchEntries handle General and case-insensit
 
 test('a failed install sends the user back to reading the source', () => {
   // The daemon's own words come through, and the sentence adds what the
-  // screen now does: the staged copy is spent, so there is no Install to
-  // press again.
+  // screen now does: the review it came from is spent, so the way back is
+  // the source, not an Install to press again.
   const said = installFailedNote('the folder is in use by another program')
   assert.match(said, /the folder is in use by another program/)
   assert.match(said, /Nothing was installed/)
-  assert.match(said, /used up as soon as an install starts/)
-  assert.match(said, /read the same source again/)
+  assert.match(said, /open the plugin again from where you found it/)
   // A failure the daemon described with nothing at all still says
   // something a person can act on.
   const bare = installFailedNote('')
   assert.match(bare, /The install did not go through/)
-  assert.match(bare, /read the same source again/)
+  assert.match(bare, /open the plugin again from where you found it/)
   assert.doesNotMatch(bare, /^ .*Nothing was installed/)
   // It never claims the install can be retried from the same review.
   assert.doesNotMatch(said, /try again/i)

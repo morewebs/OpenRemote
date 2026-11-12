@@ -33,7 +33,7 @@ test('every scope the daemon offers has a label and a hint', () => {
 })
 
 test('an installed row names its project when it is for one', () => {
-  assert.equal(scopeLabel({ scope: 'machine' }), 'This machine')
+  assert.equal(scopeLabel({ scope: 'machine' }), 'This computer')
   assert.equal(scopeLabel({ scope: 'global' }), 'Every device')
   assert.equal(scopeLabel({ scope: 'project_local' }, 'site'), 'Project site')
   assert.equal(scopeLabel({ scope: 'project' }, 'site'), 'Project site, in its repo')

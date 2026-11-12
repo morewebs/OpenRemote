@@ -78,7 +78,7 @@ export default function PluginsView() {
         <div>
           <h1 className="dv-title">Plugins</h1>
           <p className="dv-meta">
-            The apps OpenRemote drives, and what you add to it. Each one is on this computer.
+            The Apps OpenRemote drives, and the plugins you add.
           </p>
         </div>
         {/* The dialog's own title, so the door and the panel agree: the dialog
@@ -271,6 +271,9 @@ function InstalledPlugins({ onUpdate, onReview }) {
       )}
 
       <h2 className="pn-section">Installed</h2>
+      {installed.length > 0 && (
+        <p className="pn-lead">Off stops a plugin on this computer and keeps its settings. Remove deletes it.</p>
+      )}
       {/* The list's one way in. A field over an empty list would be a control
           with nothing to act on, so it appears with the first installed
           plugin; its hint appears only once the list is long enough that a
@@ -345,7 +348,7 @@ function InstalledPlugins({ onUpdate, onReview }) {
                           chip says which list's row it also fills. */}
                       {p.harness && <span className="pg-badge-harness">App</span>}
                       {author && <span className="pg-author-badge">by {author}</span>}
-                      <span className="pg-badge-marketplace">@{p.marketplace}</span>
+                      {p.marketplace !== 'local' && <span className="pg-badge-marketplace">@{p.marketplace}</span>}
                     </div>
                     <div className="pn-detail">{p.description ?? RUNTIME_LABEL[p.runtime]}</div>
                   </div>
@@ -427,8 +430,11 @@ function InstalledPlugins({ onUpdate, onReview }) {
                 // tooltip is not saying it before it happens, because a person
                 // reading the armed row is not hovering anything.
                 <div className="pg-sub">
-                  Its folder on this computer is deleted. Its marketplace still lists it, so it can be
-                  installed again from there.{removeScopeNote(p) ? ` ${removeScopeNote(p)}` : ''}
+                  Its folder on this computer is deleted.{' '}
+                  {p.marketplace === 'local'
+                    ? 'Install it again from its folder, repo or archive to get it back.'
+                    : 'Its marketplace still lists it, so it can be installed again from there.'}
+                  {removeScopeNote(p) ? ` ${removeScopeNote(p)}` : ''}
                 </div>
               )}
             </div>

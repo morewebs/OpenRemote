@@ -41,7 +41,7 @@ export default function PillComposer({ onSubmit }) {
             submit()
           }
         }}
-        placeholder="Ask anything, or describe a rule…"
+        placeholder="Describe a rule: when it runs and what the chat does"
         spellCheck={false}
       />
       <button

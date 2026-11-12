@@ -57,8 +57,8 @@ function Asking({ ask }) {
           <strong className="pv">{title}</strong> has {workers}
           {running > 0 ? `, ${running} still running` : ''}.{' '}
           {archive
-            ? 'Archiving hides a chat on this computer; it keeps running.'
-            : 'Deleting it neither stops them nor deletes them, unless you say so.'}
+            ? 'Its workers are other chats this chat started. Archiving hides a chat on this computer; it keeps running.'
+            : 'Its workers are other chats this chat started. They keep running unless you delete them too.'}
         </p>
         <div className="ctx-modal-actions">
           <button type="button" className="pn-btn" onClick={cancel}>
@@ -67,24 +67,24 @@ function Asking({ ask }) {
           {archive ? (
             <>
               <button type="button" className="pn-btn" onClick={() => answerTeamAsk('leave')}>
-                Leave them
+                Archive this chat only
               </button>
               {running > 0 && (
                 <button type="button" className="pn-btn" onClick={() => answerTeamAsk('stop')}>
-                  Stop them, archive all
+                  Stop and archive all
                 </button>
               )}
               <button type="button" className="pn-btn on" onClick={() => answerTeamAsk('with')}>
-                Archive them too
+                Archive all
               </button>
             </>
           ) : (
             <>
               <button type="button" className="pn-btn" onClick={() => answerTeamAsk('keep')}>
-                Keep them
+                Delete this chat only
               </button>
               <button type="button" className="pn-btn pn-btn--danger" onClick={() => answerTeamAsk('delete')}>
-                Delete them too
+                Delete all
               </button>
             </>
           )}

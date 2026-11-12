@@ -40,7 +40,7 @@ export default function ContextRing({ used = 0, window = 0, nominal = false }) {
           {formatTokens(used)}{' '}
           <span>
             / {nominal ? '~' : ''}
-            {formatTokens(window)} tokens{nominal ? ' (nominal)' : ''}
+            {formatTokens(window)} tokens{nominal ? ' (estimate)' : ''}
           </span>
         </div>
         <div className="nc-ctx-bar">
@@ -52,7 +52,7 @@ export default function ContextRing({ used = 0, window = 0, nominal = false }) {
         </div>
         {nominal ? (
           <div className="nc-ctx-row">
-            <span>Window</span>
+            <span>Limit</span>
             <span>not reported yet</span>
           </div>
         ) : (

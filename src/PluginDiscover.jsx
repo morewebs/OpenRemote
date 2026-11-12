@@ -151,7 +151,11 @@ export default function PluginDiscover({ onInstall }) {
   if (!on.length) {
     return (
       <div className="pg-discover-view">
-        <p className="pn-empty">Every marketplace is off. Turn one on under Marketplaces.</p>
+        <p className="pn-empty">
+          {(marketplaces ?? []).length === 0
+            ? 'No marketplaces yet. Add one under Marketplaces.'
+            : 'Every marketplace is off. Turn one on under Marketplaces.'}
+        </p>
       </div>
     )
   }
@@ -295,7 +299,7 @@ export default function PluginDiscover({ onInstall }) {
                   className="pn-btn pg-error-btn"
                   onClick={() => handleRetry(m.name)}
                 >
-                  Retry
+                  Try again
                 </button>
                 <button
                   type="button"
@@ -334,8 +338,7 @@ export default function PluginDiscover({ onInstall }) {
         <div className="pg-sections">
           {all.length === 0 && !fetching.length && (
             <p className="pn-empty">
-              No marketplace has answered yet. A marketplace's catalog is read once and kept on this
-              computer; use the refresh button above once one is on.
+              No marketplace has answered yet. Refresh one under Marketplaces to see its plugins.
             </p>
           )}
           {all.length === 0 && fetching.length > 0 && (

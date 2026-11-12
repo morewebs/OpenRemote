@@ -99,7 +99,7 @@ export function useComposerMenus({
   // or when the daemon reconnects. Reopening the menu on the same word does
   // not ask again, so it is not offered here.
   const unavailableLine = unavailable
-    ? 'Commands and agents did not load. They load again when the chat changes or the daemon reconnects.'
+    ? 'Commands and agents did not load. They load again when you switch chats or the connection comes back.'
     : null
 
   // Said in place of the files when their ask failed. Files are asked again on

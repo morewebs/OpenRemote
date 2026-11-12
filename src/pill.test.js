@@ -18,6 +18,15 @@ test('a sentence without a when is not a rule - guidance, not a draft', () => {
   assert.match(out.reply, /Describe when it should fire/)
 })
 
+test('the example the guidance gives drafts a rule that can be created', () => {
+  const out = parsePill('what can you do?', ctx)
+  const example = /e\.g\. "([^"]+)"/.exec(out.reply)[1]
+  const { draft } = parsePill(example, ctx)
+  assert.equal(draft.trigger.kind, 'schedule')
+  assert.equal(draft.trigger.time, '09:00')
+  assert.equal(draft.task, 'triage new issues')
+})
+
 test('a rule-shaped sentence drafts with its own words', () => {
   const out = parsePill(
     'When the api pipeline on main fails, open a chat with codex to bisect the flaky test.',

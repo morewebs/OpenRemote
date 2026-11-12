@@ -1282,7 +1282,7 @@ function Shell() {
                   <span className="cn-text">{daemonRow.note}</span>
                   {daemonRow.action === 'restart' && (
                     <button type="button" className="cn-btn primary" onClick={retryDaemon}>
-                      Restart the daemon
+                      Restart the background service
                     </button>
                   )}
                   <button type="button" className="cn-btn" onClick={() => goView('settings')}>

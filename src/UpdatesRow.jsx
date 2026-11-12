@@ -1,6 +1,7 @@
 import { useState, useSyncExternalStore } from 'react'
 import Toggle from './Toggle.jsx'
 import { errorCopy } from './error-copy.js'
+import { openExternal } from './platform.js'
 import {
   autoCheck,
   checkForUpdates,
@@ -14,6 +15,10 @@ import {
 // keep looking. Installing always waits for the user's click: the app stops
 // its daemon and restarts into the new version, so it never happens under
 // them.
+
+// Where a build without the updater sends people for a new version.
+const RELEASE_PAGE = 'https://github.com/morewebs/OpenRemote/releases/latest'
+
 export default function UpdatesRow() {
   const s = useSyncExternalStore(subscribeUpdates, updateState)
   const [auto, setAuto] = useState(autoCheck)
@@ -22,14 +27,16 @@ export default function UpdatesRow() {
     : s.checking
       ? 'Looking for a newer version…'
       : !s.enabled
-        ? "Updates aren't switched on in this build yet. New releases install from the release page."
+        ? "This build can't update itself. Download new versions from the release page on GitHub."
         : s.available
           ? `Version ${s.available.version} is ready. Your chats stop while the app restarts.`
           : s.error
             ? errorCopy(s.error)
             : s.checkedAt
               ? 'This is the newest version.'
-              : 'Looks once a day while the app runs.'
+              : auto
+                ? 'Looks once a day while the app runs.'
+                : 'Not checked yet. Press Check now.'
   return (
     <>
       <div className="pn-row" data-stg="install-updates">
@@ -37,7 +44,15 @@ export default function UpdatesRow() {
           <div className="pn-name">Updates</div>
           <div className="pn-detail">{status}</div>
         </div>
-        {s.available && s.enabled ? (
+        {!s.enabled ? (
+          <button
+            type="button"
+            className="pn-btn"
+            onClick={() => openExternal(RELEASE_PAGE).catch(() => {})}
+          >
+            Open release page
+          </button>
+        ) : s.available ? (
           <button type="button" className="pn-btn" onClick={installUpdate} disabled={s.installing}>
             Update and restart
           </button>
@@ -47,6 +62,8 @@ export default function UpdatesRow() {
           </button>
         )}
       </div>
+      {/* A build that cannot update itself has nothing to look for. */}
+      {s.enabled && (
       <div className="pn-row" data-stg="install-updates-auto">
         <div>
           <div className="pn-name">Look for updates automatically</div>
@@ -61,6 +78,7 @@ export default function UpdatesRow() {
           }}
         />
       </div>
+      )}
     </>
   )
 }

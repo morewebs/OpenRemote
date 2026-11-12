@@ -420,7 +420,7 @@ export default function CommandPalette({ recentChatIds, onClose, onOpenChat, onO
           {
             key: 'action:chat-job',
             section: 'Actions',
-            name: 'Turn this chat into a recurring job',
+            name: 'Make an automation from this chat',
             icon: <Repeat size={15} />,
             run: { job: job.draft },
           },

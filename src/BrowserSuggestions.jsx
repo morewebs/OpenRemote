@@ -17,7 +17,7 @@ export default function BrowserSuggestions({ id, rows, active, onPick }) {
         >
           <span className="bw-suggest-title">{row.title || row.url}</span>
           <span className="bw-suggest-url">{row.url}</span>
-          {row.kept && <span className="bw-suggest-kept">Kept</span>}
+          {row.kept && <span className="bw-suggest-kept">Bookmark</span>}
         </div>
       ))}
     </div>

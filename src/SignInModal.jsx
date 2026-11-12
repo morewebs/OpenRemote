@@ -6,6 +6,7 @@ import { useBack } from './use-back.js'
 import { useDialog } from './dialog-focus.js'
 import { errorCopy } from './error-copy.js'
 import { addressLabel, readSignInWords } from './signin-words.js'
+import { harnessName } from './harness-names.js'
 
 // The harness's own sign-in, relayed. The daemon runs the CLI's own
 // login command on the machine; the CLI's words stream in here (the
@@ -122,9 +123,9 @@ export default function SignInModal({ harnessId, onDone, deviceId = null }) {
         if (e.target === e.currentTarget && (settled || error)) close()
       }}
     >
-      <div className="si-modal" ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`Sign in to ${harnessId}`}>
+      <div className="si-modal" ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`Sign in to ${harnessName(harnessId)}`}>
         <div className="si-head">
-          <h2 className="si-title">Sign in</h2>
+          <h2 className="si-title">Sign in to {harnessName(harnessId)}</h2>
           <button
             className="si-close"
             onClick={close}

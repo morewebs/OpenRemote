@@ -70,6 +70,9 @@ export default function MachinesView({ onOpenChat, openDevice = null }) {
     <div className="devices">
       <header className="dv-head">
         <h1 className="dv-title">Machines</h1>
+        {/* The page lists every device of the account, phones included, so
+            the one word it is named for is said once, plainly. */}
+        <p className="dv-meta">A machine runs chats for your other devices. Every device in your Cloud is listed here.</p>
         <p className="dv-meta">
           {devicesAnswered
             ? `${list.length} ${list.length === 1 ? 'device' : 'devices'} · ${onlineCount} online`
@@ -126,7 +129,7 @@ export default function MachinesView({ onOpenChat, openDevice = null }) {
               {device.problem === 'key_changed' ? (
                 <>
                   <span className="dv-dot dv-dot--offline" />
-                  Key changed
+                  Key changed - open to fix
                 </>
               ) : (
                 <>

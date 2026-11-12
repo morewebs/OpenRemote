@@ -218,7 +218,7 @@ export default function AutomationsView({ onOpenChat }) {
       // user's text with no reply, no draft, no error).
       out = {
         reply:
-          'That did not parse - write it as one step, e.g. "When the api pipeline on main fails, open a chat to bisect the flaky test."',
+          'That did not parse - write it as one step, e.g. "Create a rule: every day at 09:00, open a chat to triage new issues."',
       }
     }
     if (out.reply) {

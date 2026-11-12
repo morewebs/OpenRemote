@@ -36,7 +36,7 @@ export function installOffer(capabilities) {
     offer,
     installed: installed.length,
     line: offer
-      ? 'No agent is installed on this computer yet. Install one and it appears in the app picker.'
+      ? 'No App is installed on this computer yet. Install one and it appears in the App picker.'
       : null,
   }
 }
@@ -62,15 +62,15 @@ export function readyLine(installed, { known = true } = {}) {
   const rows = installed ?? []
   if (!known) return 'Checking what is installed on this computer.'
   if (rows.length === 0) {
-    return 'No agent is installed yet. Add one from the app picker whenever you are ready.'
+    return 'No App is installed yet. Add one from the App picker whenever you are ready.'
   }
   const usable = rows.filter((row) => harnessState(row) !== 'Not signed in')
   if (usable.length === 0) {
     return rows.length === 1
-      ? `${harnessName(rows[0].id)} is installed but not signed in yet. Sign in from the app picker, then start a chat.`
-      : 'Your agents are installed but not signed in yet. Sign in from the app picker, then start a chat.'
+      ? `${harnessName(rows[0].id)} is installed but not signed in yet. Sign in from the App picker, then start a chat.`
+      : 'Your Apps are installed but not signed in yet. Sign in from the App picker, then start a chat.'
   }
-  return 'These agents are ready. Describe the work, pick a folder, and start a chat.'
+  return 'These Apps are ready. Describe the work, pick a folder, and start a chat.'
 }
 
 /// The steps the wizard can visit, in order, for the progress dots. The

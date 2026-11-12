@@ -21,7 +21,7 @@ export const POWER_LABEL = {
 export const POWER_SHORT = {
   run_programs: 'Runs programs',
   read_chats: 'Reads chats',
-  agent_tools: 'Agent tools',
+  agent_tools: 'Agent tools and chats',
   network: 'Network',
   microphone: 'Microphone',
 }
@@ -47,7 +47,7 @@ export const CLAUDE_PART_LABEL = {
 // Who a plugin is for, as the install review offers it.
 export const SCOPE_LABEL = {
   global: 'Every device',
-  machine: 'This machine',
+  machine: 'This computer',
   project_local: 'One project, outside its repo',
   project: 'One project, in its repo',
 }
@@ -109,7 +109,7 @@ export function removeScopeNote(plugin) {
 // since it was approved) or the account's (not here yet, or a newer copy).
 export function reviewWaitingLine(item, projectName = null) {
   if (item?.kind === 'account') {
-    if (item.why === 'removed') return 'Removed on another device - it is off here until you remove it or turn it back on'
+    if (item.why === 'removed') return 'Removed on another device - it is off here until you remove it or turn it back on under Installed'
     return item.why === 'update' ? 'A newer copy is on your other devices' : 'On your other devices, not here yet'
   }
   if (item?.why === 'changed') return 'Changed in the repo since you approved it'
@@ -391,7 +391,7 @@ export function sourceRequest(kind, value) {
 export function installFailedNote(message) {
   const said = String(message ?? '').trim()
   const why = said || 'The install did not go through.'
-  return `${why} Nothing was installed. The staged copy is used up as soon as an install starts, so read the same source again to retry.`
+  return `${why} Nothing was installed. To retry, open the plugin again from where you found it.`
 }
 
 // ---- the Installed tab's search ----

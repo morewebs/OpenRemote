@@ -82,7 +82,7 @@ test('a registered project with no chats keeps its row and says so', () => {
   // A project whose folder is gone is its own sentence rather than reading as empty:
   // its chats have fallen to the flat list, so "No chats yet" would be the wrong news.
   assert.ok(
-    source.slice(empty, empty + 400).includes('No folder behind this project'),
+    source.slice(empty, empty + 400).includes("This project's folder is gone"),
     'and a folder-less project says what happened to it',
   )
 })

@@ -269,8 +269,8 @@ export default function EndpointManager({ harness, deviceId = null, onChanged = 
     <div>
       {!executable && (
         <p className="pn-note">
-          {harnessName(harness)} endpoints can be stored, but chats can't run through them yet -
-          only claude executes custom endpoints today.
+          {harnessName(harness)} endpoints can be stored, but chats can't run through them yet.
+          Only {harnessName('claude')} runs custom endpoints today.
         </p>
       )}
       {pending ? (
@@ -319,7 +319,7 @@ export default function EndpointManager({ harness, deviceId = null, onChanged = 
                   {tested[entry.id] && (
                     <div className="pn-detail">
                       {tested[entry.id].ok
-                        ? `Lists ${tested[entry.id].count} model${tested[entry.id].count === 1 ? '' : 's'} today.`
+                        ? `Lists ${tested[entry.id].count} model${tested[entry.id].count === 1 ? '' : 's'}.`
                         : tested[entry.id].message}
                     </div>
                   )}
@@ -333,7 +333,7 @@ export default function EndpointManager({ harness, deviceId = null, onChanged = 
                   </button>
                   {!entry.is_default && entry.enabled && (
                     <button type="button" className="pn-btn" onClick={() => makeDefault(entry.id)}>
-                      Default
+                      Make default
                     </button>
                   )}
                   <button type="button" className="pn-btn" onClick={() => setEnabled(entry.id, !entry.enabled)}>

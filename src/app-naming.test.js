@@ -34,6 +34,8 @@ test('the surfaces a person meets say App', () => {
   assert.match(source('SettingsView.jsx'), /h2 className="stg-title">Apps</)
   assert.match(source('PluginsView.jsx'), />App</)
   assert.match(source('RaceModal.jsx'), />Apps</)
+  assert.match(source('AgentsSection.jsx'), />Apps workers may use</)
+  assert.doesNotMatch(source('AgentsSection.jsx'), /any harness installed|>Harnesses/)
   assert.equal(HARNESS_STOP_NAME, "Stop one app's chats")
   assert.equal(ACTIONS.find((a) => a.id === 'pick-harness').label, 'App (new chat)')
 })

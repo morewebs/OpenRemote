@@ -21,6 +21,7 @@ import {
 } from '@phosphor-icons/react'
 import AboutModal from './AboutModal.jsx'
 import UpdatesRow from './UpdatesRow.jsx'
+import { subscribeUpdates, updateState } from './updates.js'
 import McpServersSection from './McpServersSection.jsx'
 import PluginSettings from './PluginSettings.jsx'
 import { usePlugins } from './plugins-host.jsx'
@@ -438,7 +439,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
       // other way round means the change did not take, and the row must not
       // look as though it did.
       if (next && typeof next.keep_running === 'boolean' && next.keep_running !== wanted) {
-        setStartupNote('Keep running in the tray is unchanged: the shell did not take the change.')
+        setStartupNote('Keep running in the tray is unchanged: OpenRemote could not change this setting.')
       }
     } catch (err) {
       setStartupNote(errorCopy(err))
@@ -477,7 +478,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
       // other way round means the change did not take, and the row must not
       // look as though it did.
       if (next && typeof next.keep_above === 'boolean' && next.keep_above !== wanted) {
-        setStartupNote('Keep above other windows is unchanged: the shell did not take the change.')
+        setStartupNote('Keep above other windows is unchanged: OpenRemote could not change this setting.')
       }
     } catch (err) {
       setStartupNote(errorCopy(err))
@@ -558,6 +559,8 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
   // armed row is the same rule as the project's (one press to ask, one to
   // act), and the note carries the store's own words when an action finishes.
   const browserStore = useSyncExternalStore(subscribeBrowser, getBrowserState)
+  // Whether this build can update itself, so the search drops a row it hides.
+  const updates = useSyncExternalStore(subscribeUpdates, updateState)
   const [armedBrowser, setArmedBrowser] = useState(null)
   const [browserNote, setBrowserNote] = useState(null)
   // The browser's own settings (the daemon keeps them; browser-prefs.js
@@ -766,6 +769,8 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
       keys.add('install-updates')
       keys.add('install-updates-auto')
     }
+    // A build that cannot update itself hides the automatic-look row.
+    if (!updates.enabled) keys.add('install-updates-auto')
     if (isMobile) {
       for (const key of [
         'install-first-run',
@@ -779,7 +784,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
       }
     }
     return keys
-  }, [models, effortTiers, permissionWords, autoStart, tray, above, daemonDetail, onManualConnect, connection.state, kb, profileClearable, adblockShown])
+  }, [models, effortTiers, permissionWords, autoStart, tray, above, daemonDetail, onManualConnect, connection.state, kb, profileClearable, adblockShown, updates.enabled])
 
   const searchable = useMemo(() => {
     const ids = new Set(tabs.map((s) => s.id))
@@ -1071,7 +1076,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
             <div className="stg-empty">
               <p className="stg-empty-name">Nothing matches "{query.trim()}".</p>
               <p className="stg-empty-detail">
-                Try a section name, or a word like "motion", "shortcut", or "daemon".
+                Try a section name, or a word like "motion", "shortcut", or "privacy".
               </p>
             </div>
           ) : (
@@ -1115,7 +1120,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
           >
             <header className="stg-head">
               <h2 className="stg-title">New tasks</h2>
-              <p className="stg-lead">What a new chat starts with. The composers still change their minds.</p>
+              <p className="stg-lead">What a new chat starts with. Each new chat can still change these.</p>
             </header>
             <div className="pn-list pn-list--tight">
               <div className="pn-row" data-stg="new-tasks-harness">
@@ -1203,7 +1208,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                               setManagingEndpoints(true)
                             }}
                           >
-                            Manage models…
+                            Manage endpoints…
                           </button>
                         ) : null
                       }
@@ -1373,7 +1378,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
         >
           <header className="stg-head">
             <h2 className="stg-title">Appearance</h2>
-            <p className="stg-lead">Space, not themes - the dark theme is the contract.</p>
+            <p className="stg-lead">Spacing, motion and privacy.</p>
           </header>
           <div className="pn-list pn-list--tight">
             <div className="pn-row" data-stg="appearance-density">
@@ -1748,17 +1753,17 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
           >
             <header className="stg-head">
               <h2 className="stg-title">Apps</h2>
-              <p className="stg-lead">The apps OpenRemote can drive on this machine. Install an app's own CLI and it appears here.</p>
+              <p className="stg-lead">The apps OpenRemote can drive on this computer. Install an app's own CLI and it appears here.</p>
             </header>
             <div className="pn-list pn-list--tight">
               {harnessList.map((h) => (
                 <div className="pn-row" key={h.id} data-stg={`harness-${h.id}`}>
                   <div>
                     <div className="pn-name">{harnessName(h.id)}</div>
-                    <div className="pn-detail">{h.available ? <span className="pv">{h.path}</span> : 'This app is not installed on this machine.'}</div>
+                    <div className="pn-detail">{h.available ? <span className="pv">{h.path}</span> : 'This app is not installed on this computer.'}</div>
                   </div>
                   {h.available && h.using_api_key && h.signed_in !== true ? (
-                    <span className="pn-btn">Using API key</span>
+                    <span className="pn-state">Using API key</span>
                   ) : h.available && h.signed_in === false && SIGNIN_HARNESSES.has(h.id) ? (
                     <button type="button" className="pn-btn" onClick={() => setSignInFor(h.id)}>
                       Sign in
@@ -1840,8 +1845,8 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
               <h2 className="stg-title">Models</h2>
               <p className="stg-lead">
                 Custom model endpoints on this computer - a self-hosted gateway or a relay
-                on this network that speaks an OpenAI-compatible models API. The daemon
-                holds the keys; the console never sees them.
+                on this network that speaks an OpenAI-compatible models API. Keys stay in
+                OpenRemote's background service and are never shown again.
               </p>
             </header>
             {(harnessList ?? []).filter((h) => h.custom_endpoint_supported).length === 0 ? (
@@ -1849,7 +1854,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                 <div className="pn-row">
                   <div>
                     <div className="pn-name">No supported app</div>
-                    <div className="pn-detail">Custom endpoints arrive with claude - install it to add one.</div>
+                    <div className="pn-detail">Custom endpoints need {harnessName('claude')}. Install it to add one.</div>
                   </div>
                 </div>
               </div>
@@ -1969,9 +1974,8 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                   <div>
                     <div className="pn-name">Give every chat my tabs and browser tools</div>
                     <div className="pn-detail">
-                      Each chat's agent hears which tabs you have open and gets every browser tool. Off, only a chat
-                      whose agent has used the browser does; the others can still list them. A chat already running
-                      picks this up at its next OpenRemote tool call, or when it next starts.
+                      Every chat can see your open tabs and use the browser. Off, only chats that already used the
+                      browser can. Running chats pick this up shortly.
                     </div>
                   </div>
                   <Toggle
@@ -2107,9 +2111,9 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
               </div>
               <div className="pn-row" data-stg="browser-history">
                 <div>
-                  <div className="pn-name">Pages read</div>
+                  <div className="pn-name">History</div>
                   <div className="pn-detail">
-                    {historyCount} in this window's reading record, on this computer
+                    {historyCount} {historyCount === 1 ? 'page' : 'pages'} in history, on this computer
                     only. A private tab is never recorded.
                   </div>
                 </div>
@@ -2121,10 +2125,8 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                       on, so this is a fact about where it lives rather than an
                       action that would do nothing from here. */}
                   <div className="pn-detail">
-                    The profile the browser's tabs share on this computer: cookies,
-                    site data, cache and service workers. It is cleared per site
-                    from the browser's own menu, where the shell has the tab to
-                    clear{profileClearable ? ', or for every site with Clear browsing data below' : ''}.
+                    Shared by every tab on this computer. Clear one site from the
+                    browser's own menu{profileClearable ? ', or every site with Clear browsing data below' : ''}.
                   </div>
                 </div>
               </div>
@@ -2143,7 +2145,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
               <div className="pn-row" data-stg="browser-history-clear">
                 <div>
                   <div className="pn-name">Clear history</div>
-                  <div className="pn-detail">Empties this window's reading record. It asks once.</div>
+                  <div className="pn-detail">Empties the browser history. It asks once.</div>
                 </div>
                 {rowIsArmed(armedBrowser, 'browser-history-clear') ? (
                   <button
@@ -2211,7 +2213,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                   <div>
                     <div className="pn-name">Clear browsing data</div>
                     <div className="pn-detail">
-                      Pages read over a time range, and every site's cookies, site data and cached files.
+                      History over a time range, and every site's cookies, site data and cached files.
                     </div>
                   </div>
                   <button type="button" className="pn-btn" onClick={() => setClearingData(true)}>
@@ -2371,14 +2373,14 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
           <header className="stg-head">
             <h2 className="stg-title">This install</h2>
             <p className="stg-lead">
-              The build you're running, the daemon behind it, and the first-run steps.
+              The build you're running, the service behind it, and the first-run steps.
             </p>
           </header>
           <div className="pn-list pn-list--tight">
             <div className="pn-row" data-stg="install-version">
               <div>
                 <div className="pn-name">OpenRemote {version}</div>
-                <div className="pn-detail">Daemon {capabilities?.daemon ?? '-'} · the parity build</div>
+                <div className="pn-detail">Background service {capabilities?.daemon ?? '-'}</div>
               </div>
               <button type="button" className="pn-btn" onClick={() => setAbout(true)}>About</button>
             </div>
@@ -2398,7 +2400,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                       {connection.state === 'connected'
                         ? confirmDisconnect
                           ? 'The saved address and token are forgotten; your chats, plugins and settings stay.'
-                          : 'Bearer token accepted.'
+                          : "Connected to OpenRemote's background service on this computer."
                         : connection.error ?? 'Start the app, or use Connect by address below.'}
                     </div>
                   </div>
@@ -2409,7 +2411,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                   {confirmDisconnect ? (
                     <div className="pn-actions">
                       <button type="button" className="pn-btn" onClick={() => setConfirmDisconnect(false)}>Cancel</button>
-                      <button type="button" className="pn-btn" onClick={disconnect}>Disconnect</button>
+                      <button type="button" className="pn-btn" onClick={disconnect}>Forget</button>
                     </div>
                   ) : connection.state === 'connected' ? (
                     <button
@@ -2428,7 +2430,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                   <div className="pn-row" data-stg="daemon-connect">
                     <div>
                       <div className="pn-name">Connect by address</div>
-                      <div className="pn-detail">Type the address and token of a daemon you run yourself.</div>
+                      <div className="pn-detail">Connect to an OpenRemote service you run yourself, by its address and access key.</div>
                     </div>
                     <button type="button" className="pn-btn" onClick={onManualConnect}>
                       Connect
@@ -2438,7 +2440,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                 <div className="pn-row" data-stg="daemon-chats">
                   <div>
                     <div className="pn-name">{(sessions ?? []).length} {(sessions ?? []).length === 1 ? 'chat' : 'chats'} on record</div>
-                    <div className="pn-detail">Sessions survive daemon restarts; stopped ones can resume.</div>
+                    <div className="pn-detail">Chats survive a restart of the background service; stopped ones can resume.</div>
                   </div>
                 </div>
                 {daemonDetail?.url && (
@@ -2454,11 +2456,11 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                 {hasTauri && (
                   <div className="pn-row" data-stg="daemon-restart">
                     <div>
-                      <div className="pn-name">Restart</div>
+                      <div className="pn-name">Restart the background service</div>
                       <div className="pn-detail">
                         {restarting
-                          ? 'The daemon is coming back; the console reconnects on its own.'
-                          : 'Stops running chats (stopped ones can resume) and starts a fresh daemon.'}
+                          ? 'The background service is coming back; this window reconnects on its own.'
+                          : 'Stops running chats (stopped ones can resume) and starts the service again.'}
                       </div>
                     </div>
                     <button

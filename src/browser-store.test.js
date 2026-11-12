@@ -174,7 +174,7 @@ test('a daemon with no bookmarks route says so, and one that is silent says that
   try {
     assert.equal(await refreshBookmarks(), false)
     assert.equal(getState().bookmarksStale, true)
-    assert.match(getState().bookmarksNote, /does not keep them yet/)
+    assert.match(getState().bookmarksNote, /until OpenRemote is updated/)
   } finally {
     delete globalThis.localStorage
     delete globalThis.fetch
@@ -185,7 +185,7 @@ test('a daemon with no bookmarks route says so, and one that is silent says that
   })
   try {
     assert.equal(await refreshBookmarks(), false)
-    assert.match(getState().bookmarksNote, /did not answer/)
+    assert.match(getState().bookmarksNote, /isn't responding/)
   } finally {
     delete globalThis.localStorage
     delete globalThis.fetch

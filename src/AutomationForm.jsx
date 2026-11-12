@@ -483,13 +483,23 @@ export default function AutomationForm({ rule, onClose }) {
               </span>
             )}
           </div>
+          {/* The daemon reads the local clock and arms a daily rule for its
+              exact minute (supervisor.rs, schedule_due): a minute it was not
+              running for is skipped, never caught up. An interval counts
+              from the last run, so a gap ends in one run, not several. */}
+          {kind === 'schedule' && (
+            <p className="af-when-note">
+              {cadence === 'daily'
+                ? "Uses this computer's clock. If OpenRemote is closed or the computer is asleep at that time, that day's run is skipped."
+                : 'Counts from the last run. If OpenRemote was closed, it runs once when it is open again.'}
+            </p>
+          )}
           {kind === 'webhook' && (
             <p className="af-when-note">
               {hookUrl
-                ? 'The hook answers only on this computer, at the address shown on the saved '
-                  + 'rule, and the key in that URL is its credential. That address changes each '
-                  + 'time OpenRemote starts, so a script reads the current one first rather than '
-                  + 'hardcoding it.'
+                ? 'The address changes each time OpenRemote starts. Copy the current one from '
+                  + 'this rule in the Automations list; it only works on this computer, and the '
+                  + 'key in it acts as a password.'
                 : 'The hook URL appears on the rule once it is saved.'}
             </p>
           )}

@@ -62,14 +62,14 @@ export function connectionNotice({
   if (everConnected) {
     return {
       tone: 'stopped',
-      title: 'The daemon stopped answering',
+      title: "OpenRemote's background service stopped answering",
       note: detail ?? (restartable ? STOPPED : STOPPED_MANUAL),
       action: restartable ? 'restart' : null,
     }
   }
   return {
     tone: 'never',
-    title: 'The console is not connected to the daemon',
+    title: "OpenRemote is not connected to its background service",
     note: detail ?? (restartable ? NEVER : NEVER_MANUAL),
     action: restartable ? 'restart' : null,
   }

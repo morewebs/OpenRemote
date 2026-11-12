@@ -563,7 +563,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
   const where = elsewhere ? deviceName(devices, chat.executor) : 'this computer'
   const blocked = {
     offline: `${where} is offline - this copy is read-only until it is back`,
-    'not-machine': `${where} isn't a machine - make it one to continue from here`,
+    'not-machine': `${where} can't run chats for your other devices yet - turn that on to continue here`,
     'signed-out': 'Sign in to Cloud to continue this chat',
     gone: `${where} left your Cloud - this copy is read-only`,
   }[access]
@@ -1197,7 +1197,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
             <span className="cv-fact">${chat.costUsd < 0.01 ? chat.costUsd.toFixed(4) : chat.costUsd.toFixed(2)}</span>
           )}
           {chat.thinkingTokens > 0 && (
-            <span className="cv-fact">{chat.thinkingTokens.toLocaleString()} thinking tokens</span>
+            <span className="cv-fact" title="Tokens the model spent reasoning">{chat.thinkingTokens.toLocaleString()} thinking tokens</span>
           )}
           {chat.approvedTools?.length > 0 && (
             <span className="cv-fact">
@@ -1209,18 +1209,18 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
             <button
               className="cv-fact-btn"
               onClick={() => control(() => setDeviceKind(chat.executor, 'machine'))}
-              title={privacy ? 'Let your other devices run chats on it' : `Let your other devices run chats on ${where}`}
+              title={privacy ? 'Make it a machine: a computer that runs chats for your other devices' : `Make ${where} a machine: a computer that runs chats for your other devices`}
             >
-              Make <span className="pv">{where}</span> a machine
+              Let <span className="pv">{where}</span> run chats
             </button>
           )}
           {reachable && chat.running && (
             <>
-              <button className="cv-fact-btn" onClick={() => control(() => interruptChat(chat.id))} title={hintInterrupt('Interrupt the running turn - the session stays alive')}>
+              <button className="cv-fact-btn" onClick={() => control(() => interruptChat(chat.id))} title={hintInterrupt('Stop the current reply; the chat stays open')}>
                 <HandPalm size={11} weight="fill" />
                 Interrupt
               </button>
-              <button className="cv-fact-btn" onClick={() => control(() => stopChat(chat.id))} title={hintStop('Stop the session')}>
+              <button className="cv-fact-btn" onClick={() => control(() => stopChat(chat.id))} title={hintStop("End this chat's run")}>
                 <Stop size={11} weight="fill" />
                 Stop
               </button>
@@ -1231,7 +1231,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
               its first message never got one - the daemon would only
               answer "nothing to resume", so the button never shows there. */}
           {reachable && (chat.status === 'stopped' || chat.status === 'failed') && chat.resumable && (
-            <button className="cv-fact-btn" onClick={() => control(() => resumeChat(chat.id))} title="Resume the session">
+            <button className="cv-fact-btn" onClick={() => control(() => resumeChat(chat.id))} title="Pick this chat up again">
               <Play size={11} weight="fill" />
               Resume
             </button>
@@ -1290,7 +1290,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
             )
           )}
         </p>
-        {chat.lastError && chat.status === 'failed' && <p className="cv-facts cv-error pv">{chat.lastError}</p>}
+        {chat.lastError && chat.status === 'failed' && <p className="cv-facts cv-error pv">This chat stopped with an error: {String(chat.lastError)}</p>}
       </header>
       {/* The workers this chat's agent started: each one's state, a way
           into it, Stop. Only for a chat that has workers. */}
@@ -1534,8 +1534,8 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
                     ? 'Queue a message'
                     : 'Send a message'
                 : chat.resumable
-                  ? 'Resume the session to continue'
-                  : 'This chat never started')
+                  ? 'Resume this chat to continue'
+                  : 'This chat never started. Start a new chat to try again.')
             }
             disabled={!alive || !reachable}
             spellCheck={false}

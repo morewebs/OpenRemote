@@ -1444,8 +1444,8 @@ export default function Sidebar({
                     type="button"
                     className="sb-unregister"
                     autoFocus
-                    title="Unregister this project. Its chats move to Chats and the folder on disk is never touched."
-                    aria-label={`Unregister ${shownName}`}
+                    title="Remove this project from the list. Its chats move to Chats; the folder on disk is not touched."
+                    aria-label={`Remove ${shownName}`}
                     aria-describedby="sb-unregister-note"
                     onKeyDown={(e) => {
                       if (e.key === 'Escape') {
@@ -1458,10 +1458,10 @@ export default function Sidebar({
                       removeProject(project.id)
                     }}
                   >
-                    Unregister
+                    Remove
                   </button>
                   <p className="sb-unregister-note" id="sb-unregister-note">
-                    The project goes; its chats move to Chats and the folder on disk is never touched.
+                    Its chats move to Chats. The folder on disk is not touched.
                   </p>
                 </>
               ) : (
@@ -1483,7 +1483,7 @@ export default function Sidebar({
                   <button
                     type="button"
                     className="sb-project-remove"
-                    title="Remove the project - it asks once, and its chats stay"
+                    title="Remove project (chats stay)"
                     aria-label={`Remove ${shownName}`}
                     onClick={() => setArmed((current) => armRow(current, project.id))}
                   >
@@ -1494,7 +1494,7 @@ export default function Sidebar({
               {!isCollapsed && items.length === 0 && (
                 <p className="sb-empty sb-project-empty">
                   {folderIsGone
-                    ? 'No folder behind this project any more. Unregister it to clear the row.'
+                    ? "This project's folder is gone. Remove the project to clear it."
                     : sessionsAnswered
                       ? 'No chats yet.'
                       : 'Loading your chats…'}

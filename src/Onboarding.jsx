@@ -33,8 +33,8 @@ const savedAddress = () => {
     return ''
   }
 }
-const ADDRESS_SHAPE = 'http://127.0.0.1:<the port the daemon printed>'
-const CONNECT_HINT = 'The daemon prints its address when it starts.'
+const ADDRESS_SHAPE = 'http://127.0.0.1:<the port the service printed>'
+const CONNECT_HINT = 'The background service prints its address when it starts.'
 
 // The happy path is the welcome, then the ready screen, and the user never
 // sees connection plumbing: the daemon comes up with the app. A quiet setup
@@ -127,17 +127,18 @@ export default function Onboarding({ onDone, onDismiss = null, startManual = fal
 
         {step === 'setup' && !manual && (
           <>
-            <h1 className="ob-title">Setting up this machine</h1>
+            <h1 className="ob-title">Getting OpenRemote ready</h1>
             <p className="ob-sub">This only takes a moment.</p>
           </>
         )}
 
         {step === 'setup' && manual && (
           <>
-            <h1 className="ob-title">Connect to the daemon</h1>
+            <h1 className="ob-title">Connect by address</h1>
             <p className="ob-sub">
-              The daemon on this machine didn&apos;t answer. Connect by address if you run it
-              yourself, or reopen the app to try again.
+              OpenRemote&apos;s background service didn&apos;t answer. Close and reopen OpenRemote
+              to try again. If you run the service yourself, enter the address it printed and
+              the key from ~/.openremote/token.
             </p>
             <div className="ob-harnesses">
               <input
@@ -150,7 +151,7 @@ export default function Onboarding({ onDone, onDismiss = null, startManual = fal
               />
               <input
                 className="ob-input"
-                placeholder="Token"
+                placeholder="Key (from ~/.openremote/token)"
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
                 spellCheck={false}
@@ -176,7 +177,7 @@ export default function Onboarding({ onDone, onDismiss = null, startManual = fal
 
         {step === 'agents' && (
           <>
-            <h1 className="ob-title">Add an agent</h1>
+            <h1 className="ob-title">Add an App</h1>
             <p className="ob-sub">{offer.line}</p>
             <div className="ob-harnesses">
               <button
@@ -184,7 +185,7 @@ export default function Onboarding({ onDone, onDismiss = null, startManual = fal
                 className="ob-cta ob-cta--primary"
                 onClick={() => setManaging(true)}
               >
-                Install an agent
+                Install an App
               </button>
               <button type="button" className="ob-cta" onClick={() => setStep('ready')}>
                 Skip for now

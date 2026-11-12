@@ -126,9 +126,9 @@ export default function AgentsSection() {
   return (
     <>
       <p className="pn-lead">
-        A chat's agent can start other chats as workers - on any harness installed here - and wait
+        A chat's agent can start other chats as workers - on any app installed here - and wait
         for their reports. Every worker is a chat in the sidebar: you can open, steer, stop or take
-        it over. These limits are kept by the daemon on this computer.
+        it over. These limits are kept on this computer.
       </p>
       <div className="pn-list pn-list--tight">
         {toggleRow(
@@ -175,7 +175,7 @@ export default function AgentsSection() {
             {installed.length > 0 && (
               <div className="pn-row">
                 <div>
-                  <div className="pn-name">Harnesses workers may use</div>
+                  <div className="pn-name">Apps workers may use</div>
                   <div className="pn-detail">
                     Any installed one by default; leave on only the ones you want agents to pick from.
                   </div>
@@ -188,6 +188,9 @@ export default function AgentsSection() {
                       className={allowed.includes(h.id) ? 'pn-btn on' : 'pn-btn'}
                       onClick={() => toggleHarness(h.id)}
                       aria-pressed={allowed.includes(h.id)}
+                      // The last app left on cannot be turned off: workers need one.
+                      disabled={allowed.length === 1 && allowed.includes(h.id)}
+                      title={allowed.length === 1 && allowed.includes(h.id) ? 'Workers need at least one app.' : undefined}
                     >
                       {harnessName(h.id)}
                     </button>

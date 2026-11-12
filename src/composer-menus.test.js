@@ -180,7 +180,7 @@ test('an Esc closes the word it was pressed in, never the composer', () => {
 })
 
 test('a list that did not load says so instead of showing another chat rows', () => {
-  const line = 'Commands and agents did not load. They load again when the chat changes or the daemon reconnects.'
+  const line = 'Commands and agents did not load. They load again when you switch chats or the connection comes back.'
   const own = ownCommands({ inChat: true, cloud: false })
   const empty = commandItems('', { harnessCommands: [], own, unavailable: line })
   const last = empty[empty.length - 1]
@@ -198,7 +198,7 @@ test('a list that did not load says so instead of showing another chat rows', ()
 })
 
 test('a menu trimmed to its last row still ends with the line that says it did not load', () => {
-  const line = 'Commands and agents did not load. They load again when the chat changes or the daemon reconnects.'
+  const line = 'Commands and agents did not load. They load again when you switch chats or the connection comes back.'
   // More rows than the menu takes: the chats group alone can be this long.
   const files = Array.from({ length: 90 }, (_, i) => ({ path: `src/f${i}.js`, kind: 'file' }))
   const trimmed = mentionItems('', { files, unavailable: line })

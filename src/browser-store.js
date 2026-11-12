@@ -97,9 +97,9 @@ function requestId() {
 // act on.
 function noteFor(err) {
   const status = err?.status
-  if (status === 404) return 'Bookmarks are the list this window last saw: this daemon does not keep them yet.'
-  if (status) return `Bookmarks are the list this window last saw: ${err.message}`
-  return 'Bookmarks are the list this window last saw: the daemon did not answer.'
+  if (status === 404) return "Bookmarks can't be synced until OpenRemote is updated. Showing your last saved list."
+  if (status) return "Bookmarks couldn't be synced. Showing your last saved list."
+  return "Bookmarks couldn't be synced: OpenRemote isn't responding. Showing your last saved list."
 }
 
 function unsaved(err, fallback) {

@@ -66,9 +66,8 @@ export default function PluginMarketplaces() {
     <div className="pg-marketplaces-view">
       <h2 className="pn-section">Add a marketplace</h2>
       <p className="pn-lead">
-        Any Claude Code plugin marketplace works: owner/repo on GitHub, a git URL, a folder on this
-        computer, or a link to a marketplace.json. One built in a similar layout works too; each
-        plugin&apos;s review says what the install changes or leaves out.
+        Add a Claude Code plugin marketplace: a GitHub owner/repo, a git URL, a folder, or a link.
+        One built in a similar layout works too. Off hides its plugins from Discover.
       </p>
       <div className="pg-add-row">
         <input

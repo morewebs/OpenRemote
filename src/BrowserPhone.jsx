@@ -863,7 +863,7 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
             )}
             <MenuItem
               icon={<ArrowSquareOut size={18} />}
-              label="Open in another browser"
+              label="Open in your default browser"
               disabled={!live || !/^https?:/.test(current?.url ?? '')}
               onSelect={() => {
                 setMenu(false)
@@ -1124,7 +1124,7 @@ function TabGrid({ tabs, active, thumbs, onPick, onClose, onNew, onDone }) {
         {kept.length > 0 ? (
           <div className="bp-grid">{kept.map(card)}</div>
         ) : (
-          <p className="bp-quiet">Private tabs keep no history, and agents don't see them.</p>
+          <p className="bp-quiet">Private tabs keep no history. Agents can't see them unless you allow it from the menu.</p>
         )}
       </div>
     </div>

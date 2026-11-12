@@ -31,7 +31,7 @@ test('skipping is a button, not a wall: it lands on the ready screen', () => {
   const view = source('Onboarding.jsx')
   assert.match(view, />\s*Skip for now\s*</)
   assert.match(view, /onClick=\{\(\) => setStep\('ready'\)\}/)
-  assert.match(view, /Install an agent/)
+  assert.match(view, /Install an App/)
 })
 
 test('the step runs after the connection and before the ready screen', () => {
@@ -57,8 +57,8 @@ test('the ready screen speaks from the rules, and the old screens still work', (
   assert.match(view, /ob-harness--quiet/)
   // The welcome, the quiet beat and the manual form are untouched.
   assert.match(view, /One window for all your coding agents/)
-  assert.match(view, /Setting up this machine/)
-  assert.match(view, /Connect to the daemon/)
+  assert.match(view, /Getting OpenRemote ready/)
+  assert.match(view, /Connect by address/)
   assert.match(view, /onClick=\{onDismiss\}/)
 })
 

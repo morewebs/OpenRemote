@@ -44,9 +44,9 @@ test('the rule trash says the schedule goes with the rule', () => {
 test('the armed project row carries its promise as a visible line', () => {
   const side = source('Sidebar.jsx')
   assert.match(side, /className="sb-unregister-note"/)
-  assert.match(side, /The project goes; its chats move to Chats and the folder on disk is never touched\./)
+  assert.match(side, /Its chats move to Chats\. The folder on disk is not touched\./)
   // The tooltip stays, as the hover repeat rather than the only home.
-  assert.match(side, /title="Unregister this project\. Its chats move to Chats and the folder on disk is never touched\."/)
+  assert.match(side, /title="Remove this project from the list\. Its chats move to Chats; the folder on disk is not touched\."/)
   assert.match(source('sidebar.css'), /\.sb-unregister-note \{/)
 })
 // ---- the four Settings rows that destroy something ----
@@ -66,8 +66,8 @@ test('Settings: forgetting the daemon says what is forgotten and puts Cancel fir
   assert.match(settings, /The saved address and token are forgotten; your chats, plugins and settings stay\./)
   assert.ok(
     settings.indexOf('setConfirmDisconnect(false)}>Cancel</button>') <
-      settings.indexOf('onClick={disconnect}>Disconnect</button>'),
-    'Cancel comes before Disconnect',
+      settings.indexOf('onClick={disconnect}>Forget</button>'),
+    'Cancel comes before Forget',
   )
 })
 

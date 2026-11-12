@@ -84,7 +84,7 @@ export default function AboutModal({ onClose, daemonVersion, api }) {
         {view === 'about' ? (
           <>
             <div className="ab-version">Version {version} · slice 1</div>
-            {daemonVersion && <div className="ab-version">Daemon {daemonVersion}</div>}
+            {daemonVersion && <div className="ab-version">Background service {daemonVersion}</div>}
             <div className="ab-sep" />
             <button type="button" className="ab-btn ab-btn--block" onClick={() => setView('licenses')}>
               Third-party licenses
@@ -150,7 +150,7 @@ function AboutScreen({
             </div>
             {daemonVersion && (
               <div className="ab-row">
-                <span className="ab-row-label">Daemon</span>
+                <span className="ab-row-label">Background service</span>
                 <span className="ab-row-value">{daemonVersion}</span>
               </div>
             )}

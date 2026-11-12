@@ -15,7 +15,7 @@ test('no answer yet is the starting state, with a way to start it again', () => 
   for (const info of [null, undefined, {}, { mobile: false }]) {
     const status = daemonStatus(info)
     assert.equal(status.tone, 'starting')
-    assert.equal(status.title, 'Waiting for the daemon')
+    assert.equal(status.title, "Waiting for OpenRemote's background service")
     assert.equal(status.detail, null)
     assert.equal(status.action, 'try-now')
     // A moment is not a promise of forever, and it is not an error.
@@ -28,7 +28,7 @@ test("a daemon that never ran says so, in the shell's own words", () => {
   const reason = 'failed to spawn `openremote-daemon`: The system cannot find the file specified. (os error 2)'
   const status = daemonStatus(failure('start', reason))
   assert.equal(status.tone, 'failed')
-  assert.equal(status.title, 'The daemon did not start')
+  assert.equal(status.title, "OpenRemote's background service did not start")
   assert.equal(status.detail, reason)
   assert.equal(status.action, 'try-now')
   // The shell does retry the spawn on its own (desktop.rs backs off to
@@ -41,7 +41,7 @@ test('a daemon that ran and exited gets its own title', () => {
   for (const mobile of [false, true]) {
     const status = daemonStatus(failure('stopped', text, { mobile }))
     assert.equal(status.tone, 'failed')
-    assert.equal(status.title, 'The daemon exited')
+    assert.equal(status.title, "OpenRemote's background service stopped")
     assert.doesNotMatch(status.title, /did not start/)
     assert.equal(status.detail, text)
   }
@@ -55,7 +55,7 @@ test('a daemon that ran and exited gets its own title', () => {
 test('a daemon that is alive and quiet is not described as retried', () => {
   const status = daemonStatus(failure('silent', 'it started and has not answered in 90 seconds'))
   assert.equal(status.tone, 'failed')
-  assert.equal(status.title, 'The daemon is running but silent')
+  assert.equal(status.title, "OpenRemote's background service is running but not answering")
   assert.equal(status.action, 'try-now')
   // Nothing is retrying this one - the shell is waiting on the same process
   // - and nothing proves it is wedged either, so the note says both and says
@@ -67,8 +67,8 @@ test('a daemon that is alive and quiet is not described as retried', () => {
 
 test('a reason the rule cannot read claims no more than it can', () => {
   // An unknown kind is the worst case, not the best one.
-  assert.equal(daemonStatus(failure('nonsense', 'boom')).title, 'The daemon did not start')
-  assert.equal(daemonStatus(failure('toString', 'boom')).title, 'The daemon did not start')
+  assert.equal(daemonStatus(failure('nonsense', 'boom')).title, "OpenRemote's background service did not start")
+  assert.equal(daemonStatus(failure('toString', 'boom')).title, "OpenRemote's background service did not start")
   // A reason in the older shape is still a reason.
   assert.equal(daemonStatus({ error: 'a plain reason' }).detail, 'a plain reason')
   // And a blank one is none at all: no empty detail box.

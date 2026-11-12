@@ -32,7 +32,7 @@ export default function TeamBar({ chat, canAct }) {
   }
 
   return (
-    <section className="cv-team" aria-label="Team">
+    <section className="cv-team" aria-label="Workers">
       <div className="cv-team-bar">
         <button
           type="button"
@@ -41,7 +41,7 @@ export default function TeamBar({ chat, canAct }) {
           aria-expanded={open}
         >
           {open ? <CaretDown size={11} /> : <CaretRight size={11} />}
-          <span className="cv-team-title">Team ({members.length})</span>
+          <span className="cv-team-title">Workers ({members.length})</span>
           {roll && <span className={`dot dot--${roll}`} />}
           {summary && <span className="cv-team-summary">{summary}</span>}
         </button>

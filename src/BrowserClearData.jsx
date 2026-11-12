@@ -57,8 +57,8 @@ export default function BrowserClearData({ onClose, onCleared }) {
     {
       on: history,
       set: setHistory,
-      name: 'Pages read',
-      detail: "This window's reading record, in the time above.",
+      name: 'History',
+      detail: 'Pages in history, in the time above.',
     },
     {
       on: cookies,

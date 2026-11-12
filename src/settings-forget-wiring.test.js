@@ -44,10 +44,10 @@ test('the reason stays in the row while the control is absent', () => {
   assert.match(
     row,
     // The detail line says what is forgotten once the confirm is open, and
-    // keeps the token sentence otherwise; both live in the row, not a tooltip.
+    // keeps the connected sentence otherwise; both live in the row, not a tooltip.
     /connection\.state === 'connected'\s*\?\s*confirmDisconnect/,
   )
-  assert.match(row, /Bearer token accepted\./)
+  assert.match(row, /Connected to OpenRemote's background service on this computer\./)
   assert.match(row, /The saved address and token are forgotten; your chats, plugins and settings stay\./)
   assert.match(row, /className="pn-detail"/)
 })
