@@ -76,6 +76,7 @@ Compiled into the daemon, which ships as the Windows sidecar, the Android librar
 - aes 0.8.4 - MIT OR Apache-2.0
 - aes-gcm 0.10.3 - Apache-2.0 OR MIT
 - atomic-waker 1.1.2 - Apache-2.0 OR MIT
+- arrayvec 0.7.8 - MIT OR Apache-2.0
 - axum 0.8.9 - MIT
 - axum-core 0.5.6 - MIT
 - base64 0.22.1 - MIT OR Apache-2.0
@@ -95,6 +96,7 @@ Compiled into the daemon, which ships as the Windows sidecar, the Android librar
 - curve25519-dalek 4.1.3 - BSD-3-Clause
 - data-encoding 2.11.1 - MIT
 - digest 0.10.7 - MIT OR Apache-2.0
+- downcast-rs 2.0.2 - MIT OR Apache-2.0
 - equivalent 1.0.3 - Apache-2.0 OR MIT
 - errno 0.3.14 - MIT OR Apache-2.0
 - filetime 0.2.29 - MIT/Apache-2.0
@@ -121,6 +123,7 @@ Compiled into the daemon, which ships as the Windows sidecar, the Android librar
 - inout 0.1.4 - MIT OR Apache-2.0
 - itoa 1.0.18 - MIT OR Apache-2.0
 - libc 0.2.189 - MIT OR Apache-2.0
+- libm 0.2.16 - MIT
 - log 0.4.34 - MIT OR Apache-2.0
 - matchit 0.8.4 - MIT AND BSD-3-Clause
 - memchr 2.8.3 - Unlicense OR MIT
@@ -128,6 +131,7 @@ Compiled into the daemon, which ships as the Windows sidecar, the Android librar
 - miniz_oxide 0.9.1 - MIT OR Zlib OR Apache-2.0
 - mio 1.2.3 - MIT
 - num-traits 0.2.19 - MIT OR Apache-2.0
+- multi-stash 0.2.0 - MIT/Apache-2.0
 - once_cell 1.21.4 - MIT OR Apache-2.0
 - opaque-debug 0.3.1 - MIT OR Apache-2.0
 - percent-encoding 2.3.2 - MIT OR Apache-2.0
@@ -157,6 +161,7 @@ Compiled into the daemon, which ships as the Windows sidecar, the Android librar
 - smallvec 1.16.2 - MIT OR Apache-2.0
 - snow 0.10.0 - Apache-2.0 OR MIT
 - socket2 0.6.5 - MIT OR Apache-2.0
+- spin 0.9.9 - MIT
 - subtle 2.6.1 - BSD-3-Clause
 - sync_wrapper 1.0.2 - Apache-2.0
 - tar 0.4.46 - MIT OR Apache-2.0
@@ -178,6 +183,9 @@ Compiled into the daemon, which ships as the Windows sidecar, the Android librar
 - untrusted 0.9.0 - ISC
 - uuid 1.26.1 - Apache-2.0 OR MIT
 - want 0.3.2 - MIT
+- wasmi 0.46.0, wasmi_collections 0.46.0, wasmi_core 0.46.0, wasmi_ir 0.46.0 -
+  MIT/Apache-2.0 (the WASM plugin runtime)
+- wasmparser 0.228.0 - Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT
 - webpki-roots 1.0.9 - CDLA-Permissive-2.0
 - windows-link 0.2.1 - MIT OR Apache-2.0
 - windows-sys 0.61.2 - MIT OR Apache-2.0
@@ -395,6 +403,9 @@ purpose:
   by the console).
 - commander, a katex CLI dependency (nothing imports it; Vite never
   bundles it).
+- foldhash 0.1.5, hashbrown 0.15.5 and string-interner 0.19.0:
+  optional crates of wasmi's collections that the features the daemon
+  enables never compile (a lock lists every feature's crates).
 - Build-time and test-time crates of both lock files: proc-macro
   crates (syn, quote, serde_derive, thiserror-impl and the rest), cc,
   rustc_version, tempfile and the dev-only tree.
