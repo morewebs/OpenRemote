@@ -22,7 +22,22 @@ it is, and this folder holds no program until `build.sh` has run.
 Every call is approved like any other agent tool: the chat's permission
 mode decides whether you are asked first. `ssh_run` sends a command to a
 shell on the host, so it can do whatever that account can do there; pick
-the account each host signs in as with that in mind.
+the account each host signs in as with that in mind. `ssh_read_file` runs
+a command in that shell too (`head`), so only `ssh_hosts` is marked
+read-only.
+
+Each host's login shell must be a POSIX shell (sh, bash, dash, zsh, ksh):
+paths are quoted for one, and `ssh_read_file` and `ssh_write_file` run
+`head -c` and `cat`. A host whose account logs in to fish, csh or
+PowerShell gets `ssh_run` only, with commands written for that shell.
+
+Every call ends before the daemon stops waiting for it, so a call the
+agent is told timed out is not still running: a call waits at most 10 s
+for one of the four connections (and is refused, never started later, if
+none frees), then runs within its own limit, then has 5 s to stop. Those
+three together stay at least 10 s under the tool's `timeout_secs`, and a
+test checks the sum for every tool. The page's requests wait 5 s for a
+connection and run 25 s, inside the 60 s the daemon gives them.
 
 ## Settings
 
@@ -32,7 +47,7 @@ All four are plain text, and none is a secret:
 |---|---|
 | Hosts | `name=user@address` or `name=user@address:port`, separated by commas: `web-1=deploy@203.0.113.5, db=root@db.example.com:2222, v6=me@[2001:db8::1]`. A name is lowercase letters, digits and single dashes; a user is a plain account name; an address is a host name or an IP address. An entry of any other shape is left out, and the plugin's page and `ssh_hosts` say which and why without repeating it. |
 | Key file | Optional: the path of a private key, like `~/.ssh/id_ed25519`. |
-| ssh-agent socket | Optional, macOS and Linux: the path your terminal's `SSH_AUTH_SOCK` holds. |
+| ssh-agent socket | Optional: the path your terminal's `SSH_AUTH_SOCK` holds (macOS, Linux), or on Windows `\\.\pipe\openssh-ssh-agent` to use the OpenSSH agent service. Left empty, no agent's keys are offered. |
 | Path to ssh | Optional: the full path of the ssh program. |
 
 ## What it will not do
@@ -54,15 +69,21 @@ every argument and variable it was started with).
   against two known_hosts files: the plugin's own (in its data folder) and
   yours (`~/.ssh/known_hosts`). A connection never writes either. A host
   whose key is in neither is refused by ssh before it signs in or sends anything; a host whose
-  key does not match is refused with words that say so and how to check,
+  key does not match is refused with words that say so and how to check
+  (the page's Verify, or replacing the old key from your own terminal),
   and the call is not retried.
-- **Let an agent trust a key.** Keys are verified by you: connect once
+- **Let an agent's tools trust a key.** Keys are verified by you: connect once
   from your own terminal and accept the key there, or use the plugin's page
   (below). Verify looks at the key with an empty scratch file, offers no
   key and no agent (`PreferredAuthentications=none`, `IdentityAgent=none`),
   shows the fingerprint, and records the key only when you confirm that
   same fingerprint within five minutes, for the host as its settings are
-  then. The page's requests are not tools: an agent can't call them.
+  then. The page's requests are not tools, so a chat's agent can't call
+  them. They are the daemon's `POST /plugins/{id}/request`, which takes
+  the daemon's token: like every console route, any program on this
+  computer that holds that token (it is in an owner-only file) could drive
+  Verify, as it could drive the rest of the console. The line drawn here is
+  between a chat's agent and you, not between programs running as you.
 - **Take ssh options from anyone.** ssh starts with `-F none`, so no ssh
   config is read and nothing in one can add a `ProxyCommand`, a
   `LocalCommand`, a forward or a shared connection; `ProxyCommand=none` and
@@ -105,8 +126,11 @@ environment of its own, cleared again and given only:
 Not `PATH`, `SSH_ASKPASS` or `DISPLAY`: nothing may prompt, and with no
 config ssh runs no other program. The agent's socket is a setting rather
 than something guessed because the agent is a power over every key it
-holds; you name the one this plugin may use. On Windows the OpenSSH
-agent service is reached by its fixed pipe, without a variable.
+holds; you name the one this plugin may use. Windows' ssh reaches the
+OpenSSH agent service by its fixed pipe without any variable, so when the
+setting is empty the plugin also passes `IdentityAgent=none` there: the
+service's keys are offered only once you name its pipe
+(`\\.\pipe\openssh-ssh-agent`) in the setting.
 
 ## The page
 

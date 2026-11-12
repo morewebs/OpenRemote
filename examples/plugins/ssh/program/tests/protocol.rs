@@ -45,6 +45,8 @@ struct Plugin {
     child: Child,
     stdin: ChildStdin,
     lines: Receiver<Value>,
+    /// Answers that came while another was awaited.
+    early: Vec<Value>,
     next: u64,
     data: PathBuf,
     home: PathBuf,
@@ -92,6 +94,7 @@ impl Plugin {
             child,
             stdin,
             lines,
+            early: Vec::new(),
             next: 1,
             data: data.clone(),
             home,
@@ -113,11 +116,24 @@ impl Plugin {
     }
 
     fn call(&mut self, method: &str, params: Value) -> Value {
+        let id = self.send(method, params);
+        self.answer(id)
+    }
+
+    /// Send a call without waiting for its answer.
+    fn send(&mut self, method: &str, params: Value) -> u64 {
         let id = self.next;
         self.next += 1;
         let message = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
         writeln!(self.stdin, "{message}").unwrap();
         self.stdin.flush().unwrap();
+        id
+    }
+
+    fn answer(&mut self, id: u64) -> Value {
+        if let Some(i) = self.early.iter().position(|v| v["id"] == id) {
+            return self.early.remove(i);
+        }
         loop {
             let got = self
                 .lines
@@ -126,7 +142,17 @@ impl Plugin {
             if got["id"] == id {
                 return got;
             }
+            if got.get("id").is_some() {
+                self.early.push(got);
+            }
         }
+    }
+
+    fn send_tool(&mut self, name: &str, arguments: Value) -> u64 {
+        self.send(
+            "tools/call",
+            json!({"name": name, "arguments": arguments, "chat": {"id": "c", "workspace": null}}),
+        )
     }
 
     fn notify(&mut self, method: &str, params: Value) {
@@ -149,11 +175,20 @@ impl Plugin {
 
     /// Every start of ssh so far, in order.
     fn ssh_calls(&self) -> Vec<Value> {
-        let file = self.data.join("fake-ssh-calls.jsonl");
-        std::fs::read_to_string(file)
-            .unwrap_or_default()
-            .lines()
-            .map(|l| serde_json::from_str(l).unwrap())
+        let mut files: Vec<PathBuf> = std::fs::read_dir(&self.data)
+            .unwrap()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| {
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with("fake-ssh-call-"))
+            })
+            .collect();
+        files.sort();
+        files
+            .iter()
+            .map(|f| serde_json::from_slice(&std::fs::read(f).unwrap()).unwrap())
             .collect()
     }
 }
@@ -476,4 +511,51 @@ fn a_command_that_runs_too_long_is_stopped() {
     assert_eq!(result["isError"], true, "{result}");
     assert!(text(&result).contains("did not finish"), "{result}");
     assert!(started.elapsed() < Duration::from_secs(20));
+}
+
+#[test]
+fn a_call_that_finds_every_connection_busy_fails_within_its_budget_and_never_runs_later() {
+    let mut p = Plugin::start("busy", base_settings(json!({})));
+    let busy: Vec<u64> = (0..4)
+        .map(|_| {
+            p.send_tool(
+                "ssh_run",
+                json!({"host": "stuck", "command": "hold", "timeout_s": 14}),
+            )
+        })
+        .collect();
+    // Let the four take every slot.
+    std::thread::sleep(Duration::from_millis(1500));
+    let started = std::time::Instant::now();
+    let fifth = p.send_tool(
+        "ssh_run",
+        json!({"host": "web-1", "command": "echo fifth", "timeout_s": 1}),
+    );
+    let answer = p.answer(fifth)["result"].clone();
+    let waited = started.elapsed();
+    assert_eq!(answer["isError"], true, "{answer}");
+    assert!(text(&answer).contains("busy"), "{answer}");
+    // Well inside ssh_run's own timeout_secs, and before a slot frees.
+    assert!(waited < Duration::from_secs(12), "{waited:?}");
+    for id in busy {
+        p.answer(id);
+    }
+    std::thread::sleep(Duration::from_millis(500));
+    let calls = p.ssh_calls();
+    assert_eq!(calls.len(), 4, "{calls:?}");
+    assert!(!calls
+        .iter()
+        .any(|c| args_of(c).iter().any(|a| a == "echo fifth")));
+}
+
+#[test]
+fn on_windows_the_system_agent_is_offered_only_when_the_user_names_it() {
+    let mut p = Plugin::start("winagent", base_settings(json!({})));
+    p.tool("ssh_run", json!({"host": "web-1", "command": "true"}));
+    let options = options_of(&args_of(&p.ssh_calls()[0]));
+    assert_eq!(
+        options.contains(&"IdentityAgent=none".to_string()),
+        cfg!(windows),
+        "{options:?}"
+    );
 }

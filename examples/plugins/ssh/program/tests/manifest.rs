@@ -92,3 +92,13 @@ fn its_page_is_in_the_folder() {
         assert!(page.contains(request), "{request}");
     }
 }
+
+#[test]
+fn only_the_list_of_hosts_is_marked_read_only() {
+    // ssh_read_file runs a command in the host's shell, so it is not a
+    // read-only call as far as the chat's approval is concerned.
+    let m = manifest();
+    for t in m["contributes"]["tools"].as_array().unwrap() {
+        assert_eq!(t["read_only"], t["name"] == "ssh_hosts", "{t}");
+    }
+}

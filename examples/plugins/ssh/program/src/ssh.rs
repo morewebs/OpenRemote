@@ -27,8 +27,11 @@ use crate::config::{option_path, Host};
 
 /// At most this many ssh connections live at once; more calls wait.
 pub const CONNECTIONS: usize = 4;
-/// How long a call waits for a free connection before it says so.
-pub const QUEUE_WAIT: Duration = Duration::from_secs(120);
+/// The longest a run takes after its time is up: ssh is stopped, and its
+/// output is collected for at most this long. A call's whole life is its
+/// wait for a connection (the caller's `queue_wait`), its run and this,
+/// which together stay inside the time the daemon gives the call.
+pub const STOP_GRACE: Duration = Duration::from_secs(5);
 /// How much of each stream is held: a command that prints gigabytes costs
 /// this program a few megabytes, not the lot.
 pub const KEEP_BYTES: usize = 1_000_000;
@@ -75,6 +78,9 @@ pub struct Target<'a> {
     pub known_hosts: Vec<PathBuf>,
     pub key_file: Option<&'a Path>,
     pub mode: Mode,
+    /// Offer no agent's keys: set on Windows when the user named no agent,
+    /// since Windows' ssh finds its agent service without being told.
+    pub no_agent: bool,
 }
 
 /// ssh's arguments for one connection, up to and including the address;
@@ -113,9 +119,11 @@ pub fn args(target: &Target) -> Result<Vec<String>, String> {
     if scan {
         option("PreferredAuthentications=none");
         option("PubkeyAuthentication=no");
-        option("IdentityAgent=none");
     } else {
         option("PreferredAuthentications=publickey");
+    }
+    if scan || target.no_agent {
+        option("IdentityAgent=none");
     }
     // What a config could set for convenience in a terminal and must not do
     // for an agent. With -F none none of it is read anyway; these say so on
@@ -232,7 +240,8 @@ pub static GATE: Gate = Gate::new();
 /// when the program does.
 pub type Live = Arc<Mutex<HashMap<u64, Child>>>;
 
-fn drain(mut from: impl Read + Send + 'static) -> std::thread::JoinHandle<Tail> {
+fn drain(mut from: impl Read + Send + 'static) -> std::sync::mpsc::Receiver<Tail> {
+    let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let mut tail = Tail::default();
         let mut buf = [0u8; 16 * 1024];
@@ -243,8 +252,9 @@ fn drain(mut from: impl Read + Send + 'static) -> std::thread::JoinHandle<Tail> 
             tail.push(&buf[..n]);
         }
         tail.finish();
-        tail
-    })
+        let _ = tx.send(tail);
+    });
+    rx
 }
 
 /// One ssh run, however it ends. `input` is the command's stdin (None: ssh
@@ -256,14 +266,17 @@ pub fn run(
     command: &str,
     input: Option<Vec<u8>>,
     env: &[(String, String)],
+    queue_wait: Duration,
     timeout: Duration,
     live: &Live,
     id: u64,
 ) -> Result<Outcome, String> {
-    let _slot = GATE.acquire(QUEUE_WAIT).ok_or_else(|| {
+    // A call that finds no free connection in its wait gives up there, and
+    // never starts later: the agent has its answer.
+    let _slot = GATE.acquire(queue_wait).ok_or_else(|| {
         format!(
-            "All {CONNECTIONS} ssh connections stayed busy for {} s, so this call did not start. Try again in a moment.",
-            QUEUE_WAIT.as_secs()
+            "All {CONNECTIONS} ssh connections stayed busy for {} s, so this call did not start and will not. Try again in a moment.",
+            queue_wait.as_secs()
         )
     })?;
     if input.is_none() {
@@ -293,14 +306,13 @@ pub fn run(
         .map_err(|e| format!("ssh could not be started from {}: {e}", program.display()))?;
     let out = drain(child.stdout.take().expect("piped"));
     let err = drain(child.stderr.take().expect("piped"));
-    let feeder = match (input, child.stdin.take()) {
-        (Some(bytes), Some(mut stdin)) => Some(std::thread::spawn(move || {
+    if let (Some(bytes), Some(mut stdin)) = (input, child.stdin.take()) {
+        std::thread::spawn(move || {
             // A host that hangs up early closes this pipe under the write;
             // that is the host's answer, not a failure here.
             let _ = stdin.write_all(&bytes);
-        })),
-        _ => None,
-    };
+        });
+    }
     live.lock().unwrap().insert(id, child);
     let mut timed_out = false;
     let code = loop {
@@ -326,14 +338,17 @@ pub fn run(
         std::thread::sleep(Duration::from_millis(25));
     };
     live.lock().unwrap().remove(&id);
-    if let Some(f) = feeder {
-        let _ = f.join();
-    }
+    // Output still on its way is waited for briefly, never past the grace.
+    let collect_by = Instant::now() + STOP_GRACE;
+    let collect = |rx: std::sync::mpsc::Receiver<Tail>| {
+        rx.recv_timeout(collect_by.saturating_duration_since(Instant::now()))
+            .unwrap_or_default()
+    };
     Ok(Outcome {
         code,
         timed_out,
-        stdout: out.join().unwrap_or_default(),
-        stderr: err.join().unwrap_or_default(),
+        stdout: collect(out),
+        stderr: collect(err),
         elapsed: started.elapsed(),
     })
 }
@@ -350,7 +365,7 @@ pub fn explain(stderr: &str, name: &str) -> (&'static str, String) {
         "host key mismatch",
     ]) {
         return ("hostkey_changed", format!(
-            "{name}'s host key is not the one that was verified, so ssh refused to connect and nothing was sent. That happens when a server is reinstalled, and it is also what someone in the way looks like. Ask the user to compare the host's new fingerprint with the host's own and, only if it is right, press Verify on {name} again."
+            "{name}'s host key is not the one that was verified, so ssh refused to connect and nothing was sent. That happens when a server is reinstalled, and it is also what someone in the way looks like. Ask the user to compare the host's new fingerprint with the host's own and, only if it is right, press Verify on {name} again, or connect from their own terminal and replace the old key in ~/.ssh/known_hosts there."
         ));
     }
     if has(&[
@@ -494,6 +509,7 @@ mod tests {
                 ],
                 key_file: Some(&key),
                 mode,
+                no_agent: false,
             };
             let args = args(&t).unwrap();
             for o in options(&args) {
@@ -513,6 +529,7 @@ mod tests {
             known_hosts: vec![PathBuf::from("/d/kh")],
             key_file: Some(&key),
             mode: Mode::Run,
+            no_agent: false,
         };
         let args = args(&t).unwrap();
         let o = options(&args);
@@ -547,6 +564,7 @@ mod tests {
             known_hosts: vec![PathBuf::from("/d/scan-1")],
             key_file: Some(&key),
             mode: Mode::Scan,
+            no_agent: false,
         };
         let args = args(&t).unwrap();
         let o = options(&args);
@@ -604,5 +622,22 @@ mod tests {
             explain("something odd\n", "web").1,
             "ssh could not finish: something odd"
         );
+    }
+
+    #[test]
+    fn no_agent_turns_the_agent_off_for_a_real_call() {
+        let t = Target {
+            host: &host(),
+            known_hosts: vec![PathBuf::from("/d/kh")],
+            key_file: None,
+            mode: Mode::Run,
+            no_agent: true,
+        };
+        assert!(options(&args(&t).unwrap()).contains(&"IdentityAgent=none"));
+        let t = Target {
+            no_agent: false,
+            ..t
+        };
+        assert!(!options(&args(&t).unwrap()).contains(&"IdentityAgent=none"));
     }
 }

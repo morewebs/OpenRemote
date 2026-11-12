@@ -2,7 +2,7 @@
 //! built by `cargo test`, never by build.sh, and never ships in bin/).
 //!
 //! It records how it was started - every argument and every environment
-//! variable - as one JSON line in `fake-ssh-calls.jsonl`, in the folder of
+//! variable - as one JSON line in a `fake-ssh-call-*.json` file, in the folder of
 //! the first known_hosts file it was given (the plugin's data folder), and
 //! then plays a host by its address:
 //!
@@ -15,7 +15,7 @@
 //! - `slow.example`: never answers.
 //! - `-V`: a version line on stderr.
 
-use std::io::{Read, Write};
+use std::io::Read;
 
 /// An ed25519 public key, as ssh files one (any well-formed blob will do).
 pub const KEY: &str = "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl";
@@ -61,13 +61,19 @@ fn main() {
         .collect();
     let folder = known.parent().map(|p| p.to_path_buf()).unwrap_or_default();
     let record = serde_json::json!({"args": args, "env": env, "stdin": stdin.len()});
-    if let Ok(mut log) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(folder.join("fake-ssh-calls.jsonl"))
-    {
-        let _ = writeln!(log, "{record}");
-    }
+    // One file a call, named so they sort in the order they started:
+    // calls made at once can't interleave their lines.
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let _ = std::fs::write(
+        folder.join(format!(
+            "fake-ssh-call-{nanos:024}-{}.json",
+            std::process::id()
+        )),
+        record.to_string(),
+    );
 
     let at = args
         .iter()

@@ -114,6 +114,35 @@ jobs:
       - run: cargo build -p fixture-agent --locked
       - run: cargo test --locked
 
+  # The SSH example plugin is its own crate (examples/plugins/ssh/program,
+  # its own workspace and lock), and its tests are what pin its security
+  # rules: host keys always checked, no ssh option from a setting, no key
+  # kept, ssh's environment and the time limits. It gets a job of its own so
+  # the daemon job's format and lint steps, which stop that job before its
+  # tests, cannot stop these. The tests run first; its own format and lint
+  # checks come after them.
+  ssh-plugin:
+    name: ssh plugin (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: examples/plugins/ssh/program
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: examples/plugins/ssh/program
+      - run: cargo test --locked
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+
   # The shell crate (src-tauri) reaches a release tag today without ever
   # being compiled or linted: the console job tests the web app and the
   # daemon job the daemon workspace, so a broken desktop.rs stays green

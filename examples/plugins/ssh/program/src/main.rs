@@ -48,6 +48,11 @@ const WRITE_TIMEOUT: Duration = Duration::from_secs(120);
 /// A look at a key or a test connection answers within the 60 s a page's
 /// request waits.
 const UI_TIMEOUT: Duration = Duration::from_secs(25);
+/// How long a tool call waits for a free connection. It counts against the
+/// call's own time limit in openremote.json (a test checks the sum).
+const TOOL_QUEUE_WAIT: Duration = Duration::from_secs(10);
+/// A page's request waits less: the daemon gives it 60 s in all.
+const UI_QUEUE_WAIT: Duration = Duration::from_secs(5);
 /// A Verify the user has not confirmed stops counting after this long.
 const PENDING_FOR: Duration = Duration::from_secs(300);
 
@@ -244,6 +249,9 @@ fn ready(
         known_hosts: known,
         key_file: key.as_deref(),
         mode,
+        // Windows' ssh reaches its agent service unasked; its keys are
+        // offered only when the user named an agent.
+        no_agent: cfg!(windows) && agent.is_none(),
     })?;
     // A scan offers nothing to a host nobody has checked: no agent either.
     let env = ssh::environment(if mode == ssh::Mode::Scan {
@@ -275,6 +283,7 @@ fn go(
     ready: &Ready,
     command: &str,
     input: Option<Vec<u8>>,
+    queue_wait: Duration,
     timeout: Duration,
 ) -> Result<ssh::Outcome, String> {
     let id = shared.next.fetch_add(1, Ordering::Relaxed);
@@ -284,6 +293,7 @@ fn go(
         command,
         input,
         &ready.env,
+        queue_wait,
         timeout,
         &shared.live,
         id,
@@ -357,6 +367,12 @@ fn render(outcome: &ssh::Outcome) -> String {
         section("stdout", &outcome.stdout, out_keep),
         section("stderr", &outcome.stderr, err_keep)
     )
+}
+
+/// What a host's shell said, as an error repeats it: its end, up to 300
+/// characters, the way ssh's own complaints are cut in `ssh::explain`.
+fn brief(said: &str) -> String {
+    last_chars(said.trim(), 300).trim_start().to_string()
 }
 
 // ---- the agent's words, on their way to the remote shell ----
@@ -467,7 +483,14 @@ fn tool_run(shared: &Shared, args: &Value) -> Result<Value, String> {
         ssh::Mode::Run,
         trusted_files(shared),
     )?;
-    let outcome = go(shared, &ready, &command, None, Duration::from_secs(seconds))?;
+    let outcome = go(
+        shared,
+        &ready,
+        &command,
+        None,
+        TOOL_QUEUE_WAIT,
+        Duration::from_secs(seconds),
+    )?;
     let name = &ready.host.name;
     Ok(match verdict(&ready.host, &outcome) {
         Verdict::TimedOut => reply(
@@ -499,7 +522,14 @@ fn tool_read(shared: &Shared, args: &Value) -> Result<Value, String> {
     )?;
     // One byte more than asked, to know whether the file goes on.
     let command = format!("head -c {} -- {}", max + 1, remote_path(&file));
-    let outcome = go(shared, &ready, &command, None, FILE_TIMEOUT)?;
+    let outcome = go(
+        shared,
+        &ready,
+        &command,
+        None,
+        TOOL_QUEUE_WAIT,
+        FILE_TIMEOUT,
+    )?;
     let name = &ready.host.name;
     match verdict(&ready.host, &outcome) {
         Verdict::TimedOut => Err(format!(
@@ -508,9 +538,7 @@ fn tool_read(shared: &Shared, args: &Value) -> Result<Value, String> {
         )),
         Verdict::Failed(_, words) => Err(words),
         Verdict::Ran(code) if code != Some(0) => {
-            let said = String::from_utf8_lossy(&outcome.stderr.bytes)
-                .trim()
-                .to_string();
+            let said = brief(&String::from_utf8_lossy(&outcome.stderr.bytes));
             Err(format!(
                 "{file} could not be read on {name}: {}",
                 if said.is_empty() {
@@ -572,7 +600,14 @@ fn tool_write(shared: &Shared, args: &Value) -> Result<Value, String> {
         remote_path(&file)
     );
     let size = bytes.len();
-    let outcome = go(shared, &ready, &command, Some(bytes), WRITE_TIMEOUT)?;
+    let outcome = go(
+        shared,
+        &ready,
+        &command,
+        Some(bytes),
+        TOOL_QUEUE_WAIT,
+        WRITE_TIMEOUT,
+    )?;
     let name = &ready.host.name;
     match verdict(&ready.host, &outcome) {
         Verdict::TimedOut => Err(format!(
@@ -581,9 +616,7 @@ fn tool_write(shared: &Shared, args: &Value) -> Result<Value, String> {
         )),
         Verdict::Failed(_, words) => Err(words),
         Verdict::Ran(code) if code != Some(0) => {
-            let said = String::from_utf8_lossy(&outcome.stderr.bytes)
-                .trim()
-                .to_string();
+            let said = brief(&String::from_utf8_lossy(&outcome.stderr.bytes));
             Err(format!(
                 "{file} was not written on {name}: {}",
                 if said.is_empty() {
@@ -673,7 +706,10 @@ fn known_state(shared: &Shared, host: &Host) -> &'static str {
 /// with `add` after them. A new file is written beside the old and moved
 /// over it, so a crash leaves one or the other.
 fn rewrite_known_hosts(shared: &Shared, host: &Host, add: &[String]) -> Result<(), String> {
-    let file = shared.known_hosts();
+    // One rewrite at a time: two (a Verify and a Forget) read, edit and
+    // move the same file, and the second must start from the first's result.
+    let state = shared.state.lock().unwrap();
+    let file = state.data.join("known_hosts");
     let kept: Vec<String> = read(&file)
         .lines()
         .filter(|line| {
@@ -689,7 +725,11 @@ fn rewrite_known_hosts(shared: &Shared, host: &Host, add: &[String]) -> Result<(
     } else {
         format!("{}\n", kept.join("\n"))
     };
-    let temp = file.with_extension(format!("tmp-{}", std::process::id()));
+    let temp = file.with_extension(format!(
+        "tmp-{}-{}",
+        std::process::id(),
+        shared.next.fetch_add(1, Ordering::Relaxed)
+    ));
     std::fs::write(&temp, body).map_err(|e| format!("known_hosts could not be written: {e}"))?;
     std::fs::rename(&temp, &file).map_err(|e| {
         let _ = std::fs::remove_file(&temp);
@@ -780,7 +820,7 @@ fn verify_start(shared: &Shared, name: &str) -> Result<Value, String> {
     std::fs::write(&scan, "").map_err(|e| format!("A scratch file could not be made: {e}"))?;
     let result = (|| {
         let ready = ready(shared, name, ssh::Mode::Scan, vec![scan.clone()])?;
-        let outcome = go(shared, &ready, "true", None, UI_TIMEOUT)?;
+        let outcome = go(shared, &ready, "true", None, UI_QUEUE_WAIT, UI_TIMEOUT)?;
         let keys = parse_known_hosts(&read(&scan));
         let Some(first) = keys.first() else {
             if outcome.timed_out {
@@ -862,7 +902,7 @@ fn forget(shared: &Shared, name: &str) -> Result<Value, String> {
 
 fn host_test(shared: &Shared, name: &str) -> Result<Value, String> {
     let ready = ready(shared, name, ssh::Mode::Run, trusted_files(shared))?;
-    let outcome = go(shared, &ready, "true", None, UI_TIMEOUT)?;
+    let outcome = go(shared, &ready, "true", None, UI_QUEUE_WAIT, UI_TIMEOUT)?;
     Ok(match verdict(&ready.host, &outcome) {
         Verdict::TimedOut => {
             json!({"ok": false, "kind": "timeout", "message": format!("{name} did not answer within {} s.", UI_TIMEOUT.as_secs())})
@@ -934,5 +974,52 @@ mod tests {
         let text = render(&outcome);
         assert!(text.contains("left out"));
         assert!(text.len() < OUTPUT_CAP + 500);
+    }
+
+    /// Each tool's longest life (the wait for a connection, the run, and
+    /// the stop) ends well before the daemon gives up on the call, so a
+    /// call the agent is told timed out is never still running.
+    #[test]
+    fn every_call_ends_before_the_daemons_limit_for_it() {
+        let manifest: Value = serde_json::from_slice(
+            &std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../openremote.json"))
+                .unwrap(),
+        )
+        .unwrap();
+        let limit = |tool: &str| {
+            let t = manifest["contributes"]["tools"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|t| t["name"] == tool)
+                .unwrap();
+            Duration::from_secs(t["timeout_secs"].as_u64().unwrap())
+        };
+        let margin = Duration::from_secs(10);
+        let life = |run: Duration, queue: Duration| queue + run + ssh::STOP_GRACE;
+        assert!(life(Duration::from_secs(RUN_MAX_S), TOOL_QUEUE_WAIT) + margin <= limit("ssh_run"));
+        assert!(life(FILE_TIMEOUT, TOOL_QUEUE_WAIT) + margin <= limit("ssh_read_file"));
+        assert!(life(WRITE_TIMEOUT, TOOL_QUEUE_WAIT) + margin <= limit("ssh_write_file"));
+        // A page's request waits 60 s in the daemon.
+        assert!(life(UI_TIMEOUT, UI_QUEUE_WAIT) + margin <= Duration::from_secs(60));
+    }
+
+    #[test]
+    fn what_a_host_said_is_cut_before_it_is_repeated() {
+        let long = format!(
+            "{}
+the last line",
+            "x".repeat(5000)
+        );
+        let said = brief(&long);
+        assert!(said.chars().count() <= 300, "{said}");
+        assert!(said.ends_with("the last line"));
+        assert_eq!(
+            brief(
+                "  
+ "
+            ),
+            ""
+        );
     }
 }

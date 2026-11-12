@@ -45,7 +45,7 @@
           },
           "required": ["host", "path"]
         },
-        "read_only": true,
+        "read_only": false,
         "timeout_secs": 90
       },
       {
@@ -91,7 +91,7 @@
         "key": "agent_socket",
         "type": "string",
         "label": "ssh-agent socket",
-        "help": "Optional, macOS and Linux. The path your terminal's SSH_AUTH_SOCK shows (echo $SSH_AUTH_SOCK), so keys with a passphrase loaded by ssh-add can be used. OpenRemote does not pass SSH_AUTH_SOCK on by itself. On Windows, the OpenSSH agent service is found without it."
+        "help": "Optional. The path your terminal's SSH_AUTH_SOCK shows (echo $SSH_AUTH_SOCK), so keys with a passphrase loaded by ssh-add can be used. OpenRemote does not pass SSH_AUTH_SOCK on by itself. On Windows, \\\\.\\pipe\\openssh-ssh-agent uses the OpenSSH agent service. Left empty, no agent's keys are offered."
       },
       {
         "key": "ssh_path",
