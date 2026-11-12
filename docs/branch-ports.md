@@ -77,6 +77,7 @@ recorded as dropped below.
 | Ad blocking, console (new; no branch had one): Settings > Browser's Block ads and trackers, Filter lists (a `useDialog` chooser, licence beside each list) and Sites allowed to show ads, registered in `settings-search.js`, refusals through `errorCopy`. Not yet looked at in the running app | new | 3915e0a |
 | Browser import, daemon: bookmarks and history from Chromium browsers (Chrome, Edge, Brave, Vivaldi, Opera, Chromium), Firefox and Safari; profiles only from each browser's own folder or a folder the user picks; only `Bookmarks`, `History`, `places.sqlite`, `profiles.ini`, `Bookmarks.plist`, `History.db` are ever opened (read-only; a test fails if a reader names a sign-in, password or site-storage file); databases read from a private scratch copy deleted afterwards; the pure-Rust SQLite and plist readers hardened and fuzzed (no new dependency); http(s) only; capped at 2,000 bookmarks an import and `CAP_BOOKMARK - 500` in all, 20,000 visits from 90 days; visits stay local, bookmarks sync as usual; `GET/POST /browser/import`, not a peer route. `import/mod.rs` and `safari.rs` written new | br-adblock d6f1839, 4df6edf (`store.import`, `put_all`) | c2fa152 |
 | Browser import, console (new): Settings > Browser's Import from another browser, a `useDialog` dialog (found profiles or a picked folder, Bookmarks / History), `errorCopy`, registered in `settings-search.js`. Not yet looked at in the running app | new | e9484d7 |
+| SSH plugin example (`examples/plugins/ssh`): four agent tools on the user's own SSH hosts, rebuilt from the draft's Node program as one compiled Rust program (no program from PATH); hosts in plain-text settings checked to shapes that can't reach an ssh option, no secret setting and a pasted key or password refused; `-F none`, every `-o` a constant, `StrictHostKeyChecking=yes` against the plugin's verified keys and `~/.ssh/known_hosts`, a changed key refused; ssh by full path only; ssh's own cleared environment, `SSH_AUTH_SOCK` only from a setting; no powers beyond a process plugin's; new `ui/ssh.html` (no console surface for a process plugin's view yet) and `docs/plugins/ssh.md`. Not in the catalog (its folder holds no program until `build.sh` runs) | br-ssh 59178e9 | d087c9c |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 `wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`,
@@ -115,6 +116,14 @@ under that branch. The branch is not deleted here.
 | 35a116c | Shell engine and hooks, bundled list snapshots | engine and hooks ported (b2b3383); snapshots and `update-filter-lists.mjs` dropped by ruling |
 | ea815f7 | Hooks split from the glue | ported (b2b3383, decisions in `rules.rs`) |
 | d6f1839 | Saved working tree: browser import (`chromium.rs`, `firefox.rs`, `plist.rs`, `sqlite.rs`) | ported (c2fa152) after a line-by-line review: readers hardened, two draft bugs fixed (quoted column names, a self-parented Firefox folder), `mod.rs` and `safari.rs` new |
+
+### Ready to delete: br-ssh
+
+Its one commit is ported. The branch is not deleted here.
+
+| Commit | What | State |
+|---|---|---|
+| 59178e9 | Saved working tree: the SSH plugin as a Node program (`plugin.js`, `lib/ssh.js`, `lib/store.js`, `lib/text.js`, manifest) | ported (d087c9c) as a compiled program: tools, Verify, quoting, output tails and error words kept; hosts moved from the page's store into settings; the audit log dropped; `ui/ssh.html` and `docs/plugins/ssh.md` new |
 
 ### Ready to delete: br-chatmove
 
@@ -257,7 +266,9 @@ main, or obsolete:
   (`CAP_BOOKMARK`, new keys refused at 5,000) is then what stops the tree.
 - br-sync profile sync: **dropped** by policy (cookies and site storage stay on
   the device, `docs/cloud-trust-model.md`). Sealed store kept as a reference.
-- SSH plugin: after the plugin runtime; add its missing `ui/ssh.html` and docs.
+- SSH plugin: ported (Done row above), so br-ssh is ready to delete (its
+  section below). Its page waits for the console to show a process plugin's
+  views.
 
 ### Smaller branches
 - br-chatctl: the chat-permission-controls redesign (one ladder of rungs over
