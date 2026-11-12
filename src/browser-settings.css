@@ -100,3 +100,36 @@
   color: var(--red, #f87171);
   font-size: 12.5px;
 }
+
+/* Settings > Browser's "Filter lists" dialog: a line on what ticking does. */
+.bw-dialog-lead {
+  margin: 12px 0 2px;
+  color: var(--text-3);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* Settings > Browser's allowed sites: the field to add one. */
+.bws-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.bws-add input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+}
+
+.bws-add input:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 0;
+}

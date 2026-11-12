@@ -40,6 +40,8 @@ import { STARTUP_CHOICES, browserSetting, loadBrowserPrefs, setBrowserPref, setS
 import { hostOf, permissionName, permissionRows } from './browser-chrome.js'
 import { SEARCH_ENGINES } from './browser-omnibox.js'
 import BrowserClearData from './BrowserClearData.jsx'
+import BrowserFilterLists from './BrowserFilterLists.jsx'
+import { adblockLine, listLabel, loadAdblock, setAdblock, setAdblockSite, siteOf } from './browser-adblock.js'
 import { useBack } from './use-back.js'
 import { useConsole } from './state/console.jsx'
 import { signedIn } from './cloud.js'
@@ -563,10 +565,23 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
   const browserPrefs = useBrowserPrefs()
   const [profileClearable, setProfileClearable] = useState(false)
   const [clearingData, setClearingData] = useState(false)
+  // Ad and tracker blocking (browser-adblock.js): the daemon's state on this
+  // computer. Its rows show only where the browser here can block.
+  const [adblock, setAdblockStatus] = useState(null)
+  const [choosingLists, setChoosingLists] = useState(false)
+  const [siteDraft, setSiteDraft] = useState('')
+  const adblockShown = hasTauri && !isMobile && adblock?.supported === true
   useEffect(() => {
     if (!hasTauri || isMobile) return undefined
     let live = true
     loadBrowserPrefs(browserCall)
+    loadAdblock(browserCall)
+      .then((status) => {
+        if (live) setAdblockStatus(status)
+      })
+      .catch(() => {
+        /* the rows stay absent */
+      })
     callShell('browser_features').then((features) => {
       if (live) setProfileClearable(Boolean(features?.clear_site))
     })
@@ -574,6 +589,34 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
       live = false
     }
   }, [])
+  // While a picked list downloads, look again every few seconds so the line
+  // under the toggle moves on by itself.
+  const adblockUpdating = adblock?.state === 'updating'
+  useEffect(() => {
+    if (!adblockUpdating) return undefined
+    const timer = setInterval(() => {
+      loadAdblock(browserCall)
+        .then(setAdblockStatus)
+        .catch(() => {})
+    }, 3000)
+    return () => clearInterval(timer)
+  }, [adblockUpdating])
+  const toggleAdblock = () => {
+    setBrowserNote(null)
+    setAdblock(browserCall, { on: !adblock.on })
+      .then(setAdblockStatus)
+      .catch((err) => setBrowserNote(errorCopy(err)))
+  }
+  const allowAdsOn = (site, allow) => {
+    setBrowserNote(null)
+    setAdblockSite(browserCall, site, allow)
+      .then((status) => {
+        setAdblockStatus(status)
+        if (allow) setSiteDraft('')
+      })
+      .catch((err) => setBrowserNote(errorCopy(err)))
+  }
+  const draftSite = siteOf(siteDraft)
   const searchEngine = browserSetting(browserPrefs.settings, 'search')
   const barEverywhere = browserSetting(browserPrefs.settings, 'bookmarks_bar')
   const browserStartup = browserSetting(browserPrefs.settings, 'startup')
@@ -703,6 +746,12 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
       keys.add('browser-startup')
     }
     if (!profileClearable) keys.add('browser-clear-data')
+    // Ad blocking is drawn only where the browser here says it can block.
+    if (!adblockShown) {
+      keys.add('browser-adblock')
+      keys.add('browser-adblock-lists')
+      keys.add('browser-adblock-sites')
+    }
     // The Browser key group is listed only where there is a browser.
     if (!BROWSER_KEYS) for (const a of BROWSER_ACTIONS) keys.add(`keyboard-${a.id}`)
     // This install is a phone tab, but the daemon rows and the first-run step
@@ -724,7 +773,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
       }
     }
     return keys
-  }, [models, effortTiers, permissionWords, autoStart, tray, above, daemonDetail, onManualConnect, connection.state, kb, profileClearable])
+  }, [models, effortTiers, permissionWords, autoStart, tray, above, daemonDetail, onManualConnect, connection.state, kb, profileClearable, adblockShown])
 
   const searchable = useMemo(() => {
     const ids = new Set(tabs.map((s) => s.id))
@@ -1908,6 +1957,73 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                     label="Show bookmarks bar"
                   />
                 </div>
+                {adblockShown && (
+                  <>
+                    <div className="pn-row" data-stg="browser-adblock">
+                      <div>
+                        <div className="pn-name">Block ads and trackers</div>
+                        <div className="pn-detail">{adblockLine(adblock)}</div>
+                      </div>
+                      <Toggle checked={adblock.on} onChange={toggleAdblock} label="Block ads and trackers" />
+                    </div>
+                    <div className="pn-row" data-stg="browser-adblock-lists">
+                      <div>
+                        <div className="pn-name">Filter lists</div>
+                        <div className="pn-detail">
+                          {adblock.lists.some((l) => l.picked)
+                            ? adblock.lists
+                                .filter((l) => l.picked)
+                                .map(listLabel)
+                                .join(', ')
+                            : `None picked. On offer: ${adblock.lists.map(listLabel).join(', ')}.`}
+                        </div>
+                      </div>
+                      <button type="button" className="pn-btn" onClick={() => setChoosingLists(true)}>
+                        Choose…
+                      </button>
+                    </div>
+                    <div className="pn-row pn-row--stack" data-stg="browser-adblock-sites">
+                      <div>
+                        <div className="pn-name">Sites allowed to show ads</div>
+                        <div className="pn-detail">
+                          Nothing is blocked on these sites or the pages below them. Your own computer and
+                          network are never filtered.
+                        </div>
+                      </div>
+                      {adblock.sites.length > 0 && (
+                        <div className="bws-sites">
+                          {adblock.sites.map((site) => (
+                            <div key={site} className="bws-site">
+                              <span className="bws-site-host pv">{site}</span>
+                              <button type="button" className="pn-btn" onClick={() => allowAdsOn(site, false)}>
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <form
+                        className="bws-add"
+                        onSubmit={(e) => {
+                          e.preventDefault()
+                          if (draftSite) allowAdsOn(draftSite, true)
+                        }}
+                      >
+                        <input
+                          type="text"
+                          value={siteDraft}
+                          onChange={(e) => setSiteDraft(e.target.value)}
+                          placeholder="example.com"
+                          aria-label="A site to allow ads on"
+                          spellCheck={false}
+                        />
+                        <button type="submit" className="pn-btn" disabled={!draftSite}>
+                          Allow
+                        </button>
+                      </form>
+                    </div>
+                  </>
+                )}
                 <div className="pn-row pn-row--stack" data-stg="browser-permissions">
                   <div>
                     <div className="pn-name">Site permissions</div>
@@ -2081,6 +2197,13 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
               <p className="stg-note" role="status">
                 {browserNote}
               </p>
+            )}
+            {choosingLists && adblock && (
+              <BrowserFilterLists
+                status={adblock}
+                onClose={() => setChoosingLists(false)}
+                onSaved={setAdblockStatus}
+              />
             )}
             {clearingData && (
               <BrowserClearData
