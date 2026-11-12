@@ -13,6 +13,7 @@
 // - a plugin writes in a composer only after the user clicked its button
 //   in that composer: a click is the grant, and nothing else makes one.
 
+import { MAX_IMAGE_BYTES } from './composer-attachments.js'
 import {
   CHAT_CALLS,
   fromBase64,
@@ -24,7 +25,8 @@ import {
 } from './plugin-runtime.js'
 
 export const MAX_INSERT = 100_000
-export const MAX_ATTACH_BYTES = 10 * 1024 * 1024
+// The composer's own limit, which the daemon holds every picture to.
+export const MAX_ATTACH_BYTES = MAX_IMAGE_BYTES
 export const INPUT_STATES = new Set(['idle', 'active', 'busy'])
 
 // A grant ends five minutes after the click that made it, at the latest.
@@ -177,7 +179,7 @@ export function makeCalls(deps) {
         throw new Error('Only pictures (PNG, JPEG, GIF, WebP) can be attached for now.')
       }
       if (!(bytes instanceof ArrayBuffer) || bytes.byteLength > MAX_ATTACH_BYTES) {
-        throw new Error('A picture can be up to 10 MB.')
+        throw new Error('A picture can be up to 5 MB.')
       }
       deps.attach(
         { kind: 'image', name: String(name ?? 'picture').slice(0, 120), mime, dataUrl: `data:${mime};base64,${toBase64(bytes)}` },

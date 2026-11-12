@@ -255,3 +255,20 @@ test('a grant ends when the button goes back to idle, or five minutes after the 
   assert.equal(GRANT_MS, 5 * 60 * 1000)
   assert.deepEqual(typed, ['one', 'five'])
 })
+
+test("a plugin's picture is held to the composer's own 5 MB, as the daemon holds it", async () => {
+  const { MAX_ATTACH_BYTES } = await import('./plugin-calls.js')
+  const { MAX_IMAGE_BYTES } = await import('./composer-attachments.js')
+  assert.equal(MAX_ATTACH_BYTES, MAX_IMAGE_BYTES)
+  const { calls, grants } = setup()
+  const writer = record([])
+  grants.composers.set(':a:', { insert: () => {}, attachKey: 'chat-a' })
+  grantClick(grants, 'board@local', ':a:')
+  const attach = (size) =>
+    answerCall(writer, call('composer.attach', { name: 'p.png', mime: 'image/png', bytes: new ArrayBuffer(size), composer: ':a:' }), calls)
+  assert.equal((await attach(MAX_IMAGE_BYTES)).error, undefined)
+  assert.match((await attach(MAX_IMAGE_BYTES + 1)).error, /up to 5 MB/)
+  const { readFileSync } = await import('node:fs')
+  const doc = readFileSync(new URL('../docs/plugins/js-api.md', import.meta.url), 'utf8')
+  assert.match(doc, /`composer\.attach\(file, \{ composer, name \}\)` \| Adds a picture \(PNG, JPEG, GIF or WebP, up to 5 MB;/)
+})

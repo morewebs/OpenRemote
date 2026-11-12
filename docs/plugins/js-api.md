@@ -192,7 +192,7 @@ one of the app's own.
 |---|---|
 | `composer.onClick(handler)` | `handler({ input, composer })` on each click of one of your buttons. `input` is the button's `id`; `composer` is a handle to the composer it was clicked in. Answers a function that stops listening. Clicks that came before your page was up are kept for your first handler. |
 | `composer.insert(text, { composer })` | Writes `text` at that composer's cursor (or over its selection), with a space where words would touch. Without `composer`, the one whose button was clicked last. Refused without a live grant for that composer, or once it has closed. |
-| `composer.attach(file, { composer, name })` | Adds a picture (PNG, JPEG, GIF or WebP, up to 10 MB; a `Blob`, `File` or bytes) to that composer's next message. Same grant as `insert`. |
+| `composer.attach(file, { composer, name })` | Adds a picture (PNG, JPEG, GIF or WebP, up to 5 MB; a `Blob`, `File` or bytes) to that composer's next message. Same grant as `insert`. |
 | `composer.setState(input, { state, label, title }, { composer })` | The button's look: `state` is `'idle'`, `'active'` (accent, breathing: listening, recording) or `'busy'` (quieter: working); `label` is a few words beside it (`'Listening 0:12'`); `title` its tooltip. With a `composer` you hold a grant for, in that composer only; every composer's otherwise. `'idle'` ends the button's grants. |
 
 ### Chats

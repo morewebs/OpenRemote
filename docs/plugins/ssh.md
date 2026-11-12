@@ -32,7 +32,10 @@ paths are quoted for one, and `ssh_read_file` and `ssh_write_file` run
 PowerShell gets `ssh_run` only, with commands written for that shell.
 
 Every call ends before the daemon stops waiting for it, so a call the
-agent is told timed out is not still running: a call waits at most 10 s
+agent is told timed out is no longer running here: the plugin's ssh client
+has stopped. The command it started on the remote host may still be running
+there, since closing the connection does not always end it (a process that
+ignores the hangup, or one started in the background). A call waits at most 10 s
 for one of the four connections (and is refused, never started later, if
 none frees), then runs within its own limit, then has 5 s to stop. Those
 three together stay at least 10 s under the tool's `timeout_secs`, and a
