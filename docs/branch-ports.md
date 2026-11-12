@@ -68,6 +68,8 @@ recorded as dropped below.
 | Console `moveChat`, the move rules, the ask-first preference | br-chatmove f24a570, c11841c (console) | ccdc34e |
 | Drag a chat onto a project, the move confirm, pane-menu submenu, Settings > Confirmations | br-chatmove 6bd13e6 | 67ef0c3 |
 | Plugin docs (`docs/plugins/`: protocol, authoring, JS API) written for what this OpenRemote does; the toy example as one compiled program (tools and a JSON-lines harness driver); dictation's local server only at a typed address; an e2e that installs and runs the examples; the Freebuff plan in `docs/plans/` | br-plugins 03499db, 56e78fb, 76d1eaf; br-plugin-ui 2db6a60, ee8e0ec, 5a16093, 7b9b120; br-freebuff-tui f9629f6 | 76210ef |
+| An OpenCode chat's permission word reaches OpenCode (`OPENCODE_PERMISSION`, its own permission config merged over the user's); a word that is not a JSON object refuses to start | br-chatctl 5382f7d (opencode driver) | eae6816 |
+| Codex `never` sandbox: reviewed, not ported - on main `never` is "Never ask" and keeps the workspace sandbox (codex 0.167 runs that pairing as given); lifting it to `danger-full-access` would do more than the word says. Pinned by a test that fails on the branch's version | br-chatctl 5382f7d (codex driver) | 59a6a1f |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 `wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`,
@@ -210,6 +212,8 @@ main, or obsolete:
 - br-updater: rewire into main's `publish` job (signatures staged at the root,
   `latest.json` written by publish, no separate job); stop the daemon before
   the installer runs.
-- br-chatctl: redesign against main's `PermissionWord` model; take the codex
-  `never` sandbox and `OPENCODE_PERMISSION` fixes first.
+- br-chatctl: the chat-permission-controls redesign (one ladder of rungs over
+  every App, OpenCode's rungs, Antigravity's skip-permissions rung, codex's
+  Full Access pairing) - **awaiting design approval** against main's
+  `PermissionWord` model. Its two fixes are done (above).
 - br-accounts, br-teleport: design references only.
