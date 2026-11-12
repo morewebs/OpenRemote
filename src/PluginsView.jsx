@@ -247,9 +247,18 @@ function InstalledPlugins({ onUpdate, onReview }) {
                   </div>
                   <div className="pn-detail">{reviewWaitingLine({ ...g, kind: 'account' })}</div>
                 </div>
-                <button type="button" className="pn-btn" onClick={() => onReview({ kind: 'account', id: g.id })}>
-                  Review
-                </button>
+                {/* Another device's removal only turned it off here: removing it
+                    on this device, with its settings and secrets, is this
+                    device's user's own word. */}
+                {g.why === 'removed' ? (
+                  <button type="button" className="pn-btn" onClick={() => run(() => removePlugin(g.id))}>
+                    Remove it here
+                  </button>
+                ) : (
+                  <button type="button" className="pn-btn" onClick={() => onReview({ kind: 'account', id: g.id })}>
+                    Review
+                  </button>
+                )}
               </div>
             ))}
           </div>

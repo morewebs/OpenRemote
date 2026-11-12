@@ -883,6 +883,30 @@ impl Store {
 
     // ---- Global plugins: the account's records ----
 
+    /// This device's own write: it replaces whatever is held.
+    pub fn put_global_plugin(&mut self, record: GlobalPluginRecord) -> Result<(), StoreError> {
+        self.state.global_plugins.insert(record.id(), record);
+        self.persist()
+    }
+
+    /// Off, for another device's removal, without the time a person's own
+    /// change gets: the record that turned it off stays the newer word
+    /// until someone here installs it again or turns it back on.
+    pub fn turn_off_installed_plugin_keeping_time(
+        &mut self,
+        id: &str,
+    ) -> Result<InstalledPlugin, StoreError> {
+        let plugin = self
+            .state
+            .installed_plugins
+            .get_mut(id)
+            .ok_or_else(|| StoreError::NotFound(format!("plugin {id}")))?;
+        plugin.enabled = false;
+        let out = plugin.clone();
+        self.persist()?;
+        Ok(out)
+    }
+
     pub fn global_plugins(&self) -> Vec<&GlobalPluginRecord> {
         self.state.global_plugins.values().collect()
     }
@@ -2304,10 +2328,33 @@ mod tests {
                 path: "/somewhere".into(),
             },
             resolved: "abc".into(),
+            archive: None,
             at,
             by,
             removed: false,
         }
+    }
+
+    #[test]
+    fn this_devices_own_word_replaces_the_record_and_a_removal_turns_off_without_a_new_time() {
+        let mut store = Store::open(tempdir()).unwrap();
+        // A record from the future (a peer's clock) is held; this device's
+        // own write still replaces it.
+        store
+            .merge_global_plugin(global("shout", 9_000, None))
+            .unwrap();
+        store.put_global_plugin(global("shout", 10, None)).unwrap();
+        assert_eq!(store.global_plugin("shout@local").unwrap().at, 10);
+        // Turned off for another device's removal: the time it was installed
+        // or updated here is kept, so the removal still reads as newer.
+        let mut here = installed("shout", PluginScope::Global, None);
+        here.updated_at = 5;
+        store.put_installed_plugin(here).unwrap();
+        let off = store
+            .turn_off_installed_plugin_keeping_time("shout@local")
+            .unwrap();
+        assert!(!off.enabled);
+        assert_eq!(off.updated_at, 5);
     }
 
     #[test]

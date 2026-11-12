@@ -109,6 +109,7 @@ export function removeScopeNote(plugin) {
 // since it was approved) or the account's (not here yet, or a newer copy).
 export function reviewWaitingLine(item, projectName = null) {
   if (item?.kind === 'account') {
+    if (item.why === 'removed') return 'Removed on another device - it is off here until you remove it or turn it back on'
     return item.why === 'update' ? 'A newer copy is on your other devices' : 'On your other devices, not here yet'
   }
   if (item?.why === 'changed') return 'Changed in the repo since you approved it'
@@ -128,9 +129,12 @@ export function notSandboxed(plugin) {
 // Where a plugin came from, in a line.
 export function sourceLabel(source) {
   if (!source) return ''
-  if (source.kind === 'folder') return `Folder: ${source.path}`
+  // A plugin from the account names a folder or file on another device
+  // by its kind only: no path travels between devices.
+  if (source.kind === 'folder') return source.path ? `Folder: ${source.path}` : 'A folder on another of your devices'
   if (source.kind === 'git') return `Git: ${source.url}`
-  if (source.kind === 'archive') return `Archive: ${source.location}`
+  if (source.kind === 'archive')
+    return source.location ? `Archive: ${source.location}` : 'An archive on another of your devices'
   if (source.kind === 'marketplace') return `${source.marketplace}: ${source.from}`
   return ''
 }

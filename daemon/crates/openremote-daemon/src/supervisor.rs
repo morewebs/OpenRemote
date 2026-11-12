@@ -1091,7 +1091,14 @@ impl Supervisor {
         });
         let mut notes = Vec::new();
         for plugin in plugins {
-            match crate::plugins::rerun_command(&data_dir, &plugin).await {
+            // Its program stops before the folder is replaced.
+            let id = plugin.id();
+            let stop = async {
+                if let Some(changed) = self.plugin_changed.get() {
+                    changed(id).await;
+                }
+            };
+            match crate::plugins::rerun_command(&data_dir, &plugin, stop).await {
                 Ok(Some(hash)) => {
                     let mut updated = plugin.clone();
                     updated.resolved = Some(hash);

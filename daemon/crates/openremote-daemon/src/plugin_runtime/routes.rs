@@ -146,7 +146,7 @@ async fn file(
     };
     // A repo plugin's files are served only while they are what was
     // approved, as its tools run only then.
-    if !super::scope::approved_files(&plugin, &root) {
+    if !app.plugin_runtime.approved(&plugin) {
         return bad(
             StatusCode::CONFLICT,
             "its files in the project changed since you approved them; review it again under Plugins",

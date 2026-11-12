@@ -1106,6 +1106,11 @@ impl Staged {
     pub fn id(&self) -> String {
         format!("{}@{}", self.name, self.marketplace)
     }
+
+    /// The fetched folder as the review read it.
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
 }
 
 /// The plugin folders on this machine, and the installs waiting for an
@@ -1391,6 +1396,15 @@ pub(crate) fn place(from: &Path, target: &Path) -> Result<(), PluginError> {
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent)?;
     }
+    // A link where the folder goes is never moved aside or deleted
+    // through: what it leads to is not this plugin's.
+    if std::fs::symlink_metadata(target).is_ok_and(|m| m.file_type().is_symlink() || is_reparse(&m))
+    {
+        return Err(PluginError::Invalid(format!(
+            "{} is a link, so OpenRemote won't replace it",
+            target.display()
+        )));
+    }
     let aside = target.with_file_name(format!(
         ".{}.old-{}",
         target
@@ -1421,6 +1435,26 @@ pub(crate) fn place(from: &Path, target: &Path) -> Result<(), PluginError> {
             Err(e)
         }
     }
+}
+
+/// Whether metadata is of a Windows reparse point (a junction included).
+fn is_reparse(meta: &std::fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        meta.file_attributes() & 0x400 != 0
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = meta;
+        false
+    }
+}
+
+/// Copy a plugin folder (plain files and folders, no links, no git
+/// history), within the size limits.
+pub(crate) fn copy_folder(from: &Path, to: &Path) -> Result<(), PluginError> {
+    copy_tree(from, to, &mut CopyBudget::default())
 }
 
 /// The first plugin builds put a plugin straight under `plugins/<name>`;
@@ -2140,10 +2174,14 @@ pub async fn run_command(approved: &ApprovedCommand) -> Result<PathBuf, PluginEr
 /// At a chat's start: run an installed plugin's approved command again
 /// and take its folder if it changed. Answers whether it changed and the
 /// new content hash; an error leaves the last copy in place.
-pub async fn rerun_command(
+pub async fn rerun_command<F>(
     data_dir: &Path,
     plugin: &InstalledPlugin,
-) -> Result<Option<String>, PluginError> {
+    before_swap: F,
+) -> Result<Option<String>, PluginError>
+where
+    F: std::future::Future<Output = ()>,
+{
     let Some(approved) = &plugin.command else {
         return Ok(None);
     };
@@ -2198,6 +2236,9 @@ pub async fn rerun_command(
             added.join(", ")
         )));
     }
+    // A program running the old copy holds its folder (Windows refuses to
+    // move a running program's folder): it stops first.
+    before_swap.await;
     let swapped = swap_in(&root, &fresh, &target);
     let _ = std::fs::remove_dir_all(&fresh);
     swapped?;
@@ -2424,6 +2465,22 @@ fn write_bare_claude_manifest(root: &Path, manifest: &Manifest) -> Result<(), Pl
 /// Unpack a .zip or .tar.gz into `to`, refusing any entry that would land
 /// outside it and any archive that unpacks past the size limit.
 pub(crate) fn unpack(bytes: &[u8], to: &Path) -> Result<(), PluginError> {
+    unpack_within(bytes, to, MAX_ARCHIVE_BYTES)
+}
+
+/// A gzip tar only, unpacked within `cap` bytes: how a copy of a plugin
+/// from another device arrives.
+pub(crate) fn unpack_tar_gz(bytes: &[u8], to: &Path, cap: u64) -> Result<(), PluginError> {
+    if !bytes.starts_with(&[0x1f, 0x8b]) {
+        return Err(PluginError::Invalid("the copy is not a .tar.gz".into()));
+    }
+    unpack_within(bytes, to, cap)
+}
+
+/// Unpack within `cap` bytes, counting what is really written: a zip's
+/// declared sizes are its own claim, and a small claim over a large stream
+/// is how a zip bomb works.
+fn unpack_within(bytes: &[u8], to: &Path, cap: u64) -> Result<(), PluginError> {
     std::fs::create_dir_all(to)?;
     let mut total: u64 = 0;
     if bytes.starts_with(b"PK\x03\x04") {
@@ -2443,15 +2500,22 @@ pub(crate) fn unpack(bytes: &[u8], to: &Path) -> Result<(), PluginError> {
                 std::fs::create_dir_all(&out)?;
                 continue;
             }
-            total += entry.size();
-            if total > MAX_ARCHIVE_BYTES {
+            if total.saturating_add(entry.size()) > cap {
                 return Err(PluginError::Source("the archive unpacks too large".into()));
             }
             if let Some(parent) = out.parent() {
                 std::fs::create_dir_all(parent)?;
             }
             let mut file = std::fs::File::create(&out)?;
-            std::io::copy(&mut (&mut entry).take(MAX_ARCHIVE_BYTES), &mut file)?;
+            // At most one byte past what is left, whatever the entry claims.
+            let left = cap - total;
+            let written = std::io::copy(&mut (&mut entry).take(left + 1), &mut file)?;
+            total += written;
+            if total > cap {
+                drop(file);
+                let _ = std::fs::remove_file(&out);
+                return Err(PluginError::Source("the archive unpacks too large".into()));
+            }
         }
         return Ok(());
     }
@@ -2468,7 +2532,7 @@ pub(crate) fn unpack(bytes: &[u8], to: &Path) -> Result<(), PluginError> {
                 continue;
             }
             total += entry.header().size().unwrap_or(0);
-            if total > MAX_ARCHIVE_BYTES {
+            if total > cap {
                 return Err(PluginError::Source("the archive unpacks too large".into()));
             }
             // unpack_in refuses a path that climbs out of `to`.
@@ -2592,6 +2656,45 @@ mod tests {
                 .to_string()
                 .contains("not a plugin")
         );
+    }
+
+    /// A zip whose entry claims ten bytes and holds sixty-four thousand:
+    /// what is written is counted, not what the entry claims.
+    #[test]
+    fn a_zip_that_understates_its_sizes_is_stopped_at_the_cap() {
+        let mut bytes = Vec::new();
+        {
+            let mut zip = zip::ZipWriter::new(Cursor::new(&mut bytes));
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated);
+            zip.start_file("bomb.bin", options).unwrap();
+            std::io::Write::write_all(&mut zip, &vec![0u8; 64 * 1024]).unwrap();
+            zip.finish().unwrap();
+        }
+        // The local header's size (at 22) and the central directory's (at 24).
+        let claim = 10u32.to_le_bytes();
+        let local = bytes.windows(4).position(|w| w == b"PK").unwrap();
+        bytes[local + 22..local + 26].copy_from_slice(&claim);
+        let central = bytes.windows(4).position(|w| w == b"PK").unwrap();
+        bytes[central + 24..central + 28].copy_from_slice(&claim);
+        let to = tempfile::tempdir().unwrap();
+        let err = unpack_within(&bytes, to.path(), 1_000).unwrap_err();
+        assert!(err.to_string().contains("too large"), "{err}");
+        let written = std::fs::metadata(to.path().join("bomb.bin")).map_or(0, |m| m.len());
+        assert!(written <= 1_000, "{written} bytes written");
+    }
+
+    #[test]
+    fn a_copy_from_another_device_is_a_tar_gz_within_its_cap() {
+        let from = tempfile::tempdir().unwrap();
+        std::fs::write(from.path().join("big.bin"), vec![7u8; 10 * 1024]).unwrap();
+        let packed = crate::plugin_runtime::global::pack(from.path()).unwrap();
+        let to = tempfile::tempdir().unwrap();
+        let err = unpack_tar_gz(&packed, &to.path().join("small"), 1_000).unwrap_err();
+        assert!(err.to_string().contains("too large"), "{err}");
+        unpack_tar_gz(&packed, &to.path().join("ok"), 1 << 20).unwrap();
+        let err = unpack_tar_gz(b"PK", &to.path().join("zip"), 1 << 20).unwrap_err();
+        assert!(err.to_string().contains("tar.gz"), "{err}");
     }
 
     #[test]
@@ -3155,7 +3258,7 @@ mod tests {
             updated_at: 0,
         };
         assert!(
-            rerun_command(data_dir, &record(None))
+            rerun_command(data_dir, &record(None), async {})
                 .await
                 .unwrap()
                 .is_some()
@@ -3167,7 +3270,7 @@ mod tests {
         // The output grows an MCP server, which runs programs: a power the
         // user never saw. It is not swapped in behind their back.
         std::fs::write(folder.join(".mcp.json"), "{}").unwrap();
-        let err = rerun_command(data_dir, &record(None))
+        let err = rerun_command(data_dir, &record(None), async {})
             .await
             .unwrap_err()
             .to_string();
@@ -3228,7 +3331,7 @@ mod tests {
             installed_at: 0,
             updated_at: 0,
         };
-        let err = rerun_command(data_dir, &record)
+        let err = rerun_command(data_dir, &record, async {})
             .await
             .unwrap_err()
             .to_string();

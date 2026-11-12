@@ -679,6 +679,11 @@ pub struct GlobalPluginRecord {
     /// The installed folder's content hash: a copy fetched from another
     /// device is offered for review only when it is exactly these bytes.
     pub resolved: String,
+    /// The sha256 of the folder's archive as every device packs it: a copy
+    /// fetched from another device is checked against it before a byte of
+    /// it is unpacked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archive: Option<String>,
     /// When and where it last changed: the latest write wins.
     pub at: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]

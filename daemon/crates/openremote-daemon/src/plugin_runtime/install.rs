@@ -36,8 +36,30 @@ pub fn allowed_scopes(manifest: &Manifest, from_command: bool) -> Vec<PluginScop
     scopes
 }
 
-/// Where a scope keeps a plugin's files.
+/// Where a scope keeps the plugin's files it runs, and for a Project
+/// plugin the project's folder, whose repo gets a copy (checked: no part of
+/// its path is a link, and it stays inside the project).
 fn target(
+    app: &App,
+    staged: &Staged,
+    scope: PluginScope,
+    project: Option<ProjectId>,
+) -> Result<(PathBuf, Option<PathBuf>), Failure> {
+    let target = target_dir(app, staged, scope, project)?;
+    if scope != PluginScope::Project {
+        return Ok((target, None));
+    }
+    let folder = project
+        .and_then(|p| scope::project_folder(&lock_recovering(&app.store), p))
+        .ok_or((
+            StatusCode::CONFLICT,
+            "the project has no folder".to_string(),
+        ))?;
+    scope::repo_dir(&folder, &staged.name).map_err(|e| (StatusCode::CONFLICT, e))?;
+    Ok((target, Some(folder)))
+}
+
+fn target_dir(
     app: &App,
     staged: &Staged,
     scope: PluginScope,
@@ -55,12 +77,9 @@ fn target(
             &staged.marketplace,
             &staged.name,
         )),
+        // What runs is OpenRemote's snapshot of the reviewed bytes.
         (PluginScope::Project, Some(project)) => {
-            let folder = scope::project_folder(&lock_recovering(&app.store), project).ok_or((
-                StatusCode::CONFLICT,
-                "the project has no folder".to_string(),
-            ))?;
-            Ok(scope::repo_dir(&folder, &staged.name))
+            Ok(scope::snapshot_dir(&app.data_dir, project, &staged.name))
         }
         (_, None) => Err((
             StatusCode::BAD_REQUEST,
@@ -142,8 +161,22 @@ pub async fn install(
     if let Some(why) = clash {
         return refuse(staged, (StatusCode::CONFLICT, why));
     }
-    let target = match target(app, &staged, scope, project) {
+    let (target, repo) = match target(app, &staged, scope, project) {
         Ok(target) => target,
+        Err(failure) => return refuse(staged, failure),
+    };
+    // The bytes the user reviewed, hashed before anything moves: a Project
+    // plugin runs only while its repo still carries exactly these, and a
+    // Global one is copied to other devices as exactly these.
+    let hash = {
+        let root = staged.root().to_path_buf();
+        tokio::task::spawn_blocking(move || crate::plugins::content_hash(&root))
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+            .and_then(|r| r.map_err(failure))
+    };
+    let hash = match hash {
+        Ok(hash) => hash,
         Err(failure) => return refuse(staged, failure),
     };
     let before = lock_recovering(&app.store)
@@ -164,15 +197,22 @@ pub async fn install(
         PluginScope::ProjectLocal | PluginScope::Project => app.plugins.install_at(staged, &target),
     };
     placed.map_err(failure)?;
-    // The placed folder's content: a repo plugin runs only while its files
-    // are exactly these, and a Global one is copied as exactly these.
-    let hash = {
-        let target = target.clone();
-        tokio::task::spawn_blocking(move || crate::plugins::content_hash(&target))
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    };
+    // The repo gets its copy of the snapshot, for whoever clones it.
+    if let Some(folder) = &repo {
+        let written = {
+            let (folder, name, from) = (folder.clone(), name.clone(), target.clone());
+            tokio::task::spawn_blocking(move || scope::write_repo_copy(&folder, &name, &from))
+                .await
+                .map_err(|e| e.to_string())
+                .and_then(|r| r)
+        };
+        if let Err(why) = written {
+            if before.is_none() {
+                let _ = std::fs::remove_dir_all(&target);
+            }
+            return Err((StatusCode::CONFLICT, why));
+        }
+    }
     let now = openremote_core::now_ms();
     let harness = manifest.harness.as_ref().map(|h| PluginHarnessRef {
         id: h.id.clone(),
@@ -227,6 +267,14 @@ pub async fn install(
     if let (Some(before), Some(old)) = (&before, old_folder) {
         if before.scope != scope && old != target {
             let _ = std::fs::remove_dir_all(&old);
+            if before.scope == PluginScope::Project {
+                if let Some(folder) = before
+                    .project
+                    .and_then(|p| scope::project_folder(&lock_recovering(&app.store), p))
+                {
+                    let _ = scope::delete_repo_copy(&folder, &before.name);
+                }
+            }
             forget_in_repo(app, before);
         }
     }
@@ -242,11 +290,9 @@ pub async fn install(
         }
         _ => {}
     }
-    if scope == PluginScope::Project {
-        if let Some(folder) =
-            project.and_then(|p| scope::project_folder(&lock_recovering(&app.store), p))
-        {
-            let _ = scope::note_in_repo_index(&folder, &plugin);
+    if let Some(folder) = &repo {
+        if let Err(why) = scope::note_in_repo_index(folder, &plugin) {
+            eprintln!("plugin {id}: its repo's index was not updated: {why}");
         }
     }
     // The plugin's App appears (or changes) without a restart.
@@ -299,8 +345,25 @@ pub async fn remove(app: &Arc<App>, id: &str, tell_account: bool) -> Result<(), 
             ),
         ));
     }
+    // A repo copy is deleted only through a path that is no link and stays
+    // inside the project; asked before anything goes.
+    let repo = match plugin.scope {
+        PluginScope::Project => {
+            let folder = plugin
+                .project
+                .and_then(|p| scope::project_folder(&lock_recovering(&app.store), p));
+            if let Some(folder) = &folder {
+                scope::repo_dir(folder, &plugin.name).map_err(|e| (StatusCode::CONFLICT, e))?;
+            }
+            folder
+        }
+        _ => None,
+    };
     // Its program stops first: it holds the folder open too.
     app.plugin_runtime.changed(id).await;
+    if let Some(folder) = &repo {
+        scope::delete_repo_copy(folder, &plugin.name).map_err(|e| (StatusCode::CONFLICT, e))?;
+    }
     match plugin.scope {
         PluginScope::Global | PluginScope::Machine => app
             .plugins
@@ -348,8 +411,9 @@ pub fn project_source(
     if !crate::plugins::valid_name(name) {
         return Err((StatusCode::BAD_REQUEST, "not a plugin's folder name".into()));
     }
-    let dir = scope::repo_dir(&folder, name);
-    if !dir.is_dir() {
+    // Read only through a path that is no link and stays in the project.
+    let dir = scope::repo_dir(&folder, name).map_err(|e| (StatusCode::CONFLICT, e))?;
+    if !std::fs::symlink_metadata(&dir).is_ok_and(|m| m.is_dir()) {
         return Err((
             StatusCode::NOT_FOUND,
             format!("the project has no plugin {name}"),

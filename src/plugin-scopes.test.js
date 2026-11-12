@@ -16,6 +16,7 @@ import {
   removeScopeNote,
   reviewWaitingLine,
   scopeLabel,
+  sourceLabel,
 } from './plugins.js'
 
 const source = (file) => readFileSync(new URL(`./${file}`, import.meta.url), 'utf8')
@@ -122,4 +123,16 @@ test('the Plugins page lists what waits for review, each with a Review button', 
   // An App appearing or leaving with its plugin reaches the pickers.
   const state = source('state/console.jsx')
   assert.match(state, /api\.installStagedPlugin\(stageId, where\)\s*\n\s*await Promise\.all\(\[refreshPlugins\(\), refreshCapabilities\(\)\]\)/)
+})
+
+test('a plugin another device removed is off here, and this device confirms the removal', () => {
+  assert.match(reviewWaitingLine({ why: 'removed', kind: 'account' }), /^Removed on another device/)
+  const view = source('PluginsView.jsx')
+  assert.match(view, /g\.why === 'removed'/)
+  assert.match(view, /run\(\(\) => removePlugin\(g\.id\)\)/)
+})
+
+test("an account plugin's source never names a path on another device", () => {
+  assert.equal(sourceLabel({ kind: 'folder', path: '' }), 'A folder on another of your devices')
+  assert.equal(sourceLabel({ kind: 'archive', location: '' }), 'An archive on another of your devices')
 })

@@ -12,10 +12,14 @@
 //! are read from the copy itself and approved here. Nothing a peer sends
 //! installs, updates or grants anything.
 //!
-//! A record marked removed takes the Global copy off this device: a removal
-//! only ever takes powers away. Turning a Global plugin off stays on the
-//! device that did it, and so do its settings - secrets never leave the
-//! device they were typed on.
+//! A record marked removed turns this device's Global copy off - it only
+//! ever takes powers away - and lists it as removed on another device. The
+//! copy, its settings and its secrets go only when the user here confirms
+//! the removal. A removal applies only when it is newer than this device's
+//! own install of the plugin, so an old removal can't take off a plugin
+//! installed again since. Turning a Global plugin off stays on the device
+//! that did it, and so do its settings - secrets never leave the device
+//! they were typed on.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -45,6 +49,9 @@ const MAX_ARCHIVE: usize = 256 * 1024 * 1024;
 const PACKED_FOR: Duration = Duration::from_secs(300);
 /// One request to a peer.
 const PEER_TIME: Duration = Duration::from_secs(120);
+/// How far ahead of this device's clock a peer's record may be dated: a
+/// record dated later would win every meeting from then on.
+const SKEW_MS: i64 = 5 * 60 * 1000;
 
 /// A Global plugin's folder packed for another device's copy.
 pub struct Packed {
@@ -58,8 +65,20 @@ pub struct Packed {
 /// plugin: the record is kept here and sent to every device online now.
 /// `resolved` is the installed folder's content hash.
 pub async fn publish(app: &Arc<App>, plugin: &InstalledPlugin, resolved: String, removed: bool) {
+    // The archive every device packs of these bytes, so a copy is checked
+    // before a byte of it is unpacked.
+    let archive = if removed {
+        None
+    } else {
+        let dir = crate::plugins::plugin_dir(&app.data_dir, &plugin.marketplace, &plugin.name);
+        tokio::task::spawn_blocking(move || pack(&dir).ok().map(|bytes| sha256(&bytes)))
+            .await
+            .ok()
+            .flatten()
+    };
     let record = {
         let mut store = lock_recovering(&app.store);
+        let held = store.global_plugin(&plugin.id()).map(|r| r.at);
         let record = GlobalPluginRecord {
             name: plugin.name.clone(),
             marketplace: plugin.marketplace.clone(),
@@ -67,13 +86,16 @@ pub async fn publish(app: &Arc<App>, plugin: &InstalledPlugin, resolved: String,
             description: plugin.description.clone(),
             runtime: plugin.runtime,
             powers: plugin.powers.clone(),
-            source: plugin.source.clone(),
+            // A folder or file on this computer is named by its kind only.
+            source: super::scope::shareable_source(&plugin.source),
             resolved,
-            at: openremote_core::now_ms(),
+            archive,
+            at: local_at(openremote_core::now_ms(), held),
             by: store.this_device(),
             removed,
         };
-        let _ = store.merge_global_plugin(record.clone());
+        // This device's own word replaces what it holds, whatever its date.
+        let _ = store.put_global_plugin(record.clone());
         record
     };
     if let Some(mesh) = app.cloud.mesh() {
@@ -89,11 +111,31 @@ pub fn is_note(note: &Value) -> bool {
     note["type"].as_str() == Some("plugins.global")
 }
 
-/// A peer's note: one record changed.
-pub fn on_note(app: &Arc<App>, _peer: PeerContext, note: Value) {
-    let Ok(record) = serde_json::from_value::<GlobalPluginRecord>(note["record"].clone()) else {
+/// When this device's own write is dated: now, and always after the
+/// record it replaces, so it wins every meeting that follows.
+pub fn local_at(now: i64, held: Option<i64>) -> i64 {
+    held.map_or(now, |held| now.max(held.saturating_add(1)))
+}
+
+/// A peer's record dated no later than a little past this device's clock.
+pub fn clamp_at(at: i64, now: i64) -> i64 {
+    at.min(now.saturating_add(SKEW_MS))
+}
+
+pub fn sha256(bytes: &[u8]) -> String {
+    use sha2::Digest;
+    crate::plugins::hex(&sha2::Sha256::digest(bytes))
+}
+
+/// A peer's note: one record changed. It is the sender's own word, so the
+/// sender is who wrote it.
+pub fn on_note(app: &Arc<App>, peer: PeerContext, note: Value) {
+    let Ok(mut record) = serde_json::from_value::<GlobalPluginRecord>(note["record"].clone())
+    else {
         return;
     };
+    record.by = Some(peer.device_id);
+    record.at = clamp_at(record.at, openremote_core::now_ms());
     let app = Arc::clone(app);
     tokio::spawn(async move {
         take(&app, record).await;
@@ -108,7 +150,8 @@ pub async fn sync_with(app: &Arc<App>, peer: DeviceId) {
     };
     if let Some(theirs) = peer_get(&mesh, peer, "/sync/plugins".into()).await {
         for raw in theirs["plugins"].as_array().into_iter().flatten() {
-            if let Ok(record) = serde_json::from_value::<GlobalPluginRecord>(raw.clone()) {
+            if let Ok(mut record) = serde_json::from_value::<GlobalPluginRecord>(raw.clone()) {
+                record.at = clamp_at(record.at, openremote_core::now_ms());
                 let _ = lock_recovering(&app.store).merge_global_plugin(record);
             }
         }
@@ -140,24 +183,34 @@ async fn take(app: &Arc<App>, record: GlobalPluginRecord) {
     }
 }
 
-/// The installed plugin a record takes off this device: only a removal, and
-/// only this device's Global copy of it - never a plugin the user installed
-/// here for this machine or a project. A live record takes nothing and
-/// installs nothing.
-pub fn removal_here(store: &Store, record: &GlobalPluginRecord) -> Option<String> {
+/// Whether a removal record is about this device's Global copy, written
+/// after this device last installed or changed it.
+fn removes(store: &Store, record: &GlobalPluginRecord) -> Option<InstalledPlugin> {
     if !record.removed {
         return None;
     }
-    let id = record.id();
-    let here = store.installed_plugin(&id).ok()?;
-    (here.scope == PluginScope::Global).then_some(id)
+    let here = store.installed_plugin(&record.id()).ok()?;
+    (here.scope == PluginScope::Global && record.at > here.updated_at).then(|| here.clone())
 }
 
+/// The installed plugin a record turns off on this device: only a removal
+/// newer than this device's own install, and only this device's Global copy,
+/// never a plugin the user installed here for this machine or a project. A
+/// live record takes nothing and installs nothing.
+pub fn removal_here(store: &Store, record: &GlobalPluginRecord) -> Option<String> {
+    removes(store, record)
+        .filter(|here| here.enabled)
+        .map(|here| here.id())
+}
+
+/// Another device removed it: here it is turned off, keeping its files,
+/// settings and secrets until this device's user confirms the removal.
 async fn follow_removal(app: &Arc<App>, id: &str) {
-    match super::install::remove(app, id, false).await {
-        Ok(()) => eprintln!("plugin {id}: removed, as another of your devices did"),
-        // A chat on its harness holds it here; the next meeting tries again.
-        Err((_, why)) => eprintln!("plugin {id}: another of your devices removed it: {why}"),
+    let off = lock_recovering(&app.store).turn_off_installed_plugin_keeping_time(id);
+    if off.is_ok() {
+        app.plugin_runtime.changed(id).await;
+        app.supervisor.reprobe_harnesses().await;
+        eprintln!("plugin {id}: turned off, as another of your devices removed it");
     }
 }
 
@@ -172,8 +225,9 @@ pub struct Pending {
     pub version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    /// `missing` (not on this device) or `update` (this device's Global
-    /// copy is another version).
+    /// `missing` (not on this device), `update` (this device's Global copy
+    /// is another version) or `removed` (another device removed it; it is
+    /// off here until this device's user removes it or turns it back on).
     pub why: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub by: Option<DeviceId>,
@@ -186,10 +240,13 @@ pub fn pending(store: &Store, data_dir: &Path) -> Vec<Pending> {
     store
         .global_plugins()
         .into_iter()
-        .filter(|record| !record.removed)
         .filter_map(|record| {
             let id = record.id();
+            if record.removed {
+                removes(store, record).filter(|here| !here.enabled)?;
+            }
             let why = match store.installed_plugin(&id).ok() {
+                _ if record.removed => "removed",
                 None => "missing",
                 Some(here) if here.scope == PluginScope::Global => {
                     let dir = super::scope::folder(data_dir, store, here)?;
@@ -276,6 +333,10 @@ pub async fn fetch_for_review(
         }
     }
     let bytes = bytes.ok_or((StatusCode::BAD_GATEWAY, last))?;
+    let archive = record.archive.clone().ok_or((
+        StatusCode::CONFLICT,
+        "the account's record names no archive to check a copy against; install it again on the device that has it".to_string(),
+    ))?;
     let folder = app
         .data_dir
         .join("plugins")
@@ -284,7 +345,7 @@ pub async fn fetch_for_review(
     let checked = {
         let folder = folder.clone();
         let resolved = record.resolved.clone();
-        tokio::task::spawn_blocking(move || unpack_exact(&bytes, &folder, &resolved))
+        tokio::task::spawn_blocking(move || unpack_exact(&bytes, &archive, &folder, &resolved))
             .await
             .map_err(|e| e.to_string())
             .and_then(|r| r)
@@ -302,9 +363,14 @@ pub async fn fetch_for_review(
     })
 }
 
-/// Unpack a copy and keep it only when it is exactly the approved bytes.
-pub fn unpack_exact(bytes: &[u8], to: &Path, resolved: &str) -> Result<(), String> {
-    crate::plugins::unpack(bytes, to).map_err(|e| e.to_string())?;
+/// Unpack a copy and keep it only when it is exactly the approved bytes:
+/// the archive is checked against the record's sha256 before anything is
+/// unpacked, only a gzip tar is taken, and it unpacks within the size cap.
+pub fn unpack_exact(bytes: &[u8], archive: &str, to: &Path, resolved: &str) -> Result<(), String> {
+    if sha256(bytes) != archive {
+        return Err("the copy that arrived is not the one your account installed".into());
+    }
+    crate::plugins::unpack_tar_gz(bytes, to, MAX_ARCHIVE as u64).map_err(|e| e.to_string())?;
     let hash = crate::plugins::content_hash(to).map_err(|e| e.to_string())?;
     if hash != resolved {
         return Err("the copy that arrived is not the one your account installed".into());
@@ -506,6 +572,7 @@ mod tests {
                 path: "/elsewhere".into(),
             },
             resolved: "0".repeat(64),
+            archive: None,
             at: 10,
             by: Some(DeviceId::new()),
             removed,
@@ -595,6 +662,65 @@ mod tests {
     }
 
     #[test]
+    fn another_devices_removal_turns_it_off_and_waits_for_this_devices_word() {
+        let data = tempfile::tempdir().unwrap();
+        let mut store = Store::open(data.path().to_path_buf()).unwrap();
+        let mut here = super::super::scope::tests::record("shout", PluginScope::Global, None);
+        here.updated_at = 100;
+        store.put_installed_plugin(here).unwrap();
+        let mut removed = record("shout", true);
+        removed.at = 150;
+        store.merge_global_plugin(removed.clone()).unwrap();
+        assert!(
+            pending(&store, data.path()).is_empty(),
+            "on: turned off first"
+        );
+        store
+            .turn_off_installed_plugin_keeping_time("shout@local")
+            .unwrap();
+        // Off, still installed, and listed for this device's user to confirm.
+        assert!(store.installed_plugin("shout@local").is_ok());
+        assert_eq!(removal_here(&store, &removed), None, "nothing more to do");
+        let waiting = pending(&store, data.path());
+        assert_eq!(waiting.len(), 1);
+        assert_eq!(waiting[0].why, "removed");
+        // Turned back on here (a newer word of this device's): no longer.
+        store
+            .set_installed_plugin_enabled("shout@local", true)
+            .unwrap();
+        assert!(pending(&store, data.path()).is_empty());
+    }
+
+    #[test]
+    fn dates_from_peers_are_held_to_this_clock_and_own_writes_come_after() {
+        assert_eq!(clamp_at(1_000, 1_000), 1_000);
+        assert_eq!(clamp_at(i64::MAX, 1_000), 1_000 + SKEW_MS);
+        assert_eq!(local_at(1_000, None), 1_000);
+        assert_eq!(local_at(1_000, Some(500)), 1_000);
+        // A record held from a clock ahead of this one: still replaced, later.
+        assert_eq!(local_at(1_000, Some(9_000)), 9_001);
+    }
+
+    #[test]
+    fn a_stale_removal_does_not_take_off_a_fresh_reinstall() {
+        let data = tempfile::tempdir().unwrap();
+        let mut store = Store::open(data.path().to_path_buf()).unwrap();
+        let mut here = super::super::scope::tests::record("shout", PluginScope::Global, None);
+        here.updated_at = 100;
+        store.put_installed_plugin(here).unwrap();
+        // Removed elsewhere before this device installed it again: kept.
+        let mut removed = record("shout", true);
+        removed.at = 50;
+        assert_eq!(removal_here(&store, &removed), None);
+        // Removed after: it applies.
+        removed.at = 150;
+        assert_eq!(
+            removal_here(&store, &removed).as_deref(),
+            Some("shout@local")
+        );
+    }
+
+    #[test]
     fn a_copy_is_kept_only_when_it_is_exactly_the_approved_bytes() {
         let from = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(from.path().join("ui")).unwrap();
@@ -605,12 +731,30 @@ mod tests {
         // Packing is deterministic, so slices of two packs fit together.
         assert_eq!(packed, pack(from.path()).unwrap());
         let to = tempfile::tempdir().unwrap();
-        unpack_exact(&packed, &to.path().join("ok"), &resolved).unwrap();
+        let archive = sha256(&packed);
+        unpack_exact(&packed, &archive, &to.path().join("ok"), &resolved).unwrap();
         assert_eq!(
             crate::plugins::content_hash(&to.path().join("ok")).unwrap(),
             resolved
         );
-        let err = unpack_exact(&packed, &to.path().join("bad"), &"f".repeat(64)).unwrap_err();
+        let err =
+            unpack_exact(&packed, &archive, &to.path().join("bad"), &"f".repeat(64)).unwrap_err();
         assert!(err.contains("not the one"), "{err}");
+        // An archive other than the recorded one is refused before a byte of
+        // it is unpacked.
+        let err = unpack_exact(
+            &packed,
+            &"0".repeat(64),
+            &to.path().join("early"),
+            &resolved,
+        )
+        .unwrap_err();
+        assert!(err.contains("not the one"), "{err}");
+        assert!(!to.path().join("early").exists());
+        // A zip is not how a copy travels, whatever its hash.
+        let zip = b"PK\x03\x04 not really a zip".to_vec();
+        let err = unpack_exact(&zip, &sha256(&zip), &to.path().join("zip"), &resolved).unwrap_err();
+        assert!(err.contains("tar.gz"), "{err}");
+        assert!(!to.path().join("zip").exists());
     }
 }

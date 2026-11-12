@@ -520,3 +520,71 @@ fn an_update_stops_the_program_on_both_sides_of_the_swap() {
     // The 409 naming live chats still comes first.
     assert!(body.find("plugin_chats").expect("the 409") < first);
 }
+
+/// A project's process plugin whose files in the repo change after its
+/// review: its running program is stopped, and a view's next call does not
+/// reach it.
+#[tokio::test]
+async fn a_project_process_plugin_stops_when_its_repo_copy_changes() {
+    let daemon = start_daemon(&[]).await;
+    let folder = process_plugin();
+    let repo = workspace(None);
+    let saved = call(
+        &daemon,
+        "POST",
+        "/projects",
+        Some(json!({"request_id": "proj", "folders": [repo.path()]})),
+    )
+    .await;
+    assert_eq!(saved.status, 201, "{}", saved.raw);
+    let project = saved.body["id"].as_str().unwrap().to_string();
+    let staged = stage(&daemon, folder.path(), "proj-pp").await;
+    let stage_id = staged.body["result"]["stage_id"].as_str().unwrap();
+    let installed = call(
+        &daemon,
+        "POST",
+        &format!("/plugins/stage/{stage_id}/install"),
+        Some(json!({"request_id": "proj-pp-install", "scope": "project", "project": project})),
+    )
+    .await;
+    assert_eq!(installed.status, 200, "{}", installed.raw);
+    let id = installed.body["result"]["id"].as_str().unwrap().to_string();
+    let route = |tail: &str| format!("/plugins/{}/{tail}", id.replace('~', "%7E"));
+    let set = call(
+        &daemon,
+        "POST",
+        &route("settings"),
+        Some(json!({"values": {"token": "t"}})),
+    )
+    .await;
+    assert_eq!(set.status, 200, "{}", set.raw);
+    let request = route("request");
+    let ask = || {
+        call(
+            &daemon,
+            "POST",
+            &request,
+            Some(json!({"name": "ping", "params": {}})),
+        )
+    };
+    let asked = ask().await;
+    assert_eq!(asked.status, 200, "{}", asked.raw);
+    let state = |body: &Value| body["installed"][0]["process"]["state"].clone();
+    assert_eq!(
+        state(&call(&daemon, "GET", "/plugins", None).await.body),
+        "running"
+    );
+
+    std::fs::write(
+        repo.path()
+            .join(".openremote/plugins/fixture-tools/ui/index.html"),
+        "<p>changed upstream</p>",
+    )
+    .unwrap();
+    let asked = ask().await;
+    assert_ne!(asked.status, 200, "{}", asked.raw);
+    assert_eq!(
+        state(&call(&daemon, "GET", "/plugins", None).await.body),
+        "stopped"
+    );
+}

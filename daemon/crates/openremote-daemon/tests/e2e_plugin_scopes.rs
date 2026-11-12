@@ -20,22 +20,9 @@ use serde_json::{Value, json};
 /// answers "wasm". It asks for no power; reading it implies `agent_tools`.
 fn wasm_plugin() -> tempfile::TempDir {
     let folder = tempfile::tempdir().expect("plugin folder");
-    let answer = r#"{"content":[{"type":"text","text":"wasm"}]}"#;
-    let wat = format!(
-        r#"(module
-            (memory (export "memory") 1)
-            (data (i32.const 1024) "{}")
-            (func (export "or_alloc") (param i32) (result i32) (i32.const 4096))
-            (func (export "or_call") (param i32 i32) (result i64)
-                (i64.or (i64.shl (i64.const 1024) (i64.const 32)) (i64.const {}))))"#,
-        answer.replace('"', "\\\""),
-        answer.len()
-    );
-    std::fs::write(
-        folder.path().join("tool.wasm"),
-        wat::parse_str(&wat).expect("assemble"),
-    )
-    .unwrap();
+    write_module(folder.path(), "wasm");
+    std::fs::create_dir_all(folder.path().join("ui")).unwrap();
+    std::fs::write(folder.path().join("ui/page.html"), "reviewed").unwrap();
     std::fs::write(
         folder.path().join("openremote.json"),
         json!({
@@ -49,6 +36,59 @@ fn wasm_plugin() -> tempfile::TempDir {
     )
     .unwrap();
     folder
+}
+
+/// `tool.wasm` in `folder`, its one tool answering `word`. Words of one
+/// length make modules of one size.
+fn write_module(folder: &Path, word: &str) {
+    let answer = format!(r#"{{"content":[{{"type":"text","text":"{word}"}}]}}"#);
+    let wat = format!(
+        r#"(module
+            (memory (export "memory") 1)
+            (data (i32.const 1024) "{}")
+            (func (export "or_alloc") (param i32) (result i32) (i32.const 4096))
+            (func (export "or_call") (param i32 i32) (result i64)
+                (i64.or (i64.shl (i64.const 1024) (i64.const 32)) (i64.const {}))))"#,
+        answer.replace('"', "\\\""),
+        answer.len()
+    );
+    std::fs::write(
+        folder.join("tool.wasm"),
+        wat::parse_str(&wat).expect("assemble"),
+    )
+    .unwrap();
+}
+
+/// A directory link at `link` to `target`: a junction on Windows (which
+/// needs no privilege), a symlink elsewhere.
+fn link_dir(link: &Path, target: &Path) {
+    #[cfg(windows)]
+    {
+        let made = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(link)
+            .arg(target)
+            .output()
+            .is_ok_and(|o| o.status.success());
+        assert!(made, "mklink /J could not make a junction");
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(target, link).unwrap();
+}
+
+/// Every file under `dir`, with its bytes, to see that nothing changed.
+fn tree(dir: &Path) -> Vec<(std::path::PathBuf, Vec<u8>)> {
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(dir).unwrap().flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            out.extend(tree(&path));
+        } else {
+            out.push((path.clone(), std::fs::read(&path).unwrap()));
+        }
+    }
+    out.sort();
+    out
 }
 
 async fn stage_source(daemon: &TestDaemon, source: Value) -> Reply {
@@ -194,6 +234,9 @@ async fn who_a_plugin_is_for_never_widens_what_it_may_do() {
     let records = call(&daemon, "GET", "/sync/plugins", None).await;
     assert_eq!(records.status, 200, "{}", records.raw);
     assert_eq!(records.body["plugins"][0]["name"], "wasm-tools");
+    // A folder on this computer is named to the account by its kind only.
+    let folder_name = folder.path().file_name().unwrap().to_string_lossy();
+    assert!(!records.raw.contains(&*folder_name), "{}", records.raw);
     assert_eq!(records.body["plugins"][0]["removed"], true);
 }
 
@@ -384,14 +427,26 @@ async fn a_global_plugin_from_another_device_waits_for_this_devices_approval() {
     let listed = call(&b, "GET", "/plugins", None).await;
     assert_eq!(listed.body["global_pending"], json!([]), "{}", listed.raw);
 
-    // Removed from every device on a: b's copy goes too.
+    // Removed from every device on a: b's copy is turned off, not deleted,
+    // and b's user is asked to confirm the removal there.
     remove(&a, "wasm-tools@local").await;
-    until("b lets it go", || async {
+    let listed = until("b turns it off", || async {
         let listed = call(&b, "GET", "/plugins", None).await;
-        (listed.body["installed"] == json!([])).then_some(())
+        (listed.body["installed"][0]["enabled"] == json!(false)).then_some(listed)
     })
     .await;
+    assert_eq!(listed.body["installed"][0]["id"], "wasm-tools@local");
+    assert_eq!(
+        listed.body["global_pending"][0]["why"], "removed",
+        "{}",
+        listed.raw
+    );
     assert!(tool_names(&b, &chat).await.is_empty());
+    // b's user confirms: now it goes, here.
+    remove(&b, "wasm-tools@local").await;
+    let listed = call(&b, "GET", "/plugins", None).await;
+    assert_eq!(listed.body["installed"], json!([]));
+    assert_eq!(listed.body["global_pending"], json!([]));
 }
 
 /// The account's routes are open to every device of the account, and
@@ -461,21 +516,167 @@ fn an_install_asks_about_tool_names_again_under_the_lock_before_the_record() {
     );
 }
 
-/// A command plugin made again before a chat replaces its folder: a program
-/// still running the old copy is stopped (pinned: running a command plugin
-/// needs a marketplace and a harness chat).
+/// A command plugin made again before a chat replaces its folder: the
+/// program running the old copy stops before the swap (Windows refuses to
+/// move a running program's folder), and again after. Pinned: running a
+/// command plugin needs a marketplace and a harness chat.
 #[test]
 fn a_command_plugin_made_again_stops_its_old_program() {
+    let plugins = include_str!("../src/plugins.rs");
+    let rerun = between(plugins, "pub async fn rerun_command<", "Ok(Some(hash))");
+    let stop = rerun
+        .find("before_swap.await")
+        .expect("a stop before the swap");
+    let swap = rerun.find("swap_in(").expect("the swap");
+    assert!(stop < swap);
     let supervisor = include_str!("../src/supervisor.rs");
-    let rerun = between(
+    let caller = between(
         supervisor,
         "async fn rerun_plugin_commands(",
         "pub fn remove_mcp_server(",
     );
-    let record = rerun.find("put_installed_plugin").expect("the record");
-    let stop = rerun.find("plugin_changed").expect("the stop");
-    assert!(record < stop);
+    let handed = caller.find("plugin_changed").expect("the stop handed in");
+    let call = caller
+        .find("rerun_command(&data_dir, &plugin, stop)")
+        .expect("the call");
+    let after = caller.rfind("plugin_changed").expect("the stop after");
+    assert!(handed < call && call < after);
     let app = include_str!("../src/app.rs");
     let wired = between(app, "set_plugin_changed(", "});");
     assert!(wired.contains("runtime.changed(&id)"), "{wired}");
+}
+
+/// A project plugin runs the bytes the user reviewed, from OpenRemote's own
+/// copy: a repo edit that keeps every file's size and time cannot slip
+/// other code in.
+#[tokio::test]
+async fn a_project_plugin_runs_the_reviewed_bytes_not_the_repos_live_files() {
+    let daemon = start_daemon(&[]).await;
+    let folder = wasm_plugin();
+    let repo = workspace(None);
+    let p = project(&daemon, repo.path()).await;
+    let stage_id = stage_folder(&daemon, folder.path()).await;
+    let installed = approve(
+        &daemon,
+        &stage_id,
+        json!({"scope": "project", "project": p}),
+    )
+    .await;
+    assert_eq!(installed.status, 200, "{}", installed.raw);
+    let chat = chat_in(&daemon, repo.path()).await;
+    assert_eq!(
+        call_hello(&daemon, &chat).await["content"][0]["text"],
+        "wasm"
+    );
+
+    // Swap a repo file for other bytes of the same size, and put its time
+    // back: a look at counts, sizes and times sees nothing.
+    let page = repo
+        .path()
+        .join(".openremote/plugins/wasm-tools/ui/page.html");
+    let when = std::fs::metadata(&page).unwrap().modified().unwrap();
+    std::fs::write(&page, "SWAPPED!").unwrap();
+    std::fs::File::options()
+        .write(true)
+        .open(&page)
+        .unwrap()
+        .set_modified(when)
+        .unwrap();
+    let id = installed.body["result"]["id"]
+        .as_str()
+        .unwrap()
+        .replace('~', "%7E");
+    let served = call(
+        &daemon,
+        "GET",
+        &format!("/plugins/{id}/files/ui/page.html"),
+        None,
+    )
+    .await;
+    assert!(!served.raw.contains("SWAPPED!"), "{}", served.raw);
+    assert_eq!(
+        call_hello(&daemon, &chat).await["content"][0]["text"],
+        "wasm"
+    );
+}
+
+/// A repo whose `.openremote`, `.openremote/plugins` or plugin folder is a
+/// link leading out of the project: OpenRemote writes and deletes nothing
+/// through it.
+#[tokio::test]
+async fn repo_paths_that_are_links_are_refused_and_nothing_outside_is_touched() {
+    let daemon = start_daemon(&[]).await;
+    let folder = wasm_plugin();
+
+    // `.openremote/plugins` leads outside, where a folder of the plugin's
+    // name already sits.
+    let repo = workspace(None);
+    let p = project(&daemon, repo.path()).await;
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(outside.path().join("wasm-tools")).unwrap();
+    std::fs::write(outside.path().join("wasm-tools/marker.txt"), "keep me").unwrap();
+    std::fs::create_dir_all(repo.path().join(".openremote")).unwrap();
+    link_dir(
+        &repo.path().join(".openremote").join("plugins"),
+        outside.path(),
+    );
+    let before = tree(outside.path());
+    let stage_id = stage_folder(&daemon, folder.path()).await;
+    let refused = approve(
+        &daemon,
+        &stage_id,
+        json!({"scope": "project", "project": p}),
+    )
+    .await;
+    assert_eq!(refused.status, 409, "{}", refused.raw);
+    let staged = stage_source(
+        &daemon,
+        json!({"kind": "project", "project": p, "name": "wasm-tools"}),
+    )
+    .await;
+    assert_ne!(staged.status, 200, "{}", staged.raw);
+    assert_eq!(tree(outside.path()), before, "nothing outside changed");
+
+    // `.openremote` itself leads outside: no index is written there.
+    let repo2 = workspace(None);
+    let p2 = project(&daemon, repo2.path()).await;
+    let outside2 = tempfile::tempdir().unwrap();
+    link_dir(&repo2.path().join(".openremote"), outside2.path());
+    let stage_id = stage_folder(&daemon, folder.path()).await;
+    let refused = approve(
+        &daemon,
+        &stage_id,
+        json!({"scope": "project", "project": p2}),
+    )
+    .await;
+    assert_eq!(refused.status, 409, "{}", refused.raw);
+    assert!(tree(outside2.path()).is_empty(), "nothing written outside");
+
+    // Installed while the repo was plain, then the plugins folder is made a
+    // link to the outside: removing it deletes nothing out there.
+    let repo3 = workspace(None);
+    let p3 = project(&daemon, repo3.path()).await;
+    let stage_id = stage_folder(&daemon, folder.path()).await;
+    let ok = approve(
+        &daemon,
+        &stage_id,
+        json!({"scope": "project", "project": p3}),
+    )
+    .await;
+    assert_eq!(ok.status, 200, "{}", ok.raw);
+    let id = ok.body["result"]["id"].as_str().unwrap().to_string();
+    std::fs::remove_dir_all(repo3.path().join(".openremote/plugins")).unwrap();
+    link_dir(
+        &repo3.path().join(".openremote").join("plugins"),
+        outside.path(),
+    );
+    let removed = call(
+        &daemon,
+        "POST",
+        &format!("/plugins/{}/remove", id.replace('~', "%7E")),
+        Some(json!({"request_id": uuid::Uuid::new_v4().to_string()})),
+    )
+    .await;
+    assert_eq!(removed.status, 409, "{}", removed.raw);
+    assert_eq!(tree(outside.path()), before, "nothing outside deleted");
 }

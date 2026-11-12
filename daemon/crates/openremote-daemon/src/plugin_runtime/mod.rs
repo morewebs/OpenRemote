@@ -260,7 +260,7 @@ impl PluginRuntime {
         let root = self
             .folder(&plugin)
             .ok_or_else(|| format!("{}'s project is gone", plugin.name))?;
-        if !scope::approved_files(&plugin, &root) {
+        if !self.approved(&plugin) {
             return Err(format!(
                 "{}'s files in the project changed since you approved them; review it again under Plugins",
                 plugin.name
@@ -284,8 +284,25 @@ impl PluginRuntime {
         })
     }
 
-    /// A process plugin's running program, started if it isn't.
+    /// Whether a plugin may run now: a Project plugin only while its repo
+    /// still carries what was approved (its code runs from the snapshot).
+    pub fn approved(&self, plugin: &InstalledPlugin) -> bool {
+        scope::approved(&lock_recovering(&self.store), plugin)
+    }
+
+    /// A process plugin's running program, started if it isn't. A Project
+    /// plugin whose repo copy changed since its review is stopped here,
+    /// even mid-run: a view's or a tool's next call never reaches it.
     pub async fn process(&self, id: &str) -> Result<Arc<process::Conn>, String> {
+        if let Some(plugin) = self.plugin(id) {
+            if !self.approved(&plugin) {
+                self.processes.stop(id).await;
+                return Err(format!(
+                    "{}'s files in the project changed since you approved them; review it again under Plugins",
+                    plugin.name
+                ));
+            }
+        }
         self.processes.connection(id, || self.spec(id)).await
     }
 
