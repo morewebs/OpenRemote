@@ -24,17 +24,18 @@ own "start this chat on my machine" flow sends exactly the same body over exactl
 (`cloud_http.rs`, `create_remote`), so the receiving daemon genuinely cannot tell the user's click
 from a peer's client. That is a property of the design, not an oversight to patch quietly.
 
-## The three tiers
+## The four tiers
 
 | tier | what the gate checks on top of the pinned link |
 |---|---|
 | Sync | nothing. Any device of the account may copy synced chat logs, and the account's Global plugin records and copies. |
 | Machine | this computer must be a machine. The check is on the receiver (`mesh().kind() == "machine"`), not on the caller: a phone may drive a machine. |
 | Chat | this computer must be a machine, and the chat must be synced and executing here. A private chat answers 404, the same answer as a chat that does not exist. |
+| Read | the chat must be synced and executing here (`synced_here`, checked in `peer_gate` before the handler runs), the same 404 as the Chat tier otherwise. This computer need not be a machine: any device that shows a synced chat may read its pictures, as any device may copy its events. |
 
 ## The rows
 
-35 rows: 4 Sync, 17 Machine, 14 Chat. "Sessions" and "chats" are the same thing; the API calls them
+36 rows: 4 Sync, 17 Machine, 14 Chat, 1 Read. "Sessions" and "chats" are the same thing; the API calls them
 sessions.
 
 ### Sync tier (4)
@@ -97,6 +98,12 @@ registered as a project, or read a log through these paths (the Sync tier reads 
 | `POST /sessions/{id}/workspace` | Chat | move the chat into one of this machine's projects, named by its id, or out of every project into the home folder; an idle harness restarts there, and its conversation is copied beside the new folder (claude) or carried into the next message | name a folder: the body takes a project id, a path never parses as one (400), and an id that is not one of this machine's projects is 404; move a chat while a turn runs (409) |
 | `POST /decisions/{id}/answer` | Chat | answer any pending approval or question in the chat: allow, deny, or an "always allow" that stores a tool grant for the chat | answer a decision belonging to a private chat (404), or forge a decision id that is not pending here |
 
+### Read tier (1)
+
+| route | tier | what a peer can do | what it cannot |
+|---|---|---|---|
+| `GET /sessions/{id}/blobs/{sha}` | Read | fetch one picture a synced chat that runs here carries (a pasted picture, a page's screenshot, a picked element's picture), by its sha256, with its type | read a private chat's pictures (404 at the gate), a picture another chat holds (`held_by`: the picture's record must name this chat, else 404), or any file that is not a stored picture: the name must be a sha256 (`Blobs::is_name`). The console's own `GET /blobs/{sha}` is not a peer route |
+
 ## One-way notes, which are not rows
 
 Some of what a peer can do is not a route. The mesh also carries notes, handled by `on_note` in
@@ -112,7 +119,6 @@ chat; the fifth carries no chat at all and is the one described after the table.
 | `sync.head` | makes this computer pull from the sender when the sender's head is ahead of its own (`pull`) | nothing happens: it writes nothing itself, and what comes back is checked the same way as an append |
 | `sync.tombstone` | deletes a synced chat: stops it if it is running here, records the tombstone, and stops syncing it (`apply_tombstone`) | returns before it stops, tombstones or forgets anything |
 | `sync.browser` | rewrites this computer's browser settings and bookmark tree: every row newer than the local one is taken, key by key, deletions (a bookmark removed) included. Any device of the account may send it (`browser/sync.rs`, `on_note`) | nothing at all: the note names no session, so it never reaches chat data, and history, cookies, site storage and the tabs to restore are not in it |
-
 | `plugins.global` | keeps the account's newer record of a Global plugin. A live record installs, updates and grants nothing: the user is shown it under Plugins, and installing it means fetching the copy, checking it is exactly the recorded bytes, reviewing it and approving it here, where its powers are read from the copy. A removed record dated after this computer last installed or changed the plugin turns its Global copy off, and the Plugins page lists it as removed on another device: its files, settings and secrets go only when the user here removes it. A record's date is held to at most five minutes past this computer's clock, and a note's writer is the device that sent it. A copy installed here for this machine or a project is never touched. Records name a folder or file on the sending computer by its kind only | nothing at all: the note names no session |
 
 The tombstone is a deletion, and it is the one that matters. It is also how a deletion crosses
@@ -185,8 +191,9 @@ Proven end to end against this code: a machine of the same account can
 So a prompt that appears to be the user's approval may be an approval by any device of the account,
 and a chat may run with approvals off before the user ever sees it. A future contributor deciding
 what is safe to forward should assume a peer can do all of the above; the allowlist keeps them from
-the rest of the daemon's API (59 route registrations in `api_routes`, of which these 32 pairs are
-peer rows), not from driving a chat.
+the rest of the daemon's API (63 route registrations in `api_routes`, plus the two Global plugin
+routes it merges in, of which these 36 method and path pairs are peer rows), not from driving a
+chat.
 
 ## What actually protects the user in Cloud mode
 
@@ -246,6 +253,11 @@ refused on every path, route and note alike, is touching a private chat.
   `supervisor.rs`, not run.
 - `GET /model-endpoints/{id}/models` making a network call with the stored key is read from the
   handler and the endpoint store, not observed against a real gateway.
+- The Read tier's `GET /sessions/{id}/blobs/{sha}` is read from `peer_gate` and `get_session_blob`
+  (`http.rs`) and `held_by` (`openremote-core/src/blobs.rs`, unit tested), not driven by a peer in
+  `tests/e2e_cloud_mesh.rs`.
+- `POST /sessions/{id}/workspace` is driven from the console in `tests/e2e_chat_move.rs`; the peer
+  path is the same handler behind the Chat tier's gate, not driven by a peer.
 
 ## If you are changing this
 

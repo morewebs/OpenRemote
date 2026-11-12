@@ -185,10 +185,11 @@ an old process is still alive; find it before re-running).
   reaches the user's other devices through the relay (`/devices/{id}/...`
   is another device's API, carried over the mesh).
 - What a peer may ask is the allowlist in `http.rs` (`PEER_ROUTES`), in
-  three tiers: copying synced chats (any device of the account), driving
+  four tiers: copying synced chats (any device of the account), driving
   the computer (only when this computer is a machine; the caller's own
-  kind is not checked, so a phone may drive a machine), and acting on one
-  chat (a machine, and the chat is synced and runs here). Private chats
+  kind is not checked, so a phone may drive a machine), acting on one
+  chat (a machine, and the chat is synced and runs here), and reading one
+  chat's pictures (any device, and the chat is synced and runs here). Private chats
   never leave the computer. Add to that list with care: everything on it
   is reachable by every device of the account.
 - What a peer can therefore do is more than drive: it can create a chat

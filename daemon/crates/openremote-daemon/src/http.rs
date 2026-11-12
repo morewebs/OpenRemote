@@ -3457,6 +3457,31 @@ fn after_cursor(query: &str) -> Cursor {
 mod tests {
     use super::*;
 
+    /// docs/cloud-trust-model.md is the route-by-route table of what a peer
+    /// may ask: every row of `PEER_ROUTES` is on it, and its count matches.
+    #[test]
+    fn the_trust_model_page_lists_every_peer_route() {
+        let page = include_str!("../../../../docs/cloud-trust-model.md");
+        let count = |tier: Tier| PEER_ROUTES.iter().filter(|(_, _, t)| *t == tier).count();
+        let line = format!(
+            "{} rows: {} Sync, {} Machine, {} Chat, {} Read.",
+            PEER_ROUTES.len(),
+            count(Tier::Sync),
+            count(Tier::Machine),
+            count(Tier::Chat),
+            count(Tier::Read),
+        );
+        assert!(page.contains(&line), "the page should say: {line}");
+        assert!(page.contains("## The four tiers"));
+        for (method, path, _) in PEER_ROUTES {
+            let row = format!("| `{method} {path}` |");
+            assert!(
+                page.contains(&row),
+                "the page has no row for {method} {path}"
+            );
+        }
+    }
+
     /// The browser's routes are this device's alone: its bookmarks, settings,
     /// history and the import that reads other browsers' files here. A peer
     /// reaches none of them (the `sync.browser` note is not a route).
