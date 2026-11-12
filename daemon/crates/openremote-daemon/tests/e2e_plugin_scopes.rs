@@ -237,7 +237,11 @@ async fn a_project_plugin_runs_only_for_its_own_projects_chats() {
 
     // Someone changes the plugin in the repo: it stops running until this
     // machine reviews the new files.
+    let files = format!("/plugins/{id}/files/openremote.json");
+    assert_eq!(call(&daemon, "GET", &files, None).await.status, 200);
     std::fs::write(in_repo.join("added.txt"), "changed upstream").unwrap();
+    // Its views are not served from the changed files either.
+    assert_eq!(call(&daemon, "GET", &files, None).await.status, 409);
     assert!(tool_names(&daemon, &in_a).await.is_empty());
     assert_eq!(call_hello(&daemon, &in_a).await["isError"], true);
     let listed = call(&daemon, "GET", "/plugins", None).await;

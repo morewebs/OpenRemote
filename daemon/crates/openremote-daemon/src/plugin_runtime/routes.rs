@@ -144,6 +144,14 @@ async fn file(
     let Some(root) = app.plugin_runtime.folder(&plugin) else {
         return bad(StatusCode::NOT_FOUND, "the plugin's files are gone");
     };
+    // A repo plugin's files are served only while they are what was
+    // approved, as its tools run only then.
+    if !super::scope::approved_files(&plugin, &root) {
+        return bad(
+            StatusCode::CONFLICT,
+            "its files in the project changed since you approved them; review it again under Plugins",
+        );
+    }
     let relative = Path::new(&path);
     if path.is_empty()
         || path.contains('\\')
