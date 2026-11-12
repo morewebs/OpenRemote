@@ -14,7 +14,7 @@
         "key": "base_url",
         "type": "string",
         "label": "Service address",
-        "help": "An OpenAI-compatible endpoint, up to and including its version. OpenAI's is https://api.openai.com/v1; a whisper server on this computer works too.",
+        "help": "An OpenAI-compatible endpoint, up to and including its version. OpenAI's is https://api.openai.com/v1. For a whisper server on this computer or your network, type its address here, like http://127.0.0.1:8080/v1: Dictation reaches a private address only when you typed it.",
         "default": "https://api.openai.com/v1",
         "placeholder": "https://api.openai.com/v1"
       },

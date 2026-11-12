@@ -1,29 +1,35 @@
 {
   "api": 1,
   "name": "toy-harness",
-  "version": "0.1.0",
-  "description": "A toy command-line agent driven as an OpenRemote harness, with one agent tool. An example of a process plugin.",
+  "version": "0.2.0",
+  "description": "A toy command-line agent as an OpenRemote harness, and two agent tools. An example of a process plugin: one compiled program in the plugin's own folder.",
   "runtime": "process",
   "entry": {
-    "command": "node",
-    "args": ["${OPENREMOTE_PLUGIN_ROOT}/plugin.js"]
+    "command": "bin/toy",
+    "args": ["--tools"],
+    "windows": { "command": "bin/toy.exe", "args": ["--tools"] }
   },
-  "powers": ["agent_tools"],
-  "contributes": {
-    "harnesses": [
-      {
-        "id": "toy",
-        "name": "Toy CLI",
-        "description": "Echoes what you say, counts it, and asks before it shouts.",
-        "models": [
-          { "model": "toy-echo", "display_name": "Toy Echo", "default": true },
-          { "model": "toy-mirror", "display_name": "Toy Mirror", "efforts": ["low", "high"] }
-        ],
-        "permission_modes": ["ask", "allow"],
-        "default_permission": "ask",
-        "one_prompt_at_a_time": true
-      }
+  "harness": {
+    "api": 1,
+    "id": "toy",
+    "name": "Toy CLI",
+    "driver": {
+      "windows": "bin/toy.exe",
+      "default": "bin/toy"
+    },
+    "args": ["--driver"],
+    "models": [
+      { "model": "toy-echo", "display_name": "Toy Echo", "is_default": true },
+      { "model": "toy-mirror", "display_name": "Toy Mirror", "detail": "Says it backwards" }
     ],
+    "default_model": "toy-echo",
+    "permission_modes": [
+      { "w": "ask", "l": "Ask before shouting" },
+      { "w": "allow", "l": "Shout without asking" }
+    ],
+    "default_permission": "ask"
+  },
+  "contributes": {
     "tools": [
       {
         "name": "word_count",
@@ -36,6 +42,17 @@
           "required": ["text"]
         },
         "read_only": true
+      },
+      {
+        "name": "greet",
+        "description": "Greet someone with the greeting set in the plugin's settings.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "description": "Who to greet." }
+          }
+        },
+        "read_only": true
       }
     ],
     "settings": [
@@ -43,14 +60,14 @@
         "key": "greeting",
         "type": "string",
         "label": "Greeting",
-        "help": "What the toy says before every reply.",
+        "help": "What the greet tool says before the name.",
         "default": "Hello"
       },
       {
         "key": "token",
         "type": "secret",
         "label": "Token",
-        "help": "A pretend API token, to show how secrets reach a plugin. The toy only says whether one is set."
+        "help": "A pretend API token, to show how a secret reaches a plugin's program. The toy only says whether one is set."
       }
     ]
   }

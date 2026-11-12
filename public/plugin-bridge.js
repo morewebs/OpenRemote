@@ -11,6 +11,8 @@
 //
 // It never holds the daemon's token or address: every call it makes is
 // answered by the console, which asks the daemon itself.
+//
+// docs/plugins/js-api.md is the plugin author's side of this file.
 ;(() => {
   'use strict'
   const host = window.parent

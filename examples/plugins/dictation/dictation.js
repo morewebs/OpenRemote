@@ -8,6 +8,11 @@
 // text goes in at the cursor of the composer you started in. Nothing is
 // sent to a chat: you read it, change it, and send it yourself.
 //
+// OpenRemote reaches the internet for a plugin. A server on this computer
+// or your network is reached only at an address you typed into Service
+// address yourself: the default never counts, and this code can't choose
+// one.
+//
 // It runs in OpenRemote's sandboxed plugin frame with two powers, the
 // microphone and the network. The request goes out through OpenRemote,
 // which writes the API key in on the way, and only toward the service
