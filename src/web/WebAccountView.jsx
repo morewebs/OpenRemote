@@ -21,7 +21,7 @@ export default function WebAccountView({ onSignOut }) {
       </header>
       <h2 className="pn-section">This browser</h2>
       <p className="pn-lead">
-        Signed in to moreweb as a device of the account. Chats stay on your machines.
+        This browser is one of your account's devices. Your chats stay on your machines; this page shows them and sends what you type.
       </p>
       <div className="pn-list pn-list--tight">
         {me && (

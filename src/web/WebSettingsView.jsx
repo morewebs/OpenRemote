@@ -29,7 +29,6 @@ export default function WebSettingsView() {
         </div>
       </header>
       <h2 className="pn-section">Appearance</h2>
-      <p className="pn-lead">Space, not themes - the dark theme is the contract.</p>
       <div className="pn-list pn-list--tight">
         <div className="pn-row">
           <div>
@@ -49,7 +48,7 @@ export default function WebSettingsView() {
         <div className="pn-row">
           <div>
             <div className="pn-name">Reduce motion</div>
-            <div className="pn-detail">Stops the running-dot breathe and picker transitions.</div>
+            <div className="pn-detail">Turns off animations.</div>
           </div>
           <Toggle
             checked={prefs.reduce_motion}

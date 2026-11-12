@@ -43,6 +43,6 @@ export function machineLine(machine) {
 /// the person may be about to wake it.
 export function pickRefusal(machine) {
   if (!machine) return 'This device is not a machine.'
-  if (!machine.online) return 'This machine is offline. Start its agent, then try again.'
+  if (!machine.online) return 'This machine is offline. Check it is on and OpenRemote is running there, then try again.'
   return null
 }

@@ -125,7 +125,9 @@ export function isPhone(device) {
 /** What a device is, for its card: a phone, a machine, or a desktop. */
 export function kindLabel(device) {
   if (isPhone(device)) return 'Phone'
-  return device?.kind === 'machine' ? 'Machine' : 'Desktop'
+  if (device?.kind === 'machine') return 'Machine'
+  // A browser joins the account as its own kind; it is never a desktop.
+  return device?.kind === 'web' ? 'Web console' : 'Desktop'
 }
 
 /** How this device names itself. */

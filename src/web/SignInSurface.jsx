@@ -60,7 +60,7 @@ export default function SignInSurface({ onLinked }) {
           headers: { Authorization: `Bearer ${tokens.access}` },
         })
       } catch {
-        setProblem('The gateway could not be reached. Check this computer is online, then try again.')
+        setProblem('OpenRemote Cloud could not be reached. Check this computer is online, then try again.')
         setStep('error')
         return
       }
@@ -71,7 +71,7 @@ export default function SignInSurface({ onLinked }) {
         return
       }
       if (!response.ok) {
-        setProblem(`The gateway answered ${response.status} when asked for your devices.`)
+        setProblem(`OpenRemote Cloud could not list your devices (error ${response.status}). Try again in a minute.`)
         setStep('error')
         return
       }
@@ -133,13 +133,13 @@ export default function SignInSurface({ onLinked }) {
             body: tokenBody({ code, redirect: pending.redirect || redirect, verifier: pending.verifier }),
           })
         } catch {
-          setProblem('The gateway could not be reached to finish the sign-in. Try again.')
+          setProblem('moreweb could not be reached to finish the sign-in. Try again.')
           setStep('intro')
           return
         }
         const payload = await response.json().catch(() => null)
         if (!response.ok || typeof payload?.access_token !== 'string') {
-          setProblem(refusal(payload, 'The gateway refused the sign-in. Try again.'))
+          setProblem(refusal(payload, 'moreweb refused the sign-in. Try again.'))
           setStep('intro')
           return
         }
@@ -260,8 +260,9 @@ export default function SignInSurface({ onLinked }) {
             {!linking && <p className="cm-error web-signin-honest">{LINKS_MISSING}</p>}
             {machines.length === 0 ? (
               <p className="cm-body">
-                No machines in this account yet. Install the OpenRemote agent on a computer and join it
-                with a code from that machine's list, then come back to this page.
+                No machines in this account yet. Open OpenRemote on one of your computers and choose
+                Machines, then Make this computer a machine. A Linux server can be added from
+                dash.moreweb.space instead.
               </p>
             ) : (
               <ul className="web-signin-machines">

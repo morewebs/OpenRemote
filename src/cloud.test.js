@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { chatAccess, cloudAnswered, machinePickerItems, sessionsForMode, signedIn } from './cloud.js'
+import { chatAccess, cloudAnswered, kindLabel, machinePickerItems, sessionsForMode, signedIn } from './cloud.js'
 
 const me = 'dev-me'
 const devices = [
@@ -178,4 +178,11 @@ test('signing out reports its own failure instead of claiming success', () => {
   assert.match(handler, /catch \(err\)/, 'and catches a rejection')
   assert.match(handler, /setError\(errorCopy\(err\)\)/, 'and shows it the way a failed sign-in is shown')
   assert.match(row, /'Signing out'/, 'the row says what it is doing while it runs')
+})
+
+test('a device names its kind: a browser is a web console, never a desktop', () => {
+  assert.equal(kindLabel({ kind: 'web', platform: 'web' }), 'Web console')
+  assert.equal(kindLabel({ kind: 'machine', platform: 'linux' }), 'Machine')
+  assert.equal(kindLabel({ kind: 'desktop', platform: 'windows' }), 'Desktop')
+  assert.equal(kindLabel({ kind: 'desktop', platform: 'android' }), 'Phone')
 })

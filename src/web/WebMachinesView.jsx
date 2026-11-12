@@ -3,7 +3,7 @@
 
 import { HardDrives } from '@phosphor-icons/react'
 import { useConsole } from '../state/console.jsx'
-import { kindLabel, platformLabel } from '../cloud.js'
+import { platformLabel } from '../cloud.js'
 import '../devices.css'
 
 export default function WebMachinesView({ onPick }) {
@@ -39,7 +39,7 @@ export default function WebMachinesView({ onPick }) {
               <span className="pv">{device.name}</span>
             </span>
             <span className="dv-detail">
-              {[platformLabel(device.platform), kindLabel(device), device.app_version]
+              {[platformLabel(device.platform), device.app_version ? `v${device.app_version}` : null]
                 .filter(Boolean)
                 .join(' · ')}
             </span>
@@ -50,7 +50,10 @@ export default function WebMachinesView({ onPick }) {
           </button>
         ))}
         {devicesAnswered && machines.length === 0 && (
-          <p className="dv-meta">No machines in this account yet.</p>
+          <p className="dv-meta">
+            No machines yet. On one of your computers, open OpenRemote and choose Machines, then
+            Make this computer a machine.
+          </p>
         )}
       </div>
     </div>
