@@ -6,7 +6,7 @@ makes its own trust boundary worth attacking, and reports about it welcome.
 ## Supported versions
 
 The newest published release is supported. Older builds are not patched; the
-fix is to upgrade. The current line is 0.4.x (0.4.8 as this is written).
+fix is to upgrade. The current line is 0.5.x (0.5.0 as this is written).
 
 ## Reporting a vulnerability
 
