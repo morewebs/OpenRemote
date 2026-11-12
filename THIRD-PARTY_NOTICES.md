@@ -376,6 +376,8 @@ Compiled into the desktop shell (Windows installers only):
 - tauri-plugin-autostart 2.7.0 - Apache-2.0 OR MIT
 - tauri-plugin-shell 2.4.0 - Apache-2.0 OR MIT
 - tauri-plugin-single-instance 2.5.2 - Apache-2.0 OR MIT
+- thiserror 1.0.69 - MIT OR Apache-2.0. The older major version, which
+  the filter engine (adblock) uses; the rest of the app links thiserror 2.
 - tray-icon 0.25.1 - MIT OR Apache-2.0
 - unicode-segmentation 1.13.3 - MIT OR Apache-2.0
 - webview2-com 0.39.1 - MIT

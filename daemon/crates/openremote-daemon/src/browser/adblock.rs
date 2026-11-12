@@ -149,8 +149,13 @@ impl Keeper {
     }
 
     /// The wanted lists that are missing or past their week: what a
-    /// download would fetch now. Empty while blocking is off.
-    pub fn due(&self, on: bool, picked: &[String]) -> Vec<&'static FilterList> {
+    /// download would fetch now. Empty while blocking is off, and while no
+    /// browser on this daemon can block (`supported`): a list nothing here
+    /// could use is never downloaded.
+    pub fn due(&self, on: bool, picked: &[String], supported: bool) -> Vec<&'static FilterList> {
+        if !supported {
+            return Vec::new();
+        }
         wanted(on, picked)
             .into_iter()
             .filter(|list| match self.on_disk(list) {
@@ -244,12 +249,16 @@ impl Keeper {
     /// Whether a download may start now: none is running, and the last
     /// failure is an hour old (or the user just asked).
     fn may_fetch(&self) -> bool {
-        let urgent = self.urgent.swap(false, Ordering::SeqCst);
         let state = lock(&self.state);
-        !state.fetching
-            && (urgent
-                || state.error.is_none()
-                || state.last_try.is_none_or(|at| at.elapsed() > RETRY_AFTER))
+        // A download is running: the user's ask stays, so the retry runs
+        // once this one ends.
+        if state.fetching {
+            return false;
+        }
+        let urgent = self.urgent.swap(false, Ordering::SeqCst);
+        urgent
+            || state.error.is_none()
+            || state.last_try.is_none_or(|at| at.elapsed() > RETRY_AFTER)
     }
 
     /// What Settings shows. `supported` is whether the browser here can
@@ -281,9 +290,12 @@ impl Keeper {
             })
             .collect();
         let wanted = wanted(on, &picked);
-        let due = !self.due(on, &picked).is_empty();
+        let due = !self.due(on, &picked, supported).is_empty();
         let word = if !on {
             "off"
+        } else if !supported {
+            // On, but no browser here can block, so nothing is downloaded.
+            "unsupported"
         } else if wanted.is_empty() {
             // On, but nothing to block with until the user picks a list.
             "none"
@@ -380,7 +392,8 @@ async fn download(location: &str) -> Result<Vec<u8>, String> {
                 DOWNLOAD_TIME,
                 max_body,
                 &url,
-                &[("user-agent", "OpenRemote"), ("accept", "text/plain")],
+                // The client names itself (User-Agent: OpenRemote/<version>).
+                &[("accept", "text/plain")],
             )
             .await
             .map_err(|e| format!("could not download {url}: {e}"))?;
@@ -462,7 +475,11 @@ async fn keep(service: &BrowserService) {
     inform(service);
     let due = {
         let store = lock(&service.store);
-        keeper.due(store.adblock_on(), &store.adblock_lists())
+        keeper.due(
+            store.adblock_on(),
+            &store.adblock_lists(),
+            supported(service),
+        )
     };
     if !due.is_empty() && keeper.may_fetch() {
         keeper.fetch(&due).await;
@@ -544,10 +561,11 @@ async fn set(State(app): State<Arc<App>>, Json(body): Json<SetBody>) -> Response
     }
     let urgent = body.on == Some(true) || body.lists.as_ref().is_some_and(|l| !l.is_empty());
     keeper.changed(urgent);
+    let able = supported(&app.browser);
     let store = lock(&app.browser.store);
-    let mut status = keeper.status(&store, supported(&app.browser));
+    let mut status = keeper.status(&store, able);
     if !keeper
-        .due(store.adblock_on(), &store.adblock_lists())
+        .due(store.adblock_on(), &store.adblock_lists(), able)
         .is_empty()
     {
         // The keeper is waking to download them: said now, so the switch
@@ -623,26 +641,26 @@ mod tests {
         // Off, whatever is picked.
         assert!(
             keeper
-                .due(false, &ids(&["easylist", "easyprivacy"]))
+                .due(false, &ids(&["easylist", "easyprivacy"]), true)
                 .is_empty()
         );
         // On, nothing picked.
-        assert!(keeper.due(true, &[]).is_empty());
+        assert!(keeper.due(true, &[], true).is_empty());
         // On, a list the catalog doesn't offer.
         assert!(
             keeper
-                .due(true, &ids(&["https://evil.test/list"]))
+                .due(true, &ids(&["https://evil.test/list"]), true)
                 .is_empty()
         );
         // On with one picked: that one, and only that one.
         let due: Vec<&str> = keeper
-            .due(true, &ids(&["easyprivacy"]))
+            .due(true, &ids(&["easyprivacy"]), true)
             .iter()
             .map(|l| l.id)
             .collect();
         assert_eq!(due, vec!["easyprivacy"]);
         put_lists(&keeper, &["easyprivacy"]);
-        assert!(keeper.due(true, &ids(&["easyprivacy"])).is_empty());
+        assert!(keeper.due(true, &ids(&["easyprivacy"]), true).is_empty());
     }
 
     #[test]
@@ -844,6 +862,39 @@ mod tests {
                 assert!(told.is_empty(), "{told:?}");
             }
         }
+    }
+
+    #[test]
+    fn nothing_is_downloaded_where_no_browser_can_block() {
+        let dir = tempfile::tempdir().unwrap();
+        let keeper = Keeper::new(dir.path());
+        assert!(keeper.due(true, &ids(&["easylist"]), false).is_empty());
+        assert_eq!(keeper.due(true, &ids(&["easylist"]), true).len(), 1);
+        let mut store = BrowserStore::open(dir.path());
+        store.set_adblock_on(true);
+        store.set_adblock_lists(&ids(&["easylist"]));
+        assert_eq!(keeper.status(&store, false)["state"], "unsupported");
+        assert_eq!(keeper.status(&store, true)["state"], "updating");
+    }
+
+    #[test]
+    fn an_ask_during_a_download_runs_once_it_ends() {
+        let dir = tempfile::tempdir().unwrap();
+        let keeper = Keeper::new(dir.path());
+        {
+            let mut state = lock(&keeper.state);
+            state.fetching = true;
+            state.error = Some("easylist.to answered 503".into());
+            state.last_try = Some(Instant::now());
+        }
+        keeper.changed(true);
+        assert!(!keeper.may_fetch(), "never two downloads at once");
+        // The download ends, failed, a moment ago: without the kept ask it
+        // would wait an hour.
+        lock(&keeper.state).fetching = false;
+        assert!(keeper.may_fetch(), "the user's ask is still there");
+        // Used once: the next look waits for the retry hour again.
+        assert!(!keeper.may_fetch());
     }
 
     #[test]

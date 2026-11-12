@@ -1,5 +1,5 @@
 //! What ad and tracker blocking decides, with no WebView2 in it: the
-//! engine built from the user's picked lists, which requests it may look at
+//! engine built from the user's picked lists, which requests it may filter
 //! at all, and the hide rules a page gets. Kept apart from the hooks so all
 //! of it is tested without a window.
 //!
@@ -143,7 +143,7 @@ pub fn site_allowed(allow: &[String], host: &str) -> bool {
     })
 }
 
-/// Whether blocking may look at a request at all. Never: what isn't web
+/// Whether blocking may filter a request at all. Never filtered: what isn't web
 /// traffic, anything on a page the user allows ads on or on their own
 /// machine or network, anything going to their own machine or network
 /// (the daemon included), and a tab's own page - a document request that
@@ -262,7 +262,7 @@ mod tests {
     }
 
     #[test]
-    fn the_console_and_the_daemon_are_never_looked_at() {
+    fn the_console_and_the_daemon_are_never_filtered() {
         let allow = Vec::new();
         // The daemon, asked from a web page or from anywhere else.
         assert!(!may_filter(
@@ -503,7 +503,7 @@ mod tests {
         let _ = class_id_selectors(&engine, "not json", &found.exceptions);
         let _ = class_id_selectors(&engine, "[[1,2],[null]]", &found.exceptions);
         assert!(
-            started.elapsed() < Duration::from_secs(60),
+            started.elapsed() < Duration::from_secs(5),
             "took {:?}",
             started.elapsed()
         );

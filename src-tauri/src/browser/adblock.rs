@@ -13,7 +13,7 @@
 //! Only the browser's tabs are ever hooked. The console's own webview never
 //! is (`hookable`), and the daemon's requests are its own process's, which
 //! no webview sees; a request to this machine or its network is never
-//! looked at either (`rules::may_filter`).
+//! filtered either (`rules::may_filter`).
 
 mod hooks;
 mod rules;

@@ -4,7 +4,7 @@
 //! nothing of Tauri (the glue in `adblock.rs` ties it to the app's tabs).
 //!
 //! Off, nothing here runs: no filter is registered with any tab, so no
-//! request is ever held up to be looked at, and no engine exists. On, each
+//! request is ever held up or filtered, and no engine exists. On, each
 //! hooked tab hands every request to Brave's filter engine (the `adblock`
 //! crate) running the lists the user picked, and answers the ones the
 //! lists name with an empty response, so the page simply never receives
