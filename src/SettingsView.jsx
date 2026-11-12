@@ -1971,7 +1971,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                     <div className="pn-detail">
                       Each chat's agent hears which tabs you have open and gets every browser tool. Off, only a chat
                       whose agent has used the browser does; the others can still list them. A chat already running
-                      picks this up at its next tool call.
+                      picks this up at its next OpenRemote tool call, or when it next starts.
                     </div>
                   </div>
                   <Toggle

@@ -42,6 +42,7 @@ pub fn routes() -> Router<Arc<App>> {
         .route("/browser/import", get(import_sources).post(import_run))
         .route("/browser/tools", get(tool_list))
         .route("/sessions/{id}/browser/call", post(call_tool))
+        .route("/sessions/{id}/browser/shared", post(shared))
         .merge(super::adblock::routes())
 }
 
@@ -452,6 +453,23 @@ async fn tool_list(State(app): State<Arc<App>>) -> Response {
         Vec::new()
     };
     Json(json!({"tools": tools})).into_response()
+}
+
+/// The user shared a page, a picture of one or a picked element with a
+/// chat from the browser: the browser is in play for that chat, as when its
+/// agent calls a browser tool, so its MCP server lists the browser tools
+/// from now on. The console's own call; no peer reaches it.
+async fn shared(State(app): State<Arc<App>>, AxumPath(id): AxumPath<String>) -> Response {
+    let Some(session_id) = SessionId::parse(&id) else {
+        return bad(StatusCode::BAD_REQUEST, "bad session id");
+    };
+    match crate::supervisor::lock_recovering(&app.store).note_browser_used(&session_id) {
+        Ok(()) => Json(json!({"shared": true})).into_response(),
+        Err(openremote_core::store::StoreError::NotFound(_)) => {
+            bad(StatusCode::NOT_FOUND, "no such chat")
+        }
+        Err(e) => bad(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()),
+    }
 }
 
 #[derive(Deserialize)]

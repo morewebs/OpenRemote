@@ -721,7 +721,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
   const claims = useRef({ text: null, pictures: null })
   const claimText = () => {
     claims.current.text?.()
-    claims.current.text = claimInserter(attach)
+    claims.current.text = claimInserter(attach, composerKey)
   }
   // The browser's pictures go to the composer the user is in, like its text
   // (claimInserter): this one while it is the focused pane's, or the moment

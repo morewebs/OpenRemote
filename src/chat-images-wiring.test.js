@@ -61,7 +61,7 @@ test("the browser's text bus and its picture bus follow the same focus", () => {
   const fresh = read('NewChat.jsx')
   assert.match(
     fresh,
-    /releaseInserter\.current = claimInserter\(attach\)\s*\n\s*releasePictures\.current\?\.\(\)\s*\n\s*releasePictures\.current = setFocusedComposer\('new'\)/,
+    /releaseInserter\.current = claimInserter\(attach, 'new'\)\s*\n\s*releasePictures\.current\?\.\(\)\s*\n\s*releasePictures\.current = setFocusedComposer\('new'\)/,
   )
 })
 

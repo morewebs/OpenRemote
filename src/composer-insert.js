@@ -9,8 +9,10 @@ let current = null
 // claim. The claim belongs to the composer that made it: releasing it is what
 // a composer's unmount does, so a claim cannot outlive the surface it types
 // into and the browser pane never reports a delivery that went nowhere.
-export function claimInserter(fn) {
-  const mine = { fn }
+// `key` names the composer (a chat's id, or 'new'), so the pane can say
+// which chat it shared with.
+export function claimInserter(fn, key = null) {
+  const mine = { fn, key }
   current = mine
   return function release() {
     // A later claim is not this one's to clear: the composer that took the bus
@@ -26,6 +28,11 @@ export function insertToComposer(text) {
   if (!current) return false
   current.fn(text)
   return true
+}
+
+// The composer that holds the bus, by its key, or null.
+export function inserterKey() {
+  return current?.key ?? null
 }
 
 // Test-only: forget the claim.

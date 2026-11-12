@@ -39,7 +39,8 @@ import {
 } from '@phosphor-icons/react'
 import { hasTauri, isMobile } from './platform.js'
 import { PICKER_CANCEL, PICKER_SOURCE, formatPicked } from './browser-pick.js'
-import { insertToComposer } from './composer-insert.js'
+import { insertToComposer, inserterKey } from './composer-insert.js'
+import { sharedWith, tellDaemon } from './browser-share.js'
 import { SEARCH_ENGINES, inlineFor, omnibox, security, shownAddress, suggest } from './browser-omnibox.js'
 import { browserSetting, setSitePermission, useBrowserPrefs } from './browser-prefs.js'
 import { closeOthers, closeTab, closeToRight, cycle, canUse, extrasMissing, isDormant, newTab, openBelongs, rememberClosed, stripPlan, takeClosed, tabTitle } from './browser-tabs.js'
@@ -909,8 +910,12 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
         return
       }
       const line = formatPicked({ ...pick, url: tab.url, title: tab.title })
-      if (insertToComposer(line)) notify('Attached to the chat')
-      else notify('No chat open - open one first, then pick again')
+      // The chat it lands in has the browser in play from now on.
+      const target = inserterKey()
+      if (insertToComposer(line)) {
+        sharedWith(target, tellDaemon)
+        notify('Attached to the chat')
+      } else notify('No chat open - open one first, then pick again')
     } catch {
       // The console could not reach the shell at all: back out, and say it.
       notify('The page could not be reached - the pick was cancelled')
@@ -942,6 +947,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   const attachPicture = (item, what) => {
     try {
       const { key } = addToFocused(item)
+      sharedWith(key, tellDaemon)
       notify(key === 'new' ? `${what} added to the new chat` : `${what} added to the chat`)
     } catch (err) {
       notify(errorCopy(err))

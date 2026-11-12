@@ -801,8 +801,18 @@ async fn the_every_chat_switch_reaches_a_running_chat_at_its_next_tool_call() {
     )
     .await;
     assert_eq!(set.status, 200, "{}", set.raw);
-    // Longer than any poll would take: nothing arrives on its own.
-    tokio::time::sleep(Duration::from_secs(6)).await;
+    // Nothing arrives on its own: the server's loop, from its start to the
+    // gate reads, waits on its input alone, with no timer to wake it (read
+    // from the source rather than waited out).
+    let source = include_str!("../src/mcp_chat.rs");
+    let serving = &source
+        [source.find("pub async fn run(").unwrap()..source.find("fn tool() -> Value").unwrap()];
+    for timer in ["sleep", "interval", "select!", "timeout"] {
+        assert!(
+            !serving.contains(timer),
+            "the staged server must not run on a timer: {timer}"
+        );
+    }
     let quiet = rpc_lines(&mut stdin, &mut lines, 3, "ping", json!({})).await;
     assert_eq!(quiet.len(), 1, "{quiet:?}");
     // Any tool call, even one that fails, looks again.
@@ -856,4 +866,46 @@ async fn an_unknown_browser_tool_is_named_and_opens_nothing() {
     )
     .await;
     assert_eq!(gates.body["browser"], false, "{}", gates.raw);
+}
+
+/// A page or an element the user shares with a chat from the browser puts
+/// the browser in play for that chat, as an agent's own browser call does:
+/// its MCP server lists the browser tools from then on. A chat this daemon
+/// does not hold is refused, and nothing else opens.
+#[tokio::test]
+async fn sharing_a_page_with_a_chat_opens_its_browser_tools() {
+    let ws = workspace(Some("plain"));
+    let side = sidecar(ws.path()).await;
+    let daemon = &side.daemon;
+    let created = call(
+        daemon,
+        "POST",
+        "/sessions",
+        Some(json!({"request_id": "s-create", "harness": "claude", "workspace": ws.path()})),
+    )
+    .await;
+    let chat = created.body["id"].as_str().unwrap().to_string();
+    let gates = format!("/sessions/{chat}/tools/gates");
+    let before = call(daemon, "GET", &gates, None).await;
+    assert_eq!(before.body["browser"], false, "{}", before.raw);
+    let shared = call(
+        daemon,
+        "POST",
+        &format!("/sessions/{chat}/browser/shared"),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(shared.status, 200, "{}", shared.raw);
+    let after = call(daemon, "GET", &gates, None).await;
+    assert_eq!(after.body["browser"], true, "{}", after.raw);
+
+    let stranger = openremote_core::SessionId::new().to_string();
+    let refused = call(
+        daemon,
+        "POST",
+        &format!("/sessions/{stranger}/browser/shared"),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(refused.status, 404, "{}", refused.raw);
 }

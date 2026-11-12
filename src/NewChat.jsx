@@ -43,6 +43,7 @@ import { greetingAt, greetingForNewChat, nextGreetingIndex } from './greetings.j
 import { useComposerMenus } from './useComposerMenus.jsx'
 import { mentionedChats, ownCommands, takeCommands } from './composer-menus.js'
 import { claimInserter } from './composer-insert.js'
+import { chatMade, tellDaemon } from './browser-share.js'
 import { isMobile } from './platform.js'
 import { moveAttachments, removeAttachment, setFocusedComposer } from './attachments.js'
 import { AttachmentChips, useAttachInput, useAttachments } from './ComposerAttachments.jsx'
@@ -1101,7 +1102,7 @@ export default function NewChat({
   const releasePictures = useRef(null)
   const takeInserter = () => {
     releaseInserter.current?.()
-    releaseInserter.current = claimInserter(attach)
+    releaseInserter.current = claimInserter(attach, 'new')
     releasePictures.current?.()
     releasePictures.current = setFocusedComposer('new')
   }
@@ -1262,6 +1263,8 @@ export default function NewChat({
           attachments: payload.attachments,
         },
       )
+      // A page or element shared from the browser before the chat existed.
+      chatMade(id, tellDaemon)
       // What was sent leaves; anything added meanwhile follows the message
       // into its chat's composer.
       for (const item of sent) removeAttachment('new', item.id)

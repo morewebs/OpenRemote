@@ -28,9 +28,12 @@ families of tools, and lists:
   an agent finds the browser on its own. The rest of the browser tools once
   the chat has the browser in play: its agent called a real browser tool
   (kept by this device in the store's `browser_used` set, never in the
-  chat's events, never cleared while the chat lives), or the user turned on
-  Settings > Browser > Give every chat my tabs and browser tools
-  (`agent_tabs`).
+  chat's events, never cleared while the chat lives), the user shared a
+  page, a picture of one or a picked element with the chat from the browser
+  (`POST /sessions/{id}/browser/shared`, the console's own call, kept in the
+  same set; a share with the home screen's composer reaches the chat it
+  becomes), or the user turned on Settings > Browser > Give every chat my
+  tabs and browser tools (`agent_tabs`).
 - `agents_harnesses` and `agents_spawn` whenever teams are on; `agents_list`,
   `read`, `wait`, `message` and `stop` once the chat has a worker.
 - Plugin agent tools, as before.
@@ -39,8 +42,8 @@ The daemon answers what is open at `GET /sessions/{id}/tools/gates`. The
 server reads it when it starts, when the client lists, and after each tool
 call while a gate is still shut, and sends
 `notifications/tools/list_changed` when one opened. Nothing runs on a
-timer, so the Settings switch reaches a running chat at its next tool call
-(the switch says so). What the server has seen open stays open, so a tool a
+timer, so the Settings switch reaches a running chat at its next OpenRemote
+tool call, or when it next starts (the switch says so). What the server has seen open stays open, so a tool a
 running chat has used is never taken away.
 
 Why only Claude Code: its client re-lists on `list_changed` for a server
@@ -61,7 +64,11 @@ where it can break them.
 `browser_go`), and `browser_logs {kind}` replaces `browser_console` and
 `browser_network`. A call that names two actions at once is refused, never
 guessed at. Only tools that read were merged with tools that read, so the
-reading ones still run without asking. Calls by the old names still work
+reading ones still run without asking. A merge does widen a grant within its
+class: a chat whose user allowed one of the old tools for the rest of the
+chat (say `browser_console`) has now allowed the merged tool, and with it
+the other actions it took in (`browser_network`'s kind). A read grant never
+grows into a write, because no merge crossed that line. Calls by the old names still work
 (`browser::tools::current_name`). The `tab`, `ref` and `element` parameter
 descriptions, repeated across most tools, are a few words each, and the
 team tools' descriptions keep their contract and drop the repetition.
