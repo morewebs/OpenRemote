@@ -258,11 +258,12 @@ test('a chat row menu offers Move to project, and a refusal keeps the daemon wor
   assert.ok(at >= 0, 'the row menu takes the position the picker opens at')
   const menu = source.slice(at, at + 5000)
   assert.match(menu, /label: 'Move to project'/)
-  assert.match(menu, /onSelect: \(\) => setMoving\(\{ row, at \}\)/)
-  assert.match(source, /const moveTargets = \(\) => \[/)
+  assert.match(menu, /setMoving\(\{ row, at \}\)/)
+  assert.match(source, /const moveTargets = \(row\) => \[/)
   assert.match(source, /\{ id: 'none', name: 'No project' \}/)
   assert.match(source, /<PickerMenu[\s\S]{0,500}label="Move to project"/)
-  assert.match(source, /api\.call\('POST', `\/sessions\/\$\{row\.id\}\/workspace`/)
-  // A failure is the daemon's sentence, not a swallowed one.
-  assert.match(source, /catch \(err\) \{\s*setCopyNote\(errorCopy\(err\)\)/)
+  // The route has one home now: the console's moveChat, through useMoveChat,
+  // which asks first (move-wiring.test.js). A failure is still the daemon's
+  // sentence on this list's own status line, not a swallowed one.
+  assert.match(source, /useMoveChat\(\{ onNote: setCopyNote \}\)/)
 })

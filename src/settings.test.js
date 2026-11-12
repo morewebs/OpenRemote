@@ -343,10 +343,10 @@ test('the startup rows and the preference toggles say when a write did not land'
     const before = viewSource.slice(Math.max(0, at - 260), at)
     assert.match(before, /if \(!setPref\(/, `${attribute} applies it only when the save landed`)
   }
-  // One line, drawn where the press happened: the Appearance rows and the
-  // startup rows each show it from the same piece of state.
+  // One line, drawn where the press happened: the Appearance, startup and
+  // Confirmations rows each show it from the same piece of state.
   const lines = viewSource.match(/\{startupNote && \(\s*\n\s*<p className="pn-error" role="status">/g) ?? []
-  assert.equal(lines.length, 2, 'the note renders under Appearance and under Startup')
+  assert.equal(lines.length, 3, 'the note renders under Appearance, Startup and Confirmations')
 })
 test('a stored set that cannot be read is not an empty set', () => {
   // The failure this guards: savePrefs used to build on loadPrefs, which answers

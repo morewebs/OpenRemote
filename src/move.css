@@ -1,0 +1,27 @@
+/* Moving a chat between projects: the confirm and the sidebar's drop. */
+
+/* "Don't show this again": a quiet line above the buttons. */
+.mv-skip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mv-skip input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* A project a dragged chat would move into, and only that one: the accent,
+   drawn inside the box so the list does not shift under the pointer. No
+   transition, so reduced motion has nothing to stop. */
+.project.mv-drop,
+.sb-chats-title.mv-drop {
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px var(--accent);
+  background: rgba(163, 155, 184, 0.08);
+}

@@ -12,7 +12,7 @@ globalThis.localStorage = {
   clear: () => store.clear(),
 }
 
-const { askBeforeMove, busyReason, moveSentence, moveTargets, setAskBeforeMove, wouldMove } = await import(
+const { askBeforeMove, busyReason, dropMoves, moveSentence, moveTargets, setAskBeforeMove, unreachableNote, wouldMove } = await import(
   './move-chat.js'
 )
 
@@ -74,4 +74,25 @@ test('asking first is this device\'s choice, on until turned off', () => {
   assert.equal(askBeforeMove(), false)
   setAskBeforeMove(true)
   assert.equal(askBeforeMove(), true)
+})
+
+test('a chat whose machine can\'t be asked says why instead of offering projects', () => {
+  assert.equal(unreachableNote('offline', 'box'), 'box is offline')
+  assert.equal(unreachableNote('not-machine', 'box'), "box isn't a machine")
+  assert.equal(unreachableNote('signed-out', 'box'), 'Sign in to Cloud first')
+  assert.equal(unreachableNote('gone', 'box'), 'box left your Cloud')
+  assert.equal(unreachableNote('unknown', 'box'), "Couldn't reach box")
+  // Here and a reachable machine have projects to show, not a reason.
+  assert.equal(unreachableNote('here', 'box'), null)
+  assert.equal(unreachableNote('remote', 'box'), null)
+})
+
+test('a drop moves only a chat this computer runs, onto this computer\'s projects', () => {
+  const row = { workspace: '/dev/webapp', status: 'idle' }
+  assert.equal(dropMoves(projects, row, projects[1], 'here'), true)
+  assert.equal(dropMoves(projects, row, projects[0], 'here'), false, 'already there')
+  // The sidebar's projects are this computer's: a chat on another machine
+  // moves through its menu, which asks that machine for its own.
+  assert.equal(dropMoves(projects, row, projects[1], 'remote'), false)
+  assert.equal(dropMoves(projects, null, projects[1], 'here'), false)
 })

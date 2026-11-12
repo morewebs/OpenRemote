@@ -57,3 +57,36 @@ export function askBeforeMove() {
 export function setAskBeforeMove(ask) {
   return savePrefs({ ask_move_chat: Boolean(ask) })
 }
+
+/**
+ * Why a chat's projects can't be listed, for the chat's machine as
+ * `chatAccess` (cloud.js) sees it; null when they can - here, or a
+ * reachable machine that is asked for its own.
+ */
+export function unreachableNote(access, where) {
+  switch (access) {
+    case 'here':
+    case 'remote':
+      return null
+    case 'offline':
+      return `${where} is offline`
+    case 'not-machine':
+      return `${where} isn't a machine`
+    case 'signed-out':
+      return 'Sign in to Cloud first'
+    case 'gone':
+      return `${where} left your Cloud`
+    default:
+      return `Couldn't reach ${where}`
+  }
+}
+
+/**
+ * Whether dropping `row` (a sidebar chat row) on `project` (null: the Chats
+ * section) would move it. The sidebar's projects are this computer's, so
+ * only a chat that runs here moves by a drop.
+ */
+export function dropMoves(projects, row, project, access) {
+  if (!row || access !== 'here') return false
+  return wouldMove(projects, row.workspace, project)
+}

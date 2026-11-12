@@ -41,7 +41,10 @@ import { duplicatedNames, folderless, heldStates, projectFor, projectIndex, proj
 import { activeSessions } from './archive.js'
 import { deviceName, isPhone, sessionsForMode } from './cloud.js'
 import { hasTauri, isMobile } from './platform.js'
-import { CHAT_DRAG_TYPE, chatDragPayload } from './split.js'
+import { CHAT_DRAG_TYPE, acceptsChatDrop, chatDragPayload } from './split.js'
+import { useMoveChat } from './useMoveChat.jsx'
+import { dropMoves } from './move-chat.js'
+import './move.css'
 import { armRow, clearRow, rowIsArmed } from './row-confirm.js'
 import { listHasUnread, loadSeen, markSeen, recordSeen, seedSeen, storeSeen, unreadIds } from './unread.js'
 import { lineFor, missingLines, pruneLines, questionKey, questionLine, rememberLine, wantedKeys } from './question-line.js'
@@ -196,6 +199,15 @@ export default function Sidebar({
     const timer = setTimeout(() => setCopyNote(null), COPY_NOTE_MS)
     return () => clearTimeout(timer)
   }, [copyNote])
+  // Moving chats between projects (useMoveChat.jsx): the picker below and a
+  // drop on a project head both ask first, and what a move did, or the
+  // daemon's own words for why it didn't, lands on the copy's status line.
+  const move = useMoveChat({ onNote: setCopyNote })
+  // The chat row being dragged, and the place a drop would move it into (a
+  // project's id, or 'flat' for the Chats section): lit only where a drop
+  // would actually move it.
+  const [dragging, setDragging] = useState(null)
+  const [dropOn, setDropOn] = useState(null)
   // What this console has looked at, per chat: the stamp each chat showed
   // the last time it was read. Read once at mount from this computer's own
   // key, never on the boot path, so a damaged record cannot take the first
@@ -258,6 +270,8 @@ export default function Sidebar({
         // A copy's last status is stale while its device is away.
         offline: elsewhere && !device?.online,
         synced: Boolean(session.executor),
+        // The device that runs it, which is where its projects live.
+        executor: session.executor ?? null,
         // The chat that started this one, when its agent did.
         parent: session.parent?.chat ?? null,
         spawnedAt: session.parent?.spawned_at ?? 0,
@@ -739,36 +753,58 @@ export default function Sidebar({
   // machine's projects. A chat's project is its folder, so the picker marks the
   // one the chat is in, and the daemon is the one that decides whether the
   // target is real.
-  const moveTargets = () => [
+  // A chat on another machine moves among that machine's projects, which
+  // useMoveChat asks it for as the picker opens.
+  const moveTargets = (row) => [
     { id: 'none', name: 'No project' },
-    ...(projects ?? []).map((project) => ({ id: project.id, name: projectName(project) })),
+    ...(move.placeOf(row).list ?? []).map((project) => ({ id: project.id, name: projectName(project) })),
   ]
 
   // Where the chat is now, for the picker's mark: the project holding its
   // folder, or "none" when no project does.
-  const currentProject = (row) =>
-    (projects ?? []).find((project) => (project.folders ?? []).includes(row.workspace))?.id ?? 'none'
+  const currentProject = (row) => projectFor(move.placeOf(row).list, row.workspace)?.id ?? 'none'
 
   // Moving a chat: the daemon decides and answers, and this says what it said.
   // A refusal keeps the daemon's own sentence, which names the reason (a turn
   // in flight, a project that is gone) better than anything this file could.
-  const moveTo = async (id) => {
+  // The route goes through the console's moveChat (useMoveChat), asked first
+  // unless this device said not to.
+  const moveTo = (id) => {
     const row = moving?.row
     setMoving(null)
     if (!row) return
-    const project = id === 'none' ? null : id
-    const request_id = `move-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-    try {
-      await api.call('POST', `/sessions/${row.id}/workspace`, {
-        request_id,
-        project_id: project,
-      })
-      const name = project ? projectName(projects.find((p) => p.id === project) ?? {}) : null
-      setCopyNote(name ? `Moved to ${name}.` : 'Moved out of its project.')
-    } catch (err) {
-      setCopyNote(errorCopy(err))
-    }
+    const place = move.placeOf(row)
+    const project = id === 'none' ? null : ((place.list ?? []).find((p) => p.id === id) ?? null)
+    if (id !== 'none' && !project) return
+    move.moveTo(row, project, place)
   }
+
+  // A drop on a project head (or the Chats title, for none): the row being
+  // dragged moves there, asked first, when it is a chat this computer runs
+  // and it is not already there.
+  const dropTarget = (project, key) => ({
+    onDragOver: (e) => {
+      if (!acceptsChatDrop(e.dataTransfer?.types)) return
+      if (!dropMoves(projects, dragging, project, dragging && move.accessOf(dragging))) {
+        if (dropOn === key) setDropOn(null)
+        return
+      }
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      if (dropOn !== key) setDropOn(key)
+    },
+    onDragLeave: (e) => {
+      if (!e.currentTarget.contains(e.relatedTarget) && dropOn === key) setDropOn(null)
+    },
+    onDrop: (e) => {
+      const row = dragging
+      setDropOn(null)
+      setDragging(null)
+      if (!dropMoves(projects, row, project, row && move.accessOf(row))) return
+      e.preventDefault()
+      move.moveTo(row, project)
+    },
+  })
 
   // Right-click on a plugin's tile: open it, or open it in a new split.
   const viewMenuItems = (item) => {
@@ -852,7 +888,10 @@ export default function Sidebar({
             {
               label: 'Move to project',
               icon: <FolderSimple size={14} />,
-              onSelect: () => setMoving({ row, at }),
+              onSelect: () => {
+                move.prepare(row)
+                setMoving({ row, at })
+              },
             },
           ]
         : []),
@@ -994,6 +1033,12 @@ export default function Sidebar({
         e.dataTransfer.setData(CHAT_DRAG_TYPE, row.id)
         e.dataTransfer.setData('text/plain', chatDragPayload(row.id))
         e.dataTransfer.effectAllowed = 'move'
+        // A project head can take it too: the drop moves the chat there.
+        setDragging(row)
+      }}
+      onDragEnd={() => {
+        setDragging(null)
+        setDropOn(null)
       }}
       onContextMenu={(e) => {
         e.preventDefault()
@@ -1343,7 +1388,8 @@ export default function Sidebar({
           return (
             <section
               key={project.id}
-              className={`project${isArmed ? ' armed' : ''}`}
+              className={`project${isArmed ? ' armed' : ''}${dropOn === project.id ? ' mv-drop' : ''}`}
+              {...dropTarget(project, project.id)}
               // Focus or a click leaving the row is a decision to keep it:
               // the armed state never survives a look away.
               onBlur={(e) => {
@@ -1463,7 +1509,11 @@ export default function Sidebar({
           )
         })}
 
-        <div className="section-title sb-chats-title" data-unread={listHasUnread(grouped.flat, unread) ? 'true' : undefined}>
+        <div
+          className={`section-title sb-chats-title${dropOn === 'flat' ? ' mv-drop' : ''}`}
+          data-unread={listHasUnread(grouped.flat, unread) ? 'true' : undefined}
+          {...dropTarget(null, 'flat')}
+        >
           Chats
         </div>
         {/* Only while there are chats to be outside a project: with every
@@ -1574,13 +1624,14 @@ export default function Sidebar({
         // shows.
         <PickerMenu
           label="Move to project"
-          items={moveTargets()}
+          items={moveTargets(moving.row)}
           selectedId={currentProject(moving.row)}
           anchor={moving.at ?? undefined}
           onChoose={moveTo}
           onClose={() => setMoving(null)}
         />
       )}
+      {move.modal}
       {deleting && (
         <DeleteChatModal
           title={deleting.title}

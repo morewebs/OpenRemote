@@ -90,7 +90,7 @@ test('nonsense matches nothing rather than guessing', () => {
 test('a phone sees the phone tabs, a desktop sees them all', () => {
   assert.deepEqual(
     visibleSections(true).map((s) => s.id),
-    ['appearance', 'cloud', 'archived', 'this-install'],
+    ['appearance', 'cloud', 'archived', 'confirmations', 'this-install'],
   )
   assert.deepEqual(visibleSections(false), SECTIONS)
 })
@@ -254,4 +254,17 @@ test('Enter opens the first row, and nothing at all when there is no row', () =>
   assert.equal(resultToOpen(undefined), null)
   assert.equal(resultToOpen(null), null)
   assert.equal(resultToOpen('not a list'), null)
+})
+
+test('asking before a chat moves is found by the words a person would use', () => {
+  const section = SECTIONS.find((s) => s.id === 'confirmations')
+  assert.ok(section, 'Confirmations is a tab')
+  assert.equal(section.group, 'chats')
+  assert.equal(section.phone, true, 'the phone moves chats too')
+  for (const q of ['move', 'confirm', "don't show", 'project']) {
+    assert.ok(
+      searchSettings(q).some((e) => e.key === 'confirmations-move'),
+      `"${q}" finds the move confirm`,
+    )
+  }
 })

@@ -36,6 +36,7 @@ export const SECTIONS = [
   { id: 'models', label: 'Models', icon: 'shapes', group: 'system', phone: false },
   { id: 'browser', label: 'Browser', icon: 'globe', group: 'system', phone: false },
   { id: 'archived', label: 'Archived chats', icon: 'archive', group: 'chats', phone: true },
+  { id: 'confirmations', label: 'Confirmations', icon: 'check-circle', group: 'chats', phone: true },
   { id: 'this-install', label: 'This install', icon: 'info', group: 'about', phone: true },
 ]
 
@@ -54,6 +55,7 @@ const BLURBS = {
   models: 'Custom model endpoints on this computer, which a chat can run through.',
   browser: 'How the built-in browser searches, what it keeps on this computer, and where to clear it.',
   archived: 'Chats hidden on this computer.',
+  confirmations: 'What OpenRemote asks before it acts on a chat.',
   'this-install': 'The build you are running, its daemon, and the first-run steps.',
 }
 
@@ -71,6 +73,8 @@ const ROWS = [
 
   row('appearance-density', 'appearance', 'Compact density', 'Pulls the rows and gutters in.', ['spacing', 'layout', 'comfortable']),
   row('appearance-motion', 'appearance', 'Reduce motion', 'Stops the running-dot breathe and picker transitions.', ['animation', 'accessibility', 'transition']),
+  row('confirmations-move', 'confirmations', 'Ask before moving a chat', 'A move to another project asks first, with what changes.', ['move', 'project', 'confirm', 'dialog', "don't show", 'ask', 'folder', 'drag']),
+
   row('appearance-privacy', 'appearance', 'Privacy mode', 'Blurs titles, paths, and the transcript for recordings.', ['blur', 'recording', 'stream', 'hide', 'screen']),
 
   row('startup-reopen', 'startup', 'Reopen', 'The view you left, or always New chat.', ['startup', 'last view', 'new chat', 'boot']),

@@ -30,6 +30,7 @@ import { pushBack, useBack } from './use-back.js'
 import SplitArea from './SplitArea.jsx'
 import ViewBoundary from './ViewBoundary.jsx'
 import ContextMenu from './ContextMenu.jsx'
+import { useMoveChat } from './useMoveChat.jsx'
 import { textFieldOf, textMenuItems } from './text-menu.js'
 import CommandPalette from './CommandPalette.jsx'
 import ShortcutSheet from './ShortcutSheet.jsx'
@@ -649,6 +650,8 @@ function Shell() {
   // and act on the chat it shows. Text fields are handled by the one listener
   // below, before this sees them.
   const [paneMenu, setPaneMenu] = useState(null)
+  // Moving a pane's chat to another project, from its right-click menu.
+  const chatMove = useMoveChat()
   // Text fields: the engine's own context menu is off in the console, so a
   // right click in an input, a textarea or a contenteditable had nothing at
   // all. One capture listener at the document serves every field in every
@@ -674,6 +677,10 @@ function Shell() {
     const leafId = t.closest?.('[data-leaf-id]')?.dataset.leafId ?? layout.focus
     e.preventDefault()
     setLayout((l) => focusLeaf(l, leafId))
+    // A chat on another machine moves among that machine's projects: ask it
+    // for them now, so the submenu has them by the time it opens.
+    const shown = leafById(layout, leafId)?.view ?? view
+    if (isChatView(shown) && chats[shown]) chatMove.prepare({ id: shown, executor: chats[shown].executor ?? null })
     setPaneMenu({ x: e.clientX, y: e.clientY, leafId })
   }
 
@@ -704,8 +711,12 @@ function Shell() {
     ]
     const title = chats[v]?.title
     if (isChatView(v) && title) {
+      const chat = chats[v]
       items.push(
         { divider: true },
+        // The chat's machine's projects, as a submenu: "No project" first,
+        // the current one checked. useMoveChat asks before it moves.
+        chatMove.menuItem({ id: v, title, workspace: chat.workspace ?? null, executor: chat.executor ?? null }),
         { label: 'Archive chat', icon: <Archive size={14} />, hint: kb.label('archive'), onSelect: () => archiveFrom(leaf, v) },
         {
           label: 'Copy chat title',
@@ -1334,6 +1345,7 @@ function Shell() {
               )}
             </div>
           </main>
+          {chatMove.modal}
           {paneMenu && (
             <ContextMenu
               x={paneMenu.x}

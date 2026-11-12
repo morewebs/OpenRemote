@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import {
   Archive,
+  CheckCircle,
   CaretLeft,
   CaretRight,
   Cloud,
@@ -85,6 +86,7 @@ const SECTION_ICONS = {
   models: Shapes,
   browser: Globe,
   archived: Archive,
+  confirmations: CheckCircle,
   'this-install': Info,
 }
 
@@ -2083,6 +2085,42 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
             )}
           </section>
         )}
+
+        <section
+          className="stg-section"
+          id="stg-confirmations"
+          role="tabpanel"
+          aria-labelledby="stg-tab-confirmations"
+          data-stg="confirmations"
+          hidden={!!query || active !== 'confirmations'}
+        >
+          <header className="stg-head">
+            <h2 className="stg-title">Confirmations</h2>
+            <p className="stg-lead">What OpenRemote asks before it acts on a chat. Kept on this device.</p>
+          </header>
+          <div className="pn-list pn-list--tight">
+            <div className="pn-row" data-stg="confirmations-move">
+              <div>
+                <div className="pn-name">Ask before moving a chat</div>
+                <div className="pn-detail">
+                  Moving a chat to another project, from its menu or by dragging it, asks first and says
+                  which folder its agent works in next. The dialog&apos;s &ldquo;Don&apos;t show this
+                  again&rdquo; turns this off.
+                </div>
+              </div>
+              <Toggle
+                checked={prefs.ask_move_chat}
+                onChange={() => setPref({ ask_move_chat: !prefs.ask_move_chat })}
+                label="Ask before moving a chat"
+              />
+            </div>
+          </div>
+          {startupNote && (
+            <p className="pn-error" role="status">
+              {startupNote}
+            </p>
+          )}
+        </section>
 
         <section
           className="stg-section"
