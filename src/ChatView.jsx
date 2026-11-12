@@ -50,6 +50,7 @@ import { errorCopy } from './error-copy.js'
 import { isTeamTool, teamTool } from './team.js'
 import { requestBeside } from './team-placement.js'
 import TeamBar from './TeamBar.jsx'
+import PluginComposerButtons from './PluginComposerButtons.jsx'
 import './chatview.css'
 import './composer.css'
 import './team.css'
@@ -1697,6 +1698,16 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
             </div>
             <div className="nc-send-group">
               {attachInput.button}
+              {/* The buttons plugins add to the composer (dictation's
+                  microphone, say), dimmed while the chat can't take text. A
+                  project's plugin shows only in its project's chats. */}
+              <PluginComposerButtons
+                inputRef={inputRef}
+                setText={setText}
+                composer={chat.id}
+                workspace={chat.workspace ?? null}
+                disabled={!alive || !reachable}
+              />
               {/* The harness's own permission word for this chat, by the
                   send button: the last thing to check before a message
                   goes. It is start-time on every harness - the chip

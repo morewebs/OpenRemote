@@ -12,6 +12,7 @@
 import { CATALOG, GROUPS, fuzzyScore } from './shortcuts.js'
 import { harnessName } from './harness-names.js'
 import { chatTitle, text } from './shape.js'
+import { pluginSlug } from './plugin-runtime.js'
 
 // The sidebar's category order. A section names its group by id; the tab
 // list renders one small label per group.
@@ -31,6 +32,7 @@ export const SECTIONS = [
   { id: 'harnesses', label: 'Apps', icon: 'robot', group: 'system', phone: false },
   { id: 'agents', label: 'Agents', icon: 'users', group: 'system', phone: false },
   { id: 'mcp-servers', label: 'MCP servers', icon: 'plugs', group: 'system', phone: false },
+  { id: 'plugins', label: 'Plugins', icon: 'puzzle-piece', group: 'system', phone: false },
   { id: 'models', label: 'Models', icon: 'shapes', group: 'system', phone: false },
   { id: 'browser', label: 'Browser', icon: 'globe', group: 'system', phone: false },
   { id: 'archived', label: 'Archived chats', icon: 'archive', group: 'chats', phone: true },
@@ -48,6 +50,7 @@ const BLURBS = {
   harnesses: 'The apps OpenRemote can drive on this machine.',
   agents: "What a chat's agent may do with other chats: workers, how many, on which apps.",
   'mcp-servers': 'Tools a session can call.',
+  plugins: "Each installed plugin's own settings. A secret stays with this computer.",
   models: 'Custom model endpoints on this computer, which a chat can run through.',
   browser: 'How the built-in browser searches, what it keeps on this computer, and where to clear it.',
   archived: 'Chats hidden on this computer.',
@@ -137,6 +140,7 @@ const SECTION_TERMS = {
   // The daemon lives inside This install now: someone typing "daemon" should
   // not have to know that the tab it moved into is named after the build.
   'this-install': ['daemon', 'sidecar', 'build', 'update', 'first-run', 'onboarding'],
+  plugins: ['plugin', 'extension', 'api key', 'secret'],
 }
 
 // The section's own result points at the tab's element (data-stg="<id>").
@@ -160,6 +164,9 @@ export const SETTINGS_ENTRIES = [...SECTION_ROWS, ...ROWS, ...KEYBOARD]
  *   and by its base URL's host), and the row that says where its API key is
  *   set. `endpoints` is the list EndpointManager hands up, either one array or
  *   a map of harness id to array.
+ * - one row per installed plugin that declares settings (Settings > Plugins >
+ *   its name), and one per setting it declares. `plugins` is the list the
+ *   view draws: `{ id, name, settings: [{ key, label, help, type }] }`.
  */
 export function dynamicEntries({
   harnesses = null,
@@ -167,6 +174,7 @@ export function dynamicEntries({
   archived = null,
   chats = {},
   endpoints = null,
+  plugins = null,
 } = {}) {
   const harnessList = Array.isArray(harnesses) ? harnesses : []
   const servers = Array.isArray(mcpServers) ? mcpServers : []
@@ -219,6 +227,26 @@ export function dynamicEntries({
         terms: ['restore', 'unarchive', 'unhide', 'archived', 'chat'],
       },
     )
+  }
+
+  for (const p of Array.isArray(plugins) ? plugins : []) {
+    const slug = pluginSlug(p.id)
+    entries.push({
+      key: `plugin-${slug}`,
+      section: 'plugins',
+      label: p.name,
+      detail: 'Its own settings.',
+      terms: ['plugin', 'settings', p.id],
+    })
+    for (const s of p.settings ?? []) {
+      entries.push({
+        key: `plugin-${slug}-${s.key}`,
+        section: 'plugins',
+        label: `${s.label} (${p.name})`,
+        detail: s.help ?? (s.type === 'secret' ? 'A secret: set or cleared, never shown.' : 'A plugin setting.'),
+        terms: ['plugin', p.name, s.key, ...(s.type === 'secret' ? ['secret', 'key', 'token'] : [])],
+      })
+    }
   }
 
   for (const h of harnessList) {

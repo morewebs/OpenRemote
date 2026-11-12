@@ -37,7 +37,7 @@ import PickerMenu from './PickerMenu.jsx'
 import { useConsole } from './state/console.jsx'
 import { chatStatus } from './state/reducer.js'
 import { attentionTitle, needsYou } from './needs-you.js'
-import { duplicatedNames, folderless, projectIndex, projectLine, projectName, sections, unreadProjects, waitingProjects } from './projects.js'
+import { duplicatedNames, folderless, projectFor, projectIndex, projectLine, projectName, sections, unreadProjects, waitingProjects } from './projects.js'
 import { activeSessions } from './archive.js'
 import { deviceName, isPhone, sessionsForMode } from './cloud.js'
 import { hasTauri, isMobile } from './platform.js'
@@ -57,6 +57,9 @@ import { CHATS_PAGE, PROJECT_PAGE, loadPins, planList, storePins, togglePin } fr
 import { usePrivacyMode } from './privacy.js'
 import { useHint, useShortcut } from './keyboard.jsx'
 import { rolledStatus } from './team.js'
+import { usePlugins } from './plugins-host.jsx'
+import { PluginGlyph } from './plugin-icons.jsx'
+import { isPluginView } from './plugin-runtime.js'
 import './sidebar.css'
 import './team.css'
 
@@ -142,6 +145,15 @@ export default function Sidebar({
   renamedTitles = NO_TITLES,
 }) {
   const { connection, sessions, chats, devices, thisDevice, projects, projectsAnswered, sessionsAnswered, capabilities, removeProject, archived, setChatArchived, deleteChat, api, reconnecting } = useConsole()
+  // The views enabled plugins add: the Plugins group's tiles. A project's
+  // plugin shows its tiles only while the user is in that project - a chat
+  // of it, or one of the plugin's own views - as its tools ride only that
+  // project's chats.
+  const pluginHost = usePlugins()
+  const contextProject = isPluginView(active)
+    ? pluginHost?.viewInfo(active)?.plugin?.project ?? null
+    : projectFor(projects, (sessions ?? []).find((s) => s.id === active)?.workspace)?.id ?? null
+  const pluginViews = pluginHost?.viewsFor(contextProject) ?? []
   const privacy = usePrivacyMode()
   const [query, setQuery] = useState('')
   const [searchOn, setSearchOn] = useState(false)
@@ -755,6 +767,23 @@ export default function Sidebar({
     }
   }
 
+  // Right-click on a plugin's tile: open it, or open it in a new split.
+  const viewMenuItems = (item) => {
+    const split = (dir, before) => () => onSplit(item.key, dir, before)
+    return [
+      { label: 'Open', icon: <PluginGlyph name={item.icon} size={14} />, onSelect: () => onSelect(item.key) },
+      ...(onSplit && !isMobile
+        ? [
+            { divider: true },
+            { label: 'Split right', icon: <ArrowRight size={14} />, onSelect: split('row', false) },
+            { label: 'Split down', icon: <ArrowDown size={14} />, onSelect: split('col', false) },
+            { label: 'Split left', icon: <ArrowLeft size={14} />, onSelect: split('row', true) },
+            { label: 'Split up', icon: <ArrowUp size={14} />, onSelect: split('col', true) },
+          ]
+        : []),
+    ]
+  }
+
   // Right-click on a chat: the same actions as the hover buttons, plus the
   // split directions - the same four words the pane header and the main
   // area's own menu use. `at` is where the menu opened: the move picker opens
@@ -1157,8 +1186,32 @@ export default function Sidebar({
         </div>
       )}
 
-      <nav className="sb-list" aria-label="Projects and chats">
+      <nav className="sb-list" aria-label={pluginViews.length > 0 ? 'Plugins, projects and chats' : 'Projects and chats'}>
         <div key={mode} className="sb-mode-fade">
+        {/* The views plugins add, each a tile that opens in a pane. A plugin
+            runs in this console, so the group shows in Local and Cloud alike;
+            with no such plugin there is no group. */}
+        {pluginViews.length > 0 && (
+          <div className="sb-plugins" role="group" aria-label="Plugins">
+            <div className="section-title sb-plugins-title">Plugins</div>
+            {pluginViews.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                className={`sb-plugin-row${item.key === active ? ' active' : ''}`}
+                title={`${item.title} (${item.pluginName} plugin)`}
+                onClick={() => onSelect(item.key)}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  setMenu({ x: e.clientX, y: e.clientY, items: viewMenuItems(item) })
+                }}
+              >
+                <PluginGlyph name={item.icon} size={15} />
+                <span className="sb-plugin-name">{item.title}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {/* The one group that exists only while it has something in it: a
             chat whose harness is blocked on an answer is starving, and it
             should not be hunted for in a long list. Same row, same mark, same

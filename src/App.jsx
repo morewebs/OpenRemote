@@ -46,6 +46,9 @@ import { chatTitle } from './shape.js'
 import ViewPopup from './ViewPopup.jsx'
 import { POPUP_VIEWS, onPopup } from './popups.js'
 import { KeyboardProvider, useKeyboard, useShortcut } from './keyboard.jsx'
+import { PluginProvider, usePlugins } from './plugins-host.jsx'
+import PluginView from './PluginView.jsx'
+import { isPluginView, settingsKey } from './plugin-runtime.js'
 import { freePanes, raceLayout } from './race.js'
 import {
   MAX_PANES,
@@ -94,7 +97,10 @@ function loadViewState(sessions, gone = EMPTY_GONE) {
   } catch {
     saved = null
   }
-  const known = new Set([...STATIC_VIEWS, ...(sessions ?? []).map((s) => s.id)])
+  const ids = new Set([...STATIC_VIEWS, ...(sessions ?? []).map((s) => s.id)])
+  // A plugin's view is known by its shape: the plugin list may not have
+  // answered yet, and its pane says so if the view is gone.
+  const known = { has: (v) => ids.has(v) || isPluginView(v) }
   const hashView = location.hash.replace(/^#/, '')
   const fromHash = known.has(hashView) ? hashView : null
   // The stored history is kept as it stands, minus the chats this console
@@ -140,7 +146,7 @@ function loadLayout() {
   }
 }
 
-const isChatView = (v) => !STATIC_VIEWS.includes(v)
+const isChatView = (v) => !STATIC_VIEWS.includes(v) && !isPluginView(v)
 
 function Shell() {
   const {
@@ -180,7 +186,7 @@ function Shell() {
   // hash is empty or static: nothing needs holding.
   const [bootSeed, setBootSeed] = useState(() => {
     const bootHash = location.hash.replace(/^#/, '')
-    return bootHash && !STATIC_VIEWS.includes(bootHash) ? bootHash : null
+    return bootHash && !STATIC_VIEWS.includes(bootHash) && !isPluginView(bootHash) ? bootHash : null
   })
   // The sessions list the shell mounted with (the console's initial
   // empty one): any later identity is a beat's answer, and that answer
@@ -303,7 +309,7 @@ function Shell() {
   // that said Cloud. The mode's own list rule decides (cloud.js), and a chat it
   // does not hold opens New chat.
   const chatInMode = (id) =>
-    !STATIC_VIEWS.includes(id) &&
+    isChatView(id) &&
     sessionsForMode(sessions, mode, thisDevice).some((s) => s.id === id)
   // A chat just created is in the console before the session list catches
   // up. Treating that gap as "the other mode" bounced the view back to New
@@ -316,7 +322,7 @@ function Shell() {
     (listed && chats[stored] && !chatInMode(stored))
       ? 'new'
       : stored
-  const chat = STATIC_VIEWS.includes(view) ? null : chats[view] ?? null
+  const chat = isChatView(view) ? chats[view] ?? null : null
 
   // Whether this window has had a working connection at any point, which is
   // the one fact that tells a daemon that stopped apart from one that never
@@ -481,8 +487,9 @@ function Shell() {
   }
 
   // The sidebar's click goes where the user is looking: the focused pane
-  // when that is a split pane and the target is a chat or New chat; every
-  // other view (plugins, settings, ...) belongs to the primary pane.
+  // when that is a split pane and the target is a chat, a plugin's view or
+  // New chat; every other view (plugins, settings, ...) belongs to the
+  // primary pane.
   const focused = leafById(layout, layout.focus)
   // The chat the focused pane is showing, when it is showing one. The palette's
   // rename row is about "this chat", and the address cannot answer that alone: a
@@ -493,7 +500,7 @@ function Shell() {
     // The same rule for the focused pane's own route: an ordinary New chat
     // (the tile, the shortcut) is not a press of the setup row.
     if (id === 'new') setSetupSeed(null)
-    if (focused?.view !== null && (id === 'new' || isChatView(id))) {
+    if (focused?.view !== null && (id === 'new' || isChatView(id) || isPluginView(id))) {
       const session = (sessions ?? []).find((s) => s.id === id)
       if (session) ensureChat(session)
       setLayout((l) => setLeafView(l, focused.id, id))
@@ -790,6 +797,22 @@ function Shell() {
     openInFocus(id)
   }
 
+  // A plugin opens its own view (ui.openView) where the sidebar would, and
+  // its block of Settings > Plugins (ui.openSettings, the Installed tab's
+  // Settings button). Set on every render: the handlers read this render's
+  // layout.
+  const [settingsTarget, setSettingsTarget] = useState(null)
+  const setPluginNavigation = usePlugins()?.setNavigation
+  useEffect(() => {
+    setPluginNavigation?.({
+      openView: (key) => openInFocus(key),
+      openSettings: (pluginId) => {
+        setSettingsTarget({ section: 'plugins', key: settingsKey(pluginId), at: Date.now() })
+        goView('settings')
+      },
+    })
+  })
+
   // A saved shape arrived from the palette's Layouts page or the pane header,
   // already checked against this window's room and already resolved (a chat role
   // is the chat current now). A restore replaces whatever panes are open, so it
@@ -946,7 +969,11 @@ function Shell() {
       // connection errors say "reconnect from Settings", and Settings has to
       // be able to do it.
       onManualConnect={() => setManualConnect(true)}
+      target={settingsTarget}
     />
+  ) : isPluginView(view) ? (
+    // A plugin's view runs in this console, in Local and Cloud alike.
+    <PluginView viewKey={view} />
   ) : view === 'account' ? (
     <AccountView onOpenMachines={openMachines} />
   ) : view === 'mobile' ? (
@@ -997,10 +1024,12 @@ function Shell() {
     )
   )
 
+  const pluginViews = usePlugins()?.views
   const paneLabel = (leaf) => {
     const v = leaf.view ?? view
     if (v === 'new') return 'New chat'
     if (STATIC_VIEWS.includes(v)) return v[0].toUpperCase() + v.slice(1)
+    if (isPluginView(v)) return pluginViews?.find((p) => p.key === v)?.title ?? 'Plugin'
     return chats[v]?.title ?? 'Chat'
   }
 
@@ -1008,6 +1037,7 @@ function Shell() {
   // composers serve Local and Cloud, so one window mixes both.
   const paneContent = (leaf) => {
     if (leaf.view === null) return primaryContent
+    if (isPluginView(leaf.view)) return <PluginView viewKey={leaf.view} />
     if (leaf.view === 'new') {
       return (
         <NewChat
@@ -1433,11 +1463,13 @@ export default function App() {
   return (
     <ConsoleProvider>
       <KeyboardProvider>
-        <div className="app">
-          <Shell />
-          {/* What becomes of a lead's workers when it is archived or deleted. */}
-          <LeadWorkersModal />
-        </div>
+        <PluginProvider>
+          <div className="app">
+            <Shell />
+            {/* What becomes of a lead's workers when it is archived or deleted. */}
+            <LeadWorkersModal />
+          </div>
+        </PluginProvider>
       </KeyboardProvider>
     </ConsoleProvider>
   )

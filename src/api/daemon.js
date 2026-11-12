@@ -721,6 +721,70 @@ export class DaemonApi {
     return this.call('POST', `/plugins/${seg(id)}/remove`, { request_id: newRequestId() }, { timeoutMs: 180_000 })
   }
 
+  // ---- JavaScript plugins (the frames the console hosts) ----
+  //
+  // A plugin's frame never holds the token: the console makes each of these
+  // calls itself and hands the frame only the answer.
+
+  // One of a plugin's own files, as bytes: its page, its scripts and
+  // pictures.
+  async pluginFile(id, path) {
+    const segments = String(path).split('/').map(encodeURIComponent).join('/')
+    const linked = linkAbort({ timeoutMs: CALL_TIMEOUT_MS })
+    let response
+    let bytes = null
+    try {
+      response = await this.fetch(`${this.url}${this.prefix}/plugins/${seg(id)}/files/${segments}`, {
+        headers: { Authorization: `Bearer ${this.token}` },
+        signal: linked.signal ?? undefined,
+      })
+      if (response.ok) bytes = await response.arrayBuffer()
+    } catch (err) {
+      if (linked.timedOut || err?.name === 'TimeoutError' || err?.name === 'AbortError') throw timedOut()
+      throw err
+    } finally {
+      linked.detach()
+    }
+    if (!response.ok) {
+      let words = null
+      try {
+        words = (await response.json())?.error ?? null
+      } catch {
+        /* not JSON: the status says it */
+      }
+      const error = new Error(words ?? `HTTP ${response.status}`)
+      error.status = response.status
+      throw error
+    }
+    return { type: response.headers.get('content-type') ?? '', bytes }
+  }
+
+  // The settings a plugin declares: every value, and for each secret only
+  // whether it is set - a secret never comes back to the console.
+  pluginSettings(id) {
+    return this.call('GET', `/plugins/${seg(id)}/settings`)
+  }
+
+  // A secret is replaced only when `values` names it; null puts a value
+  // back to its default (a secret, to unset).
+  savePluginSettings(id, values) {
+    return this.call('POST', `/plugins/${seg(id)}/settings`, { request_id: newRequestId(), values })
+  }
+
+  // A plugin's request, made by the daemon (only for a plugin given the
+  // network). A transcription can take a while: the daemon allows up to
+  // five minutes, and this waits a little longer than that.
+  pluginFetch(id, request) {
+    return this.call('POST', `/plugins/${seg(id)}/fetch`, request, { timeoutMs: 330_000 })
+  }
+
+  // One of the bridge's chat calls (chats/list, chats/read, chats/start,
+  // chats/prompt, chats/stop). The daemon checks the power from the install
+  // record, and keeps a project's plugin inside its project.
+  pluginCall(id, method, params = {}) {
+    return this.call('POST', `/plugins/${seg(id)}/call`, { method, params })
+  }
+
   // ---- marketplaces (Plugins > Discover, Marketplaces) ----
 
   marketplaces() {

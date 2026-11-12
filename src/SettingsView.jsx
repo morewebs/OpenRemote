@@ -11,6 +11,7 @@ import {
   Palette,
   Plugs,
   Power,
+  PuzzlePiece,
   Robot,
   UsersThree,
   Shapes,
@@ -19,6 +20,8 @@ import {
 } from '@phosphor-icons/react'
 import AboutModal from './AboutModal.jsx'
 import McpServersSection from './McpServersSection.jsx'
+import PluginSettings from './PluginSettings.jsx'
+import { usePlugins } from './plugins-host.jsx'
 import EndpointManager from './EndpointManager.jsx'
 import { EndpointManagerModal } from './EndpointManager.jsx'
 import AgentsSection from './AgentsSection.jsx'
@@ -78,6 +81,7 @@ const SECTION_ICONS = {
   harnesses: Robot,
   agents: UsersThree,
   'mcp-servers': Plugs,
+  plugins: PuzzlePiece,
   models: Shapes,
   browser: Globe,
   archived: Archive,
@@ -100,7 +104,7 @@ const checkedAt = (at) =>
 // with a default keeps the shell's prop check honest - it reads these
 // declarations, and a required-looking prop that is never passed is how a
 // call site goes unchecked.
-export default function SettingsView({ onReplay, onOpenChat, onClose = null, onManualConnect = null }) {
+export default function SettingsView({ onReplay, onOpenChat, onClose = null, onManualConnect = null, target = null }) {
   const privacy = usePrivacyMode()
   const {
     connection,
@@ -640,12 +644,31 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
   // The rows whose list is daemon data are built by the module from these same
   // arrays (settings-search.js), so a seventh harness or a freshly archived
   // chat is searchable without an edit here or there.
+  // The installed plugins that declare settings (Settings > Plugins), as the
+  // search reads them.
+  const pluginSettingsRecords = usePlugins()?.settingsPlugins
+  const pluginSettingsList = useMemo(
+    () =>
+      (pluginSettingsRecords ?? []).map((r) => ({
+        id: r.plugin.id,
+        name: r.name,
+        settings: r.ui.settings,
+      })),
+    [pluginSettingsRecords],
+  )
   const index = useMemo(
     () => [
       ...SETTINGS_ENTRIES,
-      ...dynamicEntries({ harnesses: harnessList, mcpServers, archived: archivedRows, chats, endpoints: endpointLists }),
+      ...dynamicEntries({
+        harnesses: harnessList,
+        mcpServers,
+        archived: archivedRows,
+        chats,
+        endpoints: endpointLists,
+        plugins: pluginSettingsList,
+      }),
     ],
-    [harnessList, mcpServers, archivedRows, chats, endpointLists],
+    [harnessList, mcpServers, archivedRows, chats, endpointLists, pluginSettingsList],
   )
 
   // A row that is not on screen (no model catalog, no tray, browser dev)
@@ -743,6 +766,17 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
     setPicker(null)
     setFlash(null)
   }
+
+  // A plugin asked for its own settings (or the Installed tab's Settings
+  // button did): the Plugins tab, with that plugin's block marked.
+  useEffect(() => {
+    if (!target?.section) return
+    setQuery('')
+    setTab(target.section)
+    if (isMobile) setCategory(target.section)
+    setFlash(target.key ?? null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target?.at])
 
   const openResult = (entry) => {
     setQuery('')
@@ -1708,6 +1742,26 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
               <h2 className="stg-title">MCP servers</h2>
             </header>
             <McpServersSection />
+          </section>
+        )}
+
+        {!isMobile && (
+          <section
+            className="stg-section"
+            id="stg-plugins"
+            role="tabpanel"
+            aria-labelledby="stg-tab-plugins"
+            data-stg="plugins"
+            hidden={!!query || active !== 'plugins'}
+          >
+            <header className="stg-head">
+              <h2 className="stg-title">Plugins</h2>
+              <p className="stg-lead">
+                Each plugin&apos;s own settings. A secret, like an API key, stays with this computer&apos;s
+                OpenRemote: it is never shown again, and goes only into the plugin&apos;s own requests.
+              </p>
+            </header>
+            <PluginSettings />
           </section>
         )}
 

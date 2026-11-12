@@ -31,6 +31,7 @@ import {
 import { projectName } from './projects.js'
 import { useArmedRow } from './use-armed-row.js'
 import { errorCopy } from './error-copy.js'
+import { usePlugins } from './plugins-host.jsx'
 import './devices.css'
 import './panels.css'
 import './plugins.css'
@@ -143,6 +144,10 @@ export default function PluginsView() {
 
 function InstalledPlugins({ onUpdate, onReview }) {
   const { plugins, catalog, marketplaces, projects, setPluginEnabled, removePlugin } = useConsole()
+  // Which plugins have settings of their own, and where a JavaScript
+  // plugin shows up in the app - both read from the install record.
+  const pluginHost = usePlugins()
+  const hasSettings = (id) => (pluginHost?.settingsPlugins ?? []).some((r) => r.plugin.id === id)
   const [confirmRemove, setConfirmRemove] = useState(null)
   // The arm ends when the row scrolls out of view or loses focus, so a first
   // press cannot outlive the user's attention (use-armed-row.js).
@@ -346,6 +351,11 @@ function InstalledPlugins({ onUpdate, onReview }) {
                   </div>
                 </div>
                 <div className="pn-actions">
+                  {hasSettings(p.id) && (
+                    <button type="button" className="pn-btn" onClick={() => pluginHost.openSettings(p.id)}>
+                      Settings
+                    </button>
+                  )}
                   {entry?.update && (
                     <button type="button" className="pn-btn pg-update" onClick={() => onUpdate(entry)}>
                       Update{entry.version ? ` to ${entry.version}` : ''}
@@ -394,6 +404,13 @@ function InstalledPlugins({ onUpdate, onReview }) {
                   </span>
                 ))}
                 {notSandboxed(p) && <span className="pg-chip pg-warn">Runs as you, not sandboxed</span>}
+                {/* Where a JavaScript plugin shows up in the app. */}
+                {pluginHost?.records.get(p.id)?.ui.inputs.length > 0 && (
+                  <span className="pg-chip">In the composer</span>
+                )}
+                {pluginHost?.records.get(p.id)?.ui.views.length > 0 && (
+                  <span className="pg-chip">In the sidebar</span>
+                )}
               </div>
               <div className="pg-source pv">{sourceLabel(p.source)}</div>
               {orphaned && (
