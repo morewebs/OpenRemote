@@ -1,0 +1,13 @@
+[package]
+name = "openremote-ssh"
+version = "0.2.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+publish = false
+description = "An OpenRemote process plugin: the user's SSH hosts as agent tools, through the system's own ssh"
+
+[dependencies]
+serde_json = "1"
+
+# Its own workspace: the plugin builds on its own, apart from the daemon.
+[workspace]

@@ -1,0 +1,197 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!--
+  The SSH plugin's page: the hosts from its settings, each with its host
+  key, and the three things only a person may do with a key: Verify (look
+  at the key, compare its fingerprint with the host's own, trust it), Test
+  (one login, running `true`) and Forget. The page asks the plugin's
+  program through the daemon (`ui/request`: state, verify_start,
+  verify_confirm, host_test, forget); an agent's tools can do none of this.
+
+  It runs in OpenRemote's sandboxed plugin frame: no network, no storage,
+  no inline handlers. Hosts are edited in Settings > Plugins > SSH.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SSH hosts</title>
+<style>
+  body { margin: 0; padding: 16px; font: 13px/1.45 var(--font-sans, system-ui); color: var(--text-1); background: var(--bg-app); }
+  h1 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+  p { margin: 0 0 12px; color: var(--text-2); }
+  .bar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  button { font: inherit; color: var(--text-1); background: var(--bg-side); border: 1px solid var(--line); border-radius: var(--radius, 6px); padding: 4px 10px; cursor: pointer; }
+  button:hover { background: var(--bg-hover); }
+  button.primary { border-color: var(--accent); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .host { border: 1px solid var(--line); border-radius: var(--radius, 6px); padding: 10px 12px; margin-bottom: 8px; background: var(--bg-side); }
+  .row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  .name { font-weight: 600; }
+  .addr, .fp { font-family: ui-monospace, "Geist Mono", monospace; font-size: 12px; color: var(--text-2); word-break: break-all; }
+  .state { font-size: 12px; color: var(--text-3); }
+  .state.ok { color: var(--green); }
+  .actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .check { margin-top: 10px; padding: 10px; border: 1px solid var(--accent); border-radius: var(--radius, 6px); }
+  .check.changed { border-color: #d9534f; }
+  .warn { color: #e0796f; font-weight: 600; }
+  .note { margin-top: 6px; font-size: 12px; color: var(--text-2); }
+  .problem { color: #e0796f; }
+  ul { margin: 4px 0 12px 18px; padding: 0; color: var(--text-2); }
+</style>
+</head>
+<body>
+<h1>SSH hosts</h1>
+<p>Agents reach these servers only through the SSH tools, and only after their host key is verified. A key changed since you verified it is refused, never accepted on its own.</p>
+<div class="bar">
+  <button id="refresh" type="button">Refresh</button>
+  <button id="settings" type="button">Edit hosts in Settings</button>
+  <span id="status" class="state"></span>
+</div>
+<div id="problems"></div>
+<div id="hosts"></div>
+
+<script>
+  'use strict'
+  const or = window.openremote
+  const $ = (id) => document.getElementById(id)
+  const el = (tag, cls, text) => {
+    const node = document.createElement(tag)
+    if (cls) node.className = cls
+    if (text !== undefined) node.textContent = text
+    return node
+  }
+
+  // The page's one way to its program. Until the console carries a process
+  // plugin's view requests, the page says so instead of failing quietly.
+  async function ask(name, params = {}) {
+    if (!or || typeof or.request !== 'function') {
+      throw new Error('This OpenRemote does not show a process plugin\'s pages yet. The SSH tools still work: set your hosts in Settings > Plugins > SSH, and verify a host\'s key by connecting to it once from your own terminal.')
+    }
+    return or.request(name, params)
+  }
+
+  function say(text) {
+    $('status').textContent = text || ''
+  }
+
+  function problems(state) {
+    const box = $('problems')
+    box.replaceChildren()
+    const lines = []
+    if (state.ssh && state.ssh.problem) lines.push(state.ssh.problem)
+    if (state.key_file && state.key_file.problem) lines.push(state.key_file.problem)
+    if (state.agent && state.agent.problem) lines.push(state.agent.problem)
+    for (const note of state.left_out || []) lines.push(note)
+    if (!lines.length) return
+    const list = el('ul')
+    for (const line of lines) list.append(el('li', 'problem', line))
+    box.append(list)
+  }
+
+  function hostCard(host) {
+    const card = el('div', 'host')
+    const top = el('div', 'row')
+    const left = el('div')
+    left.append(el('div', 'name', host.name), el('div', 'addr', host.address))
+    top.append(left, el('div', host.verified ? 'state ok' : 'state', host.host_key))
+    card.append(top)
+    if (host.fingerprint) card.append(el('div', 'fp', `${host.key_type} ${host.fingerprint}`))
+    const actions = el('div', 'actions')
+    const verify = el('button', 'primary', host.verified ? 'Verify again' : 'Verify')
+    const test = el('button', '', 'Test')
+    const forget = el('button', '', 'Forget key')
+    forget.disabled = !host.verified
+    actions.append(verify, test, forget)
+    card.append(actions)
+    const slot = el('div')
+    card.append(slot)
+
+    verify.addEventListener('click', async () => {
+      slot.replaceChildren(el('div', 'note', `Looking at ${host.name}'s key...`))
+      try {
+        const seen = await ask('verify_start', { name: host.name })
+        slot.replaceChildren(checkBox(host, seen, slot))
+      } catch (e) {
+        slot.replaceChildren(el('div', 'note problem', e.message))
+      }
+    })
+    test.addEventListener('click', async () => {
+      slot.replaceChildren(el('div', 'note', `Signing in to ${host.name}...`))
+      try {
+        const r = await ask('host_test', { name: host.name })
+        slot.replaceChildren(el('div', r.ok ? 'note' : 'note problem', r.ok ? `Signed in and ran a command (${r.ms} ms).` : r.message))
+      } catch (e) {
+        slot.replaceChildren(el('div', 'note problem', e.message))
+      }
+    })
+    forget.addEventListener('click', async () => {
+      try {
+        await ask('forget', { name: host.name })
+        await load()
+      } catch (e) {
+        slot.replaceChildren(el('div', 'note problem', e.message))
+      }
+    })
+    return card
+  }
+
+  // What the user compares before trusting a key: its fingerprint, which
+  // they read from the host itself (ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+  // on the server, or the provider's console). Trust sends that very
+  // fingerprint back; the program records the key only if it matches what
+  // it saw.
+  function checkBox(host, seen, slot) {
+    const box = el('div', seen.previous ? 'check changed' : 'check')
+    if (seen.same) {
+      box.append(el('div', 'note', 'This is the key already verified. Nothing to do.'))
+      return box
+    }
+    if (seen.previous) {
+      box.append(el('div', 'warn', `${host.name}'s key is not the one you verified before (${seen.previous.type} ${seen.previous.fingerprint}).`))
+      box.append(el('div', 'note', 'A reinstalled server looks like this, and so does someone in the way. Trust it only if the host itself shows the new fingerprint.'))
+    }
+    box.append(el('div', 'note', `${host.name} (${seen.address}) presents this ${seen.type} key:`))
+    box.append(el('div', 'fp', seen.fingerprint))
+    box.append(el('div', 'note', 'Compare it with the fingerprint the server itself shows. Trust it only if they match.'))
+    const actions = el('div', 'actions')
+    const trust = el('button', 'primary', 'They match: trust this key')
+    const cancel = el('button', '', 'Cancel')
+    actions.append(trust, cancel)
+    box.append(actions)
+    trust.addEventListener('click', async () => {
+      trust.disabled = true
+      try {
+        await ask('verify_confirm', { name: host.name, fingerprint: seen.fingerprint })
+        await load()
+      } catch (e) {
+        slot.replaceChildren(el('div', 'note problem', e.message))
+      }
+    })
+    cancel.addEventListener('click', () => slot.replaceChildren())
+    return box
+  }
+
+  async function load() {
+    say('Loading...')
+    try {
+      const state = await ask('state')
+      problems(state)
+      const list = $('hosts')
+      list.replaceChildren()
+      if (!state.hosts.length) list.append(el('p', '', 'No hosts yet. Add them in Settings > Plugins > SSH, in Hosts.'))
+      for (const host of state.hosts) list.append(hostCard(host))
+      say('')
+    } catch (e) {
+      say('')
+      $('hosts').replaceChildren(el('p', 'problem', e.message))
+    }
+  }
+
+  $('refresh').addEventListener('click', load)
+  $('settings').addEventListener('click', () => {
+    if (or && or.ui && typeof or.ui.openSettings === 'function') or.ui.openSettings()
+  })
+  load()
+</script>
+</body>
+</html>

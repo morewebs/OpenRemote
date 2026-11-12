@@ -1,0 +1,104 @@
+{
+  "api": 1,
+  "name": "ssh",
+  "version": "0.2.0",
+  "description": "Your SSH hosts as agent tools: run commands and read and write files on servers that run no OpenRemote, through this computer's own ssh. Keys only, never passwords, and every host key checked against one you verified.",
+  "runtime": "process",
+  "entry": {
+    "command": "bin/openremote-ssh",
+    "windows": { "command": "bin/openremote-ssh.exe" }
+  },
+  "powers": [],
+  "contributes": {
+    "tools": [
+      {
+        "name": "ssh_hosts",
+        "description": "List the SSH hosts the user set up for you: each one's name, address and whether its host key is verified. These are servers that run no OpenRemote and no agent of their own; you reach them only through the ssh_ tools, by the names this returns. A host whose key is not verified is refused until the user verifies it.",
+        "input_schema": { "type": "object", "properties": {} },
+        "read_only": true,
+        "timeout_secs": 15
+      },
+      {
+        "name": "ssh_run",
+        "description": "Run a shell command on one of the user's SSH hosts. The command goes, as written, to the login shell of the account the user set up for that host, and the answer is its exit code, stdout and stderr, labelled. There is no terminal and nothing can be typed in, so use non-interactive flags (apt-get -y; no editors or pagers). It is cut off after timeout_s seconds (default 60, at most 300) and may keep running on the host. Output past 200,000 characters keeps its end.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "host": { "type": "string", "description": "A host name from ssh_hosts." },
+            "command": { "type": "string", "description": "The shell command line to run, up to 12,000 characters. For a longer script, write it with ssh_write_file and run that." },
+            "timeout_s": { "type": "integer", "minimum": 1, "maximum": 300, "description": "Seconds before the command is cut off. Default 60." }
+          },
+          "required": ["host", "command"]
+        },
+        "read_only": false,
+        "timeout_secs": 330
+      },
+      {
+        "name": "ssh_read_file",
+        "description": "Read a text file from one of the user's SSH hosts: the start of the file, up to max_bytes (default 100,000, at most 200,000), saying when the file goes on. A leading ~/ means the account's home folder. A binary file is refused: look at one with ssh_run (file, strings, xxd).",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "host": { "type": "string", "description": "A host name from ssh_hosts." },
+            "path": { "type": "string", "description": "The file's path on the host." },
+            "max_bytes": { "type": "integer", "minimum": 1, "maximum": 200000, "description": "How much of the start of the file to read. Default 100,000." }
+          },
+          "required": ["host", "path"]
+        },
+        "read_only": true,
+        "timeout_secs": 90
+      },
+      {
+        "name": "ssh_write_file",
+        "description": "Write a text file on one of the user's SSH hosts: it replaces the file, or with append adds to its end. content is written exactly as given (UTF-8), up to 2,000,000 bytes; the folder must already exist. A leading ~/ means the account's home folder. No copy of an overwritten file is kept, so read it first when that matters.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "host": { "type": "string", "description": "A host name from ssh_hosts." },
+            "path": { "type": "string", "description": "The file's path on the host." },
+            "content": { "type": "string", "description": "The text to write." },
+            "append": { "type": "boolean", "description": "Add to the end of the file instead of replacing it. Default false." }
+          },
+          "required": ["host", "path", "content"]
+        },
+        "read_only": false,
+        "timeout_secs": 150
+      }
+    ],
+    "views": [
+      {
+        "id": "hosts",
+        "title": "SSH hosts",
+        "place": "machines",
+        "icon": "terminal",
+        "entry": "ui/ssh.html"
+      }
+    ],
+    "settings": [
+      {
+        "key": "hosts",
+        "type": "string",
+        "label": "Hosts",
+        "help": "Your servers, as name=user@address or name=user@address:port, separated by commas, like web-1=deploy@203.0.113.5, db=root@db.example.com:2222. The name is what agents call a host by. Addresses only: never a password."
+      },
+      {
+        "key": "key_file",
+        "type": "string",
+        "label": "Key file",
+        "help": "Optional. The path of a private key file, like ~/.ssh/id_ed25519, used with no passphrase prompt. Leave empty to use your ssh agent or ssh's usual key files. Never paste a key here: a key typed into this field is refused."
+      },
+      {
+        "key": "agent_socket",
+        "type": "string",
+        "label": "ssh-agent socket",
+        "help": "Optional, macOS and Linux. The path your terminal's SSH_AUTH_SOCK shows (echo $SSH_AUTH_SOCK), so keys with a passphrase loaded by ssh-add can be used. OpenRemote does not pass SSH_AUTH_SOCK on by itself. On Windows, the OpenSSH agent service is found without it."
+      },
+      {
+        "key": "ssh_path",
+        "type": "string",
+        "label": "Path to ssh",
+        "help": "Optional. The full path of the ssh program. Left empty, it is looked for in fixed places: /usr/bin/ssh, /usr/local/bin/ssh, /opt/homebrew/bin/ssh, or Windows' own OpenSSH client. ssh is never looked up on PATH."
+      }
+    ]
+  }
+}

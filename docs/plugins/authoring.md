@@ -20,6 +20,10 @@ Examples in this repository:
   `bin/toy`, `bin/toy.exe` on Windows) answers two agent tools,
   `word_count` and `greet`, and is also the driver of a toy harness,
   "Toy CLI", that echoes and asks before it shouts.
+- [`examples/plugins/ssh`](../../examples/plugins/ssh): a process
+  plugin with four agent tools on the user's own SSH hosts, through the
+  system's ssh: keys by path or ssh-agent only, host keys always checked.
+  [ssh.md](ssh.md) says what it will not do and why.
 - [`examples/harness-plugin`](../../examples/harness-plugin): a copyable
   template for a harness plugin's driver.
 
