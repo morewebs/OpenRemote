@@ -1,8 +1,9 @@
 // Plugins > Marketplaces: where Discover's plugins come from. A
-// marketplace is a Claude Code catalog - added from owner/repo, a git
-// URL, a folder or a link to a marketplace.json. Off hides it from
-// Discover; removing it keeps what was installed from it. OpenRemote's
-// own can be turned off, not removed.
+// marketplace is a Claude Code catalog - or one in a similar layout, which
+// the daemon reads the same way - added from owner/repo, a git URL, a
+// folder or a link to a marketplace.json. Off hides it from Discover;
+// removing it keeps what was installed from it. OpenRemote's own can be
+// turned off, not removed.
 
 import { useState } from 'react'
 import { useConsole } from './state/console.jsx'
@@ -66,7 +67,8 @@ export default function PluginMarketplaces() {
       <h2 className="pn-section">Add a marketplace</h2>
       <p className="pn-lead">
         Any Claude Code plugin marketplace works: owner/repo on GitHub, a git URL, a folder on this
-        computer, or a link to a marketplace.json.
+        computer, or a link to a marketplace.json. One built in a similar layout works too; each
+        plugin&apos;s review says what the install changes or leaves out.
       </p>
       <div className="pg-add-row">
         <input

@@ -169,3 +169,21 @@ test('a plugin tile is drawn from local marks, and fetches nothing', () => {
     assert.doesNotMatch(element[0], /homepage/, `${caller} still passes a homepage`)
   }
 })
+
+test('a plugin written for another layout shows what the install adapted and left out', () => {
+  const modal = source('InstallPluginModal.jsx')
+  // The daemon's review answer carries `adapted` and `left_out` (plain
+  // sentences from the install's rewrite); the review lists both under
+  // their own labels, each note as a line, and shows nothing for a plugin
+  // in Claude Code's own layout (both lists empty).
+  assert.match(modal, /\{manifest\.adapted\?\.length > 0 && \(/)
+  assert.match(modal, /<span className="pg-review-label">Adapted<\/span>/)
+  assert.match(modal, /\{manifest\.adapted\.map\(\(note\) => \(\s*\n\s*<li key=\{note\}>\{note\}\.<\/li>/)
+  assert.match(modal, /\{manifest\.left_out\?\.length > 0 && \(/)
+  assert.match(modal, /<span className="pg-review-label">Left out<\/span>/)
+  assert.match(modal, /\{manifest\.left_out\.map\(\(note\) => \(\s*\n\s*<li key=\{note\}>\{note\}\.<\/li>/)
+  // Both sit before the Install button, inside the review itself.
+  assert.ok(modal.indexOf('>Adapted<') < modal.lastIndexOf('Install'))
+  const marketplaces = source('PluginMarketplaces.jsx')
+  assert.match(marketplaces, /One built in a similar layout works too/)
+})

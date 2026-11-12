@@ -127,6 +127,14 @@
   font-size: 12px;
 }
 
+/* the line above a list in the review, such as what adapting a plugin
+   written for another app's layout changed */
+.pg-review-lead {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-2);
+}
+
 /* a power the new version adds, beside its line in the review */
 .pg-new {
   margin-left: 8px;

@@ -7,7 +7,10 @@
 //! marketplace.json link) and cached under `<data dir>/marketplaces/`, so
 //! Discover works offline from the last refresh. Nothing here installs a
 //! plugin: an entry resolves to a fetch, and the install goes through the
-//! same review as any other.
+//! same review as any other. A catalog in the sibling layout `adapt`
+//! rewrites - marketplace.json at the top of its repo, a `pluginRoot`
+//! under every relative source, archive downloads pinned by sha256 - is
+//! read too.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -55,6 +58,14 @@ const ANTHROPIC_NAMES: &[&str] = &[
     "anthropic-plugin-directory",
     "claude-plugin-directory",
 ];
+
+/// The name the sibling layout's publisher keeps for its official catalog
+/// (its own app refuses a copy under that name), honored here only from
+/// that publisher's GitHub organization or its own hosts - as Anthropic's
+/// names are above.
+const PUBLISHER_CATALOG: &str = "zcode-plugins-official";
+const PUBLISHER_GITHUB: &str = "zai-org/";
+const PUBLISHER_HOSTS: &[&str] = &["z.ai", "zai-org.github.io"];
 
 /// The marketplaces a machine starts with. Each is added once, ever: one
 /// the user removes stays removed.
@@ -118,9 +129,14 @@ pub fn parse_source(input: &str) -> Result<MarketplaceSource, PluginError> {
         });
     }
     if path.is_file() && lower.ends_with(".json") {
-        // A marketplace.json on disk: its root is two levels up, as in
-        // Claude Code (`<root>/.claude-plugin/marketplace.json`).
-        if let Some(root) = path.parent().and_then(Path::parent) {
+        // A marketplace.json on disk: its root is two levels up in Claude
+        // Code's place (`<root>/.claude-plugin/marketplace.json`), one up
+        // at the top of a folder, where the sibling layout keeps it.
+        let root = match path.parent() {
+            Some(dir) if dir.file_name().is_some_and(|n| n == ".claude-plugin") => dir.parent(),
+            other => other,
+        };
+        if let Some(root) = root {
             return Ok(MarketplaceSource::Directory {
                 path: absolute(root),
             });
@@ -215,7 +231,29 @@ pub fn check_name(name: &str, source: &MarketplaceSource) -> Result<(), PluginEr
             "the name '{name}' belongs to one of Anthropic's own marketplaces"
         )));
     }
+    if canonical == PUBLISHER_CATALOG && !from_publisher(source, home.as_deref()) {
+        return Err(PluginError::Invalid(format!(
+            "the name '{name}' belongs to another publisher's own marketplace"
+        )));
+    }
     Ok(())
+}
+
+/// Whether a catalog comes from the sibling layout's publisher: its GitHub
+/// organization, or one of its own hosts.
+fn from_publisher(source: &MarketplaceSource, home: Option<&str>) -> bool {
+    if home.is_some_and(|h| h.starts_with(PUBLISHER_GITHUB)) {
+        return true;
+    }
+    let url = match source {
+        MarketplaceSource::Url { url } | MarketplaceSource::Git { url, .. } => url,
+        _ => return false,
+    };
+    url_host(url).is_some_and(|host| {
+        PUBLISHER_HOSTS
+            .iter()
+            .any(|h| host == *h || host.ends_with(&format!(".{h}")))
+    })
 }
 
 /// Spellings that read as the same name: case, a trailing dot, a dot for
@@ -266,9 +304,17 @@ impl Catalog {
     }
 }
 
-/// Read `<root>/.claude-plugin/marketplace.json`.
+/// Read `<root>/.claude-plugin/marketplace.json` - or, where there is none,
+/// the `marketplace.json` at the top of the folder, where the sibling
+/// layout keeps its catalog.
 pub fn read_catalog(root: &Path) -> Result<Catalog, PluginError> {
-    let path = root.join(".claude-plugin").join("marketplace.json");
+    let claude = root.join(".claude-plugin").join("marketplace.json");
+    let top = root.join("marketplace.json");
+    let (path, at_top) = if claude.is_file() || !top.is_file() {
+        (claude, false)
+    } else {
+        (top, true)
+    };
     let raw = std::fs::read(&path).map_err(|_| {
         PluginError::Source(format!(
             "{} has no .claude-plugin/marketplace.json",
@@ -282,11 +328,16 @@ pub fn read_catalog(root: &Path) -> Result<Catalog, PluginError> {
         .filter(|n| !n.is_empty())
         .ok_or_else(|| PluginError::Invalid("marketplace.json names no marketplace".into()))?
         .to_string();
-    let entries = v["plugins"]
+    let mut entries = v["plugins"]
         .as_array()
         .cloned()
         .ok_or_else(|| PluginError::Invalid("marketplace.json lists no plugins".into()))?;
     let text = |v: &Value| v.as_str().map(String::from);
+    if at_top {
+        if let Some(base) = text(&v["pluginRoot"]) {
+            under_plugin_root(&mut entries, &base);
+        }
+    }
     Ok(Catalog {
         name,
         owner: text(&v["owner"]["name"]),
@@ -294,6 +345,32 @@ pub fn read_catalog(root: &Path) -> Result<Catalog, PluginError> {
         plugin_root: text(&v["metadata"]["pluginRoot"]),
         entries,
     })
+}
+
+/// The sibling layout's top-level `pluginRoot` puts every relative source
+/// under it, `./hello` included - unlike Claude Code's
+/// `metadata.pluginRoot`, which only places bare names. Written into the
+/// entries as read, so the rest reads one form.
+fn under_plugin_root(entries: &mut [Value], base: &str) {
+    let base = base.trim_start_matches("./").trim_end_matches('/');
+    if base.is_empty() || base == "." {
+        return;
+    }
+    for entry in entries {
+        let Some(source) = entry.get("source").and_then(Value::as_str) else {
+            continue;
+        };
+        let placed = if source == "." {
+            format!("./{base}")
+        } else if let Some(rest) = source.strip_prefix("./") {
+            format!("./{base}/{rest}")
+        } else if !source.is_empty() && !source.contains('/') {
+            format!("./{base}/{source}")
+        } else {
+            continue;
+        };
+        entry["source"] = Value::String(placed);
+    }
 }
 
 /// Where an entry's plugin comes from - every source type a Claude Code
@@ -323,9 +400,12 @@ pub enum EntrySource {
         version: Option<String>,
         registry: Option<String>,
     },
+    /// A .zip or .tar.gz; `path` is the one folder inside it that is the
+    /// plugin.
     Archive {
         url: String,
         sha256: Option<String>,
+        path: Option<String>,
     },
     Command {
         command: String,
@@ -401,12 +481,56 @@ pub fn entry_source(entry: &Value, plugin_root: Option<&str>) -> Result<EntrySou
                 Some(url) if url.starts_with('-') => Err(format!("'{url}' is not a web address")),
                 other => Ok(other),
             };
+            // A folder inside the repository, when the source names one.
+            let folder = || -> Result<Option<String>, String> {
+                let Some(path) = field("path")
+                    .map(|p| p.trim_matches('/').to_string())
+                    .filter(|p| !p.is_empty() && p != ".")
+                else {
+                    return Ok(None);
+                };
+                if !plugins::relative_inside(&path) {
+                    return Err(format!("its folder '{path}' leaves the repository"));
+                }
+                Ok(Some(path))
+            };
             match o.get("source").and_then(Value::as_str) {
-                Some("github") => Ok(EntrySource::Github {
-                    repo: need("repo")?,
-                    reference: branch(field("ref"))?,
-                    sha: commit(field("sha"))?,
-                }),
+                // The sibling layout names a repository's subfolder with
+                // `path` here; Claude Code's catalogs use git-subdir.
+                Some("github") => match folder()? {
+                    Some(path) => Ok(EntrySource::GitSubdir {
+                        url: need("repo")?,
+                        path,
+                        reference: branch(field("ref"))?,
+                        sha: commit(field("sha"))?,
+                    }),
+                    None => Ok(EntrySource::Github {
+                        repo: need("repo")?,
+                        reference: branch(field("ref"))?,
+                        sha: commit(field("sha"))?,
+                    }),
+                },
+                // A `type` makes it a download (the sibling layout's);
+                // without one it is a git repository, as in Claude Code.
+                Some("url") if o.contains_key("type") => download(o),
+                // The sibling layout's name for any git repository.
+                Some("git") => {
+                    let url = address(field("url"))?
+                        .ok_or_else(|| "its source has no url".to_string())?;
+                    match folder()? {
+                        Some(path) => Ok(EntrySource::GitSubdir {
+                            url,
+                            path,
+                            reference: branch(field("ref"))?,
+                            sha: commit(field("sha"))?,
+                        }),
+                        None => Ok(EntrySource::Url {
+                            url,
+                            reference: branch(field("ref"))?,
+                            sha: commit(field("sha"))?,
+                        }),
+                    }
+                }
                 Some("url") => Ok(EntrySource::Url {
                     url: address(field("url"))?
                         .ok_or_else(|| "its source has no url".to_string())?,
@@ -428,6 +552,7 @@ pub fn entry_source(entry: &Value, plugin_root: Option<&str>) -> Result<EntrySou
                 Some("archive") => Ok(EntrySource::Archive {
                     url: need("url")?,
                     sha256: field("sha256"),
+                    path: archive_folder(field("path"))?,
                 }),
                 Some("command") => Ok(EntrySource::Command {
                     command: need("command")?,
@@ -439,6 +564,70 @@ pub fn entry_source(entry: &Value, plugin_root: Option<&str>) -> Result<EntrySou
         }
         _ => Err("it names no source".into()),
     }
+}
+
+/// A download the sibling layout pins: `{"source": "url", "type": "zip",
+/// "url", "sha256", "path"}`. Its sha256 is required - that layout stops
+/// an install without one - and the link is https (or this machine's own
+/// address, for a local mirror).
+fn download(o: &serde_json::Map<String, Value>) -> Result<EntrySource, String> {
+    let text = |key: &str| o.get(key).and_then(Value::as_str).map(String::from);
+    match text("type").as_deref() {
+        Some("zip") => {}
+        Some(other) => return Err(format!("its download type '{other}' is unknown here")),
+        None => return Err("its download names no type".into()),
+    }
+    let url = text("url").ok_or("its source has no url")?;
+    if !secure_link(&url) {
+        return Err("its download is not an https link".into());
+    }
+    let sha256 = text("sha256").ok_or("its download names no sha256 to check it against")?;
+    if sha256.len() != 64 || !sha256.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("its download's sha256 is not 64 hex digits".into());
+    }
+    Ok(EntrySource::Archive {
+        url,
+        sha256: Some(sha256),
+        path: archive_folder(text("path"))?,
+    })
+}
+
+/// The folder inside an archive that is the plugin; none for the whole.
+fn archive_folder(path: Option<String>) -> Result<Option<String>, String> {
+    let Some(path) = path
+        .map(|p| p.trim_matches('/').to_string())
+        .filter(|p| !p.is_empty() && p != ".")
+    else {
+        return Ok(None);
+    };
+    if !plugins::relative_inside(&path) {
+        return Err(format!("its folder '{path}' leaves the download"));
+    }
+    Ok(Some(path))
+}
+
+/// https, or plain http to this machine itself.
+fn secure_link(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    lower.starts_with("https://")
+        || (lower.starts_with("http://")
+            && url_host(&lower)
+                .is_some_and(|host| matches!(host.as_str(), "127.0.0.1" | "localhost" | "::1")))
+}
+
+/// The host a URL names, lowercase, without its user, port or brackets.
+fn url_host(url: &str) -> Option<String> {
+    let lower = url.to_ascii_lowercase();
+    let rest = lower.split_once("://")?.1;
+    let authority = rest.split(['/', '?', '#']).next()?;
+    let authority = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+    let host = match authority.strip_prefix('[') {
+        Some(v6) => v6.split(']').next()?,
+        None => authority.split(':').next()?,
+    };
+    (!host.is_empty()).then(|| host.to_string())
 }
 
 /// `owner/repo` shorthand to a clone URL; a URL stays as it is.
@@ -555,9 +744,10 @@ impl EntrySource {
                 version: version.clone(),
                 registry: registry.clone(),
             },
-            EntrySource::Archive { url, sha256 } => Fetch::Archive {
+            EntrySource::Archive { url, sha256, path } => Fetch::Archive {
                 location: url.clone(),
                 sha256: sha256.clone(),
+                path: path.clone(),
             },
             EntrySource::Command {
                 command,
@@ -764,7 +954,12 @@ pub fn entry_views(
         let mut powers = None;
         let mut claude_parts = Vec::new();
         let mut version = text(&entry["version"]);
-        let mut description = text(&entry["description"]);
+        // The sibling layout gives text per language beside the plain field
+        // (`description_i18n`); the app speaks English.
+        let english = |entry: &Value, key: &str| {
+            text(&entry[format!("{key}_i18n")]["en"]).or_else(|| text(&entry[key]))
+        };
+        let mut description = english(entry, "description");
 
         // A folder inside the marketplace can be read now, as Claude Code
         // reads it: its own manifest says exactly what it is.
@@ -787,6 +982,12 @@ pub fn entry_views(
             .as_deref()
             .and_then(|dir| plugins::read_manifest(dir, builtin_ids).ok());
         if let Some(m) = &read {
+            // A plugin written for another app whose every part needs that
+            // app (its publisher's account, its panels) has nothing to
+            // install here; said now rather than at the review.
+            if why_not.is_none() {
+                why_not = m.nothing_left();
+            }
             runtime = Some(m.runtime);
             powers = Some(m.powers.clone());
             claude_parts = m.claude_parts.clone();
@@ -853,7 +1054,7 @@ pub fn entry_views(
             id,
             name: name.to_string(),
             marketplace: record.name.clone(),
-            display_name: text(&entry["displayName"]),
+            display_name: english(entry, "displayName"),
             description,
             version,
             author,
@@ -1218,5 +1419,120 @@ mod tests {
         assert!(!by("dictation").not_sandboxed);
         assert!(!by("odd").installable);
         assert_eq!(by("odd").id, "odd@claude-plugins-official");
+    }
+
+    #[test]
+    fn a_catalog_at_the_top_of_a_folder_reads_with_its_plugin_root_above_every_source() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("marketplace.json"),
+            json!({"name": "layout-tools", "pluginRoot": "plugins", "plugins": [
+                {"name": "a", "source": "./a"},
+                {"name": "b", "source": "b"},
+                {"name": "c", "source": {"source": "github", "repo": "x/y", "path": "sub"}},
+            ]})
+            .to_string(),
+        )
+        .unwrap();
+        let catalog = read_catalog(dir.path()).unwrap();
+        assert_eq!(catalog.name, "layout-tools");
+        let source = |i: usize| entry_source(&catalog.entries[i], None).unwrap();
+        assert_eq!(source(0), EntrySource::Relative("plugins/a".into()));
+        assert_eq!(source(1), EntrySource::Relative("plugins/b".into()));
+        assert!(matches!(source(2), EntrySource::GitSubdir { ref path, .. } if path == "sub"));
+
+        // Claude Code's own place wins where a folder has both.
+        std::fs::create_dir_all(dir.path().join(".claude-plugin")).unwrap();
+        std::fs::write(
+            dir.path().join(".claude-plugin").join("marketplace.json"),
+            json!({"name": "claude-side", "plugins": []}).to_string(),
+        )
+        .unwrap();
+        assert_eq!(read_catalog(dir.path()).unwrap().name, "claude-side");
+        // A marketplace.json given on its own names the folder it sits in.
+        let top = dir.path().join("marketplace.json");
+        assert!(matches!(
+            parse_source(&top.to_string_lossy()).unwrap(),
+            MarketplaceSource::Directory { ref path } if Path::new(path) == dir.path()
+        ));
+    }
+
+    #[test]
+    fn a_pinned_download_reads_and_an_unsafe_one_says_why() {
+        let read = |v: Value| entry_source(&json!({"name": "x", "source": v}), None);
+        let sha = "ab".repeat(32);
+        assert_eq!(
+            read(json!({"source": "url", "type": "zip", "url": "https://x/p.zip", "sha256": sha, "path": "p"}))
+                .unwrap(),
+            EntrySource::Archive {
+                url: "https://x/p.zip".into(),
+                sha256: Some(sha.clone()),
+                path: Some("p".into())
+            }
+        );
+        // This machine's own address may serve a mirror over plain http.
+        assert!(
+            read(json!({"source": "url", "type": "zip", "url": "http://127.0.0.1:9/p.zip", "sha256": sha}))
+                .is_ok()
+        );
+        for (source, says) in [
+            (
+                json!({"source": "url", "type": "zip", "url": "https://x/p.zip"}),
+                "sha256",
+            ),
+            (
+                json!({"source": "url", "type": "zip", "url": "https://x/p.zip", "sha256": "ab"}),
+                "64 hex",
+            ),
+            (
+                json!({"source": "url", "type": "zip", "url": "http://example.com/p.zip", "sha256": sha}),
+                "https",
+            ),
+            (
+                json!({"source": "url", "type": "zip", "url": "https://x/p.zip", "sha256": sha, "path": "../p"}),
+                "leaves",
+            ),
+            (
+                json!({"source": "url", "type": "tar", "url": "https://x/p.tar", "sha256": sha}),
+                "'tar'",
+            ),
+        ] {
+            let why = read(source).unwrap_err();
+            assert!(why.contains(says), "{why}");
+        }
+        // A git source without a type stays a git repository.
+        assert!(matches!(
+            read(json!({"source": "url", "url": "https://x/p.git"})).unwrap(),
+            EntrySource::Url { .. }
+        ));
+    }
+
+    #[test]
+    fn the_publishers_own_catalog_name_is_honored_only_from_its_own_places() {
+        let elsewhere = MarketplaceSource::Github {
+            repo: "someone/plugins".into(),
+            reference: None,
+        };
+        assert!(check_name(PUBLISHER_CATALOG, &elsewhere).is_err());
+        let own_repo = MarketplaceSource::Github {
+            repo: format!("{PUBLISHER_GITHUB}plugins"),
+            reference: None,
+        };
+        assert!(check_name(PUBLISHER_CATALOG, &own_repo).is_ok());
+        let own_host = MarketplaceSource::Url {
+            url: format!(
+                "https://cdn.{}/official/marketplace.json",
+                PUBLISHER_HOSTS[0]
+            ),
+        };
+        assert!(check_name(PUBLISHER_CATALOG, &own_host).is_ok());
+        // A look-alike host is not the publisher's.
+        let lookalike = MarketplaceSource::Url {
+            url: format!(
+                "https://{}.example.com/marketplace.json",
+                PUBLISHER_HOSTS[0]
+            ),
+        };
+        assert!(check_name(PUBLISHER_CATALOG, &lookalike).is_err());
     }
 }

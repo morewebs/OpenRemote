@@ -3,6 +3,7 @@
 //! control routes merged in, because a socket decides who may call those, not a
 //! header check.
 
+pub mod adapt;
 pub mod app;
 pub mod browser;
 pub mod cloud_http;

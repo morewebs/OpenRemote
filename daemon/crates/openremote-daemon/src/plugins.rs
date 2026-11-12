@@ -13,7 +13,9 @@
 //! itself would compute one - from a marketplace entry (Claude's rule:
 //! with no plugin.json, the entry is the manifest) - or a bare one for a
 //! folder that carries Claude parts without it, so `--plugin-dir` reads
-//! the folder as one plugin and never as a folder of plugins.
+//! the folder as one plugin and never as a folder of plugins. A plugin
+//! written in the sibling layout `adapt` reads is rewritten into Claude's
+//! at install.
 
 use std::collections::HashMap;
 use std::io::{Cursor, Read};
@@ -93,6 +95,22 @@ pub struct Manifest {
     /// agent tools, composer inputs, views, settings - what the review
     /// shows and the install record keeps.
     pub contributes: openremote_core::PluginContributions,
+    /// For a plugin written in another layout: what the install rewrites
+    /// so Claude Code runs it, and what it leaves out and why.
+    pub adapted: Vec<String>,
+    pub left_out: Vec<String>,
+}
+
+impl Manifest {
+    /// Why nothing of the plugin would run here: every part it carries was
+    /// left out. None while anything is left to install.
+    pub fn nothing_left(&self) -> Option<String> {
+        (self.runtime == PluginRuntime::Content
+            && self.claude_parts.is_empty()
+            && self.harness.is_none()
+            && !self.left_out.is_empty())
+        .then(|| format!("nothing in it can run here. {}", self.left_out.join(". ")))
+    }
 }
 
 /// The `harness` block of `openremote.json`: the seam that lets a plugin add
@@ -461,11 +479,49 @@ struct ClaudeManifest {
     name: Option<String>,
     version: Option<String>,
     description: Option<String>,
+    /// The sibling layout's description per language; the app speaks
+    /// English, so its `en` comes before the plain field.
+    description_i18n: Option<Value>,
+    skills: Option<Value>,
+    commands: Option<Value>,
+    agents: Option<Value>,
     hooks: Option<Value>,
     #[serde(rename = "mcpServers")]
     mcp_servers: Option<Value>,
     #[serde(rename = "lspServers")]
     lsp_servers: Option<Value>,
+}
+
+impl ClaudeManifest {
+    /// This manifest with its gaps filled from the plugin's manifest in the
+    /// sibling layout: Claude's says it where both do. That layout runs no
+    /// language servers, so it adds none.
+    fn or(self, other: Option<ClaudeManifest>) -> ClaudeManifest {
+        let Some(other) = other else {
+            return self;
+        };
+        ClaudeManifest {
+            name: self.name.or(other.name),
+            version: self.version.or(other.version),
+            description: self.description.or(other.description),
+            description_i18n: self.description_i18n.or(other.description_i18n),
+            skills: self.skills.or(other.skills),
+            commands: self.commands.or(other.commands),
+            agents: self.agents.or(other.agents),
+            hooks: self.hooks.or(other.hooks),
+            mcp_servers: self.mcp_servers.or(other.mcp_servers),
+            lsp_servers: self.lsp_servers,
+        }
+    }
+
+    fn english_description(&self) -> Option<String> {
+        self.description_i18n
+            .as_ref()
+            .and_then(|by_language| by_language.get("en"))
+            .and_then(Value::as_str)
+            .map(String::from)
+            .or_else(|| self.description.clone())
+    }
 }
 
 #[derive(Deserialize)]
@@ -572,7 +628,9 @@ fn validate_harness(
     Ok(())
 }
 
-fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<Option<T>, PluginError> {
+pub(crate) fn read_json<T: for<'de> Deserialize<'de>>(
+    path: &Path,
+) -> Result<Option<T>, PluginError> {
     match std::fs::read(path) {
         Ok(bytes) => serde_json::from_slice(&bytes).map(Some).map_err(|e| {
             PluginError::Invalid(format!(
@@ -630,8 +688,12 @@ pub fn runtime(word: &str) -> Option<PluginRuntime> {
 pub fn read_manifest(dir: &Path, builtin_ids: &[String]) -> Result<Manifest, PluginError> {
     let claude: Option<ClaudeManifest> =
         read_json(&dir.join(".claude-plugin").join("plugin.json"))?;
+    // A plugin in the sibling layout carries its own manifest; where
+    // Claude's says nothing (or there is none), that one speaks.
+    let alternate: Option<ClaudeManifest> =
+        read_json(&dir.join(crate::adapt::MANIFEST_DIR).join("plugin.json"))?;
     let ours: Option<OpenRemoteManifest> = read_json(&dir.join("openremote.json"))?;
-    if claude.is_none() && ours.is_none() && claude_dirs(dir).is_empty() {
+    if claude.is_none() && alternate.is_none() && ours.is_none() && claude_dirs(dir).is_empty() {
         return Err(PluginError::Invalid(
             "this is not a plugin: it has neither openremote.json nor .claude-plugin/plugin.json"
                 .into(),
@@ -645,7 +707,13 @@ pub fn read_manifest(dir: &Path, builtin_ids: &[String]) -> Result<Manifest, Plu
             )));
         }
     }
-    let claude = claude.unwrap_or_default();
+    // What the install's rewrite of such a plugin leaves of it: a server or
+    // hook it has to leave out is not one the plugin brings here.
+    let plan = match &alternate {
+        Some(_) => crate::adapt::plan(dir, None, None)?,
+        None => None,
+    };
+    let claude = claude.unwrap_or_default().or(alternate);
     let name = ours
         .as_ref()
         .and_then(|o| o.name.clone())
@@ -666,10 +734,24 @@ pub fn read_manifest(dir: &Path, builtin_ids: &[String]) -> Result<Manifest, Plu
         validate_harness(harness, builtin_ids, &name)?;
     }
 
-    let has_hooks = claude.hooks.is_some() || dir.join("hooks").join("hooks.json").is_file();
-    let has_mcp = claude.mcp_servers.is_some() || dir.join(".mcp.json").is_file();
+    let survives = |kept: Option<bool>| kept != Some(false);
+    let has_hooks = (claude.hooks.is_some() || dir.join("hooks").join("hooks.json").is_file())
+        && survives(plan.as_ref().and_then(|p| p.hooks_kept));
+    let has_mcp = (claude.mcp_servers.is_some() || dir.join(".mcp.json").is_file())
+        && survives(plan.as_ref().and_then(|p| p.mcp_kept));
     let has_lsp = claude.lsp_servers.is_some() || dir.join(".lsp.json").is_file();
-    let mut claude_parts = claude_dirs(dir);
+    // Parts in folders of the plugin's own choosing count as much as the
+    // default folders.
+    let declared = |part: &str| match part {
+        "skills" => claude.skills.is_some(),
+        "agents" => claude.agents.is_some(),
+        _ => claude.commands.is_some(),
+    };
+    let mut claude_parts: Vec<String> = ["skills", "agents", "commands"]
+        .into_iter()
+        .filter(|part| dir.join(part).is_dir() || declared(part))
+        .map(String::from)
+        .collect();
     if has_hooks {
         claude_parts.push("hooks".into());
     }
@@ -724,16 +806,17 @@ pub fn read_manifest(dir: &Path, builtin_ids: &[String]) -> Result<Manifest, Plu
     powers.dedup();
     let not_sandboxed = powers.contains(&PluginPower::RunPrograms)
         && matches!(runtime, PluginRuntime::Process | PluginRuntime::Content);
+    let description = ours
+        .as_ref()
+        .and_then(|o| o.description.clone())
+        .or_else(|| claude.english_description());
 
     Ok(Manifest {
         version: ours
             .as_ref()
             .and_then(|o| o.version.clone())
             .or(claude.version),
-        description: ours
-            .as_ref()
-            .and_then(|o| o.description.clone())
-            .or(claude.description),
+        description,
         name,
         runtime,
         powers,
@@ -742,6 +825,11 @@ pub fn read_manifest(dir: &Path, builtin_ids: &[String]) -> Result<Manifest, Plu
         harness,
         entry: section.entry.as_ref().map(|e| e.describe()),
         contributes,
+        adapted: plan
+            .as_ref()
+            .map(|p| p.notes.adapted.clone())
+            .unwrap_or_default(),
+        left_out: plan.map(|p| p.notes.left_out).unwrap_or_default(),
     })
 }
 
@@ -1030,6 +1118,7 @@ impl SourceRequest {
                 Fetch::Archive {
                     location: location.clone(),
                     sha256: None,
+                    path: None,
                 },
                 PluginSource::Archive {
                     location: location.clone(),
@@ -1062,9 +1151,12 @@ pub enum Fetch {
         sha: Option<String>,
         subdir: Option<String>,
     },
+    /// `path`: the one folder inside the archive that is the plugin; only
+    /// it is unpacked.
     Archive {
         location: String,
         sha256: Option<String>,
+        path: Option<String>,
     },
     /// Straight from the registry over https - never through an npm
     /// client, never running a package's scripts.
@@ -1172,10 +1264,22 @@ impl PluginHost {
             if matches!(request.fetch, Fetch::Npm { .. }) {
                 install_node_packages(&root).await?;
             }
+            // A plugin in the sibling layout is rewritten into Claude's
+            // first, so the entry and the review both read what Claude
+            // Code will run.
+            let adapted =
+                crate::adapt::adapt(&root, request.entry_name.as_deref(), &request.marketplace)?;
             if let Some(entry) = &request.entry {
                 apply_entry(&root, entry)?;
             }
-            let manifest = read_manifest(&root, &builtin_ids)?;
+            let mut manifest = read_manifest(&root, &builtin_ids)?;
+            if let Some(notes) = adapted {
+                manifest.adapted = notes.adapted;
+                manifest.left_out = notes.left_out;
+            }
+            if let Some(why) = manifest.nothing_left() {
+                return Err(PluginError::Invalid(why));
+            }
             crate::plugin_runtime::check_staged(&root, &manifest)?;
             write_bare_claude_manifest(&root, &manifest)?;
             Ok((root, manifest, resolved))
@@ -1469,6 +1573,10 @@ fn file_flat_installs_under_local(root: &Path) {
 fn has_manifest(dir: &Path) -> bool {
     dir.join("openremote.json").is_file()
         || dir.join(".claude-plugin").join("plugin.json").is_file()
+        || dir
+            .join(crate::adapt::MANIFEST_DIR)
+            .join("plugin.json")
+            .is_file()
 }
 
 /// A plugin is the fetched folder itself, or - the common archive and
@@ -1519,7 +1627,11 @@ async fn fetch(fetch: &Fetch, to: &Path) -> Result<Option<String>, PluginError> 
         )
         .await
         .map(Some),
-        Fetch::Archive { location, sha256 } => {
+        Fetch::Archive {
+            location,
+            sha256,
+            path,
+        } => {
             let bytes = read_archive(location).await?;
             let digest = hex(&sha2::Sha256::digest(&bytes));
             if let Some(want) = sha256 {
@@ -1530,7 +1642,8 @@ async fn fetch(fetch: &Fetch, to: &Path) -> Result<Option<String>, PluginError> 
                 }
             }
             let to = to.to_path_buf();
-            tokio::task::spawn_blocking(move || unpack(&bytes, &to))
+            let inner = path.clone();
+            tokio::task::spawn_blocking(move || unpack_folder(&bytes, &to, inner.as_deref()))
                 .await
                 .map_err(|e| PluginError::Source(e.to_string()))??;
             Ok(Some(digest))
@@ -1824,14 +1937,18 @@ pub fn relative_inside(path: &str) -> bool {
 /// registry links redirect once or twice), refused past `limit` bytes.
 pub async fn http_get(location: &str, accept: &str, limit: u64) -> Result<Vec<u8>, PluginError> {
     let http = openremote_cloud::https::Http::new();
+    // The client's own cap is sized for small answers; an archive may run
+    // to the limit, with time to arrive at half a megabyte a second.
+    let max_body = usize::try_from(limit.saturating_add(1)).unwrap_or(usize::MAX);
+    let time = Duration::from_secs((limit / (512 * 1024)).max(30));
     let mut url = location.to_string();
     for _ in 0..5 {
         let response = http
-            .request(
-                "GET",
+            .download(
+                time,
+                max_body,
                 &url,
                 &[("user-agent", "OpenRemote"), ("accept", accept)],
-                None,
             )
             .await
             .map_err(|e| PluginError::Source(format!("could not download {url}: {e}")))?;
@@ -2185,6 +2302,8 @@ where
     let target = plugin_dir_checked(data_dir, &plugin.marketplace, &plugin.name)?;
     let fresh = root.join(".staging").join(uuid::Uuid::new_v4().to_string());
     copy_in(printed, fresh.clone()).await?;
+    // Rewritten as the install rewrote it, when it is in the sibling layout.
+    crate::adapt::adapt(&fresh, Some(&plugin.name), &plugin.marketplace)?;
     // The Claude manifest written at install (from the marketplace entry)
     // is not in the command's output: carry it over.
     let manifest = Path::new(".claude-plugin").join("plugin.json");
@@ -2451,7 +2570,14 @@ fn write_bare_claude_manifest(root: &Path, manifest: &Manifest) -> Result<(), Pl
 /// Unpack a .zip or .tar.gz into `to`, refusing any entry that would land
 /// outside it and any archive that unpacks past the size limit.
 pub(crate) fn unpack(bytes: &[u8], to: &Path) -> Result<(), PluginError> {
-    unpack_within(bytes, to, MAX_ARCHIVE_BYTES)
+    unpack_within(bytes, to, MAX_ARCHIVE_BYTES, None)
+}
+
+/// Unpack only the folder `inner` names inside the archive, when it names
+/// one: that folder becomes `to`, and whatever sits outside it stays
+/// behind.
+fn unpack_folder(bytes: &[u8], to: &Path, inner: Option<&str>) -> Result<(), PluginError> {
+    unpack_within(bytes, to, MAX_ARCHIVE_BYTES, inner)
 }
 
 /// A gzip tar only, unpacked within `cap` bytes: how a copy of a plugin
@@ -2460,15 +2586,43 @@ pub(crate) fn unpack_tar_gz(bytes: &[u8], to: &Path, cap: u64) -> Result<(), Plu
     if !bytes.starts_with(&[0x1f, 0x8b]) {
         return Err(PluginError::Invalid("the copy is not a .tar.gz".into()));
     }
-    unpack_within(bytes, to, cap)
+    unpack_within(bytes, to, cap, None)
 }
 
 /// Unpack within `cap` bytes, counting what is really written: a zip's
 /// declared sizes are its own claim, and a small claim over a large stream
-/// is how a zip bomb works.
-fn unpack_within(bytes: &[u8], to: &Path, cap: u64) -> Result<(), PluginError> {
+/// is how a zip bomb works. With `inner`, only that folder inside the
+/// archive is unpacked, as the top of `to`; an archive without it is
+/// refused.
+fn unpack_within(
+    bytes: &[u8],
+    to: &Path,
+    cap: u64,
+    inner: Option<&str>,
+) -> Result<(), PluginError> {
+    if let Some(inner) = inner {
+        if !relative_inside(inner) {
+            return Err(PluginError::Invalid(format!(
+                "'{inner}' is not a folder inside the archive"
+            )));
+        }
+    }
+    let inner = inner.map(Path::new);
+    // An entry's place under `to`: the folder `inner` names is the top,
+    // and whatever sits outside that folder stays behind.
+    let place = |relative: &Path| -> Option<PathBuf> {
+        match inner {
+            None => Some(relative.to_path_buf()),
+            Some(top) => relative
+                .strip_prefix(top)
+                .ok()
+                .filter(|rest| !rest.as_os_str().is_empty())
+                .map(Path::to_path_buf),
+        }
+    };
     std::fs::create_dir_all(to)?;
     let mut total: u64 = 0;
+    let mut found = inner.is_none();
     if bytes.starts_with(b"PK\x03\x04") {
         let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
             .map_err(|e| PluginError::Source(format!("the zip is unreadable: {e}")))?;
@@ -2481,6 +2635,10 @@ fn unpack_within(bytes: &[u8], to: &Path, cap: u64) -> Result<(), PluginError> {
                     "the zip reaches outside its folder".into(),
                 ));
             };
+            let Some(relative) = place(&relative) else {
+                continue;
+            };
+            found = true;
             let out = to.join(relative);
             if entry.is_dir() {
                 std::fs::create_dir_all(&out)?;
@@ -2502,40 +2660,82 @@ fn unpack_within(bytes: &[u8], to: &Path, cap: u64) -> Result<(), PluginError> {
                 let _ = std::fs::remove_file(&out);
                 return Err(PluginError::Source("the archive unpacks too large".into()));
             }
+            // A script the plugin runs directly needs its executable bit,
+            // which only the zip's own record of it carries.
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if entry.unix_mode().is_some_and(|mode| mode & 0o111 != 0) {
+                    std::fs::set_permissions(&out, std::fs::Permissions::from_mode(0o755))?;
+                }
+            }
         }
-        return Ok(());
-    }
-    if bytes.starts_with(&[0x1f, 0x8b]) {
+    } else if bytes.starts_with(&[0x1f, 0x8b]) {
         let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(Cursor::new(bytes)));
-        for entry in archive
-            .entries()
-            .map_err(|e| PluginError::Source(format!("the archive is unreadable: {e}")))?
-        {
-            let mut entry = entry
-                .map_err(|e| PluginError::Source(format!("the archive is unreadable: {e}")))?;
+        let unreadable =
+            |e: std::io::Error| PluginError::Source(format!("the archive is unreadable: {e}"));
+        for entry in archive.entries().map_err(unreadable)? {
+            let mut entry = entry.map_err(unreadable)?;
             let kind = entry.header().entry_type();
             if !(kind.is_file() || kind.is_dir()) {
                 continue;
             }
+            let escapes = || PluginError::Invalid("the archive reaches outside its folder".into());
+            if inner.is_none() {
+                total += entry.header().size().unwrap_or(0);
+                if total > cap {
+                    return Err(PluginError::Source("the archive unpacks too large".into()));
+                }
+                // unpack_in refuses a path that climbs out of `to`.
+                if !entry.unpack_in(to).map_err(unreadable)? {
+                    return Err(escapes());
+                }
+                continue;
+            }
+            let path = entry.path().map_err(unreadable)?.into_owned();
+            let Some(relative) = plain_relative(&path) else {
+                return Err(escapes());
+            };
+            let Some(relative) = place(&relative) else {
+                continue;
+            };
+            found = true;
             total += entry.header().size().unwrap_or(0);
             if total > cap {
                 return Err(PluginError::Source("the archive unpacks too large".into()));
             }
-            // unpack_in refuses a path that climbs out of `to`.
-            if !entry
-                .unpack_in(to)
-                .map_err(|e| PluginError::Source(format!("the archive is unreadable: {e}")))?
-            {
-                return Err(PluginError::Invalid(
-                    "the archive reaches outside its folder".into(),
-                ));
+            let out = to.join(relative);
+            if let Some(parent) = out.parent() {
+                std::fs::create_dir_all(parent)?;
             }
+            entry.unpack(&out).map_err(unreadable)?;
         }
-        return Ok(());
+    } else {
+        return Err(PluginError::Invalid(
+            "an archive is a .zip or a .tar.gz".into(),
+        ));
     }
-    Err(PluginError::Invalid(
-        "an archive is a .zip or a .tar.gz".into(),
-    ))
+    if !found {
+        return Err(PluginError::Source(format!(
+            "the archive has no folder {}",
+            inner.map(|p| p.display().to_string()).unwrap_or_default()
+        )));
+    }
+    Ok(())
+}
+
+/// A path inside an archive made only of plain names (a leading `./` is
+/// fine); None when any part climbs out or is absolute.
+fn plain_relative(path: &Path) -> Option<PathBuf> {
+    let mut out = PathBuf::new();
+    for part in path.components() {
+        match part {
+            Component::Normal(name) => out.push(name),
+            Component::CurDir => {}
+            _ => return None,
+        }
+    }
+    (!out.as_os_str().is_empty()).then_some(out)
 }
 
 #[cfg(test)]
@@ -2659,12 +2859,12 @@ mod tests {
         }
         // The local header's size (at 22) and the central directory's (at 24).
         let claim = 10u32.to_le_bytes();
-        let local = bytes.windows(4).position(|w| w == b"PK").unwrap();
+        let local = bytes.windows(4).position(|w| w == b"PK\x03\x04").unwrap();
         bytes[local + 22..local + 26].copy_from_slice(&claim);
         let central = bytes.windows(4).position(|w| w == b"PK").unwrap();
         bytes[central + 24..central + 28].copy_from_slice(&claim);
         let to = tempfile::tempdir().unwrap();
-        let err = unpack_within(&bytes, to.path(), 1_000).unwrap_err();
+        let err = unpack_within(&bytes, to.path(), 1_000, None).unwrap_err();
         assert!(err.to_string().contains("too large"), "{err}");
         let written = std::fs::metadata(to.path().join("bomb.bin")).map_or(0, |m| m.len());
         assert!(written <= 1_000, "{written} bytes written");
@@ -2679,7 +2879,7 @@ mod tests {
         let err = unpack_tar_gz(&packed, &to.path().join("small"), 1_000).unwrap_err();
         assert!(err.to_string().contains("too large"), "{err}");
         unpack_tar_gz(&packed, &to.path().join("ok"), 1 << 20).unwrap();
-        let err = unpack_tar_gz(b"PK", &to.path().join("zip"), 1 << 20).unwrap_err();
+        let err = unpack_tar_gz(b"PK\x03\x04", &to.path().join("zip"), 1 << 20).unwrap_err();
         assert!(err.to_string().contains("tar.gz"), "{err}");
     }
 
@@ -3772,5 +3972,93 @@ mod tests {
         let manifest = read_manifest(dir.path(), &builtins()).expect("reads");
         let harness = manifest.harness.expect("harness");
         assert_eq!(harness.driver_path(), Some("bin/x.exe"));
+    }
+
+    #[test]
+    fn an_archive_unpacks_only_the_folder_it_is_told_to() {
+        let mut zip_bytes = Vec::new();
+        {
+            let mut zip = zip::ZipWriter::new(Cursor::new(&mut zip_bytes));
+            let options = zip::write::SimpleFileOptions::default();
+            for (path, body) in [
+                ("plugin/a.txt", "a"),
+                ("plugin/deep/b.txt", "b"),
+                ("other/c.txt", "c"),
+            ] {
+                zip.start_file(path, options).unwrap();
+                std::io::Write::write_all(&mut zip, body.as_bytes()).unwrap();
+            }
+            zip.finish().unwrap();
+        }
+        let mut tgz_bytes = Vec::new();
+        {
+            let gz = flate2::write::GzEncoder::new(&mut tgz_bytes, flate2::Compression::default());
+            let mut tar = tar::Builder::new(gz);
+            for (path, body) in [
+                ("plugin/a.txt", "a"),
+                ("plugin/deep/b.txt", "b"),
+                ("other/c.txt", "c"),
+            ] {
+                let mut header = tar::Header::new_gnu();
+                header.set_size(body.len() as u64);
+                header.set_mode(0o644);
+                header.set_cksum();
+                tar.append_data(&mut header, path, body.as_bytes()).unwrap();
+            }
+            tar.into_inner().unwrap().finish().unwrap();
+        }
+        for bytes in [&zip_bytes, &tgz_bytes] {
+            let to = tempfile::tempdir().unwrap();
+            unpack_within(bytes, to.path(), MAX_ARCHIVE_BYTES, Some("plugin")).unwrap();
+            assert!(to.path().join("a.txt").is_file());
+            assert!(to.path().join("deep").join("b.txt").is_file());
+            assert!(!to.path().join("c.txt").exists());
+            assert!(!to.path().join("other").exists());
+            // A folder the archive doesn't have, or one that climbs out of
+            // it, is refused.
+            let refused = tempfile::tempdir().unwrap();
+            let missing = unpack_within(bytes, refused.path(), MAX_ARCHIVE_BYTES, Some("nope"));
+            assert!(missing.unwrap_err().to_string().contains("no folder"));
+            assert!(
+                unpack_within(bytes, refused.path(), MAX_ARCHIVE_BYTES, Some("../plugin")).is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn a_plugin_in_the_sibling_layout_is_read_by_its_own_manifest() {
+        let dir = folder(&[
+            (
+                ".zcode-plugin/plugin.json",
+                r#"{"name": "layout-plugin", "version": "0.3.0", "skills": "payload/skills",
+                    "description": "plain", "description_i18n": {"en": "In English"}}"#,
+            ),
+            ("payload/skills/x/SKILL.md", "# x"),
+            (
+                ".mcp.json",
+                r#"{"mcpServers": {"data": {"type": "http", "url": "${ZCODE_BASE_URL}/mcp",
+                                            "auth": {"type": "zcode_official"}}}}"#,
+            ),
+        ]);
+        let m = read_manifest(dir.path(), &builtins()).unwrap();
+        assert_eq!(m.name, "layout-plugin");
+        assert_eq!(m.version.as_deref(), Some("0.3.0"));
+        assert_eq!(m.description.as_deref(), Some("In English"));
+        // Its skills sit in a folder of its own choosing; its only server
+        // needs the publisher's account, so it brings no program.
+        assert_eq!(m.claude_parts, vec!["skills"]);
+        assert_eq!(m.powers, Vec::<PluginPower>::new());
+        assert!(m.left_out.iter().any(|n| n.contains("account")));
+        assert!(m.nothing_left().is_none());
+        // Claude Code's manifest, where there is one, wins over it.
+        std::fs::create_dir_all(dir.path().join(".claude-plugin")).unwrap();
+        std::fs::write(
+            dir.path().join(".claude-plugin").join("plugin.json"),
+            r#"{"name": "claude-name"}"#,
+        )
+        .unwrap();
+        let both = read_manifest(dir.path(), &builtins()).unwrap();
+        assert_eq!(both.name, "claude-name");
+        assert_eq!(both.version.as_deref(), Some("0.3.0"));
     }
 }
