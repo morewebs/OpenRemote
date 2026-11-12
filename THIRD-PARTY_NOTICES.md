@@ -30,7 +30,11 @@ changes: read the new packages' license fields (the npm lock and the
 cargo registry both carry them), place each entry in its section, and
 add any license text that is not already at the end of this file.
 Build-time, test-time and never-linked crates stay out (the full
-closure, platform by platform, is what the lock files pin).
+closure, platform by platform, is what the lock files pin). The in-app
+updater was added on 2026-11-12 from `cargo tree` of src-tauri for
+x86_64-pc-windows-msvc: its crates are under Windows only, and reqwest,
+ipnet and tokio-util, which it also links, moved from Android only to
+Windows and Android.
 
 ## The console (JavaScript)
 
@@ -272,6 +276,7 @@ Compiled into the desktop shell and the Android shell (not the standalone daemon
 - idna_adapter 1.2.2 - Apache-2.0 OR MIT
 - indexmap 1.9.3 - Apache-2.0 OR MIT
 - infer 0.22.0 - MIT
+- ipnet 2.12.2 - MIT OR Apache-2.0
 - json-patch 4.2.0 - MIT/Apache-2.0
 - jsonptr 0.7.1 - MIT OR Apache-2.0
 - litemap 0.8.3 - Unicode-3.0
@@ -296,6 +301,7 @@ Compiled into the desktop shell and the Android shell (not the standalone daemon
 - regex 1.13.1 - MIT OR Apache-2.0
 - regex-automata 0.4.18 - MIT OR Apache-2.0
 - regex-syntax 0.8.11 - MIT OR Apache-2.0
+- reqwest 0.13.5 - MIT OR Apache-2.0
 - rustc-hash 2.1.3 - Apache-2.0 OR MIT
 - same-file 1.0.6 - Unlicense/MIT
 - schemars 0.8.22 - MIT
@@ -324,6 +330,7 @@ Compiled into the desktop shell and the Android shell (not the standalone daemon
 - time 0.3.55 - MIT OR Apache-2.0
 - time-core 0.1.9 - MIT OR Apache-2.0
 - tinystr 0.8.4 - Unicode-3.0
+- tokio-util 0.7.19 - MIT
 - toml 1.1.6+spec-1.1.0 - MIT OR Apache-2.0
 - toml_datetime 1.1.1+spec-1.1.0 - MIT OR Apache-2.0
 - toml_parser 1.1.3+spec-1.1.0 - MIT OR Apache-2.0
@@ -358,10 +365,13 @@ Compiled into the desktop shell (Windows installers only):
 - either 1.19.0 - MIT OR Apache-2.0
 - encoding_rs 0.8.42 - (Apache-2.0 OR MIT) AND BSD-3-Clause
 - flatbuffers 25.12.19 - Apache-2.0
+- hyper-tls 0.6.0 - MIT/Apache-2.0
 - itertools 0.14.0 - MIT OR Apache-2.0
 - keyboard-types 0.8.3 - MIT OR Apache-2.0
+- minisign-verify 0.3.0 - MIT
 - muda 0.20.0 - Apache-2.0 OR MIT
 - multiversion_no_op 1.0.0 - Apache-2.0 OR MIT
+- native-tls 0.2.18 - MIT OR Apache-2.0
 - os_info 3.15.0 - MIT
 - os_pipe 1.2.3 - MIT
 - psl 2.1.252 - MIT/Apache-2.0. Carries Mozilla's Public Suffix List
@@ -369,6 +379,7 @@ Compiled into the desktop shell (Windows installers only):
   tell a site's own requests from other sites'.
 - psl-types 2.0.11 - MIT/Apache-2.0
 - rfd 0.16.0 - MIT
+- schannel 0.1.30 - MIT
 - seahash 4.1.0 - MIT
 - shared_child 1.1.2 - MIT
 - simdutf8 0.1.5 - MIT OR Apache-2.0
@@ -376,8 +387,11 @@ Compiled into the desktop shell (Windows installers only):
 - tauri-plugin-autostart 2.7.0 - Apache-2.0 OR MIT
 - tauri-plugin-shell 2.4.0 - Apache-2.0 OR MIT
 - tauri-plugin-single-instance 2.5.2 - Apache-2.0 OR MIT
+- tauri-plugin-updater 2.14.1 - Apache-2.0 OR MIT
+- tempfile 3.27.0 - MIT OR Apache-2.0. The updater stages a download in it.
 - thiserror 1.0.69 - MIT OR Apache-2.0. The older major version, which
   the filter engine (adblock) uses; the rest of the app links thiserror 2.
+- tokio-native-tls 0.3.1 - MIT
 - tray-icon 0.25.1 - MIT OR Apache-2.0
 - unicode-segmentation 1.13.3 - MIT OR Apache-2.0
 - webview2-com 0.39.1 - MIT
@@ -404,7 +418,6 @@ Compiled into the Android shell (APK only):
 
 - android_system_properties 0.1.6 - MIT OR Apache-2.0
 - cesu8 1.1.0 - Apache-2.0/MIT
-- ipnet 2.12.2 - MIT OR Apache-2.0
 - is-docker 0.2.0 - MIT
 - is-wsl 0.4.0 - MIT
 - jni 0.21.1 - MIT/Apache-2.0
@@ -413,10 +426,8 @@ Compiled into the Android shell (APK only):
 - ndk-context 0.1.1 - MIT OR Apache-2.0
 - ndk-sys 0.6.0+11769913 - MIT OR Apache-2.0
 - num_enum 0.7.6 - BSD-3-Clause OR MIT OR Apache-2.0
-- reqwest 0.13.5 - MIT OR Apache-2.0
 - tauri-plugin-deep-link 2.6.1 - Apache-2.0 OR MIT
 - tauri-plugin-opener 2.7.0 - Apache-2.0 OR MIT
-- tokio-util 0.7.19 - MIT
 - toml_edit 0.25.15+spec-1.1.0 - MIT OR Apache-2.0
 
 ## Where the Rust crates land
@@ -443,7 +454,9 @@ purpose:
   enables never compile (a lock lists every feature's crates).
 - Build-time and test-time crates of both lock files: proc-macro
   crates (syn, quote, serde_derive, thiserror-impl and the rest), cc,
-  rustc_version, tempfile and the dev-only tree.
+  rustc_version, the daemon's tempfile (a test-time crate there; the
+  shell's updater links it on Windows, listed above) and the dev-only
+  tree.
 - Crates that exist in a lock for other targets or other platforms
   and never compile into the three artifacts: the gtk-rs, soup3 and
   webkit2gtk families, zbus, objc2, x11, nix, swift-rs, the
