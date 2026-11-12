@@ -169,7 +169,8 @@ pub struct SpawnOptions {
     pub endpoint: Option<EndpointBinding>,
     /// The harness's own permission/approval policy word, passed verbatim
     /// (terminology parity: claude `--permission-mode`, codex
-    /// `approvalPolicy`, grok `--permission-mode`, …).
+    /// `approvalPolicy`, grok `--permission-mode`, agy `--mode`, opencode
+    /// its own permission config through `OPENCODE_PERMISSION`, …).
     pub permission_mode: Option<String>,
     /// The chat's effort in the harness's own word, set at every start -
     /// the first spawn and each resume (claude `--effort`, codex

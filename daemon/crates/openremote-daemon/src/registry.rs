@@ -773,8 +773,10 @@ fn custom_endpoint_supported(id: &str) -> bool {
 /// terminology parity: claude `--permission-mode default …`, codex
 /// `approvalPolicy untrusted …` (the app-server's thread words), grok
 /// `--permission-mode` (the six its own docs name), and agy `--mode` (the
-/// three its CLI documents). Pi and opencode have no enumerable words their
-/// drivers pass - empty, so the console renders no picker for them. Each
+/// three its CLI documents). Pi and opencode have no enumerable words -
+/// empty, so the console renders no picker for them. (Opencode's driver does
+/// pass a chat's word, which is OpenCode's own permission config, a JSON
+/// object rather than a word from a list.) Each
 /// word carries a human label the console shows instead of the raw CLI flag.
 static CLAUDE_PERMISSION_MODES: std::sync::LazyLock<[PermissionWord; 4]> =
     std::sync::LazyLock::new(|| {
@@ -1103,7 +1105,7 @@ mod tests {
         );
         // No default: the CLI's own behavior is not ours to guess.
         assert_eq!(default_permission("agy"), None);
-        // The drivers pass no flag the others would read: no words, no
+        // Neither has a list of words to offer: no words, no
         // default, no picker in the console.
         for id in ["pi", "opencode"] {
             assert_eq!(permission_modes(id).len(), 0, "{id} has no words");

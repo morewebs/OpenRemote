@@ -237,10 +237,40 @@ impl Driver {
     }
 }
 
+/// The chat's permission word is OpenCode's own permission config (a JSON
+/// object such as `{"edit":"ask","bash":"ask"}`), which `opencode serve`
+/// reads from `OPENCODE_PERMISSION` when it starts and merges over the
+/// user's own config: the keys it names are this chat's, every other key
+/// stays as the user set it. Without this the word was recorded on the
+/// chat and never reached OpenCode, so the chat ran on OpenCode's default -
+/// which lets edits and commands run without asking - whatever it chose.
+///
+/// OpenCode silently drops a value it cannot parse, so a word that is not a
+/// JSON object refuses to start rather than run looser than it says.
+fn apply_permission(command: &mut Command, opts: &SpawnOptions) -> Result<(), DriverError> {
+    let Some(word) = opts
+        .permission_mode
+        .as_deref()
+        .map(str::trim)
+        .filter(|w| !w.is_empty())
+    else {
+        return Ok(());
+    };
+    if !serde_json::from_str::<Value>(word).is_ok_and(|v| v.is_object()) {
+        return Err(DriverError::Spawn(
+            "opencode takes its permission setting as its own permission config,              a JSON object such as {\"edit\":\"ask\"}"
+                .into(),
+        ));
+    }
+    command.env("OPENCODE_PERMISSION", word);
+    Ok(())
+}
+
 async fn spawn_serve(
     mut command: Command,
     opts: SpawnOptions,
 ) -> Result<(Driver, mpsc::Receiver<DriverEvent>), DriverError> {
+    apply_permission(&mut command, &opts)?;
     let password = Uuid::new_v4().to_string();
     command
         .args(["serve", "--port", "0", "--hostname", "127.0.0.1"])
@@ -889,6 +919,60 @@ async fn drain_stderr(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn permission_env(command: &Command) -> Option<Option<String>> {
+        command
+            .as_std()
+            .get_envs()
+            .find(|(key, _)| *key == "OPENCODE_PERMISSION")
+            .map(|(_, value)| value.map(|v| v.to_string_lossy().into_owned()))
+    }
+
+    fn opts_with(permission: Option<&str>) -> SpawnOptions {
+        SpawnOptions {
+            cwd: std::path::PathBuf::from("/w"),
+            permission_mode: permission.map(String::from),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_chats_permission_config_rides_opencode_permission() {
+        // The chat's word is OpenCode's own permission config; the serve
+        // child reads it from OPENCODE_PERMISSION, merged over the user's.
+        let mut command = Command::new("opencode");
+        apply_permission(
+            &mut command,
+            &opts_with(Some(r#"{"edit":"ask","bash":"ask"}"#)),
+        )
+        .expect("an object is OpenCode's config");
+        assert_eq!(
+            permission_env(&command),
+            Some(Some(r#"{"edit":"ask","bash":"ask"}"#.to_string()))
+        );
+    }
+
+    #[test]
+    fn no_word_leaves_opencodes_own_config_alone() {
+        for word in [None, Some(""), Some("  ")] {
+            let mut command = Command::new("opencode");
+            apply_permission(&mut command, &opts_with(word)).expect("nothing to pass");
+            assert_eq!(permission_env(&command), None, "{word:?}");
+        }
+    }
+
+    #[test]
+    fn a_word_opencode_would_ignore_refuses_to_start() {
+        // OpenCode drops an OPENCODE_PERMISSION it cannot parse without a
+        // word, so passing one would run the chat on looser rules than it
+        // chose. It does not start instead.
+        for word in ["ask", "never", "[\"ask\"]", "\"ask\"", "{\"edit\":"] {
+            let mut command = Command::new("opencode");
+            let refused = apply_permission(&mut command, &opts_with(Some(word)));
+            assert!(refused.is_err(), "{word} must not start");
+            assert_eq!(permission_env(&command), None, "{word}");
+        }
+    }
 
     fn event(kind: &str, data: Value) -> Value {
         json!({"id": "evt_1", "type": kind, "data": data})
