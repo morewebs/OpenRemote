@@ -34,18 +34,52 @@ fn examples_target() -> PathBuf {
         .join("examples")
 }
 
+/// Why an example could not be built, or None when it was.
+enum Built {
+    Yes,
+    /// Its crates could not be fetched (no network and no local copy):
+    /// the test says so and stops, rather than failing on the machine.
+    NoCrates(String),
+}
+
 /// Build an example's own crate (its own workspace and lock) into this
-/// workspace's target folder; false when cargo could not.
-fn build_example(manifest: &Path, extra: &[&str]) -> bool {
-    std::process::Command::new("cargo")
-        .args(["build", "--locked", "--manifest-path"])
+/// workspace's target folder, with the cargo running these tests. The
+/// crates are fetched first; a fetch that can't happen offline skips the
+/// test, and the build itself then runs offline and must succeed.
+fn build_example(manifest: &Path, extra: &[&str]) -> Built {
+    let cargo = env!("CARGO");
+    let fetched = std::process::Command::new(cargo)
+        .args(["fetch", "--locked", "--manifest-path"])
+        .arg(manifest)
+        .output()
+        .expect("cargo runs");
+    if !fetched.status.success() {
+        return Built::NoCrates(String::from_utf8_lossy(&fetched.stderr).trim().to_string());
+    }
+    let built = std::process::Command::new(cargo)
+        .args(["build", "--locked", "--offline", "--manifest-path"])
         .arg(manifest)
         .arg("--target-dir")
         .arg(examples_target())
         .args(extra)
         .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+        .expect("cargo runs");
+    assert!(
+        built.success(),
+        "cargo build of {} failed",
+        manifest.display()
+    );
+    Built::Yes
+}
+
+/// Build, or say why the test is skipped.
+macro_rules! build_or_skip {
+    ($manifest:expr, $extra:expr) => {
+        if let Built::NoCrates(why) = build_example($manifest, $extra) {
+            eprintln!("skipped: the example's crates could not be fetched: {why}");
+            return;
+        }
+    };
 }
 
 fn copy_tree(from: &Path, to: &Path) {
@@ -291,10 +325,7 @@ async fn dictation_installs_from_openremotes_catalog_and_reaches_only_a_server_t
 #[tokio::test]
 async fn the_toy_examples_program_answers_its_tools_from_a_chat_and_drives_its_harness() {
     let source = repo().join("examples/plugins/toy-harness");
-    assert!(
-        build_example(&source.join("program/Cargo.toml"), &[]),
-        "cargo build of the toy example failed"
-    );
+    build_or_skip!(&source.join("program/Cargo.toml"), &[]);
     // The plugin as build.sh leaves it: its manifest and bin/toy.
     let folder = tempfile::tempdir().unwrap();
     copy_tree(&source, folder.path());
@@ -412,12 +443,9 @@ async fn the_text_tools_module_answers_from_a_chat_and_reaches_public_addresses_
         return;
     }
     let source = repo().join("examples/plugins/text-tools");
-    assert!(
-        build_example(
-            &source.join("Cargo.toml"),
-            &["--release", "--target", "wasm32-unknown-unknown"]
-        ),
-        "cargo build of the text-tools example failed"
+    build_or_skip!(
+        &source.join("Cargo.toml"),
+        &["--release", "--target", "wasm32-unknown-unknown"]
     );
     // The plugin as build.sh leaves it: its manifest and text_tools.wasm.
     let folder = tempfile::tempdir().unwrap();

@@ -309,3 +309,20 @@ test("a text field holds only the user's own value; the default is its placehold
   assert.equal(typedValue(minutes, 10), '')
   assert.equal(typedValue(minutes, 12), '12')
 })
+
+test('"Use default" saves the default by a click, and a saved default shows as saved', async () => {
+  const { offersDefault, typedValue } = await import('./plugin-runtime.js')
+  const address = { key: 'base_url', type: 'string', default: 'https://api.openai.com/v1' }
+  // Not saved: the field is empty (the default is its placeholder) and the
+  // default is offered, since only a saved address is the user's word.
+  assert.equal(typedValue(address, 'https://api.openai.com/v1', false), '')
+  assert.equal(offersDefault(address, 'https://api.openai.com/v1', false), true)
+  // Saved by "Use default": the field shows it, and it is not offered again.
+  assert.equal(typedValue(address, 'https://api.openai.com/v1', true), 'https://api.openai.com/v1')
+  assert.equal(offersDefault(address, 'https://api.openai.com/v1', true), false)
+  // Something else saved: the default is offered again.
+  assert.equal(offersDefault(address, 'http://127.0.0.1:9000/v1', true), true)
+  // No default, or an empty one: nothing to offer.
+  assert.equal(offersDefault({ key: 'x', default: null }, null, false), false)
+  assert.equal(offersDefault({ key: 'x', default: '' }, null, false), false)
+})

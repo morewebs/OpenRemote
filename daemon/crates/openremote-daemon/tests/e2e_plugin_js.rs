@@ -311,7 +311,7 @@ async fn the_bridge_offers_a_closed_list_and_the_network_is_not_this_machine() {
         &daemon,
         "POST",
         &format!("/plugins/{}/settings", path_of(&id)),
-        Some(json!({"values": {"api_key": "sk-private-1"}})),
+        Some(json!({"values": {"api_key": "sk-private-1", "base_url": "https://api.example.com/v1"}})),
     )
     .await;
     assert_eq!(saved.status, 200, "{}", saved.raw);

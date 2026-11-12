@@ -22,7 +22,7 @@
         "key": "api_key",
         "type": "secret",
         "label": "API key",
-        "help": "Sent only to the service address above. Leave it unset for a server that needs none.",
+        "help": "Sent only to a Service address you saved: to send it to OpenAI's, click Use default there. Leave it unset for a server that needs none.",
         "send_to": "base_url"
       },
       {

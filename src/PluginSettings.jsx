@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 import PickerMenu from './PickerMenu.jsx'
 import { useConsole } from './state/console.jsx'
 import { usePlugins } from './plugins-host.jsx'
-import { fieldPlaceholder, parseInput, pluginSlug, shownValue, typedValue } from './plugin-runtime.js'
+import { fieldPlaceholder, offersDefault, parseInput, pluginSlug, shownValue, typedValue } from './plugin-runtime.js'
 import { scopeLabel } from './plugins.js'
 import { projectName } from './projects.js'
 import { errorCopy } from './error-copy.js'
@@ -96,7 +96,12 @@ function SettingRow({ slug, setting, view, onSave }) {
     ) : setting.type === 'enum' ? (
       <ChoiceControl setting={setting} value={shownValue(setting, view.values)} onSave={onSave} />
     ) : (
-      <TextControl setting={setting} value={view.values?.[setting.key]} onSave={onSave} />
+      <TextControl
+        setting={setting}
+        value={view.values?.[setting.key]}
+        saved={(view.saved ?? []).includes(setting.key)}
+        onSave={onSave}
+      />
     )
   return (
     <div className="pn-row" data-stg={`plugin-${slug}-${setting.key}`}>
@@ -113,9 +118,10 @@ function SettingRow({ slug, setting, view, onSave }) {
 // saved value back. The plugin's default is a placeholder, never text in the
 // field: only what the user typed is the user's word (an address the user
 // typed is one the daemon may reach for the plugin; a default is not), and
-// an emptied field goes back to the default.
-function TextControl({ setting, value, onSave }) {
-  const saved = typedValue(setting, value)
+// an emptied field goes back to the default. "Use default" saves the
+// default by the user's click, which makes it the user's word.
+function TextControl({ setting, value, saved: isSaved, onSave }) {
+  const saved = typedValue(setting, value, isSaved)
   const [draft, setDraft] = useState(saved)
   const [problem, setProblem] = useState(null)
   useEffect(() => {
@@ -160,6 +166,16 @@ function TextControl({ setting, value, onSave }) {
         spellCheck={false}
         autoComplete="off"
       />
+      {offersDefault(setting, value, isSaved) && (
+        <button
+          type="button"
+          className="ps-default"
+          title={`Save ${String(setting.default)} as ${setting.label}`}
+          onClick={() => onSave({ [setting.key]: setting.default })}
+        >
+          Use default
+        </button>
+      )}
       {problem && <span className="ps-problem">{problem}</span>}
     </div>
   )

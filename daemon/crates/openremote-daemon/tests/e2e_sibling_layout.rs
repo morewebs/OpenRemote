@@ -300,3 +300,85 @@ async fn a_plugin_in_the_sibling_layout_installs_rewritten_and_says_what_it_left
     assert_eq!(changed.status, 400, "{}", changed.raw);
     assert!(changed.raw.contains("sha256"), "{}", changed.raw);
 }
+
+fn git(dir: &Path, args: &[&str], stdin: Option<&str>) -> String {
+    use std::io::Write;
+    let mut child = std::process::Command::new("git")
+        .args(["-c", "user.email=t@example.com", "-c", "user.name=t"])
+        .args(args)
+        .current_dir(dir)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("git runs");
+    if let Some(input) = stdin {
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(input.as_bytes())
+            .unwrap();
+    }
+    let out = child.wait_with_output().unwrap();
+    assert!(
+        out.status.success(),
+        "git {args:?}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
+}
+
+#[tokio::test]
+async fn a_repository_that_links_its_manifest_elsewhere_touches_nothing_outside() {
+    let daemon = start_daemon(&[]).await;
+    // Stands for the user's own Claude settings, which a linked
+    // plugin.json would have the install rewrite.
+    let outside = tempfile::tempdir().unwrap();
+    let settings = outside.path().join("settings.json");
+    std::fs::write(&settings, r#"{"hooks": {}}"#).unwrap();
+    // A repository whose .claude-plugin/plugin.json is a link to it (a git
+    // link entry, mode 120000, made whatever this system's own setting).
+    let repo = tempfile::tempdir().unwrap();
+    write(
+        repo.path(),
+        &[(
+            ".zcode-plugin/plugin.json",
+            r#"{"name": "linked", "author": "Someone", "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "echo hi"}]}]}}"#,
+        )],
+    );
+    git(repo.path(), &["init", "--quiet"], None);
+    git(repo.path(), &["add", "."], None);
+    let target = settings.to_string_lossy().replace('\\', "/");
+    let blob = git(
+        repo.path(),
+        &["hash-object", "-w", "--stdin"],
+        Some(&target),
+    );
+    git(
+        repo.path(),
+        &[
+            "update-index",
+            "--add",
+            "--cacheinfo",
+            &format!("120000,{blob},.claude-plugin/plugin.json"),
+        ],
+        None,
+    );
+    git(repo.path(), &["commit", "--quiet", "-m", "linked"], None);
+
+    let staged = post(
+        &daemon,
+        "/plugins/stage",
+        "s-linked",
+        json!({"source": {"kind": "git", "url": repo.path().to_string_lossy()}}),
+    )
+    .await;
+    // Checked out as plain files, the "manifest" is a path, not JSON: the
+    // stage is refused, and the file outside is as it was.
+    assert_eq!(staged.status, 400, "{}", staged.raw);
+    assert_eq!(
+        std::fs::read_to_string(&settings).unwrap(),
+        r#"{"hooks": {}}"#
+    );
+}

@@ -83,11 +83,11 @@ Each setting is an object with:
 | `key` | Lowercase letters, digits and underscores; unique. |
 | `type` | `string`, `secret`, `boolean`, `number` or `enum`. |
 | `label`, `help` | What the form shows. |
-| `default` | The value until the user sets one. A text or number field shows it as its placeholder and holds only what the user typed; emptying the field goes back to the default. |
+| `default` | The value until the user sets one. A text or number field shows it as its placeholder and holds only what the user typed; emptying the field goes back to the default. Beside the field, **Use default** saves the default as the user's own value, by their click. |
 | `min`, `max` | A number's bounds. |
 | `options` | An enum's choices: strings, or `{ "value": "...", "label": "..." }`. |
 | `required` | Marked as needed. OpenRemote enforces it for process and WASM plugins (they don't run until it is set); a JavaScript plugin checks its own settings. |
-| `sendTo` | A secret only (`send_to` reads too): the `key` of a `string` setting holding an address. The secret is then written only into requests to that address (the same scheme, host and port, and a path at or under it); a request elsewhere that names it is refused. |
+| `sendTo` | A secret only (`send_to` reads too): the `key` of a `string` setting holding an address. The secret is then written only into requests to the address **the user saved** there (the same scheme, host and port, and a path at or under it); a request elsewhere that names it is refused. The setting's default never counts: until the user saves an address (typing one, or clicking Use default), the header that names the secret is left out, or, when the secret is `required`, the request is refused with a sentence saying which address to save. |
 
 The form is Settings > Plugins > your plugin's name, and the Installed
 tab's Settings button opens it. A secret is write-only: once saved, no
@@ -235,8 +235,10 @@ cached, redirected for you, or given cookies:
 - A header value can name one of your secrets as `{{secret:key}}`:
   OpenRemote writes the secret in on the way out. A header whose secret
   is not set is left out, so a service that needs no key gets none. With
-  `sendTo`, a request to any other address that names the secret is
-  refused.
+  `sendTo`, the secret goes only to the address the user saved in that
+  setting: a request to any other address that names it is refused, and
+  with no saved address the header is left out (a `required` secret's
+  request is refused instead).
 
 ```js
 const { values, secrets } = await openremote.settings.get()

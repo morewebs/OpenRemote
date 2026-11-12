@@ -68,11 +68,13 @@ impl SettingsStore {
 }
 
 /// The settings as the console reads them: every plain value (what was
-/// set, else the default, else null) and, for each secret, only whether
-/// it is set.
+/// set, else the default, else null), which plain values the user saved
+/// (`saved`: a default saved by the user's own click counts, the default
+/// alone does not), and, for each secret, only whether it is set.
 pub fn view(id: &str, schema: &[SettingField], stored: &Map<String, Value>) -> Value {
     let mut values = Map::new();
     let mut secrets = Map::new();
+    let mut saved = Vec::new();
     for field in schema {
         if field.kind == SettingKind::Secret {
             let set = stored
@@ -84,6 +86,9 @@ pub fn view(id: &str, schema: &[SettingField], stored: &Map<String, Value>) -> V
                 Value::String(if set { "set" } else { "unset" }.into()),
             );
         } else {
+            if stored.get(&field.key).is_some_and(|v| !v.is_null()) {
+                saved.push(Value::String(field.key.clone()));
+            }
             values.insert(
                 field.key.clone(),
                 stored
@@ -99,6 +104,7 @@ pub fn view(id: &str, schema: &[SettingField], stored: &Map<String, Value>) -> V
         "schema": schema,
         "values": values,
         "secrets": secrets,
+        "saved": saved,
         "missing": missing_required(schema, stored),
     })
 }
@@ -232,5 +238,31 @@ mod tests {
         assert!(!data.path().join("escape.json").exists());
         store.forget("tool@local");
         assert!(store.load("tool@local").is_empty());
+    }
+
+    #[test]
+    fn the_answer_says_which_values_the_user_saved_and_a_saved_default_counts() {
+        let mut address = field("base_url", SettingKind::String);
+        address.default = Some(json!("https://api.example.com/v1"));
+        let schema = vec![address, field("key", SettingKind::Secret)];
+        let mut stored = Map::new();
+        let shown = view("p@local", &schema, &stored);
+        assert_eq!(shown["values"]["base_url"], "https://api.example.com/v1");
+        assert_eq!(shown["saved"], json!([]));
+        // "Use default" saves the default by the user's click: it is saved.
+        let changes = json!({"base_url": "https://api.example.com/v1"});
+        apply(&schema, &mut stored, changes.as_object().unwrap()).unwrap();
+        assert_eq!(stored["base_url"], "https://api.example.com/v1");
+        assert_eq!(
+            view("p@local", &schema, &stored)["saved"],
+            json!(["base_url"])
+        );
+        // A secret is never listed (its own answer is set or unset).
+        let changes = json!({"key": "k"});
+        apply(&schema, &mut stored, changes.as_object().unwrap()).unwrap();
+        assert_eq!(
+            view("p@local", &schema, &stored)["saved"],
+            json!(["base_url"])
+        );
     }
 }

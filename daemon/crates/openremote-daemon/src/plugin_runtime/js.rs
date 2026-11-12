@@ -8,8 +8,9 @@
 //!
 //! A plugin's secrets never leave this daemon except inside the plugin's
 //! own request, written into the header that names it - and, when the
-//! plugin declares a `sendTo`, only toward the address the user typed in
-//! that other setting.
+//! plugin declares a `sendTo`, only toward the address the user saved in
+//! that other setting (its default never counts: without a saved address
+//! the secret stays out, or the request is refused when it is required).
 //!
 //! Console-only, like the rest of the plugin routes: none of these answers
 //! the user's other devices.
@@ -246,20 +247,33 @@ pub fn fill_secrets(
             return Ok(None);
         };
         if let Some(guard) = &setting.send_to {
+            // Only an address the user saved: the plugin's own default is
+            // never the user's word (Settings > Plugins offers "Use
+            // default", which saves it by a click).
             let address = stored
                 .get(guard)
                 .and_then(Value::as_str)
-                .map(str::to_string)
-                .or_else(|| {
-                    declared
-                        .iter()
-                        .find(|s| &s.key == guard)
-                        .and_then(|s| s.default.as_ref())
-                        .and_then(Value::as_str)
-                        .map(str::to_string)
-                })
-                .unwrap_or_default();
-            if address.trim().is_empty() || !goes_to(url, &address) {
+                .map(str::trim)
+                .filter(|a| !a.is_empty())
+                .map(str::to_string);
+            let Some(address) = address else {
+                if !setting.required {
+                    return Ok(None);
+                }
+                let label = declared
+                    .iter()
+                    .find(|s| &s.key == guard)
+                    .map(|s| s.label.clone())
+                    .unwrap_or_else(|| guard.clone());
+                return Err((
+                    StatusCode::FORBIDDEN,
+                    format!(
+                        "Save an address in {label} first (Settings > Plugins): {} is sent only to an address you saved",
+                        setting.label
+                    ),
+                ));
+            };
+            if !goes_to(url, &address) {
                 return Err((
                     StatusCode::FORBIDDEN,
                     format!("the {name} setting is sent only to the address in {guard}"),
@@ -543,7 +557,23 @@ mod tests {
         stored.insert("loose".into(), json!("lk-2"));
         let to = "https://api.example.com/v1/audio";
 
-        // Written in, toward its address (the default here).
+        // No address saved: the plugin's default is not the user's word,
+        // so the key is not written in and the header stays out.
+        assert_eq!(
+            fill_secrets("Bearer {{secret:api_key}}", &declared, &stored, to).unwrap(),
+            None
+        );
+        // A required key with no saved address is refused, saying what to
+        // save.
+        let mut required = declared.clone();
+        required[0].required = true;
+        let (status, why) =
+            fill_secrets("Bearer {{secret:api_key}}", &required, &stored, to).unwrap_err();
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert!(why.contains("Save"), "{why}");
+        assert!(!why.contains("sk-1"), "{why}");
+        // The default saved by the user's own click ("Use default") counts.
+        stored.insert("address".into(), json!("https://api.example.com/v1"));
         assert_eq!(
             fill_secrets("Bearer {{secret:api_key}}", &declared, &stored, to).unwrap(),
             Some("Bearer sk-1".into())

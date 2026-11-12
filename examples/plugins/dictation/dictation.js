@@ -256,7 +256,7 @@ async function transcribe(audio, { values, secrets }) {
   if (response.status === 401 || response.status === 403) {
     throw settingsProblem(
       secrets.api_key === 'set'
-        ? 'The transcription service turned the API key down. Check it in Settings.'
+        ? 'The transcription service turned the API key down, or never got it: the key goes only to a Service address you saved (Use default saves the default). Check both in Settings.'
         : 'The transcription service needs an API key. Set it in Settings.',
     )
   }

@@ -222,6 +222,23 @@
   font-size: 12px;
 }
 
+/* "Use default": saves the plugin's default as the user's own value */
+.ps-default {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ps-default:hover,
+.ps-default:focus-visible {
+  color: var(--text-1);
+  text-decoration: underline;
+}
+
 .ps-secret {
   display: flex;
   flex: none;

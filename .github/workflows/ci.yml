@@ -100,9 +100,17 @@ jobs:
       # run here would not mean the workspace lints.
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets --locked -- -D warnings
-      # The e2e suite locates the fixture binary in target/debug; build it
-      # up front so no test ever spawns a nested cargo build under the
-      # target-dir lock.
+      # The e2e suite locates the fixture agent in target/debug; build it
+      # up front so its tests never spawn a nested cargo build under the
+      # target-dir lock. Two suites still build their own helpers once per
+      # test process: the plugin e2e runs `cargo build -p fixture-driver`
+      # (fresh after the workspace build, so quick), and
+      # e2e_plugin_examples builds examples/plugins' own crates into
+      # target/examples (their own target dir and lock) after a
+      # `cargo fetch`; with no network and no local copy of their crates
+      # those tests print "skipped:" and pass, as the text-tools one does
+      # without the wasm32-unknown-unknown target, which this job does not
+      # install.
       - run: cargo build -p fixture-agent --locked
       - run: cargo test --locked
 

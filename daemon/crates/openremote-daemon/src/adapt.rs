@@ -17,7 +17,7 @@ use openremote_core::LOCAL_MARKETPLACE;
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
-use crate::plugins::{PluginError, read_json, relative_inside};
+use crate::plugins::{PluginError, plain_path, read_json, relative_inside};
 
 /// The layout's manifest folder, beside Claude Code's `.claude-plugin`.
 pub const MANIFEST_DIR: &str = ".zcode-plugin";
@@ -106,7 +106,8 @@ impl Plan {
     /// Write the plan into the folder it was made for.
     pub fn apply(&self, dir: &Path) -> Result<(), PluginError> {
         for (relative, content) in &self.writes {
-            let path = dir.join(relative);
+            // Never through a link, whatever the folder holds now.
+            let path = plain_path(dir, relative)?;
             match content {
                 Some(value) => {
                     if let Some(parent) = path.parent() {
@@ -176,11 +177,11 @@ pub fn plan(
     name: Option<&str>,
     marketplace: Option<&str>,
 ) -> Result<Option<Plan>, PluginError> {
-    let Some(alternate) = read_object(&dir.join(MANIFEST_DIR).join("plugin.json"))? else {
+    let Some(alternate) = read_object(dir, &Path::new(MANIFEST_DIR).join("plugin.json"))? else {
         return Ok(None);
     };
     let manifest_path = Path::new(".claude-plugin").join("plugin.json");
-    let claude = read_object(&dir.join(&manifest_path))?;
+    let claude = read_object(dir, &manifest_path)?;
     let text = |m: Option<&Map<String, Value>>| {
         m.and_then(|m| m.get("name"))
             .and_then(Value::as_str)
@@ -220,7 +221,7 @@ pub fn plan(
 
     // Hooks: the standard file, then whatever the manifest names.
     let standard_hooks = Path::new("hooks").join("hooks.json");
-    if let Some(file) = read_object(&dir.join(&standard_hooks))? {
+    if let Some(file) = read_object(dir, &standard_hooks)? {
         match adapt_hooks_file(file.clone(), &ctx, &mut tally) {
             Some(new) if new != file => writes.push((standard_hooks, Some(Value::Object(new)))),
             Some(_) => {}
@@ -234,7 +235,7 @@ pub fn plan(
     }
 
     // MCP servers: the standard file, then whatever the manifest names.
-    if let Some(file) = read_object(&dir.join(".mcp.json"))? {
+    if let Some(file) = read_object(dir, Path::new(".mcp.json"))? {
         match adapt_servers_file(file.clone(), &ctx, &mut tally) {
             Some(new) if new != file => {
                 writes.push((PathBuf::from(".mcp.json"), Some(Value::Object(new))))
@@ -293,7 +294,11 @@ pub fn plan(
 }
 
 /// A JSON file that must hold an object; None when it isn't there.
-fn read_object(path: &Path) -> Result<Option<Map<String, Value>>, PluginError> {
+/// Read through `plain_path`: a file reached through a link is refused,
+/// so the rewrite never reads (or later writes) outside the plugin.
+fn read_object(dir: &Path, relative: &Path) -> Result<Option<Map<String, Value>>, PluginError> {
+    let path = plain_path(dir, relative)?;
+    let path = path.as_path();
     match read_json::<Value>(path)? {
         None => Ok(None),
         Some(Value::Object(map)) => Ok(Some(map)),
@@ -365,13 +370,16 @@ fn claude_paths(key: &str, value: Value, dir: &Path) -> Option<Value> {
             continue;
         }
         let on_disk = dir.join(relative);
-        if !on_disk.exists() {
+        // A path that is (or passes through) a link counts as nothing.
+        let Ok(meta) = plain_path(dir, Path::new(relative))
+            .and_then(|p| std::fs::symlink_metadata(p).map_err(PluginError::from))
+        else {
             continue;
-        }
+        };
         if key == "skills" && relative == "skills" {
             continue;
         }
-        if key == "agents" && on_disk.is_dir() {
+        if key == "agents" && meta.is_dir() {
             let mut files = Vec::new();
             markdown_files(&on_disk, &mut files);
             for file in files {
@@ -395,10 +403,16 @@ fn markdown_files(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
-    let mut paths: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
-    paths.sort();
-    for path in paths {
-        if path.is_dir() {
+    // Never through a link: a folder that links back to itself would
+    // never end.
+    let mut paths: Vec<(PathBuf, std::fs::FileType)> = entries
+        .flatten()
+        .filter_map(|e| e.file_type().ok().map(|kind| (e.path(), kind)))
+        .filter(|(_, kind)| !kind.is_symlink())
+        .collect();
+    paths.sort_by(|a, b| a.0.cmp(&b.0));
+    for (path, kind) in paths {
+        if kind.is_dir() {
             markdown_files(&path, out);
         } else if path.extension().is_some_and(|e| e == "md") {
             out.push(path);
@@ -597,7 +611,7 @@ fn manifest_hooks(
             if !relative_inside(&relative) {
                 return Some(Value::String(path));
             }
-            match read_object(&ctx.dir.join(&relative)) {
+            match read_object(ctx.dir, Path::new(&relative)) {
                 Ok(Some(file)) => match adapt_hooks_file(file.clone(), ctx, tally) {
                     Some(new) => {
                         if new != file {
@@ -790,7 +804,7 @@ fn manifest_servers(
             if !relative_inside(&relative) {
                 return Some(Value::String(path));
             }
-            match read_object(&ctx.dir.join(&relative)) {
+            match read_object(ctx.dir, Path::new(&relative)) {
                 Ok(Some(file)) => match adapt_servers_file(file.clone(), ctx, tally) {
                     Some(new) => {
                         if new != file {

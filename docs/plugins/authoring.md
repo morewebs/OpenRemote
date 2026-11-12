@@ -90,7 +90,9 @@ sees everything a plugin adds before approving it.
   tools and answer its own views. It **runs as you, not sandboxed**, and
   the install screen says so. It gets a cleared environment (only the
   variables protocol.md lists), so it can't count on whatever the daemon
-  was started with.
+  was started with. A harness driver (the `harness` block) is different:
+  it keeps the full environment, as every harness child does
+  ([../harness-plugins.md](../harness-plugins.md), "Install and trust").
 - **`wasm`**: agent tools compiled to WebAssembly, run inside the daemon,
   sandboxed. It sees its own memory and only the host functions its powers
   grant (with `network`, HTTP requests to the public internet). Pick it
@@ -270,14 +272,20 @@ Values the user sets for the plugin, under Settings > Plugins.
 - `label` and `help`: what the user reads.
 - `default`: must fit the type; a secret has none. A text or number
   field shows the default as its placeholder and holds only what the user
-  typed.
+  typed; its **Use default** button saves the default as the user's own
+  value.
 - `options`: an enum's choices, as strings or `{"value", "label"}`.
 - `min`, `max`: a number's bounds.
-- `required`: the plugin doesn't run until it is set; a tool call says
-  which setting is missing.
+- `required`: a process or WASM plugin doesn't run until it is set; a
+  tool call says which setting is missing. It is not enforced for a
+  JavaScript plugin, which checks its own settings (a `required` secret
+  with a `sendTo` is the one exception: see below).
 - `sendTo` (or `send_to`): a secret only, naming a `string` setting that
   holds an address. A JavaScript plugin's request that names the secret
-  goes only to that address or under it ([js-api.md](js-api.md)).
+  goes only to the address the user saved there, or under it. The
+  default never counts: with no saved address the header is left out, or
+  the request is refused when the secret is `required`
+  ([js-api.md](js-api.md)).
 
 The values are kept on each machine, in a file only the user can read.
 Secrets never come back out through the API (only whether they are set)

@@ -223,7 +223,16 @@ test("a project's plugin view opened from somewhere else shows a note, not the v
 
 test('a settings field holds only what the user typed', () => {
   const form = read('PluginSettings.jsx')
-  assert.match(form, /const saved = typedValue\(setting, value\)/)
+  assert.match(form, /const saved = typedValue\(setting, value, isSaved\)/)
   assert.match(form, /placeholder=\{fieldPlaceholder\(setting\)\}/)
-  assert.match(form, /<TextControl setting=\{setting\} value=\{view\.values\?\.\[setting\.key\]\}/)
+  assert.match(form, /<TextControl\s+setting=\{setting\}\s+value=\{view\.values\?\.\[setting\.key\]\}/)
+})
+
+test('a field with a default offers "Use default", which saves it by a click', () => {
+  const form = read('PluginSettings.jsx')
+  assert.match(form, /saved=\{\(view\.saved \?\? \[\]\)\.includes\(setting\.key\)\}/)
+  assert.match(form, /const saved = typedValue\(setting, value, isSaved\)/)
+  assert.match(form, /\{offersDefault\(setting, value, isSaved\) && \(/)
+  assert.match(form, /onClick=\{\(\) => onSave\(\{ \[setting\.key\]: setting\.default \}\)\}/)
+  assert.match(form, />\s*Use default\s*</)
 })

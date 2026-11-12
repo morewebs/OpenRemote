@@ -365,10 +365,22 @@ export function shownValue(setting, values) {
 // What a text or number field holds: only a value the user saved. The
 // daemon answers the plugin's default where none was saved, and that one
 // is left out (the placeholder shows it).
-export function typedValue(setting, value) {
+// `saved`: the daemon says the user saved this value (its `saved` list).
+// A default the user saved by "Use default" is theirs and shows in the
+// field; the default alone stays a placeholder.
+export function typedValue(setting, value, saved = false) {
   if (value == null) return ''
+  if (saved) return String(value)
   if (setting.default != null && value === setting.default) return ''
   return String(value)
+}
+
+// Whether a field offers "Use default": it has a default, and that default
+// is not already what the user saved. Saving it is the user's own word
+// (a key sent only to a saved address goes to it then; never before).
+export function offersDefault(setting, value, saved = false) {
+  if (setting.default == null || setting.default === '') return false
+  return !(saved && value === setting.default)
 }
 
 // A field's placeholder: the plugin's default, else its own hint.

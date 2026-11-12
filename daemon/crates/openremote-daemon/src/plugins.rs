@@ -1014,10 +1014,16 @@ fn markdown_files(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
-    let mut paths: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
-    paths.sort();
-    for path in paths {
-        if path.is_dir() {
+    // Never through a link: a folder that links back to itself would
+    // never end.
+    let mut paths: Vec<(PathBuf, std::fs::FileType)> = entries
+        .flatten()
+        .filter_map(|e| e.file_type().ok().map(|kind| (e.path(), kind)))
+        .filter(|(_, kind)| !kind.is_symlink())
+        .collect();
+    paths.sort_by(|a, b| a.0.cmp(&b.0));
+    for (path, kind) in paths {
+        if kind.is_dir() {
             markdown_files(&path, out);
         } else if path.extension().is_some_and(|e| e == "md") {
             out.push(path);
@@ -1247,6 +1253,7 @@ impl PluginHost {
         std::fs::create_dir_all(&dir)?;
         let outcome = async {
             let resolved = fetch(&request.fetch, &fetched).await?;
+            refuse_links(&fetched)?;
             let root = match &request.fetch {
                 Fetch::Git {
                     subdir: Some(sub), ..
@@ -1570,6 +1577,62 @@ fn file_flat_installs_under_local(root: &Path) {
     }
 }
 
+/// Refuse a fetched plugin that carries a link (a symlink, or on Windows
+/// a junction) anywhere in it. A plugin ships its own files: a link would
+/// let the review read, and the install's rewrites write, a file outside
+/// the plugin (a repo can link its plugin.json to the user's own Claude
+/// settings). Checked right after every fetch, before anything reads the
+/// tree; it never follows a link, so a loop ends it too.
+pub(crate) fn refuse_links(dir: &Path) -> Result<(), PluginError> {
+    let mut pending = vec![dir.to_path_buf()];
+    let mut seen = 0usize;
+    while let Some(folder) = pending.pop() {
+        for entry in std::fs::read_dir(&folder)? {
+            let entry = entry?;
+            seen += 1;
+            if seen > MAX_ENTRIES {
+                return Err(PluginError::Source(format!(
+                    "the plugin has more than {MAX_ENTRIES} files and folders"
+                )));
+            }
+            let path = entry.path();
+            let kind = std::fs::symlink_metadata(&path)?.file_type();
+            if kind.is_symlink() {
+                let shown = path
+                    .strip_prefix(dir)
+                    .unwrap_or(&path)
+                    .display()
+                    .to_string();
+                return Err(PluginError::Invalid(format!(
+                    "the plugin carries a link at {}: a plugin ships its own files, not links to files elsewhere",
+                    shown.replace('\\', "/")
+                )));
+            }
+            if kind.is_dir() {
+                pending.push(path);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// `relative` under `root` for OpenRemote to read or write, refused when
+/// any part of it that exists is a link: a write never lands outside the
+/// plugin, whatever the folder holds.
+pub(crate) fn plain_path(root: &Path, relative: &Path) -> Result<PathBuf, PluginError> {
+    let mut path = root.to_path_buf();
+    for part in relative.components() {
+        path.push(part);
+        if std::fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_symlink()) {
+            return Err(PluginError::Invalid(format!(
+                "{} is a link: a plugin ships its own files, not links to files elsewhere",
+                relative.display().to_string().replace('\\', "/")
+            )));
+        }
+    }
+    Ok(path)
+}
+
 fn has_manifest(dir: &Path) -> bool {
     dir.join("openremote.json").is_file()
         || dir.join(".claude-plugin").join("plugin.json").is_file()
@@ -1817,6 +1880,10 @@ const GIT_NEUTRAL: &[&str] = &[
     "submodule.recurse=false",
     "-c",
     "protocol.ext.allow=never",
+    // A link in a repository checks out as a small file holding its
+    // target, never as a link: a plugin ships files.
+    "-c",
+    "core.symlinks=false",
 ];
 
 /// Fetch one commit of a repository at depth one - the pinned `sha`, else
@@ -1892,6 +1959,9 @@ pub async fn git_fetch(
         }
     }
     let _ = std::fs::remove_dir_all(to.join(".git"));
+    // Checked out without links (core.symlinks=false); checked again, so
+    // a catalog or a plugin from git is read only once it is plain files.
+    refuse_links(to)?;
     Ok(commit)
 }
 
@@ -2302,6 +2372,10 @@ where
     let target = plugin_dir_checked(data_dir, &plugin.marketplace, &plugin.name)?;
     let fresh = root.join(".staging").join(uuid::Uuid::new_v4().to_string());
     copy_in(printed, fresh.clone()).await?;
+    if let Err(e) = refuse_links(&fresh) {
+        let _ = std::fs::remove_dir_all(&fresh);
+        return Err(e);
+    }
     // Rewritten as the install rewrote it, when it is in the sibling layout.
     crate::adapt::adapt(&fresh, Some(&plugin.name), &plugin.marketplace)?;
     // The Claude manifest written at install (from the marketplace entry)
@@ -2457,7 +2531,7 @@ pub fn apply_entry(root: &Path, entry: &Value) -> Result<(), PluginError> {
     let Some(fields) = entry.as_object() else {
         return Ok(());
     };
-    let path = root.join(".claude-plugin").join("plugin.json");
+    let path = plain_path(root, Path::new(".claude-plugin/plugin.json"))?;
     let strict = fields
         .get("strict")
         .and_then(Value::as_bool)
@@ -2547,7 +2621,7 @@ fn as_list(value: Option<&Value>) -> Vec<Value> {
 /// A folder that carries Claude parts with no plugin.json gets a bare one,
 /// so claude's `--plugin-dir` takes the folder as one plugin.
 fn write_bare_claude_manifest(root: &Path, manifest: &Manifest) -> Result<(), PluginError> {
-    let path = root.join(".claude-plugin").join("plugin.json");
+    let path = plain_path(root, Path::new(".claude-plugin/plugin.json"))?;
     if manifest.claude_parts.is_empty() || path.is_file() {
         return Ok(());
     }
@@ -4060,5 +4134,123 @@ mod tests {
         let both = read_manifest(dir.path(), &builtins()).unwrap();
         assert_eq!(both.name, "claude-name");
         assert_eq!(both.version.as_deref(), Some("0.3.0"));
+    }
+    /// A directory link: a junction on Windows (no privilege needed), a
+    /// symlink elsewhere.
+    fn link_dir(link: &Path, target: &Path) {
+        #[cfg(windows)]
+        {
+            let made = std::process::Command::new("cmd")
+                .args(["/C", "mklink", "/J"])
+                .arg(link)
+                .arg(target)
+                .output()
+                .is_ok_and(|o| o.status.success());
+            assert!(made, "mklink /J could not make a junction");
+        }
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(target, link).unwrap();
+    }
+
+    /// A staged plugin whose `.claude-plugin` is a link to a folder outside
+    /// it (say ~/.claude): the sibling-layout rewrite and a marketplace
+    /// entry would both write its plugin.json.
+    fn linked_staging() -> (tempfile::TempDir, tempfile::TempDir) {
+        let outside = folder(&[("plugin.json", r#"{"name": "outside"}"#)]);
+        let staged = folder(&[
+            (
+                ".zcode-plugin/plugin.json",
+                r#"{"name": "linked", "author": "Someone", "skills": "skills"}"#,
+            ),
+            ("skills/x/SKILL.md", "# x"),
+        ]);
+        link_dir(&staged.path().join(".claude-plugin"), outside.path());
+        (staged, outside)
+    }
+
+    #[test]
+    fn a_fetched_plugin_that_carries_a_link_is_refused_before_anything_reads_it() {
+        let (staged, outside) = linked_staging();
+        let why = refuse_links(staged.path()).unwrap_err().to_string();
+        assert!(why.contains("link"), "{why}");
+        // A plain tree passes.
+        let plain = folder(&[("openremote.json", "{}"), ("skills/x/SKILL.md", "# x")]);
+        refuse_links(plain.path()).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(outside.path().join("plugin.json")).unwrap(),
+            r#"{"name": "outside"}"#
+        );
+    }
+
+    #[test]
+    fn the_rewrite_and_a_marketplace_entry_never_write_through_a_link() {
+        let (staged, outside) = linked_staging();
+        let before = std::fs::read(outside.path().join("plugin.json")).unwrap();
+        assert!(crate::adapt::adapt(staged.path(), Some("linked"), "m").is_err());
+        assert!(
+            apply_entry(
+                staged.path(),
+                &json!({"name": "linked", "hooks": {"Stop": []}})
+            )
+            .is_err()
+        );
+        assert_eq!(
+            std::fs::read(outside.path().join("plugin.json")).unwrap(),
+            before
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_linked_manifest_file_is_never_written_through() {
+        let outside = folder(&[("settings.json", r#"{"hooks": {}}"#)]);
+        let staged = folder(&[(
+            ".zcode-plugin/plugin.json",
+            r#"{"name": "linked", "author": "Someone"}"#,
+        )]);
+        std::fs::create_dir_all(staged.path().join(".claude-plugin")).unwrap();
+        std::os::unix::fs::symlink(
+            outside.path().join("settings.json"),
+            staged.path().join(".claude-plugin/plugin.json"),
+        )
+        .unwrap();
+        assert!(refuse_links(staged.path()).is_err());
+        assert!(crate::adapt::adapt(staged.path(), Some("linked"), "m").is_err());
+        assert!(apply_entry(staged.path(), &json!({"name": "linked", "skills": ["./x"]})).is_err());
+        assert_eq!(
+            std::fs::read_to_string(outside.path().join("settings.json")).unwrap(),
+            r#"{"hooks": {}}"#
+        );
+    }
+
+    #[test]
+    fn a_folder_that_links_back_to_itself_ends_every_walk() {
+        let dir = folder(&[
+            (
+                ".zcode-plugin/plugin.json",
+                r#"{"name": "loop", "agents": "agents"}"#,
+            ),
+            ("agents/a.md", "# a"),
+        ]);
+        link_dir(
+            &dir.path().join("agents").join("again"),
+            &dir.path().join("agents"),
+        );
+        assert!(refuse_links(dir.path()).is_err());
+        let mut found = Vec::new();
+        markdown_files(dir.path(), &mut found);
+        assert_eq!(found, vec![dir.path().join("agents").join("a.md")]);
+        // The rewrite lists the agents it finds without following the loop.
+        let _ = crate::adapt::plan(dir.path(), None, None);
+    }
+
+    #[test]
+    fn git_never_checks_out_a_link() {
+        assert!(
+            GIT_NEUTRAL
+                .windows(2)
+                .any(|w| w == ["-c", "core.symlinks=false"]),
+            "{GIT_NEUTRAL:?}"
+        );
     }
 }
