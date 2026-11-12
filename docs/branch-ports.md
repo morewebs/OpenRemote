@@ -61,6 +61,12 @@ recorded as dropped below.
 | Plugin scopes and Global sync: Machine, Project-local, Project (files in the repo, run only while they hash to what was approved) and Global; a project's plugin rides only its chats; a Global record from another device is listed for review and installs nothing on its own; `/sync/plugins` peer routes; the console's scope picker and review lists | br-plugins 7f75c88 (`scope.rs`, `global.rs`, `install.rs`, the store's Global records), 496492c | db89194, 06c0377, a8c1d16 |
 | JavaScript UI plugins: console-only routes for a plugin's frame (the chat calls through the runtime's own gate, `fetch` with secrets written in toward their `sendTo` and the internet only), a project's plugin kept to its project's chats, frames sandboxed to scripts alone behind a source-and-origin message gate, the bridge, the CSP's own origins, composer buttons that write only after a click, plugin views as panes and sidebar tiles, Settings > Plugins | br-plugin-ui 78a7035, 64ee1bb, c3608f7, 6e475bd, 029bfbe, 1a54693, b23ee91, 4b92891 | fb718f9, f88d32d |
 | Plugins in a sibling layout (built from Claude Code's): rewritten for Claude Code at install, the review's "Adapted" and "Left out" lists, top-level catalogs with `pluginRoot`, zip downloads pinned by sha256 and unpacked from one folder, `Http::download` | br-zcode eafd691, 4e0909e, 740c90a, a001753, 2272b68 | 1b7b303 |
+| Claude Code's conversation store: folder key, carry a conversation beside a new folder | br-chatmove ca3dc19 | 76d5729 |
+| A moved chat's conversation follows (claude copy, codex cwd on resume) or is carried into the next message | br-chatmove 00fe153 (carry), c11841c | 4990af6 |
+| Peers move a chat on the machine that runs it (`/sessions/{id}/workspace` forwarded and at the Chat tier) | br-chatmove 00fe153 (peer routes) | b5195a3 |
+| Context-menu submenus | br-chatmove 4d9e2c8 | 7c4271b |
+| Console `moveChat`, the move rules, the ask-first preference | br-chatmove f24a570, c11841c (console) | ccdc34e |
+| Drag a chat onto a project, the move confirm, pane-menu submenu, Settings > Confirmations | br-chatmove 6bd13e6 | 67ef0c3 |
 | Plugin docs (`docs/plugins/`: protocol, authoring, JS API) written for what this OpenRemote does; the toy example as one compiled program (tools and a JSON-lines harness driver); dictation's local server only at a typed address; an e2e that installs and runs the examples; the Freebuff plan in `docs/plans/` | br-plugins 03499db, 56e78fb, 76d1eaf; br-plugin-ui 2db6a60, ee8e0ec, 5a16093, 7b9b120; br-freebuff-tui f9629f6 | 76210ef |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
@@ -86,6 +92,21 @@ tag keeps it.
 | 01aee56 | Restore when agents opened tabs first | ported (f9c17fd) |
 | f118e43 | Bookmarks bar picture ahead | in main |
 | 52705e9 | Picture ahead on address focus and the star | ported (4862afa) |
+
+### Ready to delete: br-chatmove
+
+Every br-chatmove commit (head c11841c; kept as `archive/br-chatmove`) is
+ported. Main's own move (5a73d51 route, 5ec192b row-menu picker) wins where
+both exist. The branch is not deleted here.
+
+| Commit | What | State |
+|---|---|---|
+| ca3dc19 | claude conversation store and carry | ported (76d5729), unchanged |
+| 00fe153 | Move route, carry, peer serving | route in main (5a73d51); carry ported (4990af6) onto main's `move_chat` in `supervisor/carry.rs`, not the branch's `relocate.rs`; peer route and forward ported (b5195a3) at main's Chat tier, refusals tested |
+| 4d9e2c8 | Context-menu submenus | ported (7c4271b), keeping main's focus hand-back; rules in `context-menu.js` |
+| f24a570 | Console `moveChat`, rules, preference | ported (ccdc34e) |
+| 6bd13e6 | Drag, menus, confirm, Settings | ported (67ef0c3): the confirm uses `useDialog` and `errorCopy`, Confirmations is in `settings-search.js`; main's picker stays in the row menu; the pointer drag (`useChatDrag`) is obsolete, since main's rows already drag as chat drags and a project head takes that drop; the chat-header menu is obsolete (main's pane header has none; the pane's right-click menu carries the submenu) |
+| c11841c | "starting" with a harness up moves | daemon half in main (5a73d51's `refuse_busy`); console half ported (ccdc34e) |
 
 ### Ready to delete: br-plugins, br-plugin-ui, br-freebuff-tui, br-zcode
 
@@ -138,7 +159,7 @@ br-zcode: its own commits are eafd691, 4e0909e, a001753, 740c90a and
 (a439843, 5dab5b5, 8082760, 2a200b2, 5d0b84f, 37e9450, 23bc1b5) and each is
 still on the branch it came from: br-plugins and br-plugin-ui (above),
 br-console (above), br-android, br-images and browser (the Browser list
-below), br-chatmove (br-chatmove remainder below) and br-updater (c978b92).
+below), br-chatmove (above) and br-updater (c978b92).
 Deleting br-zcode loses none of them.
 
 ## To port
@@ -189,8 +210,6 @@ main, or obsolete:
 - br-updater: rewire into main's `publish` job (signatures staged at the root,
   `latest.json` written by publish, no separate job); stop the daemon before
   the installer runs.
-- br-chatmove remainder: Claude conversation carry and codex cwd resume, peer
-  serving of `/workspace`, context-menu submenus, drag and confirm.
 - br-chatctl: redesign against main's `PermissionWord` model; take the codex
   `never` sandbox and `OPENCODE_PERMISSION` fixes first.
 - br-accounts, br-teleport: design references only.
