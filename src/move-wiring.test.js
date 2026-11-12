@@ -57,3 +57,16 @@ test('Settings > Confirmations turns the asking back on', () => {
   assert.match(settings, /checked=\{prefs\.ask_move_chat\}/)
   assert.match(settings, /setPref\(\{ ask_move_chat: !prefs\.ask_move_chat \}\)/)
 })
+
+test('"Don\'t show this again" is kept only once the move has landed', () => {
+  const confirm = modal.slice(modal.indexOf('const confirm = async'), modal.indexOf('const name ='))
+  const moved = confirm.indexOf('await moveChat(')
+  const kept = confirm.indexOf('if (skip) setAskBeforeMove(false)')
+  assert.ok(moved >= 0 && kept > moved, 'a refused move leaves the asking on')
+})
+
+test('the API\'s rename and move each carry their own comment', () => {
+  const api = read('api/daemon.js')
+  assert.match(api, /\/\/ Rename a chat \(the composer's \/rename\)\.\r?\n\s*rename\(id, title\)/)
+  assert.match(api, /never by a folder\.[^\n]*\r?\n(\s*\/\/[^\n]*\r?\n)*\s*moveChat\(id, projectId = null\)/)
+})

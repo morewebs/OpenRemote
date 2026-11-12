@@ -73,9 +73,10 @@ const ROWS = [
 
   row('appearance-density', 'appearance', 'Compact density', 'Pulls the rows and gutters in.', ['spacing', 'layout', 'comfortable']),
   row('appearance-motion', 'appearance', 'Reduce motion', 'Stops the running-dot breathe and picker transitions.', ['animation', 'accessibility', 'transition']),
-  row('confirmations-move', 'confirmations', 'Ask before moving a chat', 'A move to another project asks first, with what changes.', ['move', 'project', 'confirm', 'dialog', "don't show", 'ask', 'folder', 'drag']),
-
   row('appearance-privacy', 'appearance', 'Privacy mode', 'Blurs titles, paths, and the transcript for recordings.', ['blur', 'recording', 'stream', 'hide', 'screen']),
+
+  // Confirmations: what the console asks before it acts on a chat.
+  row('confirmations-move', 'confirmations', 'Ask before moving a chat', 'A move to another project asks first, with what changes.', ['move', 'project', 'confirm', 'dialog', "don't show", 'ask', 'folder', 'drag']),
 
   row('startup-reopen', 'startup', 'Reopen', 'The view you left, or always New chat.', ['startup', 'last view', 'new chat', 'boot']),
   row('startup-launch', 'startup', 'Launch at login', 'Starts OpenRemote when you sign in to this computer.', ['autostart', 'boot', 'windows']),

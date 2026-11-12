@@ -184,22 +184,42 @@ fn same_bytes(a: &Path, b: &Path) -> std::io::Result<bool> {
     }
 }
 
-/// Copy to a name claude never reads, then rename into place: claude never
+/// Copy to a name claude never reads, then put it in place: claude never
 /// meets a half-written conversation, and a target that appeared meanwhile
-/// is not overwritten.
+/// is never overwritten.
 fn copy_new(source: &Path, target: &Path) -> std::io::Result<()> {
+    let partial = stage(source, target)?;
+    place(&partial, target)
+}
+
+/// The whole copy, under a name claude never reads.
+fn stage(source: &Path, target: &Path) -> std::io::Result<PathBuf> {
     let partial = target.with_extension("jsonl.openremote-copy");
     fs::copy(source, &partial)?;
-    if target.exists() {
-        let _ = fs::remove_file(&partial);
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::AlreadyExists,
-            "the conversation appeared there meanwhile",
-        ));
-    }
-    fs::rename(&partial, target).inspect_err(|_| {
-        let _ = fs::remove_file(&partial);
-    })
+    Ok(partial)
+}
+
+/// Put the finished copy at `target` in one step that fails, rather than
+/// overwrites, when a file is already there: a hard link is created whole
+/// or not at all and never replaces a file (a rename would). The partial
+/// name goes either way. A volume without hard links gets the file written
+/// through `create_new`, which still refuses a file already there.
+fn place(partial: &Path, target: &Path) -> std::io::Result<()> {
+    let linked = fs::hard_link(partial, target);
+    let placed = match linked {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Err(e),
+        Err(_) => fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(target)
+            .and_then(|mut out| {
+                let mut from = fs::File::open(partial)?;
+                std::io::copy(&mut from, &mut out).map(|_| ())
+            }),
+    };
+    let _ = fs::remove_file(partial);
+    placed
 }
 
 #[cfg(test)]
@@ -268,6 +288,37 @@ mod tests {
         assert_eq!(fs::read_to_string(&copy).unwrap(), "{\"a\":1}\n");
         // Never a path for an id.
         assert!(carry(&root, "../x", &folder).is_err());
+        let _ = fs::remove_dir_all(&root);
+    }
+    #[test]
+    fn a_conversation_that_appears_before_the_copy_lands_is_never_overwritten() {
+        let root = std::env::temp_dir().join(format!(
+            "or-claude-race-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or_default()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let source = root.join("source.jsonl");
+        let target = root.join("target.jsonl");
+        fs::write(&source, "{\"ours\":1}\n").unwrap();
+        let partial = stage(&source, &target).unwrap();
+        // claude writes the conversation there between the copy and the
+        // final step: the final step must leave it alone.
+        fs::write(&target, "{\"claudes\":1}\n").unwrap();
+        let placed = place(&partial, &target);
+        assert_eq!(
+            placed.map_err(|e| e.kind()),
+            Err(std::io::ErrorKind::AlreadyExists)
+        );
+        assert_eq!(fs::read_to_string(&target).unwrap(), "{\"claudes\":1}\n");
+        assert!(!partial.exists(), "the partial copy is cleaned up");
+        // With nothing in the way, the copy lands whole.
+        fs::remove_file(&target).unwrap();
+        copy_new(&source, &target).unwrap();
+        assert_eq!(fs::read_to_string(&target).unwrap(), "{\"ours\":1}\n");
         let _ = fs::remove_dir_all(&root);
     }
 }

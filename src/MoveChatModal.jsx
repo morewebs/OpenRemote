@@ -40,11 +40,12 @@ export default function MoveChatModal({ move, failure = null, onMoved, onClose }
   const blocked = busyReason(status)
 
   const confirm = async () => {
-    if (skip) setAskBeforeMove(false)
     setBusy(true)
     setError(null)
     try {
       await moveChat(chat.id, to?.id ?? null)
+      // Kept only once the move landed: a refused move leaves the asking on.
+      if (skip) setAskBeforeMove(false)
       onMoved?.(move)
       onClose()
     } catch (err) {

@@ -528,7 +528,6 @@ export class DaemonApi {
     return mime && bytes.type !== mime ? new Blob([bytes], { type: mime }) : bytes
   }
 
-  // Rename a chat (the composer's /rename).
   // Move a chat into one of its machine's projects, named by id, or out of
   // every project with `projectId` null - never by a folder. A running
   // harness restarts in the new folder: the boot budget, like resume. A
@@ -542,6 +541,7 @@ export class DaemonApi {
     )
   }
 
+  // Rename a chat (the composer's /rename).
   rename(id, title) {
     return this.call('POST', `/sessions/${seg(id)}/title`, { request_id: newRequestId(), title })
   }

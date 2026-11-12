@@ -92,6 +92,18 @@ fn moving_chats() -> &'static StdMutex<std::collections::HashSet<SessionId>> {
     MOVING.get_or_init(Default::default)
 }
 
+/// A chat that is being moved stays put until the move ends: a resume or a
+/// steer would start its harness in the folder it is leaving, and the move's
+/// own restart would then fail on top of it.
+fn refuse_moving(id: &SessionId) -> Result<(), SupervisorError> {
+    if lock_recovering(moving_chats()).contains(id) {
+        return Err(SupervisorError::Conflict(
+            "this chat is being moved to another project - try again in a moment".into(),
+        ));
+    }
+    Ok(())
+}
+
 /// A chat's place in [`moving_chats`], given back however its move ends.
 struct Moving(SessionId);
 
@@ -2435,6 +2447,13 @@ impl Supervisor {
     /// (claude `--resume=<id>`, codex `thread/resume`, pi `--session`, …).
     pub async fn resume(self: &Arc<Self>, id: &SessionId) -> Result<Session, SupervisorError> {
         self.ensure_here(id)?;
+        refuse_moving(id)?;
+        self.resume_here(id).await
+    }
+
+    /// The resume itself, for the move that holds the chat's move slot and
+    /// restarts it in the new folder.
+    async fn resume_here(self: &Arc<Self>, id: &SessionId) -> Result<Session, SupervisorError> {
         let session = self.session(id)?;
         if session.status.is_alive() {
             return Err(SupervisorError::Conflict(format!(
@@ -2611,7 +2630,7 @@ impl Supervisor {
             ],
         )?;
         if live {
-            if let Err(err) = self.resume(id).await {
+            if let Err(err) = self.resume_here(id).await {
                 // The move stands: the chat says why it could not start in the
                 // new folder, and Resume tries again.
                 let _ = self.emit_all(
@@ -2879,6 +2898,7 @@ impl Supervisor {
         images: &[ImageRef],
     ) -> Result<(), SupervisorError> {
         self.ensure_here(id)?;
+        refuse_moving(id)?;
         if !self.session(id)?.status.is_alive() {
             self.resume(id).await?;
         }
@@ -2945,6 +2965,7 @@ impl Supervisor {
         id: &SessionId,
     ) -> Result<Session, SupervisorError> {
         self.ensure_here(id)?;
+        refuse_moving(id)?;
         if !self.session(id)?.status.is_alive() {
             self.resume(id).await?;
         }
@@ -3689,6 +3710,64 @@ mod tests {
             },
         );
         (supervisor, id)
+    }
+
+    #[tokio::test]
+    async fn a_resume_or_steer_mid_move_is_refused_and_the_slot_freed_lets_it_through() {
+        let supervisor = supervisor();
+        let session = Session {
+            id: SessionId::new(),
+            harness: "claude".into(),
+            workspace: None,
+            status: SessionStatus::Stopped,
+            model: None,
+            endpoint_id: None,
+            effort: None,
+            permission_mode: None,
+            harness_session_ref: Some("c-1".into()),
+            created_at: now_ms(),
+            updated_at: now_ms(),
+            last_error: None,
+            next_turn: 1,
+            fast: false,
+            approved_tools: Vec::new(),
+            executor: None,
+            title: None,
+            queue: Vec::new(),
+            queue_paused: false,
+            mentioned_chats: Vec::new(),
+            carry_transcript: None,
+            parent: None,
+        };
+        let id = session.id;
+        supervisor
+            .emit_all(&id, vec![EventPayload::SessionCreated { session }])
+            .expect("session created");
+        let slot = {
+            lock_recovering(moving_chats()).insert(id);
+            Moving(id)
+        };
+        let moving = |result: Result<(), SupervisorError>, what: &str| match result {
+            Err(SupervisorError::Conflict(words)) => {
+                assert!(words.contains("being moved"), "{what}: {words}")
+            }
+            other => panic!("{what} mid-move must be refused: {other:?}"),
+        };
+        moving(supervisor.resume(&id).await.map(|_| ()), "resume");
+        moving(supervisor.steer(&id, "hi").await.map(|_| ()), "steer");
+        moving(
+            supervisor.queue_resume(&id).await.map(|_| ()),
+            "queue resume",
+        );
+        // Once the move is over, the same resume gets past the move check
+        // (and on to the harness, which this test has none of).
+        drop(slot);
+        match supervisor.resume(&id).await {
+            Err(SupervisorError::Conflict(words)) => {
+                assert!(!words.contains("being moved"), "{words}")
+            }
+            _ => {}
+        }
     }
 
     /// A claude driver over a process that is gone: spawned through the

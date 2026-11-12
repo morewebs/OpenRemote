@@ -268,3 +268,13 @@ test('asking before a chat moves is found by the words a person would use', () =
     )
   }
 })
+
+test('the Confirmations row sits in its own block, not among Appearance', () => {
+  // A row filed among another tab's rows is one the next reader misses.
+  const together = (section) => {
+    const at = SETTINGS_ENTRIES.map((e, i) => (e.section === section && e.key !== section ? i : -1)).filter((i) => i >= 0)
+    return at.length > 0 && at.at(-1) - at[0] === at.length - 1
+  }
+  assert.ok(together('appearance'), 'the Appearance rows are one run')
+  assert.ok(together('confirmations'), 'the Confirmations rows are one run')
+})
