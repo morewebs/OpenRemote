@@ -31,7 +31,7 @@ pub enum Backend {
     Agy(openremote_agy::Resolution),
     /// A harness an installed plugin provides. Its spec names the driver to
     /// spawn; the plugin owns everything the driver does.
-    Plugin(PluginBackend),
+    Plugin(Box<PluginBackend>),
 }
 
 /// The plugin side of a backend: the harness spec, as the plugin declared it.
@@ -665,7 +665,8 @@ impl HarnessRegistry {
                     models_captured_at: spec.models_captured_at,
                     settings_live: spec.settings_live,
                 },
-                backend: available.then(|| Backend::Plugin(PluginBackend { spec: spec.clone() })),
+                backend: available
+                    .then(|| Backend::Plugin(Box::new(PluginBackend { spec: spec.clone() }))),
             });
         }
 

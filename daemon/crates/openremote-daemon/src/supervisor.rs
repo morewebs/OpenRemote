@@ -2173,7 +2173,7 @@ impl Supervisor {
         };
         // A change that fails validation or the store write holds nothing.
         let updated = self.store_settings(id, settings)?;
-        lock_recovering(prior_live_settings()).insert(id.clone(), prior.clone());
+        lock_recovering(prior_live_settings()).insert(*id, prior.clone());
         let written = entry.driver.lock().await.apply_settings(live).await;
         if let Err(error) = written {
             forget_live_settings(id);
@@ -3853,11 +3853,8 @@ mod tests {
         // Once the move is over, the same resume gets past the move check
         // (and on to the harness, which this test has none of).
         drop(slot);
-        match supervisor.resume(&id).await {
-            Err(SupervisorError::Conflict(words)) => {
-                assert!(!words.contains("being moved"), "{words}")
-            }
-            _ => {}
+        if let Err(SupervisorError::Conflict(words)) = supervisor.resume(&id).await {
+            assert!(!words.contains("being moved"), "{words}")
         }
     }
 

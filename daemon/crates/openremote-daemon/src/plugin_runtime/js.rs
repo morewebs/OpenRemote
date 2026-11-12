@@ -84,29 +84,32 @@ fn bad(status: StatusCode, message: &str) -> Response {
 }
 
 /// The installed JavaScript plugin an id names, on, with its files still
-/// what was approved.
-fn js_plugin(app: &App, id: &str) -> Result<InstalledPlugin, Response> {
-    let plugin = app
-        .plugin_runtime
-        .plugin(id)
-        .ok_or_else(|| bad(StatusCode::NOT_FOUND, &format!("{id} is not installed")))?;
+/// what was approved. The refusal is boxed: a Response is large, and the
+/// Ok side is the common one.
+fn js_plugin(app: &App, id: &str) -> Result<InstalledPlugin, Box<Response>> {
+    let plugin = app.plugin_runtime.plugin(id).ok_or_else(|| {
+        Box::new(bad(
+            StatusCode::NOT_FOUND,
+            &format!("{id} is not installed"),
+        ))
+    })?;
     if plugin.runtime != Runtime::Js {
-        return Err(bad(
+        return Err(Box::new(bad(
             StatusCode::NOT_FOUND,
             &format!("{} does not run in the console", plugin.name),
-        ));
+        )));
     }
     if !plugin.enabled {
-        return Err(bad(
+        return Err(Box::new(bad(
             StatusCode::FORBIDDEN,
             &format!("{} is turned off", plugin.name),
-        ));
+        )));
     }
     if !app.plugin_runtime.approved(&plugin) {
-        return Err(bad(
+        return Err(Box::new(bad(
             StatusCode::CONFLICT,
             "its files in the project changed since you approved them; review it again under Plugins",
-        ));
+        )));
     }
     Ok(plugin)
 }
@@ -130,7 +133,7 @@ async fn call(
 ) -> Response {
     let plugin = match js_plugin(&app, &id) {
         Ok(plugin) => plugin,
-        Err(refused) => return refused,
+        Err(refused) => return *refused,
     };
     if !BRIDGE_METHODS.contains(&body.method.as_str()) {
         return bad(
@@ -344,7 +347,7 @@ async fn fetch(
 ) -> Response {
     let plugin = match js_plugin(&app, &id) {
         Ok(plugin) => plugin,
-        Err(refused) => return refused,
+        Err(refused) => return *refused,
     };
     if !plugin.powers.contains(&PluginPower::Network) {
         return bad(

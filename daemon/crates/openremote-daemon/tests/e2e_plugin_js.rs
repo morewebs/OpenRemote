@@ -351,7 +351,7 @@ async fn the_frames_routes_answer_this_devices_console_only() {
             .unwrap();
         let response = peer.clone().oneshot(request).await.unwrap();
         assert!(
-            matches!(response.status().as_u16(), 403 | 404 | 405),
+            matches!(response.status().as_u16(), 403..=405),
             "{path}: {}",
             response.status()
         );
