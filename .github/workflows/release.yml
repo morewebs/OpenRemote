@@ -310,7 +310,11 @@ jobs:
         if: steps.build.outputs.skip != '1'
       # With the updater signing key in the secrets, the build also signs the
       # installers for in-app updates (a .sig beside each); without it, the
-      # build is exactly as before. The key is read from the secrets only.
+      # build is exactly as before. The key is read from the secrets only, and
+      # never on a manual run: workflow_dispatch can build any branch, and a
+      # signed build of unreviewed code is an update the app would accept. A
+      # build that had the key and made no signature fails here, rather than
+      # shipping a release the app cannot update to.
       - name: tauri build
         if: steps.build.outputs.skip != '1'
         run: |
@@ -320,9 +324,13 @@ jobs:
           else
             npx tauri build
           fi
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ] && ! compgen -G 'src-tauri/target/release/bundle/nsis/*.exe.sig' > /dev/null; then
+            echo "::error::the signing key was set but the build made no update signature (src-tauri/target/release/bundle/nsis/*.exe.sig)"
+            exit 1
+          fi
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ github.event_name != 'workflow_dispatch' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.event_name != 'workflow_dispatch' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
       # Tauri embeds the version in the artifact names
       # (OpenRemote_0.1.0_x64_en-US.msi, OpenRemote_0.1.0_x64-setup.exe),
       # so the globs stay version-proof. Each bundle is staged twice: under
@@ -444,9 +452,13 @@ jobs:
           else
             npx tauri build --bundles appimage,deb
           fi
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ] && ! compgen -G 'src-tauri/target/release/bundle/appimage/*.AppImage.sig' > /dev/null; then
+            echo "::error::the signing key was set but the build made no update signature (src-tauri/target/release/bundle/appimage/*.AppImage.sig)"
+            exit 1
+          fi
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ github.event_name != 'workflow_dispatch' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.event_name != 'workflow_dispatch' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
       # The version-free names ride beside the versioned ones, the way
       # the Windows job stages them.
       - name: stage the Linux installers
@@ -690,9 +702,13 @@ jobs:
           else
             npx tauri build --target universal-apple-darwin --bundles app,dmg
           fi
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ] && ! compgen -G 'src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig' > /dev/null; then
+            echo "::error::the signing key was set but the build made no update signature (src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig)"
+            exit 1
+          fi
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ github.event_name != 'workflow_dispatch' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.event_name != 'workflow_dispatch' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
       - name: check the bundle
         if: steps.build.outputs.skip != '1'
         run: |
@@ -892,14 +908,15 @@ jobs:
             echo "::warning::${TAG} has no ${name}, so the npm channel will not offer this release"
           done
 
-          # The in-app updater's latest.json, for a stable tag only: the app
-          # reads `releases/latest`, which a nightly never becomes. It is
+          # The in-app updater's latest.json, for a stable version tag only
+          # (vX.Y.Z): the app reads `releases/latest`, which neither a nightly
+          # nor a pre-release may steer. It is
           # written from the signatures the platform jobs staged at the
           # release root (with any a partial release of this tag already
           # carries), for the installers this release really has, and it goes
           # out in the same create or upload as they do. A release built
           # without the signing key has no signatures and gets no latest.json.
-          if [ "$TAG" != "nightly" ]; then
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             mkdir -p sigs
             for name in OpenRemote-Setup-x64.exe OpenRemote-x86_64.AppImage \
                         OpenRemote-universal.app.tar.gz; do
@@ -915,6 +932,13 @@ jobs:
               node scripts/updater-manifest.mjs "$TAG" "$GITHUB_REPOSITORY" sigs > latest.json
               cat latest.json
               assets+=(latest.json)
+            elif [ -n "$existing" ] && grep -qxF latest.json <<< "$existing"; then
+              # A re-run without the key over a release that was signed: its
+              # latest.json would describe installers this run is replacing.
+              # Refused rather than repaired: nothing is deleted from a live
+              # release by this job; re-run with the key in the secrets.
+              echo "publish: ${TAG} already has latest.json but this run has no update signatures; nothing was published" >&2
+              exit 1
             else
               echo "publish: no signed updates in ${TAG} (no signing key yet), so no latest.json"
             fi

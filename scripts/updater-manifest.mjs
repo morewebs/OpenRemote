@@ -27,7 +27,9 @@ export const UPDATE_ASSETS = {
 /// The manifest for `tag`, from `sigs` ({ asset name: signature text }).
 /// Throws on anything that would make a manifest point somewhere else.
 export function updaterManifest({ tag, repo, sigs, notes = '', date = new Date() }) {
-  const version = /^v(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/.exec(tag ?? '')?.[1]
+  // A stable version only: latest.json sits at releases/latest, so a
+  // pre-release named here would be offered to every installed copy.
+  const version = /^v(\d+\.\d+\.\d+)$/.exec(tag ?? '')?.[1]
   if (!version) throw new Error(`not a stable version tag: ${tag}`)
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo ?? '')) throw new Error(`not an owner/repo: ${repo}`)
   const platforms = {}

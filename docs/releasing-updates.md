@@ -42,9 +42,18 @@ release root beside the version-free installer it signs:
 `OpenRemote-Setup-x64.exe.sig`, `OpenRemote-x86_64.AppImage.sig`, and the macOS
 app archive `OpenRemote-universal.app.tar.gz` with its `.sig`. The `publish`
 job writes `latest.json` from them (`scripts/updater-manifest.mjs`) for a stable
-tag and ships it in the same release as the installers. The nightly carries the
-signatures but no `latest.json`: the app reads `releases/latest`, which a
-nightly never becomes.
+version tag (`vX.Y.Z`, no pre-release suffix) and ships it in the same release
+as the installers. The nightly and a pre-release tag carry the signatures but no
+`latest.json`: the app reads `releases/latest`, which neither may steer.
+
+- A manual run (workflow_dispatch) never gets the key, so a build of any
+  branch is never signed.
+- A build that had the key and made no signature fails its job.
+- A stable re-run without signatures, over a release that already has a
+  `latest.json`, is refused before anything is published. Nothing is deleted
+  from a live release; re-run with the key in the secrets.
+- The shell installs one update at a time; a second click while one runs is
+  refused.
 
 ## Proving it
 

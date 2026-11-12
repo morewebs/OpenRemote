@@ -39,6 +39,9 @@ test('a manifest that could point elsewhere is refused', () => {
   const sigs = { 'OpenRemote-Setup-x64.exe': 's' }
   assert.throws(() => updaterManifest({ tag: 'nightly', repo: 'morewebs/OpenRemote', sigs }), /stable version tag/)
   assert.throws(() => updaterManifest({ tag: 'v1.2', repo: 'morewebs/OpenRemote', sigs }), /stable version tag/)
+  // A pre-release is never offered as an update: releases/latest would serve
+  // it to every stable install.
+  assert.throws(() => updaterManifest({ tag: 'v1.2.3-rc.1', repo: 'morewebs/OpenRemote', sigs }), /stable version tag/)
   assert.throws(() => updaterManifest({ tag: 'v1.2.3', repo: 'evil.com/x/y', sigs }), /owner\/repo/)
   assert.throws(() => updaterManifest({ tag: 'v1.2.3', repo: 'a/b', sigs: { 'OpenRemote-Setup-x64.exe': ' ' } }), /empty/)
 })
@@ -51,11 +54,36 @@ test('the platform jobs stage each signature at the release root beside its inst
     assert.ok(wf.includes(` ${name}.sig\n`), `${name}.sig is staged`)
     assert.ok(wf.includes(`\n            ${name}.sig\n`), `${name}.sig rides in the artifact`)
   }
-  // The key comes from the secrets and nowhere else, and only switches signing on.
+  // The key comes from the secrets and nowhere else, only switches signing on,
+  // and never reaches a manual run: a workflow_dispatch can build any branch,
+  // and a signed build of unreviewed code is an update the app would accept.
   const keyLines = wf.split('\n').filter((l) => /^\s+TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)?:/.test(l))
   assert.equal(keyLines.length, 6, 'three builds, two secrets each')
-  for (const line of keyLines) assert.match(line, /\$\{\{ secrets\.TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)? \}\}$/)
+  for (const line of keyLines) {
+    assert.match(
+      line,
+      /: \$\{\{ github\.event_name != 'workflow_dispatch' && secrets\.TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)? \|\| '' \}\}$/,
+    )
+  }
   assert.equal((wf.match(/createUpdaterArtifacts":true/g) ?? []).length, 3)
+})
+
+test('a build that had the key and made no signature fails its job', () => {
+  const wf = read('../.github/workflows/release.yml')
+  // Each signed build checks its own signature in the same step, while the
+  // key is still in its env: a silent skip would ship a release the app
+  // cannot update to.
+  const builds = wf.split('      - name: tauri build\n').slice(1).map((b) => b.slice(0, b.indexOf('\n      - ')))
+  assert.equal(builds.length, 3)
+  const wanted = [
+    'src-tauri/target/release/bundle/nsis/*.exe.sig',
+    'src-tauri/target/release/bundle/appimage/*.AppImage.sig',
+    'src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig',
+  ]
+  builds.forEach((step, i) => {
+    assert.ok(step.includes(`compgen -G '${wanted[i]}' > /dev/null`), `build ${i} checks ${wanted[i]}`)
+    assert.match(step, /no update signature[^\n]*\n\s+exit 1/, `build ${i} fails without it`)
+  })
 })
 
 test('publish writes latest.json in the same release, and there is no separate job', () => {
@@ -68,8 +96,23 @@ test('publish writes latest.json in the same release, and there is no separate j
   // Written before the release goes out, so latest.json is never a step behind.
   assert.ok(publish.indexOf('> latest.json') < publish.indexOf('gh release create nightly'))
   assert.ok(publish.indexOf('> latest.json') < publish.indexOf('gh release create "$TAG"'))
-  // Only for a stable tag: the app reads releases/latest, never the nightly.
-  assert.match(publish, /if \[ "\$TAG" != "nightly" \]; then\n\s+mkdir -p sigs/)
+  // Only for a stable version tag: the app reads releases/latest, never the
+  // nightly and never a pre-release. The gate's own pattern is run here.
+  const gate = /if \[\[ "\$TAG" =~ (\^[^ ]+\$) \]\]; then\n\s+mkdir -p sigs/.exec(publish)
+  assert.ok(gate, 'publish gates latest.json on a version pattern')
+  const stable = new RegExp(gate[1])
+  assert.ok(stable.test('v1.2.3') && stable.test('v10.20.30'))
+  for (const tag of ['nightly', 'v1.2.3-rc.1', 'v1.2.3-beta', 'v1.2', '1.2.3', 'v1.2.3.4']) {
+    assert.ok(!stable.test(tag), `${tag} gets no latest.json`)
+  }
+  // A stable re-run with no signatures, over a release that already has a
+  // latest.json, refuses instead of shipping installers that latest.json does
+  // not describe (and deletes nothing from a live release).
+  const refuse = publish.indexOf('already has latest.json')
+  assert.ok(refuse > 0, 'the stale latest.json case is named')
+  assert.match(publish.slice(refuse - 400, refuse + 200), /grep -qxF latest\.json <<< "\$existing"[\s\S]*exit 1/)
+  assert.ok(refuse < publish.indexOf('gh release create "$TAG"'), 'refused before anything is published')
+  assert.doesNotMatch(publish, /delete-asset/)
   // The signatures and the macOS archive are among the files publish ships.
   assert.match(publish, /-o -name '\*\.app\.tar\.gz' -o -name '\*\.sig'/)
 })

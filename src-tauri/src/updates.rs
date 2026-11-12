@@ -8,6 +8,7 @@
 //! query and no identifier of its own to it.
 
 use std::future::Future;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::Serialize;
 use tauri::AppHandle;
@@ -75,6 +76,9 @@ pub async fn update_install(app: AppHandle) -> Result<(), String> {
     if !switched_on(&app) {
         return Err("updates aren't switched on in this build".into());
     }
+    let Some(_slot) = InstallSlot::take(&INSTALLING) else {
+        return Err("an update is already being installed".into());
+    };
     let Some(update) = app
         .updater()
         .map_err(|e| e.to_string())?
@@ -129,9 +133,48 @@ where
     installed
 }
 
+/// One install at a time. Two clicks, or a click and a second window's call,
+/// would otherwise both stop the daemon and both start an installer over the
+/// same files.
+static INSTALLING: AtomicBool = AtomicBool::new(false);
+
+/// Holds the install slot until dropped. An install that lands restarts the
+/// app, so only a failed one ever gives the slot back.
+pub(crate) struct InstallSlot<'a>(&'a AtomicBool);
+
+impl<'a> InstallSlot<'a> {
+    pub(crate) fn take(flag: &'a AtomicBool) -> Option<Self> {
+        flag.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .ok()
+            .map(|_| Self(flag))
+    }
+}
+
+impl Drop for InstallSlot<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::stop_then_install;
+    use super::{stop_then_install, InstallSlot};
+    use std::sync::atomic::AtomicBool;
+
+    #[test]
+    fn a_second_install_is_refused_while_one_runs() {
+        let flag = AtomicBool::new(false);
+        let first = InstallSlot::take(&flag).expect("the first install takes the slot");
+        assert!(
+            InstallSlot::take(&flag).is_none(),
+            "an overlapping install is refused"
+        );
+        drop(first);
+        assert!(
+            InstallSlot::take(&flag).is_some(),
+            "a failed install gives the slot back"
+        );
+    }
     use std::cell::RefCell;
 
     #[test]
