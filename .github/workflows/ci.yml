@@ -81,23 +81,18 @@ jobs:
       # components named here, `cargo fmt` answers "'cargo-fmt' is not
       # installed for the toolchain" and the gate below never reaches the
       # code it is meant to judge. rustfmt for the format check, clippy for
-      # the lint step behind it.
+      # the lint step behind it. The wasm32-unknown-unknown target is for the
+      # text-tools example plugin, which e2e_plugin_examples builds and runs
+      # as WASM; without it that test prints "skipped:" and passes.
       - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
         with:
           components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: daemon
       # The Rust gates run in a fixed order and stop at the first failure:
-      # the format check, then the lints, then the tests. The format check is
-      # the one that stops this job today. It reports eight files across four
-      # crates (openremote-core/src/model.rs, openremote-core/src/store.rs,
-      # openremote-daemon/src/app.rs, openremote-daemon/src/http.rs,
-      # openremote-daemon/src/registry.rs, openremote-grok/src/config.rs,
-      # openremote-opencode/src/driver.rs, openremote-opencode/src/resolve.rs;
-      # counted as one path per diff the command prints), and the lint step
-      # behind it is red too, on three lints in openremote-daemon, so a green
-      # run here would not mean the workspace lints.
+      # the format check, then the lints, then the tests.
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets --locked -- -D warnings
       # The e2e suite locates the fixture agent in target/debug; build it
@@ -108,9 +103,8 @@ jobs:
       # e2e_plugin_examples builds examples/plugins' own crates into
       # target/examples (their own target dir and lock) after a
       # `cargo fetch`; with no network and no local copy of their crates
-      # those tests print "skipped:" and pass, as the text-tools one does
-      # without the wasm32-unknown-unknown target, which this job does not
-      # install.
+      # those tests print "skipped:" and pass. The text-tools one needs the
+      # wasm32-unknown-unknown target, which this job installs above.
       - run: cargo build -p fixture-agent --locked
       - run: cargo test --locked
 
@@ -118,9 +112,9 @@ jobs:
   # its own workspace and lock), and its tests are what pin its security
   # rules: host keys always checked, no ssh option from a setting, no key
   # kept, ssh's environment and the time limits. It gets a job of its own so
-  # the daemon job's format and lint steps, which stop that job before its
-  # tests, cannot stop these. The tests run first; its own format and lint
-  # checks come after them.
+  # a failure in the daemon job's format or lint steps cannot hide whether
+  # these pass. The tests run first; its own format and lint checks come
+  # after them.
   ssh-plugin:
     name: ssh plugin (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -197,13 +191,11 @@ jobs:
       # What a green check here means is those three tests passed, and
       # nothing wider. The daemon workspace is the daemon job's business.
       # The Rust gates run in a fixed order and stop at the first failure:
-      # format check, lints, check, then these tests. The format check is
-      # what stops this job today, on the eight files named at the daemon
-      # job's format step, because cargo fmt --all also formats this crate's
-      # path dependencies under ../daemon. The lints behind it are red too, so a
-      # green shell job is not a statement that the workspace lints. The
-      # shell's tests live here rather than in the daemon job so a lint
-      # elsewhere cannot hide whether the navigation guard still holds.
+      # format check, lints, check, then these tests. cargo fmt --all also
+      # formats this crate's path dependencies under ../daemon, so a format
+      # slip there fails this job too. The shell's tests live here rather
+      # than in the daemon job so a lint elsewhere cannot hide whether the
+      # navigation guard still holds.
       - run: cargo test --locked
 
   # The declared MSRV must hold against the real lockfile: transitive deps
