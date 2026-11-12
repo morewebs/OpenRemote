@@ -56,6 +56,8 @@ recorded as dropped below.
 | Plugin runtime without harnesses: manifest `entry` and `contributes` (tools, composer inputs, views, settings) checked at review, process tools and view requests, WASM agent tools on wasmi 0.46 (no WASI, fuel and memory limits, network only with the power, vetted public addresses), private settings with secrets answered set or unset, console-only routes, the wasmi notice | br-plugins 7f75c88 (`plugin_runtime/` minus `harness.rs`, `scope.rs`, `global.rs`, `install.rs`), 344ea0b, 05ab28b, ab5e1ab | 25e83f8, 7e0a83b |
 | Plugin scopes and Global sync: Machine, Project-local, Project (files in the repo, run only while they hash to what was approved) and Global; a project's plugin rides only its chats; a Global record from another device is listed for review and installs nothing on its own; `/sync/plugins` peer routes; the console's scope picker and review lists | br-plugins 7f75c88 (`scope.rs`, `global.rs`, `install.rs`, the store's Global records), 496492c | db89194, 06c0377, a8c1d16 |
 | JavaScript UI plugins: console-only routes for a plugin's frame (the chat calls through the runtime's own gate, `fetch` with secrets written in toward their `sendTo` and the internet only), a project's plugin kept to its project's chats, frames sandboxed to scripts alone behind a source-and-origin message gate, the bridge, the CSP's own origins, composer buttons that write only after a click, plugin views as panes and sidebar tiles, Settings > Plugins | br-plugin-ui 78a7035, 64ee1bb, c3608f7, 6e475bd, 029bfbe, 1a54693, b23ee91, 4b92891 | fb718f9, f88d32d |
+| Plugins in a sibling layout (built from Claude Code's): rewritten for Claude Code at install, the review's "Adapted" and "Left out" lists, top-level catalogs with `pluginRoot`, zip downloads pinned by sha256 and unpacked from one folder, `Http::download` | br-zcode eafd691, 4e0909e, 740c90a, a001753, 2272b68 | 1b7b303 |
+| Plugin docs (`docs/plugins/`: protocol, authoring, JS API) written for what this OpenRemote does; the toy example as one compiled program (tools and a JSON-lines harness driver); dictation's local server only at a typed address; an e2e that installs and runs the examples; the Freebuff plan in `docs/plans/` | br-plugins 03499db, 56e78fb, 76d1eaf; br-plugin-ui 2db6a60, ee8e0ec, 5a16093, 7b9b120; br-freebuff-tui f9629f6 | 76210ef |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 `wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`,
@@ -80,6 +82,60 @@ tag keeps it.
 | 01aee56 | Restore when agents opened tabs first | ported (f9c17fd) |
 | f118e43 | Bookmarks bar picture ahead | in main |
 | 52705e9 | Picture ahead on address focus and the star | ported (4862afa) |
+
+### Ready to delete: br-plugins, br-plugin-ui, br-freebuff-tui, br-zcode
+
+Every commit on these four (heads 56e78fb, 7b9b120, 3450ccb, 2272b68; each
+kept as its `archive/<branch>` tag) is ported or obsolete. The branches are
+not deleted here.
+
+br-plugins:
+
+| Commit | What | State |
+|---|---|---|
+| 7f75c88 | Runtimes, scopes, sync, routes | ported: harness parts onto main's `plugin_driver` (43d33dd, f646b13; `plugin_runtime/harness.rs` and the JSON-RPC harness obsolete, main's driver contract wins), model and store (bfa6a86), runtime (25e83f8, c4be417), scopes and Global sync (db89194, a8c1d16, e232841, 7df4c9a, c332f8c; sync lists a plugin for review instead of installing it) |
+| ab5e1ab | src-tauri lock for wasmi | ported (25e83f8, regenerated) |
+| 05ab28b | wasmi notices | ported (7e0a83b) |
+| 03499db | protocol.md, authoring.md | ported (76210ef, rewritten for main: no harness/* methods) |
+| 76d1eaf | toy-harness and text-tools examples | text-tools in main (e88d61a); toy-harness ported (76210ef) as one compiled program, since Node from PATH and the JSON-RPC harness are not main's |
+| 496492c | Console scopes and runtimes | ported (06c0377) |
+| 344ea0b | Entry only when something runs | ported (25e83f8) |
+| 56e78fb | Docs: when an entry is needed | ported (76210ef) |
+
+br-plugin-ui:
+
+| Commit | What | State |
+|---|---|---|
+| 78a7035 | Daemon routes for frames | ported (fb718f9: fetch and the chat calls; files and settings routes were main's) |
+| 64ee1bb | Frames, bridge, CSP | ported (f88d32d, 830e4ac) |
+| c3608f7 | Composer buttons, sidebar views | ported (f88d32d, 830e4ac) |
+| 6e475bd | Settings > Plugins | ported (f88d32d, 830e4ac) |
+| 029bfbe | Words land after leaving a chat | ported (f88d32d), then obsolete by 830e4ac: a grant now ends when its composer goes |
+| 1a54693 | A page that reloads boots again | ported (f88d32d; its doc part in 76210ef) |
+| b23ee91 | CSP names the app's origins | ported (f88d32d) |
+| 4b92891 | Settings defaults filled by the console | ported (f88d32d, 830e4ac) |
+| ee8e0ec | Dictation | in main (e88d61a); its setting help in 76210ef |
+| 7d3e75a | examples/marketplace catalog | obsolete: main's catalog is the repository's own `.claude-plugin/marketplace.json` (e88d61a) |
+| 2db6a60 | js-api.md | ported (76210ef) |
+| 5a16093 | Dictation: refused-key wording | in main (e88d61a) |
+| 7b9b120 | Dictation: no audio in the frame | in main (e88d61a) |
+
+br-freebuff-tui:
+
+| Commit | What | State |
+|---|---|---|
+| 53c803a | Catalogs, live settings, refresh route | ported (67350a3, 596929c, e0931f6) |
+| 31380b8 | Console model rows, capture age | ported (5d24a5f) |
+| 3450ccb | Docs: `models_file`, `settings` | ported (5d24a5f, c11c709) |
+| f9629f6 | Freebuff TUI parity plan | ported (76210ef, now `docs/plans/2026-11-02-freebuff-tui-parity.md`) |
+
+br-zcode: its own commits are eafd691, 4e0909e, a001753, 740c90a and
+2272b68, all ported (1b7b303). Its other 54 commits came in through merges
+(a439843, 5dab5b5, 8082760, 2a200b2, 5d0b84f, 37e9450, 23bc1b5) and each is
+still on the branch it came from: br-plugins and br-plugin-ui (above),
+br-console (above), br-android, br-images and browser (the Browser list
+below), br-chatmove (br-chatmove remainder below) and br-updater (c978b92).
+Deleting br-zcode loses none of them.
 
 ## To port
 
@@ -109,23 +165,6 @@ tag keeps it.
 - br-sync profile sync: **dropped** by policy (cookies and site storage stay on
   the device, `docs/cloud-trust-model.md`). Sealed store kept as a reference.
 - SSH plugin: after the plugin runtime; add its missing `ui/ssh.html` and docs.
-
-### Plugins (br-plugins, br-plugin-ui, br-zcode, br-freebuff-tui)
-Main's `plugin_driver` stays the harness base (documented, tested, used by
-Freebuff). `plugin_runtime/harness.rs` is dropped; the rest is ported on top.
-1. ~~Freebuff model catalogs and live settings~~ (done: 67350a3, 5d24a5f).
-2. ~~Harness contract additions from `harness.rs` (MCP servers and allowed tools
-   on spawn, commands catalog, extra events and manifest fields)~~ (done: 43d33dd).
-3. ~~Model and store: `contributes`, scopes, `project`~~ (done: bfa6a86).
-4. ~~`plugin_runtime` without harnesses: manifest, process tools and views,
-   settings, routes, WASM, notices. Keep the 409 that names live chats~~
-   (done: 25e83f8, 7e0a83b).
-5. ~~Scopes and global sync; console scope UI (496492c)~~ (done: db89194,
-   06c0377).
-6. ~~JS UI plugins: routes, frames and bridge, CSP, composer buttons, views,
-   settings (78a7035 … 6e475bd)~~ (done: fb718f9, f88d32d).
-7. Docs and examples; Claude Code plugin layout (eafd691, 4e0909e, 740c90a,
-   a001753, 2272b68).
 
 ### Smaller branches
 - br-updater: rewire into main's `publish` job (signatures staged at the root,
