@@ -921,6 +921,19 @@ export default function Sidebar({
 
   // A row, and under it its team when it leads one: the workers indented
   // behind a 1px line, foldable from the lead's caret.
+  // A double click on a row's name opens the rename dialog, the same one the
+  // menu's Rename opens (ported from br-sidebar 4160f65, which made the name a
+  // field in place; main renames in the shell's dialog). Desktop only: a phone
+  // has no double click, and the web console offers no rename. The two clicks
+  // inside it still open the chat, so the dialog opens over the chat it names.
+  const renameOnDoubleClick = (id) =>
+    onRenameChat && !isMobile && !web
+      ? (e) => {
+          e.preventDefault()
+          onRenameChat(id)
+        }
+      : undefined
+
   const chatRow = (row) => {
     const workers = nest.kids.get(row.id) ?? []
     if (!workers.length) return chatItem(row, 0, false)
@@ -1001,7 +1014,7 @@ export default function Sidebar({
             rather than inside it, so it stays out of the row's Tab stop. */}
         {row.harness && <HarnessMark harness={row.harness} size={15} />}
         <div className="chat-titles">
-          <span className="chat-title pv">{row.title}</span>
+          <span className="chat-title pv" onDoubleClick={renameOnDoubleClick(row.id)}>{row.title}</span>
           {/* The visible mark a pinned row wears, in the title line so the
               list scans: a pin says the row sits at the top of this list by
               the person's own arrangement, not by its activity. */}

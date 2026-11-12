@@ -176,3 +176,18 @@ test('the dialog offers the first-message name for an empty field, and the shell
   assert.match(console, /const firstNameFor = useCallback\(/)
   assert.match(console, /firstPromptText\(chatsRef\.current\[chatId\]\?\.timeline\)/)
 })
+
+test("a double click on a chat row's name opens the rename dialog, on the desktop", () => {
+  // Ported from br-sidebar 4160f65: the name itself is the handle. Through the
+  // same shell dialog as the menu's Rename, never a field in the row. A phone
+  // has no double click (a double tap zooms), so it keeps the menu alone.
+  const sidebar = source('Sidebar.jsx')
+  const at = sidebar.indexOf('<span className="chat-title pv"')
+  assert.ok(at > 0, 'the row draws its name')
+  const tag = sidebar.slice(at, sidebar.indexOf('>', sidebar.indexOf('}', at)) + 1)
+  assert.match(tag, /onDoubleClick=\{renameOnDoubleClick\(row\.id\)\}/)
+  assert.match(
+    sidebar,
+    /const renameOnDoubleClick = \(id\) =>\s+onRenameChat && !isMobile && !web\s+\? \(e\) => \{\s+e\.preventDefault\(\)\s+onRenameChat\(id\)/,
+  )
+})
