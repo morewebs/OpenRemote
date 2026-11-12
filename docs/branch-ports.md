@@ -71,6 +71,7 @@ recorded as dropped below.
 | An OpenCode chat's permission word reaches OpenCode (`OPENCODE_PERMISSION`, its own permission config merged over the user's); a word that is not a JSON object refuses to start | br-chatctl 5382f7d (opencode driver) | eae6816 |
 | Codex `never` sandbox: reviewed, not ported - on main `never` is "Never ask" and keeps the workspace sandbox (codex 0.167 runs that pairing as given); lifting it to `danger-full-access` would do more than the word says. Pinned by a test that fails on the branch's version | br-chatctl 5382f7d (codex driver) | 59a6a1f |
 | In-app updates: a look once a day for a newer signed release, installed on the user's click with the daemon stopped first; signatures staged at the release root and `latest.json` written by main's `publish` job (no separate job). Update path not yet proven by a test release | br-updater c978b92 | 23ff224 |
+| Android phone browser: the Kotlin WebView plugin, the desktop's `browser_*` commands and events on the phone, `BrowserPhone.jsx` on main's store, bookmarks, history, prefs and permission flow, the phone's "<App> is browsing" pill. **Not checked on a device** (cargo check and clippy for aarch64-linux-android pass; the Kotlin is compiled only by the Android build) | br-android 5df13bd, f768051, 25aee6d, 1c6f04b, 56371d7, cc0080f, 546c420; browser 1a2ab3d (phone pill) | 9b358d5 |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 `wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`,
@@ -120,6 +121,24 @@ br-updater's one commit (c978b92, kept as `archive/br-updater`) is ported
 daemon before the installer runs. The update path is not yet proven by a test
 release: that needs the signing key (`docs/releasing-updates.md`) and a tagged
 release, both the user's call. The branch is not deleted here.
+
+### Ready to delete after device check: br-android
+
+Every br-android commit (head 546c420; kept as `archive/br-android`) is
+ported (9b358d5) onto main's browser store. It has not been run on a phone:
+once the app is tried on a device (tabs, the grid, a private tab, a site's
+request, an agent in a tab), the branch can go. The branch is not deleted
+here.
+
+| Commit | What | State |
+|---|---|---|
+| 5df13bd | Kotlin plugin: each tab a native WebView | ported; mixed content never allowed (was compatibility mode), file URLs get no file or universal access, a private tab refused without WebView profiles, no agent helper at a private page's start |
+| f768051 | A hidden tab's thumbnail is the one taken as it left | ported; never for a private tab |
+| 25aee6d | Only real memory pressure sleeps pages | ported, unchanged |
+| 1c6f04b | R8 keeps the plugin's class and commands | ported, unchanged |
+| 56371d7 | Shell: the desktop's browser commands and events on the phone | ported; `browser_share` keeps the desktop's (tab, on), the share sheet is `browser_share_sheet`, `browser_features` added, the daemon's tab news in `phone_browser.rs` (tested); Cargo.lock needed no change |
+| cc0080f | `BrowserPhone.jsx` and the store on the phone | ported onto main's store, bookmarks, history, session, prefs and prompts (`browser-phone.js` for its rules); the branch's `asks`, `pending`/`openInBrowser` and its own restore are obsolete (main's `prompts`, `requestBrowser`, `startSession`) |
+| 546c420 | A quick second tab switch shows the right page | ported, unchanged |
 
 ### Ready to delete: br-plugins, br-plugin-ui, br-freebuff-tui, br-zcode
 
@@ -199,10 +218,7 @@ main, or obsolete:
   head's own parts instead; DESIGN.md (c9fbc27) - it describes the branch's
   sidebar (the Pinned group, row dots), which is not main's.
 
-### Browser (browser, br-console, br-android, br-images)
-- Android phone browser, as one block (5df13bd, f768051, 25aee6d, 1c6f04b,
-  56371d7, cc0080f, 546c420), with 1a2ab3d's phone "<agent> is browsing"
-  pill. Regenerate Cargo.lock and capabilities.
+### Browser (browser, br-console, br-images)
 - Obsolete: `openremote://` pages, useBrowserPage refactor, split-pane browser,
   1a2ab3d's header Browser button (main's FloatingBar toggles the pane), the
   bookmarks-bar key (Ctrl+Shift+B is main's show/hide-browser key).
