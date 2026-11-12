@@ -39,6 +39,7 @@ pub fn hello(app: &AppHandle) {
         console: cfg!(windows),
         network: cfg!(windows),
         upload: cfg!(windows),
+        adblock: cfg!(windows),
     };
     let engine = if cfg!(windows) {
         "webview2"
@@ -137,6 +138,18 @@ pub fn bookkeeping(app: &AppHandle, call: &Call) -> Option<Result<serde_json::Va
     match call {
         Call::Mark { tab, controller } => {
             mark(app, tab, controller.clone());
+            Some(Ok(serde_json::Value::Null))
+        }
+        Call::Adblock {
+            on,
+            lists,
+            updated,
+            allow,
+        } => {
+            #[cfg(windows)]
+            super::adblock::configure(app, *on, lists.clone(), *updated, allow.clone());
+            #[cfg(not(windows))]
+            let _ = (on, lists, updated, allow);
             Some(Ok(serde_json::Value::Null))
         }
         Call::Tabs => {

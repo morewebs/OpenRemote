@@ -56,7 +56,11 @@ tauri-plugin-updater = "2"
 # browser keys, history): the same versions wry already links, so nothing
 # new ships.
 webview2-com = "0.39"
-windows = { version = "0.62", features = ["Win32_System_Com", "Win32_UI_Input_KeyboardAndMouse"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_UI_Input_KeyboardAndMouse"] }
+# Ad and tracker blocking, off unless the user turns it on and picks a list:
+# Brave's filter engine (MPL-2.0), with the public suffix list it needs to
+# tell a site's own requests from others'. No list ships with the app.
+adblock = { version = "0.13", default-features = false, features = ["embedded-domain-resolver", "full-regex-handling"] }
 
 [target.'cfg(any(windows, target_os = "linux"))'.dependencies]
 # A second launch shows the running window instead of starting a second

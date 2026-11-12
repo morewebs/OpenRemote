@@ -66,6 +66,26 @@ Reserved Font Names are respected:
   2014-2018 Khan Academy and other contributors; the xbbold-derived
   faces add Copyright 1995, 2009 American Mathematical Society.
 
+## The filter lists offered for download (not shipped)
+
+Ad and tracker blocking in the built-in browser (Windows) is off, and no
+filter list is picked, until the user turns it on and picks one in
+Settings > Browser. No list ships inside any artifact: a picked list is
+downloaded by the user's own app, from its publisher, over HTTPS, and kept
+on that computer only. Settings names each list's licence beside it. The
+lists on offer:
+
+- EasyList (https://easylist.to/easylist/easylist.txt) - adverts.
+  Copyright the EasyList authors. Dual licensed: GPL-3.0-or-later, or
+  CC BY-SA 3.0 or later (https://easylist.to/pages/licence.html).
+- EasyPrivacy (https://easylist.to/easylist/easyprivacy.txt) - trackers.
+  Copyright the EasyList authors. Dual licensed: GPL-3.0-or-later, or
+  CC BY-SA 3.0 or later (https://easylist.to/pages/licence.html).
+
+Because OpenRemote does not redistribute the lists, their license texts
+are not carried here. If a later build ships a list inside an installer,
+that list's license text must be added to the texts at the end of this
+file.
 
 ## The Rust crates: in every artifact
 
@@ -328,15 +348,28 @@ Compiled into the desktop shell and the Android shell (not the standalone daemon
 
 Compiled into the desktop shell (Windows installers only):
 
+- adblock 0.13.5 - MPL-2.0. Brave's filter engine, unmodified (source:
+  https://github.com/brave/adblock-rust). It runs the filter lists the
+  user picks when they turn ad and tracker blocking on, which is off by
+  default.
+- addr 0.15.6 - MIT/Apache-2.0
 - auto-launch 0.6.0 - MIT
 - core_detect 1.0.0 - MIT/Apache-2.0
+- either 1.19.0 - MIT OR Apache-2.0
 - encoding_rs 0.8.42 - (Apache-2.0 OR MIT) AND BSD-3-Clause
+- flatbuffers 25.12.19 - Apache-2.0
+- itertools 0.14.0 - MIT OR Apache-2.0
 - keyboard-types 0.8.3 - MIT OR Apache-2.0
 - muda 0.20.0 - Apache-2.0 OR MIT
 - multiversion_no_op 1.0.0 - Apache-2.0 OR MIT
 - os_info 3.15.0 - MIT
 - os_pipe 1.2.3 - MIT
+- psl 2.1.252 - MIT/Apache-2.0. Carries Mozilla's Public Suffix List
+  (https://publicsuffix.org, MPL-2.0), which the filter engine uses to
+  tell a site's own requests from other sites'.
+- psl-types 2.0.11 - MIT/Apache-2.0
 - rfd 0.16.0 - MIT
+- seahash 4.1.0 - MIT
 - shared_child 1.1.2 - MIT
 - simdutf8 0.1.5 - MIT OR Apache-2.0
 - softbuffer 0.4.8 - MIT OR Apache-2.0
