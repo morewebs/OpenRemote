@@ -28,6 +28,12 @@ import java.io.File
 import java.net.URLDecoder
 import java.util.concurrent.Executors
 
+/** What an intent: link from a page may never carry: a grant to this app's files. */
+private const val URI_GRANTS = Intent.FLAG_GRANT_READ_URI_PERMISSION or
+  Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+  Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
+  Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+
 /** The most a page may hand over through script (a blob: download, a saved file). */
 private const val MAX_FROM_PAGE = 64L * 1024 * 1024
 
@@ -272,18 +278,33 @@ class Files(private val browser: Browser) {
     })
   }
 
-  /** browser_reveal: opens a finished download in whatever opens its kind. */
+  /**
+   * browser_reveal: opens a finished download in whatever opens its kind.
+   * Only a download: an address from the phone's media or downloads store,
+   * this app's own Downloads files, or a path in this app's Downloads folder.
+   * Anything else would hand another app a read grant on a file of ours.
+   */
   fun reveal(path: String): String? {
     val activity = browser.activity
+    val ours = "${activity.packageName}.fileprovider"
     val uri = if (path.startsWith("/")) {
+      val downloads = activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.canonicalFile
+        ?: return "that isn't a download"
+      val file = try {
+        File(path).canonicalFile
+      } catch (_: Exception) {
+        return "that isn't a download"
+      }
+      if (!file.path.startsWith(downloads.path + File.separator)) return "that isn't a download"
       try {
-        FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", File(path))
+        FileProvider.getUriForFile(activity, ours, file)
       } catch (_: Exception) {
         return "that file is gone"
       }
     } else {
       Uri.parse(path)
     }
+    if (uri.scheme != "content" || uri.authority !in setOf("media", "downloads", ours)) return "that isn't a download"
     val type = activity.contentResolver.getType(uri) ?: guessType(path) ?: "*/*"
     val view = Intent(Intent.ACTION_VIEW)
       .setDataAndType(uri, type)
@@ -346,6 +367,11 @@ class Files(private val browser: Browser) {
         intent.addCategory(Intent.CATEGORY_BROWSABLE)
         intent.component = null
         intent.selector = null
+        // Nor does it pass on a grant to this app's files, or point at them.
+        intent.clipData = null
+        intent.flags = intent.flags and URI_GRANTS.inv()
+        val target = intent.data?.scheme?.lowercase()
+        if (target == "content" || target == "file") return
         try {
           activity.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (_: ActivityNotFoundException) {
@@ -376,7 +402,7 @@ class Files(private val browser: Browser) {
     "no other browser on this phone opens it"
   }
 
-  /** browser_share: the phone's share sheet, with the page's address. */
+  /** browser_share_sheet: the phone's share sheet, with the page's address. */
   fun share(url: String, title: String?): String? = try {
     val send = Intent(Intent.ACTION_SEND)
       .setType("text/plain")

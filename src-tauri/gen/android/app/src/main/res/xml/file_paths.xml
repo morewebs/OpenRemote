@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- What the app's FileProvider may hand another app: only the browser's
+     downloads kept in the app's own Downloads folder (before Android 10 a
+     download lands there; from 10 on downloads are MediaStore and
+     DownloadManager addresses, which need no provider). Nothing in the
+     app's cache or the rest of shared storage. -->
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-  <external-path name="my_images" path="." />
-  <cache-path name="my_cache_images" path="." />
+  <external-files-path name="downloads" path="Download/" />
 </paths>

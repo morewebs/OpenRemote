@@ -136,11 +136,14 @@ class Shots(private val browser: Browser) {
       if (shot == null) return@bitmap done(null)
       var picture: Bitmap = shot
       if (clip != null) {
+        // A part that can't be cut out fails: never the whole page in its place.
         val part = crop(shot, page.width, clip, scale)
-        if (part != null && part !== shot) {
+        if (part == null) {
           shot.recycle()
-          picture = fit(part, widest)
+          return@bitmap done(null)
         }
+        if (part !== shot) shot.recycle()
+        picture = fit(part, widest)
       }
       jpeg(picture, quality) { data -> done(data?.let { "data:image/jpeg;base64,$it" }) }
     }

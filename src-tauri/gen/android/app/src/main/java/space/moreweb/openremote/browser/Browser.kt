@@ -60,6 +60,7 @@ import app.tauri.plugin.JSObject
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.util.UUID
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -70,7 +71,14 @@ private const val MAX_LIVE = 5
 private const val AGENT_LINGER = 90_000L
 
 private const val PROFILE = "openremote-browser"
-private const val PRIVATE_PROFILE = "openremote-private"
+
+/**
+ * Private sessions' profiles start with this. Each session (from its first
+ * private tab until its last closes) gets a fresh name, so nothing one
+ * session set can reach the next, even while an old profile waits to be
+ * deleted.
+ */
+private const val PRIVATE_PREFIX = "openremote-private"
 
 /** The console's own addresses, which a tab never opens and never clears. */
 private val CONSOLE_HOSTS = setOf("tauri.localhost", "127.0.0.1", "localhost")
@@ -100,6 +108,9 @@ class Browser(activity: AppCompatActivity) {
   val agent = AgentHost(this)
 
   private var counter = 0
+
+  /** The profile of the private session now open, or null when none is. */
+  private var privateSession: String? = null
   private var stage = layer()
   private var wings = layer().apply {
     // Pages out of sight are no part of what the screen reader walks.
@@ -190,6 +201,8 @@ class Browser(activity: AppCompatActivity) {
       attached = true
       activity.registerComponentCallbacks(memory)
     }
+    // A new activity's window starts without the flag.
+    secure()
     for (tab in tabs.values) {
       val view = tab.view ?: continue
       if (view.parent == null) {
@@ -320,6 +333,7 @@ class Browser(activity: AppCompatActivity) {
     counter += 1
     val tab = Tab("tab-$counter", isPrivate, opener)
     tabs[tab.id] = tab
+    secure()
     return tab
   }
 
@@ -377,7 +391,7 @@ class Browser(activity: AppCompatActivity) {
     val page = PageView(activity, tab)
     if (profiles) {
       // Before anything else touches the page: a profile can't change later.
-      val name = if (tab.isPrivate) PRIVATE_PROFILE else PROFILE
+      val name = profileFor(tab.isPrivate)
       ProfileStore.getInstance().getOrCreateProfile(name)
       WebViewCompat.setProfile(page, name)
     }
@@ -402,6 +416,8 @@ class Browser(activity: AppCompatActivity) {
       @Suppress("DEPRECATION")
       allowUniversalAccessFromFileURLs = false
       setGeolocationEnabled(true)
+      // Google Safe Browsing warns before a known harmful page, as Chrome does.
+      safeBrowsingEnabled = true
       // A secure page never loads a part over plain HTTP: what it shows is
       // what came over the private connection.
       mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
@@ -462,16 +478,22 @@ class Browser(activity: AppCompatActivity) {
     }
   }
 
+  /** The profile a tab's page lives in: the shared one, or this private session's own. */
+  private fun profileFor(isPrivate: Boolean): String {
+    if (!isPrivate) return PROFILE
+    return privateSession ?: "$PRIVATE_PREFIX-${UUID.randomUUID()}".also { privateSession = it }
+  }
+
   fun cookies(isPrivate: Boolean): CookieManager =
-    if (profiles) ProfileStore.getInstance().getOrCreateProfile(if (isPrivate) PRIVATE_PROFILE else PROFILE).cookieManager
+    if (profiles) ProfileStore.getInstance().getOrCreateProfile(profileFor(isPrivate)).cookieManager
     else CookieManager.getInstance()
 
   private fun storage(isPrivate: Boolean): WebStorage =
-    if (profiles) ProfileStore.getInstance().getOrCreateProfile(if (isPrivate) PRIVATE_PROFILE else PROFILE).webStorage
+    if (profiles) ProfileStore.getInstance().getOrCreateProfile(profileFor(isPrivate)).webStorage
     else WebStorage.getInstance()
 
   private fun locations(isPrivate: Boolean): GeolocationPermissions =
-    if (profiles) ProfileStore.getInstance().getOrCreateProfile(if (isPrivate) PRIVATE_PROFILE else PROFILE).geolocationPermissions
+    if (profiles) ProfileStore.getInstance().getOrCreateProfile(profileFor(isPrivate)).geolocationPermissions
     else GeolocationPermissions.getInstance()
 
   /** Brings back a tab that was put to sleep. */
@@ -517,10 +539,7 @@ class Browser(activity: AppCompatActivity) {
 
   fun close(tab: Tab) {
     if (tabs.remove(tab.id) == null) return
-    if (shown === tab) {
-      shown = null
-      secure()
-    }
+    if (shown === tab) shown = null
     if (fullscreen?.tab === tab) exitFullscreen()
     permissions.dropTab(tab)
     tab.dialog?.result?.cancel()
@@ -533,7 +552,12 @@ class Browser(activity: AppCompatActivity) {
     tab.view = null
     tab.saved = null
     emit("closed", JSObject().apply { put("id", tab.id) })
-    if (tab.isPrivate && tabs.values.none { it.isPrivate }) forgetPrivate(0)
+    if (tab.isPrivate && tabs.values.none { it.isPrivate }) {
+      // The session is over: the next private tab starts a new profile.
+      privateSession = null
+      forgetPrivate(0)
+    }
+    secure()
     updateBack()
   }
 
@@ -542,21 +566,30 @@ class Browser(activity: AppCompatActivity) {
     ui.post { close(tab) }
   }
 
-  /** The last private tab closed: nothing it saw stays. */
+  /**
+   * Deletes every private profile no open session holds: the one whose last
+   * tab just closed, and any an earlier run left behind.
+   */
   private fun forgetPrivate(attempt: Int) {
-    if (!profiles || tabs.values.any { it.isPrivate }) return
-    try {
-      ProfileStore.getInstance().deleteProfile(PRIVATE_PROFILE)
-    } catch (_: IllegalStateException) {
-      // Still held by a page that is being torn down: try again shortly.
-      if (attempt < 5) ui.postDelayed({ forgetPrivate(attempt + 1) }, 1500)
-    } catch (_: Exception) {
+    if (!profiles) return
+    val store = ProfileStore.getInstance()
+    var held = false
+    for (name in store.allProfileNames) {
+      if (!name.startsWith(PRIVATE_PREFIX) || name == privateSession) continue
+      try {
+        store.deleteProfile(name)
+      } catch (_: IllegalStateException) {
+        // Still held by a page that is being torn down.
+        held = true
+      } catch (_: Exception) {
+      }
     }
+    if (held && attempt < 5) ui.postDelayed({ forgetPrivate(attempt + 1) }, 1500)
   }
 
-  /** At start, a private profile left by a process that ended mid-session. */
+  /** At start: private profiles left by a process that ended mid-session. */
   fun forgetLeftovers() {
-    if (profiles && ProfileStore.getInstance().allProfileNames.contains(PRIVATE_PROFILE)) forgetPrivate(0)
+    forgetPrivate(0)
   }
 
   // ---- where pages sit ----
@@ -652,7 +685,6 @@ class Browser(activity: AppCompatActivity) {
     onstage(tab)
     if (focus) tab.page?.requestFocus()
     claimBack()
-    secure()
     trim()
   }
 
@@ -664,17 +696,18 @@ class Browser(activity: AppCompatActivity) {
     resetBar(tab)
     offstage(tab)
     updateBack()
-    secure()
   }
 
   /**
-   * While a private page is on screen the window is secure: the phone takes
-   * no picture of it for its recent apps (a picture it would keep on disk),
-   * and screenshots of it are refused, as Chrome does for its incognito tabs.
+   * While any private tab is open the window is secure, whatever the console
+   * shows over it (the tab grid, the address bar, history, settings): the
+   * phone keeps no picture of the app for its recent apps (a picture it would
+   * write to disk), and screenshots are refused, as for Chrome's incognito
+   * tabs. Cleared once the last private tab closes.
    */
   private fun secure() {
     val window = activity.window ?: return
-    if (shown?.isPrivate == true) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    if (tabs.values.any { it.isPrivate }) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
     else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
   }
 
@@ -755,7 +788,12 @@ class Browser(activity: AppCompatActivity) {
     val side = (32 * density).roundToInt().coerceIn(16, 96)
     val scaled = if (icon.width > side || icon.height > side) Bitmap.createScaledBitmap(icon, side, side, true) else icon
     val out = ByteArrayOutputStream()
-    scaled.compress(Bitmap.CompressFormat.PNG, 100, out)
+    try {
+      scaled.compress(Bitmap.CompressFormat.PNG, 100, out)
+    } finally {
+      // The copy is ours to free; the icon itself is WebView's.
+      if (scaled !== icon) scaled.recycle()
+    }
     tab.favicon = "data:image/png;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
     changed(tab)
   }
@@ -1109,7 +1147,8 @@ class Browser(activity: AppCompatActivity) {
     val wantCache = all || kinds.any { it in setOf("cache", "cached") }
     val wantLocations = all || "permissions" in kinds
     for (isPrivate in listOf(false, true)) {
-      if (isPrivate && !profiles) continue
+      // No private session open: there is no private profile to clear.
+      if (isPrivate && (!profiles || privateSession == null)) continue
       if (wantCookies) cookies(isPrivate).run {
         removeAllCookies(null)
         flush()
@@ -1142,7 +1181,7 @@ class Browser(activity: AppCompatActivity) {
   @SuppressLint("RestrictedApi")
   private fun clearCache() {
     for (isPrivate in listOf(false, true)) {
-      if (isPrivate && !profiles) continue
+      if (isPrivate && (!profiles || privateSession == null)) continue
       val live = tabs.values.firstOrNull { it.isPrivate == isPrivate && it.page != null }?.page
       if (live != null) {
         live.clearCache(true)
@@ -1150,7 +1189,7 @@ class Browser(activity: AppCompatActivity) {
       }
       val passing = WebView(activity)
       if (profiles) {
-        val name = if (isPrivate) PRIVATE_PROFILE else PROFILE
+        val name = profileFor(isPrivate)
         ProfileStore.getInstance().getOrCreateProfile(name)
         WebViewCompat.setProfile(passing, name)
       }

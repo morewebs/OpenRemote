@@ -175,8 +175,9 @@ an old process is still alive; find it before re-running).
   (`src-tauri/src/mobile_browser.rs`, which gives the console the desktop's
   `browser_*` commands; `phone_browser.rs` holds its testable rules). The
   pages have no IPC, read no local files and load no mixed content; a private
-  tab needs WebView profiles, leaves no picture, and keeps the window secure
-  while shown. It has not been checked on a device.
+  tab needs WebView profiles (a fresh one per private session), leaves no
+  picture, and keeps the window secure while any private tab is open. It has
+  not been checked on a device.
 
 ## Cloud's trust model, for anyone touching it
 

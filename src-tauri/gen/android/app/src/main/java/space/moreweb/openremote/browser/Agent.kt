@@ -610,7 +610,10 @@ class AgentHost(private val browser: Browser) {
         browser.shots.bitmap(tab, page.width, true) { shot ->
           guard(out) {
             if (shot == null) throw Fail("the page couldn't be pictured")
-            val part = browser.shots.crop(shot, page.width, clip, 1f) ?: throw Fail("$ref couldn't be pictured")
+            val part = browser.shots.crop(shot, page.width, clip, 1f) ?: run {
+              shot.recycle()
+              throw Fail("$ref couldn't be pictured")
+            }
             if (part !== shot) shot.recycle()
             picture(tab, browser.shots.fit(part, MAX_SHOT), null, out)
           }
@@ -649,7 +652,10 @@ class AgentHost(private val browser: Browser) {
           page.evaluateJavascript("scrollY") { now ->
             guard(out) {
               val at = now?.toDoubleOrNull() ?: y
-              val shot = browser.shots.draw(page, width) ?: throw Fail("the page couldn't be pictured")
+              val shot = browser.shots.draw(page, width) ?: run {
+                sheet.recycle()
+                throw Fail("the page couldn't be pictured")
+              }
               canvas.drawBitmap(shot, 0f, (at * perCss * scale).toFloat(), null)
               shot.recycle()
               // The last screen, or a page that wouldn't scroll as far as it said.
@@ -666,8 +672,10 @@ class AgentHost(private val browser: Browser) {
 
   /**
    * A blob: address only the page that made it can read: the page reads it
-   * and hands it over in pieces. [done] gets the bytes and their type, or
-   * a problem.
+   * and hands it over in pieces. [done] gets the bytes and their type, or a
+   * problem. It installs nothing in the page (no agent helper, so a private
+   * tab nobody handed over stays without one): one global under a name made
+   * for this read holds the file until it is taken, and is deleted after.
    */
   fun readBlob(tab: Tab, url: String, max: Long, done: (ByteArray?, String?, String?) -> Unit) {
     val page = tab.page ?: return done(null, null, "the tab has no page")
@@ -675,36 +683,44 @@ class AgentHost(private val browser: Browser) {
       val read = value as? BlobRead
       if (error != null || read == null) done(null, null, error ?: "the page's file couldn't be read") else done(read.bytes, read.type, null)
     }
-    val key = UUID.randomUUID().toString()
-    val body = """
-      const response = await fetch(${quote(url)})
-      const blob = await response.blob()
-      if (blob.size > $max) throw new Error('that file is too large to save from the page')
-      const data = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result))
-        reader.onerror = () => reject(reader.error)
-        reader.readAsDataURL(blob)
-      })
-      const at = data.indexOf(',')
-      __openremote_host.keep(${quote(key)}, data.slice(at + 1))
-      return { type: blob.type, length: data.length - at - 1 }
+    val slot = quote("__openremote_blob_" + UUID.randomUUID().toString().replace("-", ""))
+    val start = """
+      (() => {
+        const slot = $slot
+        globalThis[slot] = { pending: true }
+        fetch(${quote(url)})
+          .then((response) => response.blob())
+          .then((blob) => {
+            if (blob.size > $max) throw new Error('that file is too large to save from the page')
+            const reader = new FileReader()
+            reader.onload = () => {
+              const data = String(reader.result)
+              globalThis[slot] = { type: blob.type, data: data.slice(data.indexOf(',') + 1) }
+            }
+            reader.onerror = () => { globalThis[slot] = { error: String(reader.error) } }
+            reader.readAsDataURL(blob)
+          })
+          .catch((e) => { globalThis[slot] = { error: String((e && e.message) || e) } })
+      })()
     """.trimIndent()
-    later(tab, page, body, 120_000, out) { answer ->
-      val meta = answer.optJSONObject("ok") ?: throw Fail("the page didn't read its file")
-      val length = meta.optLong("length")
+    val state = "(() => { const v = globalThis[$slot]; if (!v) return { error: 'the page lost its file' }; " +
+      "if (v.pending || v.error) return v; return { type: v.type, length: v.data.length } })()"
+    val forget = "delete globalThis[$slot]"
+    val until = SystemClock.uptimeMillis() + 120_000
+    page.evaluateJavascript(start, null)
+    fun pieces(type: String?, length: Long) {
       val text = StringBuilder()
       fun piece(from: Long) {
         if (from >= length) {
-          page.evaluateJavascript("__openremote_host.drop(${quote(key)})", null)
+          page.evaluateJavascript(forget, null)
           val bytes = try {
             Base64.decode(text.toString(), Base64.DEFAULT)
           } catch (_: IllegalArgumentException) {
             throw Fail("the page's file came over garbled")
           }
-          return out.ok(BlobRead(bytes, meta.text("type")))
+          return out.ok(BlobRead(bytes, type))
         }
-        page.evaluateJavascript("__openremote_host.slice(${quote(key)}, $from, $CHUNK)") { raw ->
+        page.evaluateJavascript("globalThis[$slot].data.slice($from, ${from + CHUNK})") { raw ->
           guard(out) {
             if (tab.page !== page) throw Fail("the tab closed while saving its file")
             text.append(unquote(raw) ?: throw Fail("the page lost its file"))
@@ -714,5 +730,28 @@ class AgentHost(private val browser: Browser) {
       }
       piece(0)
     }
+    fun poll() {
+      page.evaluateJavascript(state) { raw ->
+        guard(out) {
+          if (tab.page !== page) throw Fail("the tab closed while saving its file")
+          val answer = parse(raw)
+          when {
+            answer.optBoolean("pending") -> {
+              if (SystemClock.uptimeMillis() > until) {
+                page.evaluateJavascript(forget, null)
+                throw Fail("the page took too long to hand over its file")
+              }
+              after(100, out) { poll() }
+            }
+            answer.text("error") != null -> {
+              page.evaluateJavascript(forget, null)
+              throw Fail(answer.text("error") ?: "the page's file couldn't be read")
+            }
+            else -> pieces(answer.text("type"), answer.optLong("length"))
+          }
+        }
+      }
+    }
+    after(50, out) { poll() }
   }
 }

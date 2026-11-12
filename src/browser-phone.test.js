@@ -277,3 +277,64 @@ test('the phone shell keeps the desktop\'s command names and declares its own th
   assert.ok(caps.permissions.includes('allow-browser-share-sheet'))
   assert.ok(!caps.permissions.some((p) => p.startsWith('browser:')), 'the Kotlin plugin is reached from Rust only')
 })
+
+// ---- review fixes (round 1), pinned in the Kotlin source the build compiles ----
+
+test('an intent: link carries no grant to the app\'s files and never points at them', () => {
+  const files = read(`${android}Files.kt`)
+  for (const flag of ['FLAG_GRANT_READ_URI_PERMISSION', 'FLAG_GRANT_WRITE_URI_PERMISSION', 'FLAG_GRANT_PERSISTABLE_URI_PERMISSION', 'FLAG_GRANT_PREFIX_URI_PERMISSION']) {
+    assert.match(files, new RegExp(`Intent\.${flag}`), flag)
+  }
+  assert.match(files, /intent\.flags = intent\.flags and URI_GRANTS\.inv\(\)/)
+  assert.match(files, /intent\.clipData = null/)
+  assert.match(files, /if \(target == "content" \|\| target == "file"\) return/)
+  // The provider shares only the app's own Downloads folder.
+  const paths = read('../src-tauri/gen/android/app/src/main/res/xml/file_paths.xml')
+  assert.match(paths, /<external-files-path name="downloads" path="Download\/" \/>/)
+  assert.doesNotMatch(paths, /<cache-path|<external-path|<files-path|<root-path/)
+})
+
+test('reveal opens only a download', () => {
+  const files = read(`${android}Files.kt`)
+  assert.match(files, /if \(!file\.path\.startsWith\(downloads\.path \+ File\.separator\)\) return "that isn't a download"/)
+  assert.match(files, /if \(uri\.scheme != "content" \|\| uri\.authority !in setOf\("media", "downloads", ours\)\) return "that isn't a download"/)
+  assert.match(files, /\/\*\* browser_share_sheet: the phone's share sheet/)
+})
+
+test('each private session gets a fresh profile, and old ones are swept by prefix', () => {
+  const browser = read(`${android}Browser.kt`)
+  assert.doesNotMatch(browser, /PRIVATE_PROFILE/)
+  assert.match(browser, /return privateSession \?: "\$PRIVATE_PREFIX-\$\{UUID\.randomUUID\(\)\}"\.also \{ privateSession = it \}/)
+  assert.match(browser, /privateSession = null\n\s+forgetPrivate\(0\)/)
+  assert.match(browser, /if \(!name\.startsWith\(PRIVATE_PREFIX\) \|\| name == privateSession\) continue/)
+  assert.match(browser, /fun forgetLeftovers\(\) \{\n\s+forgetPrivate\(0\)\n\s+\}/)
+})
+
+test('the window stays secure while any private tab is open, whatever covers it', () => {
+  const browser = read(`${android}Browser.kt`)
+  assert.match(browser, /if \(tabs\.values\.any \{ it\.isPrivate \}\) window\.addFlags\(WindowManager\.LayoutParams\.FLAG_SECURE\)/)
+  assert.doesNotMatch(browser, /shown\?\.isPrivate == true\) window\.addFlags/)
+  // Set as a tab opens, re-checked as one closes and for a new activity's window.
+  assert.match(browser, /tabs\[tab\.id\] = tab\n\s+secure\(\)/)
+  assert.match(browser, /forgetPrivate\(0\)\n\s+\}\n\s+secure\(\)/)
+})
+
+test('Safe Browsing is on for every tab', () => {
+  assert.match(read(`${android}Browser.kt`), /safeBrowsingEnabled = true/)
+})
+
+test('a blob download reads the file without installing the agent helper', () => {
+  const agent = read(`${android}Agent.kt`)
+  const reader = agent.slice(agent.indexOf('fun readBlob('))
+  assert.doesNotMatch(reader, /__openremote_host|later\(|ready\(|browser\.scripts/)
+  assert.match(reader, /delete globalThis\[\$slot\]/)
+})
+
+test('pictures free their bitmaps when they fail, and a failed clip fails', () => {
+  const agent = read(`${android}Agent.kt`)
+  assert.match(agent, /\?: run \{\n\s+shot\.recycle\(\)\n\s+throw Fail\("\$ref couldn't be pictured"\)/)
+  assert.match(agent, /\?: run \{\n\s+sheet\.recycle\(\)\n\s+throw Fail\("the page couldn't be pictured"\)/)
+  assert.match(read(`${android}Browser.kt`), /if \(scaled !== icon\) scaled\.recycle\(\)/)
+  const shots = read(`${android}Shots.kt`)
+  assert.match(shots, /if \(part == null\) \{\n\s+shot\.recycle\(\)\n\s+return@bitmap done\(null\)/)
+})
