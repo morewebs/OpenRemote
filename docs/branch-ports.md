@@ -55,6 +55,7 @@ recorded as dropped below.
 | Plugin model and store: `scope` (Global, Machine, ProjectLocal, Project), `project` and `contributes` on an installed plugin, serde defaults so older stores load, a harness summary backfilled | br-plugins 7f75c88 (openremote-core `model.rs`, `lib.rs`) | bfa6a86 |
 | Plugin runtime without harnesses: manifest `entry` and `contributes` (tools, composer inputs, views, settings) checked at review, process tools and view requests, WASM agent tools on wasmi 0.46 (no WASI, fuel and memory limits, network only with the power, vetted public addresses), private settings with secrets answered set or unset, console-only routes, the wasmi notice | br-plugins 7f75c88 (`plugin_runtime/` minus `harness.rs`, `scope.rs`, `global.rs`, `install.rs`), 344ea0b, 05ab28b, ab5e1ab | 25e83f8, 7e0a83b |
 | Plugin scopes and Global sync: Machine, Project-local, Project (files in the repo, run only while they hash to what was approved) and Global; a project's plugin rides only its chats; a Global record from another device is listed for review and installs nothing on its own; `/sync/plugins` peer routes; the console's scope picker and review lists | br-plugins 7f75c88 (`scope.rs`, `global.rs`, `install.rs`, the store's Global records), 496492c | db89194, 06c0377, a8c1d16 |
+| JavaScript UI plugins: console-only routes for a plugin's frame (the chat calls through the runtime's own gate, `fetch` with secrets written in toward their `sendTo` and the internet only), a project's plugin kept to its project's chats, frames sandboxed to scripts alone behind a source-and-origin message gate, the bridge, the CSP's own origins, composer buttons that write only after a click, plugin views as panes and sidebar tiles, Settings > Plugins | br-plugin-ui 78a7035, 64ee1bb, c3608f7, 6e475bd, 029bfbe, 1a54693, b23ee91, 4b92891 | fb718f9, f88d32d |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 `wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`,
@@ -121,8 +122,8 @@ Freebuff). `plugin_runtime/harness.rs` is dropped; the rest is ported on top.
    (done: 25e83f8, 7e0a83b).
 5. ~~Scopes and global sync; console scope UI (496492c)~~ (done: db89194,
    06c0377).
-6. JS UI plugins: routes, frames and bridge, CSP, composer buttons, views,
-   settings (78a7035 … 6e475bd).
+6. ~~JS UI plugins: routes, frames and bridge, CSP, composer buttons, views,
+   settings (78a7035 … 6e475bd)~~ (done: fb718f9, f88d32d).
 7. Docs and examples; Claude Code plugin layout (eafd691, 4e0909e, 740c90a,
    a001753, 2272b68).
 
