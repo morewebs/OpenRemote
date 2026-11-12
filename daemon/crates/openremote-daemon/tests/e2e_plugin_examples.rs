@@ -516,3 +516,256 @@ async fn the_text_tools_module_answers_from_a_chat_and_reaches_public_addresses_
     assert_eq!(mine["isError"], true, "{mine}");
     assert!(text(&mine).starts_with("could not fetch"), "{mine}");
 }
+
+/// OpenRemote's official Worktrunk plugin, installed from a copy of the
+/// catalog with its program built as build.sh builds it, and Worktrunk
+/// stood in for by the plugin's own fake `wt` (a real one is not needed to
+/// test the plugin, and may not be on the machine):
+///
+/// - Discover shows a process plugin, and the install keeps exactly the
+///   reviewed powers;
+/// - its program runs with a cleared environment, finds `wt` only by the
+///   full path in its setting, and answers its tools from a chat in the
+///   chat's own folder;
+/// - start_chat starts a chat in the new worktree on the asking chat's
+///   harness;
+/// - its view's requests reach its program;
+/// - the console reads each chat folder's branch and worktree.
+#[tokio::test]
+async fn worktrunk_installs_from_openremotes_catalog_and_its_tools_drive_wt_from_a_chat() {
+    let source = repo().join("examples/plugins/worktrunk");
+    build_or_skip!(
+        &source.join("program/Cargo.toml"),
+        &["--bins", "--examples"]
+    );
+    let exe = |name: &str| {
+        if cfg!(windows) {
+            format!("{name}.exe")
+        } else {
+            name.to_string()
+        }
+    };
+
+    // The catalog as it ships, under a local name, with the plugin's folder
+    // and its built program (bin/ is what build.sh leaves).
+    let market = tempfile::tempdir().unwrap();
+    let mut catalog: Value = serde_json::from_slice(
+        &std::fs::read(repo().join(".claude-plugin/marketplace.json")).unwrap(),
+    )
+    .unwrap();
+    catalog["name"] = json!("openremote-local");
+    let entry = catalog["plugins"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["name"] == "worktrunk")
+        .expect("worktrunk in the catalog")
+        .clone();
+    assert_eq!(entry["metadata"]["openremote"]["runtime"], "process");
+    let folder = market
+        .path()
+        .join(entry["source"].as_str().unwrap().trim_start_matches("./"));
+    std::fs::create_dir_all(market.path().join(".claude-plugin")).unwrap();
+    std::fs::write(
+        market.path().join(".claude-plugin/marketplace.json"),
+        catalog.to_string(),
+    )
+    .unwrap();
+    copy_tree(&source, &folder);
+    std::fs::create_dir_all(folder.join("bin")).unwrap();
+    std::fs::copy(
+        examples_target()
+            .join("debug")
+            .join(exe("worktrunk-plugin")),
+        folder.join("bin").join(exe("worktrunk-plugin")),
+    )
+    .unwrap();
+    // The stand-in wt, in a folder of its own: it logs each command line
+    // beside itself (the plugin's environment is cleared).
+    let tools_dir = tempfile::tempdir().unwrap();
+    let fake = tools_dir.path().join(exe("fake_wt"));
+    std::fs::copy(
+        examples_target()
+            .join("debug")
+            .join("examples")
+            .join(exe("fake_wt")),
+        &fake,
+    )
+    .unwrap();
+    let log = tools_dir.path().join("fake_wt.log");
+
+    let daemon = start_daemon(&[("claude", fixture_agent())]).await;
+    let added = post(&daemon, "/marketplaces", json!({"source": market.path()})).await;
+    assert_eq!(added.status, 200, "{}", added.raw);
+    let listed = call(&daemon, "GET", "/marketplaces/catalog", None).await;
+    let shown = listed.body["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["id"] == "worktrunk@openremote-local")
+        .cloned()
+        .unwrap_or_else(|| panic!("{}", listed.raw));
+    assert_eq!(shown["installable"], true, "{shown}");
+    assert_eq!(shown["runtime"], "process", "{shown}");
+
+    let staged = post(
+        &daemon,
+        "/plugins/stage",
+        json!({"source": {"kind": "marketplace", "marketplace": "openremote-local", "plugin": "worktrunk"}}),
+    )
+    .await;
+    let manifest = &staged.body["result"]["manifest"];
+    assert_eq!(
+        manifest["contributes"]["tools"].as_array().map(Vec::len),
+        Some(10),
+        "{}",
+        staged.raw
+    );
+    assert_eq!(
+        manifest["contributes"]["views"][0]["id"], "worktrees",
+        "{}",
+        staged.raw
+    );
+    let record = approve(&daemon, &staged).await;
+    let id = record["id"].as_str().unwrap().to_string();
+    assert_eq!(id, "worktrunk@openremote-local");
+    let mut powers: Vec<String> = serde_json::from_value(record["powers"].clone()).unwrap();
+    powers.sort();
+    assert_eq!(powers, ["agent_tools", "network", "run_programs"]);
+
+    // Worktrunk by its full path; update checks off (no network in tests).
+    save_settings(
+        &daemon,
+        &id,
+        json!({"wt_path": fake.to_string_lossy(), "check_updates": false}),
+    )
+    .await;
+
+    // A chat in a git repository (its .git is enough for the plugin and
+    // for the fake).
+    let workspace = workspace(None);
+    std::fs::create_dir_all(workspace.path().join(".git")).unwrap();
+    std::fs::write(
+        workspace.path().join(".git").join("HEAD"),
+        "ref: refs/heads/main\n",
+    )
+    .unwrap();
+    let in_chat = chat(&daemon, "claude", workspace.path()).await;
+
+    let listed = tool(&daemon, &in_chat, "worktrunk__list", json!({})).await;
+    assert_eq!(listed["isError"], false, "{listed}");
+    assert!(
+        text(&listed).contains("feat") && text(&listed).contains("2 ahead"),
+        "{listed}"
+    );
+
+    let created = tool(
+        &daemon,
+        &in_chat,
+        "worktrunk__create",
+        json!({"branch": "login"}),
+    )
+    .await;
+    assert_eq!(created["isError"], false, "{created}");
+    let refused = tool(
+        &daemon,
+        &in_chat,
+        "worktrunk__run",
+        json!({"args": ["switch", "-x", "calc", "x"]}),
+    )
+    .await;
+    assert_eq!(refused["isError"], true, "{refused}");
+    let ran = std::fs::read_to_string(&log).unwrap();
+    let ran: Vec<&str> = ran
+        .lines()
+        .filter(|l| !l.contains("--help") && !l.contains("--version"))
+        .collect();
+    assert_eq!(
+        ran,
+        [
+            "list --format json",
+            "switch --create --no-cd --format json login"
+        ],
+        "{ran:?}"
+    );
+
+    // A chat started in a new worktree, on the asking chat's harness.
+    let started = tool(
+        &daemon,
+        &in_chat,
+        "worktrunk__start_chat",
+        json!({"branch": "review", "prompt": "hello from the worktree"}),
+    )
+    .await;
+    assert_eq!(started["isError"], false, "{started}");
+    let sessions = call(&daemon, "GET", "/sessions", None).await;
+    let all = sessions.body["sessions"]
+        .as_array()
+        .or(sessions.body.as_array())
+        .cloned()
+        .unwrap_or_else(|| panic!("{}", sessions.raw));
+    let new = all
+        .iter()
+        .find(|s| {
+            s["workspace"]
+                .as_str()
+                .is_some_and(|w| w.ends_with(".review"))
+        })
+        .cloned()
+        .unwrap_or_else(|| panic!("a chat in the review worktree: {}", sessions.raw));
+    assert_eq!(new["harness"], "claude", "{new}");
+
+    // The Worktrunk view's request reaches the program.
+    let state = post(
+        &daemon,
+        &format!("/plugins/{id}/request"),
+        json!({"name": "state", "params": {}}),
+    )
+    .await;
+    assert_eq!(state.status, 200, "{}", state.raw);
+    assert_eq!(
+        state.body["result"]["version"]["installed"], true,
+        "{}",
+        state.raw
+    );
+    assert_eq!(
+        state.body["result"]["version"]["version"], "9.1.0",
+        "{}",
+        state.raw
+    );
+
+    // Each chat folder's branch, and whether it is a linked worktree.
+    let linked = tempfile::tempdir().unwrap();
+    let wt_git = workspace
+        .path()
+        .join(".git")
+        .join("worktrees")
+        .join("review");
+    std::fs::create_dir_all(&wt_git).unwrap();
+    std::fs::write(wt_git.join("HEAD"), "ref: refs/heads/review\n").unwrap();
+    std::fs::write(
+        linked.path().join(".git"),
+        format!("gitdir: {}\n", wt_git.display()),
+    )
+    .unwrap();
+    let places = post(
+        &daemon,
+        "/git/places",
+        json!({"paths": [workspace.path(), linked.path(), "relative/path"]}),
+    )
+    .await;
+    assert_eq!(places.status, 200, "{}", places.raw);
+    let p = &places.body["places"];
+    let main_key = workspace.path().to_string_lossy().into_owned();
+    let linked_key = linked.path().to_string_lossy().into_owned();
+    assert_eq!(p[&main_key]["branch"], "main", "{}", places.raw);
+    assert_eq!(p[&main_key]["worktree"], false, "{}", places.raw);
+    assert_eq!(p[&linked_key]["branch"], "review", "{}", places.raw);
+    assert_eq!(p[&linked_key]["worktree"], true, "{}", places.raw);
+    assert!(p["relative/path"].is_null(), "{}", places.raw);
+
+    // The stand-in made its worktrees beside the workspace.
+    for branch in ["login", "review"] {
+        let _ = std::fs::remove_dir_all(format!("{}.{branch}", workspace.path().display()));
+    }
+}

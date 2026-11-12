@@ -20,6 +20,7 @@ import { CATALOG, actionForCombo, comboFromEvent } from './shortcuts.js'
 import { addAttachment } from './attachments.js'
 import {
   FRAME_SANDBOX,
+  PAGE_RUNTIMES,
   contributionsOf,
   displayName,
   frameAllow,
@@ -106,14 +107,14 @@ export function PluginProvider({ children }) {
   const installed = plugins?.installed ?? null
 
   // Each installed plugin: its record, what it contributes (from the
-  // record), its name as people read it. Only a JavaScript plugin's pages
-  // run here; every plugin's settings are set here.
+  // record), its name as people read it. Only a JavaScript or process
+  // plugin's pages run here; every plugin's settings are set here.
   const allRecords = useMemo(
     () => (installed ?? []).map((plugin) => ({ plugin, ui: contributionsOf(plugin), name: displayName(plugin) })),
     [installed],
   )
   const records = useMemo(
-    () => new Map(allRecords.filter((r) => r.plugin.runtime === 'js').map((r) => [r.plugin.id, r])),
+    () => new Map(allRecords.filter((r) => PAGE_RUNTIMES.has(r.plugin.runtime)).map((r) => [r.plugin.id, r])),
     [allRecords],
   )
 

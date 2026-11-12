@@ -15,6 +15,7 @@ import {
   X,
   ArrowBendUpLeft,
   ImageSquare,
+  GitBranch,
 } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { chatAccess, deviceName, signedIn } from './cloud.js'
@@ -51,6 +52,7 @@ import { isTeamTool, teamTool } from './team.js'
 import { requestBeside } from './team-placement.js'
 import TeamBar from './TeamBar.jsx'
 import PluginComposerButtons from './PluginComposerButtons.jsx'
+import { placeWords, useGitPlaces } from './git-places.js'
 import './chatview.css'
 import './composer.css'
 import './team.css'
@@ -561,6 +563,10 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
   const reachable = access === 'here' || access === 'remote'
   const elsewhere = chat.executor && chat.executor !== thisDevice
   const where = elsewhere ? deviceName(devices, chat.executor) : 'this computer'
+  // The chat folder's git branch, and whether it is a linked worktree: read
+  // on this computer only (another device's folder is there).
+  const placeOf = useGitPlaces(apiFor(null), elsewhere || !chat.workspace ? [] : [chat.workspace])
+  const gitPlace = !elsewhere && chat.workspace ? placeWords(placeOf(chat.workspace)) : null
   const blocked = {
     offline: `${where} is offline - this copy is read-only until it is back`,
     'not-machine': `${where} isn't a machine - make it one to continue from here`,
@@ -1176,6 +1182,12 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
         <p className="cv-facts">
           {chat.status !== 'idle' && <span className={`cv-dot cv-dot--${chat.status}`} />}
           <span className="cv-where pv">{chat.workspace}</span>
+          {gitPlace && (
+            <span className="cv-fact cv-branch pv" title={gitPlace.title}>
+              <GitBranch size={11} aria-hidden="true" /> {gitPlace.branch}
+              {gitPlace.worktree && <span className="cv-worktree"> · worktree of {gitPlace.of}</span>}
+            </span>
+          )}
           <span className="cv-fact">{harnessText}</span>
           {elsewhere && <span className="cv-fact">on <span className="pv">{where}</span></span>}
           {chat.model && (

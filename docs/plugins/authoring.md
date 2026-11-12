@@ -20,6 +20,11 @@ Examples in this repository:
   `bin/toy`, `bin/toy.exe` on Windows) answers two agent tools,
   `word_count` and `greet`, and is also the driver of a toy harness,
   "Toy CLI", that echoes and asks before it shouts.
+- [`examples/plugins/worktrunk`](../../examples/plugins/worktrunk):
+  OpenRemote's official Worktrunk plugin, a process plugin with ten agent
+  tools, a sidebar view and a composer button whose pages ask its program,
+  and its own install and update of the tool it drives;
+  [worktrunk.md](worktrunk.md) is its design.
 - [`examples/harness-plugin`](../../examples/harness-plugin): a copyable
   template for a harness plugin's driver.
 
@@ -222,7 +227,9 @@ tools to the same chats: the second install is refused.
 
 #### composer_inputs
 
-Buttons in the composer's bottom row, run by a JavaScript plugin's page.
+Buttons in the composer's bottom row, run by a page in the console: a
+JavaScript plugin's, or a process plugin's (which then reaches its program
+through `openremote.program.request`).
 
 ```json
 "composer_inputs": [{"id": "dictate", "label": "Dictate", "icon": "microphone"}]
@@ -233,7 +240,8 @@ Buttons in the composer's bottom row, run by a JavaScript plugin's page.
 - `icon`: one of the app's icon names, in letters only (`microphone`,
   `Microphone`); see [js-api.md](js-api.md) for the set.
 - `entry`: the page, a path inside the plugin. A js plugin may leave it
-  out: its own entry answers its buttons.
+  out: its own entry answers its buttons. A process plugin names one for
+  each button (its own entry is its program).
 
 #### views
 
@@ -246,12 +254,14 @@ Pages of the plugin's own, run in a sandboxed frame from its files.
 - `place`: `sidebar`, `machines` or `settings`.
 - `entry`: the page, a path inside the plugin.
 
-Today the console shows a **JavaScript plugin's `sidebar` views** only: a
-tile under Plugins in the sidebar that opens the view in a pane. Views
-placed in `machines` or `settings`, and a process plugin's views (whose
-page would reach its program through `POST /plugins/{id}/request`,
-arriving as `ui/request`), are accepted and shown at review but have no
-console surface yet.
+The console shows **`sidebar` views** of JavaScript and process plugins: a
+tile under Plugins in the sidebar that opens the view in a pane. A process
+plugin's page runs in the same sandboxed frame as a JavaScript plugin's
+and asks its program with `openremote.program.request(name, params)`
+(`POST /plugins/{id}/request`, arriving as `ui/request`); its chats and
+network go through its program, not the frame. Views placed in `machines`
+or `settings` are accepted and shown at review but have no console surface
+yet.
 
 #### settings
 

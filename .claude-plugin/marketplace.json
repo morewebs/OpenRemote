@@ -37,6 +37,36 @@
           ]
         }
       }
+    },
+    {
+      "name": "worktrunk",
+      "displayName": "Worktrunk",
+      "description": "Git worktrees for your agents, through Worktrunk (wt): agents list, create, switch, merge and remove worktrees and hand work to a new chat in its own worktree; a Worktrees view and composer button; each chat shows its branch; Worktrunk installed and kept up to date from the view.",
+      "version": "0.1.0",
+      "author": {
+        "name": "moreweb",
+        "url": "https://moreweb.space"
+      },
+      "homepage": "https://github.com/morewebs/OpenRemote/tree/main/examples/plugins/worktrunk",
+      "license": "AGPL-3.0-only",
+      "category": "development",
+      "keywords": [
+        "worktrunk",
+        "git",
+        "worktree",
+        "parallel-agents"
+      ],
+      "source": "./examples/plugins/worktrunk",
+      "metadata": {
+        "openremote": {
+          "runtime": "process",
+          "powers": [
+            "run_programs",
+            "agent_tools",
+            "network"
+          ]
+        }
+      }
     }
   ]
 }

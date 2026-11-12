@@ -222,6 +222,8 @@ fn chat(app: &App, raw: &str) -> Result<ChatInfo, Box<Response>> {
     Ok(ChatInfo {
         id,
         workspace: session.workspace.clone(),
+        harness: session.harness.clone(),
+        model: session.model.clone(),
     })
 }
 

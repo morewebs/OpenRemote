@@ -166,11 +166,14 @@ with its own tool name.
 {"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {
   "name": "word_count",
   "arguments": {"text": "one two three"},
-  "chat": {"id": "2320d324-78ce-4ee1-b13e-18e7ca310f14", "workspace": "/home/me/code/site"}
+  "chat": {"id": "2320d324-78ce-4ee1-b13e-18e7ca310f14", "workspace": "/home/me/code/site",
+           "harness": "claude", "model": "claude-opus-5-5"}
 }}
 ```
 
-`chat.workspace` is null for a chat in no project. Answer with an MCP tool
+`chat.workspace` is null for a chat in no project. `chat.harness` and
+`chat.model` (null when the chat uses its harness's default) say what the
+asking chat runs, so a tool that starts a chat can start it alike. Answer with an MCP tool
 result:
 
 ```json
@@ -209,10 +212,11 @@ A view's page asked the plugin's program something, through the daemon's
 {"jsonrpc": "2.0", "id": 12, "method": "ui/request", "params": {"name": "hosts", "params": {}}}
 ```
 
-Answer with whatever JSON the view expects. The call waits 60 seconds.
-The route exists, but the console does not show a process plugin's views
-yet: today only a JavaScript plugin's sidebar views have a place to
-render.
+Answer with whatever JSON the view expects. The call waits 60 seconds:
+work that takes longer answers at once and lets the page ask how it is
+going (the Worktrunk plugin's jobs do this). The page is a `sidebar` view
+or a composer button's page, run in the console's sandboxed frame; it
+asks with `openremote.program.request(name, params)` ([js-api.md](js-api.md)).
 
 ### Calls to OpenRemote (plugin to OpenRemote)
 

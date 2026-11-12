@@ -707,7 +707,8 @@ button:active,
 }
 
 /* The pin on a kept row: a glyph the size of the synced mark, in the title
-   line, so a pinned chat scans as pinned from the row alone. */.chat-pin {
+   line, so a pinned chat scans as pinned from the row alone. */
+.chat-pin {
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -716,7 +717,8 @@ button:active,
 }
 
 /* The Show N more line: quiet like an empty line but a control, so it sits
-   in the list's column at the row's own left edge. */.sb-more {
+   in the list's column at the row's own left edge. */
+.sb-more {
   display: block;
   width: 100%;
   margin: 2px 0 4px;
@@ -730,7 +732,8 @@ button:active,
   text-align: left;
   cursor: pointer;
 }
-.sb-more:hover {
+
+.sb-more:hover {
   background: var(--bg-hover);
   color: var(--text-2);
 }
@@ -739,6 +742,21 @@ button:active,
    than it. Text, never a control: the chat is where a decision is answered.
    The marker in the text is what says the question continues; the ellipsis
    is only the fallback for a pane too narrow to show what was cut to. */
+/* A chat in a linked git worktree wears its branch. */
+.chat-branch-name {
+  display: block;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-3);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.chat-branch-name svg {
+  vertical-align: -1px;
+}
+
 .chat-question {
   overflow: hidden;
   font-size: 11px;

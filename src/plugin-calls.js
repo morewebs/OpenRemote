@@ -186,6 +186,15 @@ export function makeCalls(deps) {
       return [null]
     },
 
+    // A process plugin's page asks its program (ui/request): what it answers
+    // comes back as it is.
+    'program.request': async ({ plugin }, { name, params }) => {
+      const asked = String(name ?? '').trim()
+      if (!asked || asked.length > 100) throw new Error('Name the request.')
+      const reply = await deps.api().pluginRequest(plugin.id, asked, params && typeof params === 'object' ? params : {})
+      return [reply?.result ?? null]
+    },
+
     'chats.list': chat('chats.list'),
     'chats.read': chat('chats.read'),
     'chats.start': chat('chats.start'),
@@ -241,6 +250,7 @@ export async function answerCall(record, message, calls) {
     name: record.name,
     powers: record.plugin.powers ?? [],
     inputs: record.ui.inputs,
+    runtime: record.plugin.runtime ?? 'js',
   })
   if (refused) return { error: refused }
   const handler = Object.hasOwn(calls, method) ? calls[method] : null

@@ -61,6 +61,9 @@ pub fn router(app: Arc<App>) -> Router {
         // never another device (not in `api_routes`, so no peer reaches
         // them).
         .merge(crate::plugin_runtime::routes::routes())
+        // Where each chat's folder stands in git (its branch, and whether it
+        // is a linked worktree): this device's console only.
+        .merge(crate::git_place::routes())
         // The console reaches another device's API through this one.
         .route(
             "/devices/{id}/{*rest}",

@@ -20,6 +20,7 @@ import {
   FolderOpen,
   FolderSimple,
   Gear,
+  GitBranch,
   House,
   PushPin,
   PushPinSlash,
@@ -63,6 +64,7 @@ import { rolledStatus } from './team.js'
 import { usePlugins } from './plugins-host.jsx'
 import { PluginGlyph } from './plugin-icons.jsx'
 import { isPluginView } from './plugin-runtime.js'
+import { placeWords, useGitPlaces } from './git-places.js'
 import './sidebar.css'
 import './team.css'
 
@@ -278,6 +280,14 @@ export default function Sidebar({
       }
     })
   }, [sessions, archived, chats, mode, devices, thisDevice, renamedTitles])
+
+  // The git branch of each chat on this computer: a chat in a linked
+  // worktree (Worktrunk's, or any git worktree) wears its branch, so chats
+  // working side by side in one project read apart.
+  const placeOf = useGitPlaces(
+    api,
+    rows.filter((r) => !r.device).map((r) => r.workspace),
+  )
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -1108,6 +1118,14 @@ export default function Sidebar({
               screen together. A summary here that could act would be an
               approvals panel built out of a row, without any of that. */}
           {row.question && <span className="chat-question pv">{row.question}</span>}
+          {(() => {
+            const place = !row.device && row.workspace ? placeWords(placeOf(row.workspace)) : null
+            return place?.worktree ? (
+              <span className="chat-branch-name pv" title={place.title}>
+                <GitBranch size={10} aria-hidden="true" /> {place.branch}
+              </span>
+            ) : null
+          })()}
         </div>
         {mode === 'cloud' && row.device && (
           <span className="chat-device pv">{row.device}</span>

@@ -53,6 +53,10 @@ const REQUEST_TIME: Duration = Duration::from_secs(60);
 pub struct ChatInfo {
     pub id: SessionId,
     pub workspace: Option<PathBuf>,
+    /// The chat's harness and model, so a tool that starts a chat (a
+    /// worktree's, say) can start it like the asking one.
+    pub harness: String,
+    pub model: Option<String>,
 }
 
 /// An installed plugin at work, and its folder.
@@ -400,7 +404,12 @@ impl PluginRuntime {
             .timeout_secs
             .map(Duration::from_secs)
             .unwrap_or(TOOL_TIME);
-        let chat_json = json!({"id": chat.id, "workspace": chat.workspace});
+        let chat_json = json!({
+            "id": chat.id,
+            "workspace": chat.workspace,
+            "harness": chat.harness,
+            "model": chat.model,
+        });
         match plugin.runtime {
             Runtime::Process => {
                 let conn = match self.process(&plugin.id()).await {

@@ -57,6 +57,10 @@ function fakeApi() {
       asked.push(['file', id, path])
       return { type: 'text/plain', bytes: new TextEncoder().encode('hello').buffer }
     },
+    async pluginRequest(id, name, params) {
+      asked.push(['request', id, name, params])
+      return { result: { answered: name } }
+    },
     async pluginFetch(id, request) {
       asked.push(['fetch', id, request])
       return { status: 200, headers: [['content-type', 'text/plain']], body: btoa('ok') }
@@ -254,4 +258,17 @@ test('a grant ends when the button goes back to idle, or five minutes after the 
   assert.match((await insert('six')).error, /only after the user clicks/)
   assert.equal(GRANT_MS, 5 * 60 * 1000)
   assert.deepEqual(typed, ['one', 'five'])
+})
+
+test("a process plugin's page asks its program through the daemon, and only a process plugin's", async () => {
+  const { calls, asked } = setup()
+  const proc = record([], { runtime: 'process', entry: 'bin/x', id: 'worktrunk@openremote' })
+  const reply = await answerCall(proc, { id: 1, method: 'program.request', params: { name: 'state', params: { repo: '/r' } } }, calls)
+  assert.deepEqual(reply.result, { answered: 'state' })
+  assert.deepEqual(asked.at(-1), ['request', 'worktrunk@openremote', 'state', { repo: '/r' }])
+  const js = await answerCall(record([]), { id: 2, method: 'program.request', params: { name: 'state' } }, calls)
+  assert.match(js.error, /no program/)
+  const unnamed = await answerCall(proc, { id: 3, method: 'program.request', params: { name: '' } }, calls)
+  assert.match(unnamed.error, /Name the request/)
+  assert.equal(asked.filter((a) => a[0] === 'request').length, 1)
 })

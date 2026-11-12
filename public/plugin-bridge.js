@@ -325,6 +325,10 @@
       stop: (id) => call('chats.stop', { id }),
     },
     fetch: pluginFetch,
+    // A process plugin's page asking its own program (its ui/request).
+    program: {
+      request: (name, params = {}) => call('program.request', { name: String(name ?? ''), params: params ?? {} }),
+    },
     settings: {
       get: () => call('settings.get'),
       onChange(handler) {
