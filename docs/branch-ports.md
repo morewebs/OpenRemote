@@ -54,6 +54,7 @@ recorded as dropped below.
 | Harness contract additions on main's `plugin_driver`: `mcp_servers` and `allowed_tools` on spawn, `--commands` catalog, `commands_listed`, ask `interrupts_turn`/`session_grant`, manifest `permission_modes`, `default_permission`, `fast`, `mcp`, `commands`, `one_prompt_at_a_time`, `steers_mid_turn` | br-plugins 7f75c88 (`plugin_runtime/harness.rs`, dropped) | 43d33dd |
 | Plugin model and store: `scope` (Global, Machine, ProjectLocal, Project), `project` and `contributes` on an installed plugin, serde defaults so older stores load, a harness summary backfilled | br-plugins 7f75c88 (openremote-core `model.rs`, `lib.rs`) | bfa6a86 |
 | Plugin runtime without harnesses: manifest `entry` and `contributes` (tools, composer inputs, views, settings) checked at review, process tools and view requests, WASM agent tools on wasmi 0.46 (no WASI, fuel and memory limits, network only with the power, vetted public addresses), private settings with secrets answered set or unset, console-only routes, the wasmi notice | br-plugins 7f75c88 (`plugin_runtime/` minus `harness.rs`, `scope.rs`, `global.rs`, `install.rs`), 344ea0b, 05ab28b, ab5e1ab | 25e83f8, 7e0a83b |
+| Plugin scopes and Global sync: Machine, Project-local, Project (files in the repo, run only while they hash to what was approved) and Global; a project's plugin rides only its chats; a Global record from another device is listed for review and installs nothing on its own; `/sync/plugins` peer routes; the console's scope picker and review lists | br-plugins 7f75c88 (`scope.rs`, `global.rs`, `install.rs`, the store's Global records), 496492c | db89194, 06c0377 |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 `wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`,
@@ -118,7 +119,8 @@ Freebuff). `plugin_runtime/harness.rs` is dropped; the rest is ported on top.
 4. ~~`plugin_runtime` without harnesses: manifest, process tools and views,
    settings, routes, WASM, notices. Keep the 409 that names live chats~~
    (done: 25e83f8, 7e0a83b).
-5. Scopes and global sync; console scope UI (496492c).
+5. ~~Scopes and global sync; console scope UI (496492c)~~ (done: db89194,
+   06c0377).
 6. JS UI plugins: routes, frames and bridge, CSP, composer buttons, views,
    settings (78a7035 … 6e475bd).
 7. Docs and examples; Claude Code plugin layout (eafd691, 4e0909e, 740c90a,
