@@ -338,3 +338,20 @@ test('pictures free their bitmaps when they fail, and a failed clip fails', () =
   const shots = read(`${android}Shots.kt`)
   assert.match(shots, /if \(part == null\) \{\n\s+shot\.recycle\(\)\n\s+return@bitmap done\(null\)/)
 })
+
+// ---- review fixes (round 2) ----
+
+test('a blob reader never takes more than the file\'s own bound from the page', () => {
+  const agent = read(`${android}Agent.kt`)
+  const reader = agent.slice(agent.indexOf('fun readBlob('))
+  assert.match(reader, /val bound = max \* 4 \/ 3 \+ 4/)
+  assert.match(reader, /if \(length < 0 \|\| length > bound\) \{/)
+  assert.match(reader, /if \(slice\.length > CHUNK \|\| text\.length \+ slice\.length > bound\) \{/)
+  // Checked before anything is appended.
+  assert.ok(reader.indexOf('slice.length > CHUNK') < reader.indexOf('text.append(slice)'))
+})
+
+test('the provider keeps wry\'s camera capture folder', () => {
+  const paths = read('../src-tauri/gen/android/app/src/main/res/xml/file_paths.xml')
+  assert.match(paths, /<external-files-path name="pictures" path="Pictures\/" \/>/)
+})

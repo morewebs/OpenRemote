@@ -708,7 +708,16 @@ class AgentHost(private val browser: Browser) {
     val forget = "delete globalThis[$slot]"
     val until = SystemClock.uptimeMillis() + 120_000
     page.evaluateJavascript(start, null)
+    // The page answers the length and the slices, and a page can lie: the
+    // most base64 a file of [max] bytes takes is the bound, checked before
+    // reading and again as each slice lands, so a page can't grow this
+    // buffer until the app (and the daemon in it) runs out of memory.
+    val bound = max * 4 / 3 + 4
     fun pieces(type: String?, length: Long) {
+      if (length < 0 || length > bound) {
+        page.evaluateJavascript(forget, null)
+        throw Fail("that file is too large to save from the page")
+      }
       val text = StringBuilder()
       fun piece(from: Long) {
         if (from >= length) {
@@ -723,7 +732,12 @@ class AgentHost(private val browser: Browser) {
         page.evaluateJavascript("globalThis[$slot].data.slice($from, ${from + CHUNK})") { raw ->
           guard(out) {
             if (tab.page !== page) throw Fail("the tab closed while saving its file")
-            text.append(unquote(raw) ?: throw Fail("the page lost its file"))
+            val slice = unquote(raw) ?: throw Fail("the page lost its file")
+            if (slice.length > CHUNK || text.length + slice.length > bound) {
+              page.evaluateJavascript(forget, null)
+              throw Fail("the page handed over more than its file")
+            }
+            text.append(slice)
             piece(from + CHUNK)
           }
         }

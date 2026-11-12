@@ -3,7 +3,11 @@
      downloads kept in the app's own Downloads folder (before Android 10 a
      download lands there; from 10 on downloads are MediaStore and
      DownloadManager addresses, which need no provider). Nothing in the
-     app's cache or the rest of shared storage. -->
+     app's cache or the rest of shared storage. A page's camera capture is
+     the one other thing, below. -->
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
   <external-files-path name="downloads" path="Download/" />
+  <!-- wry's file chooser (RustWebChromeClient.createImageFileUri) puts a
+       camera capture in the app's own Pictures folder through this provider. -->
+  <external-files-path name="pictures" path="Pictures/" />
 </paths>
