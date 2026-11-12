@@ -72,6 +72,9 @@ recorded as dropped below.
 | Codex `never` sandbox: reviewed, not ported - on main `never` is "Never ask" and keeps the workspace sandbox (codex 0.167 runs that pairing as given); lifting it to `danger-full-access` would do more than the word says. Pinned by a test that fails on the branch's version | br-chatctl 5382f7d (codex driver) | 59a6a1f |
 | In-app updates: a look once a day for a newer signed release, installed on the user's click with the daemon stopped first; signatures staged at the release root and `latest.json` written by main's `publish` job (no separate job). Update path not yet proven by a test release | br-updater c978b92 | 23ff224 |
 | Android phone browser: the Kotlin WebView plugin, the desktop's `browser_*` commands and events on the phone, `BrowserPhone.jsx` on main's store, bookmarks, history, prefs and permission flow, the phone's "<App> is browsing" pill. **Not checked on a device** (cargo check and clippy for aarch64-linux-android pass; the Kotlin is compiled only by the Android build) | br-android 5df13bd, f768051, 25aee6d, 1c6f04b, 56371d7, cc0080f, 546c420; browser 1a2ab3d (phone pill) | 9b358d5 |
+| Ad blocking, daemon: on/off, the picked lists and the allowed sites in the store's own `adblock` collections (never synced); a catalog of EasyList and EasyPrivacy with each licence, **none picked by default**; a list downloads only while blocking is on and it is picked (HTTPS on every hop, 16 MB, 60 s a hop, trimmed before it is kept); `Caps.adblock`, so only a browser that can block is told; routes `GET/POST /browser/adblock`, `POST /browser/adblock/site` (not peer routes) | br-adblock 4df6edf, 77e6d0b | 852143c |
+| Ad blocking, shell (Windows): Brave's engine (adblock 0.13, MPL-2.0) over WebView2 request hooks, hide rules, the blocked count; **no list ships** (the branch's brotli snapshots and `update-filter-lists.mjs` dropped); only `tab-N` webviews are hooked, never the console, and nothing on the user's machine or network (so never the daemon); off, no hook and no engine; a hostile-list test. Notices name the crates and each offered list's licence | br-adblock 35a116c, ea815f7 | b2b3383 |
+| Ad blocking, console (new; no branch had one): Settings > Browser's Block ads and trackers, Filter lists (a `useDialog` chooser, licence beside each list) and Sites allowed to show ads, registered in `settings-search.js`, refusals through `errorCopy`. Not yet looked at in the running app | new | 3915e0a |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 `wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`,
@@ -227,8 +230,12 @@ main, or obsolete:
 - Live views: protocol, mesh binary notes, daemon routing and `Tier::Browser`,
   shell cast, console live view, `e2e_cloud_browser.rs`. Needs a trust-model
   update (`docs/cloud-trust-model.md`) and a web-console answer for NOTE_BIN.
-- Ad blocking: daemon setting and routes, WebView2 hooks and lists, plus a new
-  console toggle (none exists on any branch).
+- Ad blocking: ported (Done rows above). **Open, for the user to decide:
+  which filter lists ship enabled by default.** Today none is picked and none
+  is downloaded until the user picks one (the ruling for this port); the
+  catalog offers EasyList and EasyPrivacy. br-adblock's d6f1839 (its saved
+  working tree) is browser import code, not ad blocking: it goes with the
+  import item below, so br-adblock is not ready to delete until that lands.
 - Browser import from Chromium, Firefox, Safari: unfinished (no `import/mod.rs`,
   no `safari.rs`); finish, cap imports below the bookmark sync limit.
 - br-sync profile sync: **dropped** by policy (cookies and site storage stay on
