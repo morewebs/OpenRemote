@@ -29,6 +29,7 @@ use uuid::Uuid;
 
 use crate::images::NewImage;
 use crate::registry::{Backend, HarnessRegistry, SessionDriver};
+use crate::slash;
 
 mod carry;
 mod composer;
@@ -425,7 +426,11 @@ pub struct Supervisor {
     this_machine: MachineId,
     /// Each harness's command list per workspace, as the composer's /
     /// menu shows it (composer.rs).
-    command_cache: StdMutex<HashMap<(String, std::path::PathBuf), composer::CachedCommands>>,
+    command_cache: Arc<StdMutex<HashMap<(String, std::path::PathBuf), composer::CachedCommands>>>,
+    /// Goes up whenever a command list may have changed (composer.rs).
+    commands_rev: Arc<std::sync::atomic::AtomicU64>,
+    /// The folders commands come from, watched once the composer asks.
+    command_watch: std::sync::OnceLock<Arc<crate::command_watch::CommandWatch>>,
     /// The read-a-chat MCP server (OpenRemote Controls' first tool): this
     /// binary in its `mcp-chat` mode, told the API's port. Unset, chats
     /// run without it (the e2e suites without a daemon binary).
@@ -501,7 +506,9 @@ impl Supervisor {
             stderr_ring: StdMutex::new(HashMap::new()),
             steer_next: StdMutex::new(HashMap::new()),
             this_machine,
-            command_cache: StdMutex::new(HashMap::new()),
+            command_cache: Arc::new(StdMutex::new(HashMap::new())),
+            commands_rev: Arc::new(std::sync::atomic::AtomicU64::new(1)),
+            command_watch: std::sync::OnceLock::new(),
             controls: std::sync::OnceLock::new(),
             prompt_note: std::sync::OnceLock::new(),
             plugin_changed: std::sync::OnceLock::new(),
@@ -955,6 +962,8 @@ impl Supervisor {
     /// plugin routes; chats already running keep their driver process.
     pub async fn reprobe_harnesses(&self) {
         self.swap_in_fresh_registry().await;
+        // A plugin came, went or switched: its commands with it.
+        self.commands_changed();
     }
 
     /// The installed plugin's spec behind a harness id, when a plugin
@@ -1056,8 +1065,11 @@ impl Supervisor {
             created_at: now_ms(),
             updated_at: now_ms(),
         };
-        self.with_store(|s| s.add_mcp_server(server))
-            .map_err(store_error)
+        let added = self
+            .with_store(|s| s.add_mcp_server(server))
+            .map_err(store_error)?;
+        self.commands_changed();
+        Ok(added)
     }
 
     /// The folders of the plugins a chat in `workspace` gets that claude
@@ -1135,7 +1147,9 @@ impl Supervisor {
 
     pub fn remove_mcp_server(&self, id: &str) -> Result<(), SupervisorError> {
         self.with_store(|s| s.remove_mcp_server(id))
-            .map_err(store_error)
+            .map_err(store_error)?;
+        self.commands_changed();
+        Ok(())
     }
 
     pub fn set_mcp_server_enabled(
@@ -1143,8 +1157,11 @@ impl Supervisor {
         id: &str,
         enabled: bool,
     ) -> Result<McpServerEntry, SupervisorError> {
-        self.with_store(|s| s.set_mcp_server_enabled(id, enabled))
-            .map_err(store_error)
+        let entry = self
+            .with_store(|s| s.set_mcp_server_enabled(id, enabled))
+            .map_err(store_error)?;
+        self.commands_changed();
+        Ok(entry)
     }
 
     pub fn acknowledge_mcp_server_key(&self, id: &str) -> Result<McpServerEntry, SupervisorError> {
@@ -1728,6 +1745,22 @@ impl Supervisor {
     ) -> Result<(), SupervisorError> {
         self.ensure_here(id)?;
         let entry = self.entry(id).await?;
+        // The App's own commands are routed before anything is written: a
+        // refused one leaves no turn behind (slash.rs).
+        let steering = {
+            let driver = entry.driver.lock().await;
+            driver.steers_mid_turn()
+        } && matches!(
+            self.session(id)?.status,
+            SessionStatus::Working | SessionStatus::Waiting
+        );
+        let verdict = match origin {
+            Some(_) => slash::Verdict::Send,
+            None => self.slash_verdict(id, text, steering)?,
+        };
+        if let slash::Verdict::Refuse(why) = verdict {
+            return Err(SupervisorError::Conflict(why));
+        }
         // Built before anything is written: a picture that can't be read
         // leaves no turn behind.
         let pictures = self.harness_images(&entry, images).await?;
@@ -1735,8 +1768,91 @@ impl Supervisor {
         self.open_prompt_locked(id, &entry, text, origin, images)
             .await?;
         drop(order);
-        self.send_prompt_text(id, &entry, text, origin, pictures)
-            .await
+        match verdict {
+            slash::Verdict::Driver { action, args } => {
+                self.run_command_turn(id, &entry, action, &args).await
+            }
+            _ => {
+                self.send_prompt_text(id, &entry, text, origin, pictures)
+                    .await
+            }
+        }
+    }
+
+    /// How a message that starts with one of its App's own commands runs
+    /// here: sent, run through the App's protocol, or refused.
+    fn slash_verdict(
+        &self,
+        id: &SessionId,
+        text: &str,
+        steering: bool,
+    ) -> Result<slash::Verdict, SupervisorError> {
+        if slash::leading(text).is_none() {
+            return Ok(slash::Verdict::Send);
+        }
+        let session = self.session(id)?;
+        let cwd = session.workspace.clone().unwrap_or_else(Self::home_dir);
+        let listed = self.listed_commands(&session.harness, &cwd);
+        let app = self.harness_name(&session.harness);
+        Ok(slash::verdict(
+            &session.harness,
+            &app,
+            text,
+            steering,
+            |name| listed.contains(name),
+        ))
+    }
+
+    /// Run one of the App's own commands through its protocol, inside the
+    /// turn already opened for it. One the App runs as a turn ends when the
+    /// App says so; one that answers at once closes its turn here, with
+    /// what it said as a note, and lets the queue move. A failed call says
+    /// why in the chat and fails only its own turn.
+    async fn run_command_turn(
+        &self,
+        id: &SessionId,
+        entry: &SessionEntry,
+        action: &str,
+        args: &str,
+    ) -> Result<(), SupervisorError> {
+        let ran = {
+            let mut driver = entry.driver.lock().await;
+            driver.run_command(action, args).await
+        };
+        let mut payloads = Vec::new();
+        let order = entry.order.lock().await;
+        match ran {
+            Ok(openremote_harness::CommandRun::Turn) => return Ok(()),
+            Ok(openremote_harness::CommandRun::Done(note)) => {
+                if let Some(text) = note {
+                    payloads.push(EventPayload::NoteAdded { text });
+                }
+                payloads.push(EventPayload::TurnCompleted {
+                    turn: self.current_turn(id),
+                    outcome: "success".to_string(),
+                    coarse: TurnOutcome::Completed,
+                });
+            }
+            Err(e) => {
+                payloads.push(EventPayload::DaemonError {
+                    message: e.to_string(),
+                });
+                payloads.extend(self.open_turn_boundary(id));
+            }
+        }
+        if self
+            .session(id)
+            .map(|s| s.status.is_alive())
+            .unwrap_or(false)
+        {
+            payloads.push(EventPayload::SessionStatusChanged {
+                status: SessionStatus::Idle,
+                reason: None,
+            });
+        }
+        self.emit_all(id, payloads)?;
+        drop(order);
+        self.drain_queue(id).await
     }
 
     /// Refuse a message's pictures when the chat's harness reads none, in
@@ -2802,6 +2918,13 @@ impl Supervisor {
         origin: Option<Origin>,
         images: Vec<NewImage>,
     ) -> Result<Session, SupervisorError> {
+        // A command that can't run here is refused now, not when its turn
+        // comes and nobody is looking.
+        if origin.is_none() {
+            if let slash::Verdict::Refuse(why) = self.slash_verdict(id, text, false)? {
+                return Err(SupervisorError::Conflict(why));
+            }
+        }
         let kept = self.keep_images(id, &images)?;
         {
             let order = self.order_of(id).await;
@@ -3009,6 +3132,15 @@ impl Supervisor {
         self.open_prompt_locked(id, &entry, &next.text, next.origin.as_ref(), &next.images)
             .await?;
         drop(order);
+        // A queued command was checked when it was queued; one the App runs
+        // through its protocol goes that way now.
+        if next.origin.is_none() {
+            if let slash::Verdict::Driver { action, args } =
+                self.slash_verdict(id, &next.text, false)?
+            {
+                return Box::pin(self.run_command_turn(id, &entry, action, &args)).await;
+            }
+        }
         self.send_prompt_text(id, &entry, &next.text, next.origin.as_ref(), pictures)
             .await
     }

@@ -355,3 +355,14 @@ pub struct CommandCatalog {
     pub commands: Vec<CommandDescriptor>,
     pub agents: Vec<AgentDescriptor>,
 }
+
+/// What one of an App's own commands did when OpenRemote ran it through
+/// the App's protocol rather than sending it as words.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CommandRun {
+    /// The App runs it as a turn and reports that turn's end itself.
+    Turn,
+    /// It finished when the call answered; the words are what the chat
+    /// shows about it, if anything.
+    Done(Option<String>),
+}

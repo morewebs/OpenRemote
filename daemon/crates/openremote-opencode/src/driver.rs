@@ -94,6 +94,71 @@ impl Driver {
         Ok(())
     }
 
+    /// One of OpenCode's terminal commands, through its server: the
+    /// terminal parses those itself, so sent as text they would reach the
+    /// model as words. Each answers when its call does; the turn the
+    /// supervisor opened for it is closed there, so no boundary is waited
+    /// for here.
+    pub async fn run_command(
+        &mut self,
+        action: &str,
+        _args: &str,
+    ) -> Result<openremote_harness::CommandRun, DriverError> {
+        use openremote_harness::CommandRun;
+        let session = self.session_id.clone();
+        match action {
+            "compact" => {
+                if self.wire != Wire::V2 {
+                    return Err(DriverError::Harness(
+                        "this OpenCode version compacts only from its own terminal".into(),
+                    ));
+                }
+                self.client
+                    .post(
+                        &format!("/api/session/{session}/compact"),
+                        serde_json::json!({}),
+                    )
+                    .await?;
+                Ok(CommandRun::Done(Some("This session was compacted.".into())))
+            }
+            "undo" => {
+                let messages = self
+                    .client
+                    .get(&format!("/session/{session}/message"))
+                    .await?;
+                let Some(last) = last_user_message(&messages) else {
+                    return Ok(CommandRun::Done(Some(
+                        "There is nothing to undo yet.".into(),
+                    )));
+                };
+                self.client
+                    .post(
+                        &format!("/session/{session}/revert"),
+                        serde_json::json!({"messageID": last}),
+                    )
+                    .await?;
+                Ok(CommandRun::Done(Some(
+                    "OpenCode undid the last message and its file changes. /redo brings them back."
+                        .into(),
+                )))
+            }
+            "redo" => {
+                self.client
+                    .post(
+                        &format!("/session/{session}/unrevert"),
+                        serde_json::json!({}),
+                    )
+                    .await?;
+                Ok(CommandRun::Done(Some(
+                    "OpenCode brought back what /undo took away.".into(),
+                )))
+            }
+            other => Err(DriverError::Harness(format!(
+                "OpenCode has no call for /{other} here"
+            ))),
+        }
+    }
+
     /// `/name rest` when `name` is one of OpenCode's commands.
     async fn leading_command(&mut self, text: &str) -> Option<(String, String)> {
         let rest = text.trim_start().strip_prefix('/')?;
@@ -950,8 +1015,34 @@ async fn drain_stderr(
     }
 }
 
+/// The id of the newest message the user sent, from OpenCode's message
+/// list (each entry `{info: {id, role}, parts}`).
+fn last_user_message(messages: &Value) -> Option<String> {
+    messages
+        .as_array()?
+        .iter()
+        .rev()
+        .filter_map(|m| m.get("info"))
+        .find(|info| info.get("role").and_then(Value::as_str) == Some("user"))
+        .and_then(|info| info.get("id").and_then(Value::as_str))
+        .map(String::from)
+}
+
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn undo_reverts_to_the_newest_message_the_user_sent() {
+        let list = serde_json::json!([
+            {"info": {"id": "m1", "role": "user"}, "parts": []},
+            {"info": {"id": "m2", "role": "assistant"}, "parts": []},
+            {"info": {"id": "m3", "role": "user"}, "parts": []},
+            {"info": {"id": "m4", "role": "assistant"}, "parts": []},
+        ]);
+        assert_eq!(last_user_message(&list).as_deref(), Some("m3"));
+        assert_eq!(last_user_message(&serde_json::json!([])), None);
+    }
+
     use super::*;
 
     fn permission_env(command: &Command) -> Option<Option<String>> {

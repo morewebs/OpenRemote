@@ -7,6 +7,8 @@
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use openremote_core::{Event, EventPayload, MessageRole, Session, SessionId};
 use openremote_harness::CommandCatalog;
@@ -49,8 +51,19 @@ pub struct CommandEntry {
     pub argument_hint: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub aliases: Vec<String>,
-    /// `harness` (its own) or `plugin` (an installed plugin's).
+    /// `builtin` (one of the App's own, from OpenRemote's table or the
+    /// App's own list), `custom` (the user's or the project's own command
+    /// file), `harness` (anything else the App listed: a skill, a prompt),
+    /// `plugin` (an installed plugin's) or `mcp` (an MCP server's prompt).
     pub source: &'static str,
+    /// How it runs: `native`, `driver`, `console` or `refuse` (slash.rs).
+    pub route: crate::slash::Route,
+    /// For `console`, the app's action; for `driver`, the App's call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<&'static str>,
+    /// The list the argument is picked from (`model`, `effort`, `permission`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub choices: Option<&'static str>,
     /// `command` or `skill`: a harness lists the user's whole skill library
     /// beside its commands, and the / menu keeps the two apart.
     pub kind: &'static str,
@@ -98,6 +111,10 @@ pub struct CommandsView {
     /// found still shows.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Goes up whenever any command list may have changed (a watched folder,
+    /// a plugin, an MCP server, a chat that reported a different list): a
+    /// console holding an older number asks again.
+    pub rev: u64,
 }
 
 /// The name a plugin's commands carry: its Claude manifest's own name.
@@ -180,6 +197,7 @@ impl Supervisor {
             )));
         };
         let cwd = workspace.unwrap_or_else(Self::home_dir);
+        self.command_watch().note_workspace(&cwd);
         let (plugins, data_dir) = self.with_store(|s| {
             let plugins: Vec<openremote_core::InstalledPlugin> = s
                 .installed_plugins()
@@ -249,7 +267,7 @@ impl Supervisor {
             }
         };
         let settings_servers: Vec<String> = self.mcp_servers().into_iter().map(|s| s.id).collect();
-        Ok(build_view(
+        let mut view = build_view(
             harness,
             runs_plugins,
             catalog.unwrap_or_default(),
@@ -257,7 +275,67 @@ impl Supervisor {
             settings_servers,
             error,
             &local_skills(&cwd),
-        ))
+        );
+        apply_builtins(&mut view, &local_commands(&cwd));
+        view.rev = self.commands_rev();
+        Ok(view)
+    }
+
+    /// The names the App listed at run time for a chat's folder, as last
+    /// asked (empty before the composer ever asked): the send path's way to
+    /// tell the user's own command from a built-in of the same name.
+    pub(super) fn listed_commands(&self, harness: &str, cwd: &Path) -> BTreeSet<String> {
+        lock_recovering(&self.command_cache)
+            .get(&(harness.to_string(), cwd.to_path_buf()))
+            .and_then(|c| c.catalog.as_ref())
+            .map(|c| {
+                c.commands
+                    .iter()
+                    .flat_map(|c| std::iter::once(c.name.clone()).chain(c.aliases.iter().cloned()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// The number a console compares to know its lists are current.
+    pub fn commands_rev(&self) -> u64 {
+        self.commands_rev.load(Ordering::SeqCst)
+    }
+
+    /// Something a command list depends on changed: every cached list is
+    /// asked again next time, and consoles see a new number.
+    pub fn commands_changed(&self) {
+        for entry in lock_recovering(&self.command_cache).values_mut() {
+            entry.stale = true;
+        }
+        self.commands_rev.fetch_add(1, Ordering::SeqCst);
+    }
+
+    /// The folder watcher, started the first time a list is asked for.
+    fn command_watch(&self) -> Arc<crate::command_watch::CommandWatch> {
+        self.command_watch
+            .get_or_init(|| {
+                let watch = crate::command_watch::CommandWatch::new(Self::home_dir());
+                let cache = Arc::clone(&self.command_cache);
+                let rev = Arc::clone(&self.commands_rev);
+                let home = Self::home_dir();
+                watch.start(Box::new(move |paths| {
+                    {
+                        let mut cache = lock_recovering(&cache);
+                        for ((_, cwd), entry) in cache.iter_mut() {
+                            if paths
+                                .iter()
+                                .any(|p| p.starts_with(cwd) || p.starts_with(&home))
+                            {
+                                entry.stale = true;
+                            }
+                        }
+                    }
+                    rev.fetch_add(1, Ordering::SeqCst);
+                }));
+                watch
+            })
+            .clone()
     }
 
     /// A running chat listed its commands as it started: a name the cached
@@ -283,8 +361,13 @@ impl Supervisor {
                 std::iter::once(c.name.as_str()).chain(c.aliases.iter().map(String::as_str))
             })
             .collect();
-        if names.iter().any(|n| !known.contains(n.as_str())) {
+        let behind = names.iter().any(|n| !known.contains(n.as_str()));
+        if behind {
             entry.stale = true;
+        }
+        drop(cache);
+        if behind {
+            self.commands_rev.fetch_add(1, Ordering::SeqCst);
         }
     }
 
@@ -465,6 +548,9 @@ fn build_view(
             } else {
                 "harness"
             },
+            route: crate::slash::Route::Native,
+            action: None,
+            choices: None,
             kind: kind(&c.name),
             plugin,
             available: true,
@@ -507,6 +593,9 @@ fn build_view(
             if seen_commands.insert(c.name.clone()) {
                 commands.push(CommandEntry {
                     source: "plugin",
+                    route: crate::slash::Route::Native,
+                    action: None,
+                    choices: None,
                     kind: if parts.skills.contains(&c.name) {
                         "skill"
                     } else {
@@ -549,6 +638,128 @@ fn build_view(
         agents,
         mcp_servers,
         error,
+        rev: 0,
+    }
+}
+
+/// The user's and the project's own command files, by the name each App
+/// gives them: Claude's `.claude/commands` (a sub-folder scopes the name,
+/// `folder:name`) and OpenCode's `command(s)` folders.
+fn local_commands(cwd: &Path) -> BTreeSet<String> {
+    let home = Supervisor::home_dir();
+    let roots = [
+        (home.join(".claude").join("commands"), ":"),
+        (cwd.join(".claude").join("commands"), ":"),
+        (home.join(".config").join("opencode").join("command"), "/"),
+        (home.join(".config").join("opencode").join("commands"), "/"),
+        (cwd.join(".opencode").join("command"), "/"),
+        (cwd.join(".opencode").join("commands"), "/"),
+    ];
+    let mut found = BTreeSet::new();
+    for (root, joiner) in roots {
+        command_files(&root, &root, joiner, 0, &mut found);
+    }
+    found
+}
+
+fn command_files(
+    root: &Path,
+    dir: &Path,
+    joiner: &str,
+    depth: usize,
+    found: &mut BTreeSet<String>,
+) {
+    if depth > 3 {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            command_files(root, &path, joiner, depth + 1, found);
+        } else if path.extension().is_some_and(|e| e == "md") {
+            let Ok(rel) = path
+                .with_extension("")
+                .strip_prefix(root)
+                .map(Path::to_path_buf)
+            else {
+                continue;
+            };
+            let name = rel
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join(joiner);
+            found.insert(name);
+        }
+    }
+}
+
+/// The App's built-ins joined to what it listed: a listed built-in takes
+/// the table's route (where the App lists its built-ins at all), a listed
+/// name the table also has is the user's own where the App lists only
+/// those, and every built-in the App did not list is added - dimmed with
+/// its reason when it is refused here. MCP prompts and the user's own
+/// command files are marked so the menu can badge them.
+fn apply_builtins(view: &mut CommandsView, custom: &BTreeSet<String>) {
+    use crate::slash::{Route, builtins, lists_builtins};
+    let harness = view.harness.clone();
+    let table = builtins(&harness);
+    for entry in view.commands.iter_mut().filter(|e| e.source == "harness") {
+        if entry.name.starts_with("mcp__") {
+            entry.source = "mcp";
+            continue;
+        }
+        if custom.contains(&entry.name) {
+            entry.source = "custom";
+            continue;
+        }
+        let Some(row) = table.iter().find(|b| b.answers_to(&entry.name)) else {
+            continue;
+        };
+        if lists_builtins(&harness) || row.route == Route::Native {
+            entry.source = "builtin";
+            entry.kind = "command";
+            // A row refused here that the App itself lists runs as sent.
+            if row.route != Route::Refuse {
+                entry.route = row.route;
+                entry.action = row.action;
+            }
+            entry.choices = row.choices;
+            if entry.argument_hint.is_none() {
+                entry.argument_hint = row.argument_hint.map(String::from);
+            }
+        } else {
+            // The App listed a name its own built-in also has: the user's.
+            entry.source = "custom";
+        }
+    }
+    let taken: BTreeSet<String> = view
+        .commands
+        .iter()
+        .flat_map(|e| std::iter::once(e.name.clone()).chain(e.aliases.iter().cloned()))
+        .collect();
+    for row in table {
+        if taken.contains(row.name) || row.aliases.iter().any(|a| taken.contains(*a)) {
+            continue;
+        }
+        let refused = row.route == Route::Refuse;
+        view.commands.push(CommandEntry {
+            name: row.name.to_string(),
+            description: Some(row.description.to_string()),
+            argument_hint: row.argument_hint.map(String::from),
+            aliases: row.aliases.iter().map(|a| a.to_string()).collect(),
+            source: "builtin",
+            route: row.route,
+            action: row.action,
+            choices: row.choices,
+            kind: "command",
+            plugin: None,
+            available: !refused,
+            why: refused.then(|| row.why.unwrap_or(crate::slash::TERMINAL_ONLY).to_string()),
+        });
     }
 }
 

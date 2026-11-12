@@ -224,6 +224,23 @@ impl CodexFixture {
                     self.finish_plain_turn(&prompt);
                 }
             }
+            // `/compact` through the app-server: compaction runs as a turn
+            // of its own, and the file says it was asked for.
+            ("thread/compact/start", Some(id)) => {
+                crate::record("fixture-codex-calls", "thread/compact/start");
+                self.turn_count += 1;
+                let turn = format!("turn-fixture-{}", self.turn_count);
+                self.respond(id, json!({}));
+                self.notify(
+                    "turn/started",
+                    json!({"threadId": self.thread(), "turn": {"id": turn.clone()}}),
+                );
+                self.notify("thread/compacted", json!({"threadId": self.thread()}));
+                self.notify(
+                    "turn/completed",
+                    json!({"threadId": self.thread(), "turn": {"id": turn, "status": "completed"}}),
+                );
+            }
             ("turn/steer", Some(id)) => {
                 self.respond(id, json!({"steered": true}));
             }

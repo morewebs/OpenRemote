@@ -28,6 +28,8 @@ use tokio::process::{Child, Command};
 use tokio::sync::{Mutex as AsyncMutex, mpsc, oneshot};
 
 const CALL_TIMEOUT: Duration = Duration::from_secs(60);
+/// `/compact` summarizes the whole session, which outlasts a plain call.
+const COMPACT_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// Host calls in flight: our call id (a string, pi's own shape) →
 /// response waiter. A call that gives up (failed write, timeout) removes
@@ -267,6 +269,35 @@ impl Driver {
         Ok(())
     }
 
+    /// One of pi's own commands through its rpc: pi's terminal handles its
+    /// built-ins itself, so sent as a prompt they would reach the model as
+    /// words. Each answers when its call does.
+    pub async fn run_command(
+        &mut self,
+        action: &str,
+        args: &str,
+    ) -> Result<openremote_harness::CommandRun, DriverError> {
+        use openremote_harness::CommandRun;
+        match action {
+            "compact" => {
+                let mut params = json!({});
+                if !args.trim().is_empty() {
+                    params["customInstructions"] = json!(args.trim());
+                }
+                // A summary of a long session takes a while.
+                self.call_within("compact", params, COMPACT_TIMEOUT).await?;
+                Ok(CommandRun::Done(Some("This session was compacted.".into())))
+            }
+            "session" => {
+                let stats = self.call("get_session_stats", json!({})).await?;
+                Ok(CommandRun::Done(Some(session_stats(&stats))))
+            }
+            other => Err(DriverError::Harness(format!(
+                "Pi Agent has no call for /{other} here"
+            ))),
+        }
+    }
+
     /// Abort the running turn (`message_end` with `stopReason: aborted`
     /// follows).
     pub async fn interrupt(&mut self) -> Result<(), DriverError> {
@@ -310,6 +341,15 @@ impl Driver {
     /// Pi folds id and method into one flat object; responses come back
     /// as `{type: "response", id, command, success, …}`.
     async fn call(&mut self, method: &str, params: Value) -> Result<Value, DriverError> {
+        self.call_within(method, params, CALL_TIMEOUT).await
+    }
+
+    async fn call_within(
+        &mut self,
+        method: &str,
+        params: Value,
+        timeout: Duration,
+    ) -> Result<Value, DriverError> {
         let id = self.next_id.to_string();
         self.next_id += 1;
         let (tx, rx) = oneshot::channel();
@@ -328,7 +368,7 @@ impl Driver {
         }
         self.shared
             .pending
-            .await_response(&id, rx, method, CALL_TIMEOUT)
+            .await_response(&id, rx, method, timeout)
             .await
     }
 
@@ -691,8 +731,50 @@ async fn read_stderr(
     }
 }
 
+/// `/session`'s answer from pi's `get_session_stats`, in a line or two.
+fn session_stats(answer: &Value) -> String {
+    let data = answer.get("data").unwrap_or(answer);
+    let mut parts = Vec::new();
+    if let Some(n) = data.get("userMessages").and_then(Value::as_u64) {
+        parts.push(format!("{n} messages from you"));
+    }
+    if let Some(n) = data.get("assistantMessages").and_then(Value::as_u64) {
+        parts.push(format!("{n} answers"));
+    }
+    if let Some(n) = data.get("toolCalls").and_then(Value::as_u64) {
+        parts.push(format!("{n} tool calls"));
+    }
+    if let Some(total) = data.pointer("/tokens/total").and_then(Value::as_u64) {
+        parts.push(format!("{total} tokens"));
+    }
+    if let Some(cost) = data.get("cost").and_then(Value::as_f64) {
+        parts.push(format!("${cost:.4}"));
+    }
+    if parts.is_empty() {
+        "Pi Agent answered with no session numbers.".to_string()
+    } else {
+        format!("This session so far: {}.", parts.join(", "))
+    }
+}
+
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn session_stats_read_as_one_line() {
+        let answer = json!({"type": "response", "command": "get_session_stats", "success": true,
+            "data": {"userMessages": 3, "assistantMessages": 3, "toolCalls": 7,
+                     "tokens": {"total": 1200}, "cost": 0.0123}});
+        assert_eq!(
+            session_stats(&answer),
+            "This session so far: 3 messages from you, 3 answers, 7 tool calls, 1200 tokens, $0.0123."
+        );
+        assert_eq!(
+            session_stats(&json!({})),
+            "Pi Agent answered with no session numbers."
+        );
+    }
+
     use super::*;
 
     #[tokio::test]

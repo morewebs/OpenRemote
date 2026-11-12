@@ -347,6 +347,78 @@ impl Driver {
         Ok(())
     }
 
+    /// One of Codex's own slash commands, through the app-server's calls:
+    /// its terminal parses those itself, so sent as text they would reach
+    /// the model as words. `/compact` and `/review` run as turns Codex
+    /// reports the end of; `/goal` answers at once.
+    pub async fn run_command(
+        &mut self,
+        action: &str,
+        args: &str,
+    ) -> Result<openremote_harness::CommandRun, DriverError> {
+        use openremote_harness::CommandRun;
+        match action {
+            "compact" => {
+                self.call("thread/compact/start", json!({"threadId": self.thread_id}))
+                    .await?;
+                Ok(CommandRun::Turn)
+            }
+            "review" => {
+                self.call(
+                    "review/start",
+                    json!({"threadId": self.thread_id, "target": review_target(args)}),
+                )
+                .await?;
+                Ok(CommandRun::Turn)
+            }
+            "goal" => {
+                let words = args.trim();
+                if words.is_empty() {
+                    let answer = self
+                        .call("thread/goal/get", json!({"threadId": self.thread_id}))
+                        .await?;
+                    let objective = answer
+                        .pointer("/goal/objective")
+                        .and_then(Value::as_str)
+                        .filter(|o| !o.is_empty());
+                    return Ok(CommandRun::Done(Some(match objective {
+                        Some(goal) => format!("Codex's goal: {goal}"),
+                        None => "Codex has no goal set. /goal <objective> sets one.".to_string(),
+                    })));
+                }
+                if words.eq_ignore_ascii_case("clear") {
+                    self.call("thread/goal/clear", json!({"threadId": self.thread_id}))
+                        .await?;
+                    return Ok(CommandRun::Done(Some("Goal cleared.".to_string())));
+                }
+                self.call(
+                    "thread/goal/set",
+                    json!({
+                        "threadId": self.thread_id,
+                        "objective": words,
+                        "status": "active",
+                        "origin": "user",
+                    }),
+                )
+                .await?;
+                Ok(CommandRun::Done(Some(format!("Goal set: {words}"))))
+            }
+            // Codex's terminal answers /init with a prompt of its own; this
+            // is OpenRemote's, in its own words, sent as one.
+            "init" => {
+                self.send_prompt(&Prompt {
+                    text: INIT_PROMPT.to_string(),
+                    images: Vec::new(),
+                })
+                .await?;
+                Ok(CommandRun::Turn)
+            }
+            other => Err(DriverError::Harness(format!(
+                "Codex has no call for /{other} here"
+            ))),
+        }
+    }
+
     /// Interrupt the running turn. No active turn = nothing to do.
     pub async fn interrupt(&mut self) -> Result<(), DriverError> {
         let active = self.shared.active_turn.lock().unwrap().clone();
@@ -1534,8 +1606,50 @@ async fn read_stderr(
     }
 }
 
+/// What `/init` asks of Codex: OpenRemote's own words for the file Codex's
+/// terminal would have it write.
+const INIT_PROMPT: &str = "Look through this repository and write an AGENTS.md at its root for coding agents working here: how the project is laid out, how to build, test and lint it, the conventions the code follows, and anything a newcomer would trip over. Keep it short and specific to this project; if an AGENTS.md already exists, improve it rather than starting over.";
+
+/// `/review`'s target from what follows it: nothing reviews the working
+/// tree, `base <branch>` the branch against a base, `commit <sha>` one
+/// commit, and anything else is instructions of the user's own.
+fn review_target(args: &str) -> Value {
+    let words = args.trim();
+    let mut parts = words.splitn(2, char::is_whitespace);
+    let first = parts.next().unwrap_or("");
+    let rest = parts.next().map(str::trim).unwrap_or("");
+    match (first.to_ascii_lowercase().as_str(), rest) {
+        ("", _) => json!({"type": "uncommittedChanges"}),
+        ("base", branch) if !branch.is_empty() && !branch.contains(char::is_whitespace) => {
+            json!({"type": "baseBranch", "branch": branch})
+        }
+        ("commit", sha) if !sha.is_empty() && !sha.contains(char::is_whitespace) => {
+            json!({"type": "commit", "sha": sha})
+        }
+        _ => json!({"type": "custom", "instructions": words}),
+    }
+}
+
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_review_names_its_target_the_way_codex_takes_it() {
+        assert_eq!(review_target(""), json!({"type": "uncommittedChanges"}));
+        assert_eq!(
+            review_target("base main"),
+            json!({"type": "baseBranch", "branch": "main"})
+        );
+        assert_eq!(
+            review_target("commit abc123"),
+            json!({"type": "commit", "sha": "abc123"})
+        );
+        assert_eq!(
+            review_target("look at the error handling"),
+            json!({"type": "custom", "instructions": "look at the error handling"})
+        );
+    }
+
     use super::*;
 
     #[test]

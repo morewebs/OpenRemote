@@ -52,6 +52,9 @@ semver = "1"
 # no WASI: a module sees only the host functions its approved powers give.
 # 0.46 is the newest that builds on the workspace's rust-version.
 wasmi = { version = "0.46", default-features = false, features = ["std"] }
+# hot reload of the / menu: the folders commands, skills and prompts live
+# in are watched, so a new or edited one shows without a restart
+notify = "8"
 
 [target.'cfg(unix)'.dependencies]
 # setsid for installers: no controlling terminal to prompt into
