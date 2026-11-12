@@ -4,7 +4,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { DaemonApi, clearConnection, loadConnection, nextRetryDelay, sameDaemon, saveConnection, sessionGone } from '../api/daemon.js'
-import { chatFromSession, foldEvents, mergeSessionIntoChat, vanishedChatIds } from './reducer.js'
+import { chatFromSession, firstPromptText, foldEvents, mergeSessionIntoChat, titleFrom, vanishedChatIds } from './reducer.js'
 import { createBeatLoop } from './beat.js'
 import { samePayload } from './same.js'
 import { errorCopy } from '../error-copy.js'
@@ -858,6 +858,45 @@ export function ConsoleProvider({ children }) {
 
   const renameChat = useCallback(async (chatId, title) => api.rename(chatId, title), [api])
 
+  // The name a chat was given from its first message, for a rename left empty
+  // (the daemon refuses an empty name, so the name is made the way the daemon
+  // made it: the first line of the first prompt with words). Read from the
+  // folded transcript when this console has it, else from the start of the
+  // chat's event stream, which is closed as soon as it has answered. Null when
+  // there is no such message, or the stream did not say within a few seconds.
+  // Ported from br-sidebar 8909e98.
+  const firstNameFor = useCallback(
+    (chatId) => {
+      const name = (words) => (words ? titleFrom(words).trim() || null : null)
+      const folded = firstPromptText(chatsRef.current[chatId]?.timeline)
+      if (folded) return Promise.resolve(name(folded))
+      return new Promise((resolve) => {
+        let settled = false
+        let stop = null
+        let timer = null
+        const done = (words) => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          stop?.()
+          resolve(name(words))
+        }
+        timer = setTimeout(() => done(null), 8000)
+        stop = api.events(chatId, {
+          after: null,
+          onEvent: (event) => {
+            const message = event?.type === 'message.added' ? event.message : null
+            if (message?.role === 'user' && message.text?.trim()) done(message.text)
+          },
+          onClose: () => done(null),
+        })
+        // The stream can answer before `stop` is assigned; close it now.
+        if (settled) stop?.()
+      })
+    },
+    [api],
+  )
+
   // The API of another of the user's devices, through this daemon.
   const apiFor = useCallback((deviceId) => api.device(deviceId), [api])
 
@@ -1691,6 +1730,7 @@ export function ConsoleProvider({ children }) {
       commandsFor,
       filesFor,
       renameChat,
+      firstNameFor,
       capabilitiesFor,
       refreshCloud,
       signInCloud,
@@ -1785,6 +1825,7 @@ export function ConsoleProvider({ children }) {
       commandsFor,
       filesFor,
       renameChat,
+      firstNameFor,
       capabilitiesFor,
       refreshCloud,
       signInCloud,

@@ -25,6 +25,16 @@ export function titleFrom(text) {
   return first.length > 44 ? `${first.slice(0, 44).trimEnd()}…` : first
 }
 
+/// The words a chat's generated name comes from: the first user message that
+/// has any (a message of pictures alone names nothing), or null. A rename
+/// left empty goes back to `titleFrom` of these.
+export function firstPromptText(timeline) {
+  for (const item of timeline ?? []) {
+    if (item?.kind === 'message' && item.role === 'user' && item.text?.trim()) return item.text
+  }
+  return null
+}
+
 /// A fresh chat view over one daemon session (plus any known events).
 export function chatFromSession(session) {
   const chat = {

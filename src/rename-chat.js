@@ -19,15 +19,25 @@ export function cleanName(text) {
 }
 
 // What the dialog should do with what is in the field.
-//   'empty'     - nothing but whitespace: there is no name to save
+//   'empty'     - nothing but whitespace, and no first-message name to go
+//                 back to: there is no name to save
+//   'restore'   - nothing but whitespace: `value` is the name the chat was
+//                 given from its first message (`original`), put back
 //   'unchanged' - the name the chat already has: close, write nothing
 //   'saveable'  - a new name, and `value` is what will be sent
 //
 // Comparison is on the cleaned form of both sides, so retyping the current
-// name with a stray space is the same name, not a save.
-export function renameState(current, next) {
+// name with a stray space is the same name, not a save. The daemon refuses an
+// empty name, so an empty field cannot mean "no name"; it means the chat's
+// own one (ported from br-sidebar 4160f65 and 8909e98).
+export function renameState(current, next, original = null) {
   const value = cleanName(next)
-  if (!value) return { state: 'empty', value }
+  if (!value) {
+    const back = cleanName(original)
+    if (!back) return { state: 'empty', value }
+    if (back === cleanName(current)) return { state: 'unchanged', value: back }
+    return { state: 'restore', value: back }
+  }
   if (value === cleanName(current)) return { state: 'unchanged', value }
   return { state: 'saveable', value }
 }

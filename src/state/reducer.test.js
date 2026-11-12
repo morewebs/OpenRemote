@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { chatFromSession, chatStatus, foldEvent, foldEvents, mergeSessionIntoChat, railItems, titleFrom, vanishedChatIds, workspaceName } from './reducer.js'
+import { chatFromSession, chatStatus, firstPromptText, foldEvent, foldEvents, mergeSessionIntoChat, railItems, titleFrom, vanishedChatIds, workspaceName } from './reducer.js'
 
 const session = (over = {}) => ({
   id: 's1',
@@ -831,4 +831,19 @@ test("a tool result's pictures land on its card, and a result without any leaves
   assert.deepEqual(tools[0].images, [picture('e'.repeat(64))])
   assert.equal(tools[0].result, 'captured')
   assert.deepEqual(tools[1].images, [])
+})
+
+test('a chat is named from its first user message with words', () => {
+  // The first-message name a rename can go back to (ports br-sidebar 8909e98).
+  const timeline = [
+    { kind: 'message', role: 'user', text: '   ' },
+    { kind: 'message', role: 'agent', text: 'Hello' },
+    { kind: 'tool', text: 'x' },
+    { kind: 'message', role: 'user', text: 'fix the failing test\nthen the flaky one' },
+    { kind: 'message', role: 'user', text: 'later words' },
+  ]
+  assert.equal(firstPromptText(timeline), 'fix the failing test\nthen the flaky one')
+  assert.equal(titleFrom(firstPromptText(timeline)), 'fix the failing test')
+  assert.equal(firstPromptText([]), null)
+  assert.equal(firstPromptText(undefined), null)
 })

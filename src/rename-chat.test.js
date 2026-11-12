@@ -147,3 +147,32 @@ test('the shell hosts the dialog and owns the one-beat overlay', () => {
   // cannot tell an echo from a later rename; a stamp can.
   assert.match(app, /overlayStale\(entry\?\.stamp \?\? null, known\)/)
 })
+
+test('an empty field puts back the name the chat was given from its first message', () => {
+  // The daemon refuses an empty name, so "no name" means the chat's own one:
+  // the first line of its first prompt, made the way the daemon made it.
+  assert.deepEqual(renameState('My rename', '', 'fix the failing test'), { state: 'restore', value: 'fix the failing test' })
+  assert.deepEqual(renameState('My rename', '   ', '  fix it  '), { state: 'restore', value: 'fix it' })
+  // Already that name: nothing to write.
+  assert.equal(renameState('fix it', '', 'fix it').state, 'unchanged')
+  // No first message with words (or not read yet): still nothing to save.
+  assert.deepEqual(renameState('My rename', '', null), { state: 'empty', value: '' })
+  assert.deepEqual(renameState('My rename', '', '   '), { state: 'empty', value: '' })
+  // A typed name is a typed name, whatever the first message said.
+  assert.deepEqual(renameState('Old', 'New', 'first words'), { state: 'saveable', value: 'New' })
+})
+
+test('the dialog offers the first-message name for an empty field, and the shell finds it', () => {
+  const modal = source('RenameChatModal.jsx')
+  assert.match(modal, /export default function RenameChatModal\(\{ title, original = null,/)
+  assert.match(modal, /const verdict = renameState\(title, text, original\)/)
+  // The note says which name comes back, veiled in privacy mode like any title.
+  assert.match(modal, /verdict\.state === 'restore'/)
+  assert.match(modal, /<span className="pv">\{verdict\.value\}<\/span>/)
+  const app = source('App.jsx')
+  assert.match(app, /original=\{renaming\.original\}/)
+  assert.match(app, /firstNameFor\?\.\(id\)/)
+  const console = readFileSync(new URL('./state/console.jsx', import.meta.url), 'utf8')
+  assert.match(console, /const firstNameFor = useCallback\(/)
+  assert.match(console, /firstPromptText\(chatsRef\.current\[chatId\]\?\.timeline\)/)
+})

@@ -52,7 +52,7 @@ test('a frame of stream events is folded once, against one copy', () => {
   // the chat and its timeline for every event. The events are queued per chat
   // and folded once per animation frame; that the result is the same
   // transcript is reducer.test.js's comparison, and this pins the wiring.
-  assert.match(source, /import \{ chatFromSession, foldEvents, mergeSessionIntoChat, vanishedChatIds \} from '\.\/reducer\.js'/)
+  assert.match(source, /import \{ chatFromSession, firstPromptText, foldEvents, mergeSessionIntoChat, titleFrom, vanishedChatIds \} from '\.\/reducer\.js'/)
   const apply = between('const apply = (event) => {', 'const follow = (after) => {')
   assert.match(apply, /queueEvent\(id, event\)/, 'an event is queued, not folded where it lands')
   assert.doesNotMatch(apply, /setChats/, 'and no state is published per event')

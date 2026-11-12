@@ -21,7 +21,10 @@ import { errorCopy } from './error-copy.js'
 // The dialog closes only after the daemon accepted the name: a refused rename
 // stays open with the daemon's own sentence, because closing would pretend a
 // rename had landed and the sidebar would still show the old name.
-export default function RenameChatModal({ title, synced = false, onRename, onClose }) {
+// `original` is the name the chat was given from its first message, or null
+// while it is unknown: an empty field puts it back (the daemon refuses an empty
+// name, so "no name" means the chat's own one).
+export default function RenameChatModal({ title, original = null, synced = false, onRename, onClose }) {
   useBack(true, onClose)
   const panelRef = useRef(null)
   useDialog(panelRef, onClose)
@@ -29,7 +32,7 @@ export default function RenameChatModal({ title, synced = false, onRename, onClo
   const [text, setText] = useState(title ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
-  const verdict = renameState(title, text)
+  const verdict = renameState(title, text, original)
   // A synced chat's new name reaches another device when that device next
   // syncs, so the sentence says when it lands instead of promising it is
   // already there - the same rule the remove-a-device hint follows.
@@ -113,7 +116,15 @@ export default function RenameChatModal({ title, synced = false, onRename, onClo
           disabled={busy}
         />
         <p className={`rn-note${verdict.state === 'empty' ? ' is-bad' : ''}`}>
-          {verdict.state === 'empty' ? 'A chat needs a name.' : where}
+          {verdict.state === 'empty' ? (
+            'A chat needs a name.'
+          ) : verdict.state === 'restore' ? (
+            <>
+              Saving it empty puts back the name from its first message: <span className="pv">{verdict.value}</span>
+            </>
+          ) : (
+            where
+          )}
         </p>
         {error && <p className="cv-error-line">{error}</p>}
         <div className="ctx-modal-actions">

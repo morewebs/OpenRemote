@@ -159,6 +159,7 @@ function Shell() {
     setChatArchived,
     retryDaemon,
     renameChat,
+    firstNameFor,
     capabilities,
     projects,
     thisDevice,
@@ -522,6 +523,13 @@ function Shell() {
       id,
       title: chatTitle({ title: record?.title ?? session?.title }),
       synced: Boolean(record?.executor ?? session?.executor),
+      original: null,
+    })
+    // The name an empty field puts back, from the chat's first message: read
+    // from the transcript this console holds, or the start of its stream.
+    // The dialog says "A chat needs a name." until it is known.
+    firstNameFor?.(id).then((original) => {
+      if (original) setRenaming((current) => (current?.id === id ? { ...current, original } : current))
     })
   }
 
@@ -1407,6 +1415,7 @@ function Shell() {
             (sessions ?? []).find((s) => s.id === renaming.id)?.title ??
             renaming.title
           }
+              original={renaming.original}
               synced={renaming.synced}
               onClose={() => setRenaming(null)}
               onRename={(next) => renameTo(renaming.id, next)}
