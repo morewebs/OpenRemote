@@ -510,6 +510,17 @@ mod tests {
         ptr
     }
 
+    /// The module keeps one World (the last answer's buffer and error), as
+    /// a browser's single thread does, so tests that read `wp_len` or
+    /// `wp_error` after a call must not interleave: each holds this.
+    static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn serial() -> std::sync::MutexGuard<'static, ()> {
+        SERIAL
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     struct Fixture {
         account: Vec<u8>,
         id_a: [u8; 16],
@@ -574,6 +585,7 @@ mod tests {
 
     #[test]
     fn two_handles_link_and_exchange_a_sealed_message() {
+        let _serial = serial();
         let f = fixture();
         let (a, b) = linked(&f);
         let request = b"{\"method\":\"GET\"}";
@@ -597,6 +609,7 @@ mod tests {
 
     #[test]
     fn a_wrong_peer_key_or_another_account_never_links() {
+        let _serial = serial();
         let f = fixture();
         let stranger = take(unsafe { wp_pubkey(wp_new(write(&[3u8; 32]))) });
         let hs1 = take(unsafe {
@@ -654,8 +667,8 @@ mod tests {
 
     #[test]
     fn a_blank_or_shortened_private_key_mints_no_device() {
+        let _serial = serial();
         assert_eq!(new_peer(&[]).err(), Some(ERR_KEY), "an empty key");
-        eprintln!("step 3");
         assert_eq!(new_peer(&[1u8; 16]).err(), Some(ERR_KEY), "a shortened key");
         assert_eq!(new_peer(&[0u8; 32]).err(), Some(ERR_KEY), "all zeros");
         assert!(new_peer(&[7u8; 32]).is_ok());
@@ -666,6 +679,7 @@ mod tests {
 
     #[test]
     fn a_frame_of_the_wrong_kind_is_refused_not_opened() {
+        let _serial = serial();
         let f = fixture();
         let (_a, b) = linked(&f);
         let mut frame = vec![noise::HS1];
