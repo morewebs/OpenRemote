@@ -68,7 +68,7 @@ recorded as dropped below.
 | Console `moveChat`, the move rules, the ask-first preference | br-chatmove f24a570, c11841c (console) | ccdc34e |
 | Drag a chat onto a project, the move confirm, pane-menu submenu, Settings > Confirmations | br-chatmove 6bd13e6 | 67ef0c3 |
 | Plugin docs (`docs/plugins/`: protocol, authoring, JS API) written for what this OpenRemote does; the toy example as one compiled program (tools and a JSON-lines harness driver); dictation's local server only at a typed address; an e2e that installs and runs the examples; the Freebuff plan in `docs/plans/` | br-plugins 03499db, 56e78fb, 76d1eaf; br-plugin-ui 2db6a60, ee8e0ec, 5a16093, 7b9b120; br-freebuff-tui f9629f6 | 76210ef |
-| An OpenCode chat's permission word reaches OpenCode (`OPENCODE_PERMISSION`, its own permission config merged over the user's); a word that is not a JSON object refuses to start | br-chatctl 5382f7d (opencode driver) | eae6816 |
+| An OpenCode chat's permission word reaches OpenCode (`OPENCODE_PERMISSION`, its own permission config merged over the user's); a word that is not a JSON object refuses to start | br-chatctl 5382f7d (opencode driver) | eae6816, 0008da3 |
 | Codex `never` sandbox: reviewed, not ported - on main `never` is "Never ask" and keeps the workspace sandbox (codex 0.167 runs that pairing as given); lifting it to `danger-full-access` would do more than the word says. Pinned by a test that fails on the branch's version | br-chatctl 5382f7d (codex driver) | 59a6a1f |
 | In-app updates: a look once a day for a newer signed release, installed on the user's click with the daemon stopped first; signatures staged at the release root and `latest.json` written by main's `publish` job (no separate job). Update path not yet proven by a test release | br-updater c978b92 | 23ff224 |
 | Android phone browser: the Kotlin WebView plugin, the desktop's `browser_*` commands and events on the phone, `BrowserPhone.jsx` on main's store, bookmarks, history, prefs and permission flow, the phone's "<App> is browsing" pill. **Not checked on a device** (cargo check and clippy for aarch64-linux-android pass; the Kotlin is compiled only by the Android build) | br-android 5df13bd, f768051, 25aee6d, 1c6f04b, 56371d7, cc0080f, 546c420; browser 1a2ab3d (phone pill) | 9b358d5 |
@@ -139,6 +139,14 @@ both exist. The branch is not deleted here.
 | f24a570 | Console `moveChat`, rules, preference | ported (ccdc34e) |
 | 6bd13e6 | Drag, menus, confirm, Settings | ported (67ef0c3): the confirm uses `useDialog` and `errorCopy`, Confirmations is in `settings-search.js`; main's picker stays in the row menu; the pointer drag (`useChatDrag`) is obsolete, since main's rows already drag as chat drags and a project head takes that drop; the chat-header menu is obsolete (main's pane header has none; the pane's right-click menu carries the submenu) |
 | c11841c | "starting" with a harness up moves | daemon half in main (5a73d51's `refuse_busy`); console half ported (ccdc34e) |
+
+### Ready to delete, with the user's OK: br-passwords
+
+br-passwords holds no commit of its own: its head (4724898, "Merge branch
+'br-sidebar' into browser") is on `browser`, and no commit on it is missing
+from every other branch and tag. Nothing on it needs porting; what it carries
+is tracked under `browser` and br-sidebar. Kept as `archive/br-passwords`.
+The branch is not deleted here.
 
 ### Ready to delete once a test release proves it: br-updater
 
@@ -229,10 +237,36 @@ Work asked for on integrate that ports no branch.
 | Done | Asked for | Commit |
 |---|---|---|
 | What OpenRemote adds to every agent request, slimmed: change-only tabs note, staged tool list with `list_changed` (Claude Code), 18 shorter browser tools, plugin tool caps, Codex reads without asking (`docs/prompt-budget.md`) | prompt-bloat audit | 7fb6146, 1f29e8c |
+| The whole-branch review's fixes: daemon clippy clean again, webpeer tests serialised, a page shared with a chat opens its browser tools, a paste of words and a picture keeps the words, a plugin's own view recorded in the front project, plugin pictures held to 5 MB, the ssh timeout wording, the trust model's four tiers and 36 rows (pinned by a test), the updater's crates in the notices, CI's wasm32 target and its stale comments | final review | 67bbfbd, b216c24, 61e21e7, fc34356, f0f0276, 4e06149, aac3987, c2a39d3, f7013cd |
 
 Open, for the user to decide: lowering what a tool may return (a page
 snapshot up to 60,000 characters, a worker's report up to 40,000). It saves
 tokens per use but costs extra calls on long pages and reports.
+
+## Open, for the user
+
+Every decision this page leaves with the user, in one list (each is also
+under its own branch or row):
+
+- Delete the branches marked ready: br-console, br-adblock, br-ssh,
+  br-chatmove, br-plugins, br-plugin-ui, br-freebuff-tui, br-zcode and
+  br-passwords (each kept as its `archive/<branch>` tag).
+- br-updater: a test release, which needs the updater's signing key
+  (`docs/releasing-updates.md`) and a tag, before the branch goes.
+- br-android: a run on a phone before the branch goes.
+- Ad blocking: which filter lists ship enabled by default (today none).
+- What a tool may return: lower the page snapshot and report limits or not.
+- br-sidebar: machine grouping in Cloud and on the phone needs a design call.
+- br-chatctl: the permission-controls redesign awaits design approval.
+- br-live: live views need a trust-model update and a web-console answer.
+- Codex 0.167 rejects `on-failure`, which integrate still offers as "Ask
+  when it fails": a Codex chat given that word fails to start. A fix of its
+  own (drop or remap the rung for that Codex) is waiting to be asked for.
+- THIRD-PARTY_NOTICES.md has sections for the Windows installers, the
+  Android APK and the Linux daemon only: the macOS and Linux desktop
+  bundles (`.dmg`, `.AppImage`, `.deb`) ship crates it does not list, the
+  updater's Linux and macOS crates among them. Writing those sections is
+  not started.
 
 ## To port
 
