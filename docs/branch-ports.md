@@ -222,6 +222,18 @@ br-console (above), br-android, br-images and browser (the Browser list
 below), br-chatmove (above) and br-updater (c978b92).
 Deleting br-zcode loses none of them.
 
+## Follow-ups done on integrate
+
+Work asked for on integrate that ports no branch.
+
+| Done | Asked for | Commit |
+|---|---|---|
+| What OpenRemote adds to every agent request, slimmed: change-only tabs note, staged tool list with `list_changed` (Claude Code), tool search on Anthropic's API, 18 shorter browser tools, plugin tool caps, Codex reads without asking (`docs/prompt-budget.md`) | prompt-bloat audit | 7fb6146 |
+
+Open, for the user to decide: lowering what a tool may return (a page
+snapshot up to 60,000 characters, a worker's report up to 40,000). It saves
+tokens per use but costs extra calls on long pages and reports.
+
 ## To port
 
 ### br-sidebar
