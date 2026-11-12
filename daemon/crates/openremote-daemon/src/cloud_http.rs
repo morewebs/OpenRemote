@@ -508,6 +508,7 @@ const FORWARDED: &[&str] = &[
     "/sessions/{id}/stop",
     "/sessions/{id}/resume",
     "/sessions/{id}/title",
+    "/sessions/{id}/workspace",
     "/decisions/{id}/answer",
 ];
 

@@ -34,7 +34,7 @@ from a peer's client. That is a property of the design, not an oversight to patc
 
 ## The rows
 
-34 rows: 4 Sync, 17 Machine, 13 Chat. "Sessions" and "chats" are the same thing; the API calls them
+35 rows: 4 Sync, 17 Machine, 14 Chat. "Sessions" and "chats" are the same thing; the API calls them
 sessions.
 
 ### Sync tier (4)
@@ -74,11 +74,11 @@ chat on it through `POST /sessions`. Installing a harness plugin is therefore
 also a choice about what this computer will run for every device of the
 account.
 
-### Chat tier (13)
+### Chat tier (14)
 
-All 13 require a machine, and a chat that is synced and executing here. What they share: none of them
-can touch a private chat, create or delete a chat, change its folder, or read a log through these
-paths (the Sync tier reads logs, the note channel appends them; see One-way notes).
+All 14 require a machine, and a chat that is synced and executing here. What they share: none of them
+can touch a private chat, create or delete a chat, point it at a folder this machine has not
+registered as a project, or read a log through these paths (the Sync tier reads logs, the note channel appends them; see One-way notes).
 
 | route | tier | what a peer can do | what it cannot |
 |---|---|---|---|
@@ -94,6 +94,7 @@ paths (the Sync tier reads logs, the note channel appends them; see One-way note
 | `POST /sessions/{id}/stop` | Chat | stop the chat's process | - |
 | `POST /sessions/{id}/resume` | Chat | start the chat again, which re-passes its stored model and permission word | choose new settings as part of the resume |
 | `POST /sessions/{id}/title` | Chat | rename the chat, which every device shows | - |
+| `POST /sessions/{id}/workspace` | Chat | move the chat into one of this machine's projects, named by its id, or out of every project into the home folder; an idle harness restarts there, and its conversation is copied beside the new folder (claude) or carried into the next message | name a folder: the body takes a project id, a path never parses as one (400), and an id that is not one of this machine's projects is 404; move a chat while a turn runs (409) |
 | `POST /decisions/{id}/answer` | Chat | answer any pending approval or question in the chat: allow, deny, or an "always allow" that stores a tool grant for the chat | answer a decision belonging to a private chat (404), or forge a decision id that is not pending here |
 
 ## One-way notes, which are not rows

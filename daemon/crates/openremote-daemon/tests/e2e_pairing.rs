@@ -179,6 +179,15 @@ async fn a_fake_phone_pairs_and_can_reach_only_its_own_route() {
     // The loopback API does not know the phone's token.
     let phone_on_loopback = http(daemon.control, "GET", "/sessions", Some(&token), None).await;
     assert_eq!(phone_on_loopback.status, 401);
+    let phone_moves = http(
+        daemon.control,
+        "POST",
+        "/sessions/00000000-0000-0000-0000-000000000000/workspace",
+        Some(&token),
+        Some(r#"{"request_id":"r","project_id":null}"#),
+    )
+    .await;
+    assert_eq!(phone_moves.status, 401, "a phone's token moves no chat");
 
     // Nor do the control routes.
     let phone_mint = http(
@@ -202,6 +211,12 @@ async fn a_fake_phone_pairs_and_can_reach_only_its_own_route() {
             ("GET", "/sessions"),
             ("POST", "/sessions"),
             ("GET", "/capabilities"),
+            // A phone paired in Local mode is not one of the account's
+            // devices: moving a chat is no route of the LAN listener.
+            (
+                "POST",
+                "/sessions/00000000-0000-0000-0000-000000000000/workspace",
+            ),
             ("GET", "/healthz"),
             ("GET", "/pairing/phones"),
             ("POST", "/pairing/code"),

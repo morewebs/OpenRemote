@@ -147,6 +147,12 @@ const PEER_ROUTES: &[(&str, &str, Tier)] = &[
     ("POST", "/sessions/{id}/stop", Tier::Chat),
     ("POST", "/sessions/{id}/resume", Tier::Chat),
     ("POST", "/sessions/{id}/title", Tier::Chat),
+    // Moving a chat between the projects of the machine that runs it. The
+    // Chat tier keeps it to a machine and to a synced chat that runs here;
+    // the body names one of this machine's projects by id (a path never
+    // parses as one), so the chat can only land in a folder this machine
+    // already registered.
+    ("POST", "/sessions/{id}/workspace", Tier::Chat),
     ("POST", "/decisions/{id}/answer", Tier::Chat),
     // A synced chat's pictures, for the devices that show it.
     ("GET", "/sessions/{id}/blobs/{sha}", Tier::Read),
