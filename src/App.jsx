@@ -49,7 +49,7 @@ import { POPUP_VIEWS, onPopup } from './popups.js'
 import { KeyboardProvider, useKeyboard, useShortcut } from './keyboard.jsx'
 import { PluginProvider, usePlugins } from './plugins-host.jsx'
 import PluginView from './PluginView.jsx'
-import { isPluginView, settingsKey } from './plugin-runtime.js'
+import { frontProject, isPluginView, settingsKey } from './plugin-runtime.js'
 import { freePanes, raceLayout } from './race.js'
 import {
   MAX_PANES,
@@ -822,9 +822,13 @@ function Shell() {
   // layout.
   const [settingsTarget, setSettingsTarget] = useState(null)
   const setPluginNavigation = usePlugins()?.setNavigation
+  const pluginViewInfo = usePlugins()?.viewInfo
+  // What the sidebar shows as current: a popup over the focused pane's view.
+  const sidebarActive = popup ?? ((focused?.view ?? view) === 'new' ? null : (focused?.view ?? view))
   useEffect(() => {
     setPluginNavigation?.({
       openView: (key) => openInFocus(key),
+      frontProject: () => frontProject(sidebarActive, { sessions, projects, viewInfo: pluginViewInfo }),
       openSettings: (pluginId) => {
         setSettingsTarget({ section: 'plugins', key: settingsKey(pluginId), at: Date.now() })
         goView('settings')
@@ -1176,7 +1180,7 @@ function Shell() {
   const sidebar = onboarded ? (
     <Sidebar
       open={sidebarOpen}
-      active={popup ?? ((focused?.view ?? view) === 'new' ? null : (focused?.view ?? view))}
+      active={sidebarActive}
       mode={mode}
       onMode={switchMode}
       onSelect={(id) => (POPUP_VIEWS.includes(id) ? setPopup(id) : openInFocus(id))}

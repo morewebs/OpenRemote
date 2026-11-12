@@ -236,3 +236,13 @@ test('a field with a default offers "Use default", which saves it by a click', (
   assert.match(form, /onClick=\{\(\) => onSave\(\{ \[setting\.key\]: setting\.default \}\)\}/)
   assert.match(form, />\s*Use default\s*</)
 })
+
+test("a plugin's own openView is recorded in the project the user is in, as the sidebar's tile is", () => {
+  const host = read('plugins-host.jsx')
+  assert.match(host, /openView: \(key\) => \{\s*\n\s*noteOpened\(key, navRef\.current\.frontProject\?\.\(\) \?\? null\)/)
+  assert.doesNotMatch(host, /noteOpened\(key, live\.current\.records/, "never the plugin's own project")
+  const app = read('App.jsx')
+  assert.match(app, /frontProject: \(\) =>\s*frontProject\(sidebarActive, \{ sessions, projects, viewInfo: pluginViewInfo \}\)/)
+  const sidebar = read('Sidebar.jsx')
+  assert.match(sidebar, /const contextProject = frontProject\(active, \{ sessions, projects, viewInfo: pluginHost\?\.viewInfo \}\)/)
+})

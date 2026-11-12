@@ -9,6 +9,8 @@
 // plugin's files as they are now. The daemon checks the same record again on
 // every route a frame's call reaches.
 
+import { projectFor } from './projects.js'
+
 // The one sandbox a plugin frame gets: scripts, and nothing else. Never
 // allow-same-origin (the frame would share the console's origin, its storage
 // and the daemon token in it), never forms, pop-ups or top navigation.
@@ -288,6 +290,18 @@ export function insertAt(value, start, end, piece) {
 export const VIEW_PREFIX = 'plugin:'
 
 export const isPluginView = (view) => typeof view === 'string' && view.startsWith(VIEW_PREFIX)
+
+/**
+ * The project the user is in, as the Plugins tiles read it: a plugin view
+ * stands in its own plugin's project, a chat in its folder's project, and
+ * anything else in none. A view a plugin opens is recorded here too, never
+ * in the plugin's own project, so a project's plugin cannot show its view
+ * outside that project by opening it itself.
+ */
+export function frontProject(active, { sessions = [], projects = [], viewInfo = null } = {}) {
+  if (isPluginView(active)) return viewInfo?.(active)?.plugin?.project ?? null
+  return projectFor(projects, (sessions ?? []).find((s) => s.id === active)?.workspace)?.id ?? null
+}
 
 export function viewKey(pluginId, viewId) {
   return `${VIEW_PREFIX}${pluginId}/${viewId}`

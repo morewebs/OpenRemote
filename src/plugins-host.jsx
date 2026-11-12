@@ -229,11 +229,11 @@ export function PluginProvider({ children }) {
     callsRef.current = makeCalls({
       api: () => live.current.api,
       toast: (name, text) => live.current.toast(name, text),
-      // A plugin opens its own view: it runs for its own project only, so
-      // that is where the view is opened.
+      // A plugin opens its own view where the user is: the front project,
+      // as the sidebar's tile records it. A project's plugin opening its
+      // view from another project gets the note, not the view.
       openView: (key) => {
-        const pluginId = parseViewKey(key)?.pluginId
-        noteOpened(key, live.current.records.get(pluginId)?.plugin.project ?? null)
+        noteOpened(key, navRef.current.frontProject?.() ?? null)
         navRef.current.openView?.(key)
       },
       openSettings: (pluginId) => navRef.current.openSettings?.(pluginId),

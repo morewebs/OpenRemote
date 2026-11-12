@@ -62,7 +62,7 @@ import { useHint, useShortcut } from './keyboard.jsx'
 import { rolledStatus } from './team.js'
 import { usePlugins } from './plugins-host.jsx'
 import { PluginGlyph } from './plugin-icons.jsx'
-import { isPluginView } from './plugin-runtime.js'
+import { frontProject } from './plugin-runtime.js'
 import './sidebar.css'
 import './team.css'
 
@@ -153,9 +153,7 @@ export default function Sidebar({
   // of it, or one of the plugin's own views - as its tools ride only that
   // project's chats.
   const pluginHost = usePlugins()
-  const contextProject = isPluginView(active)
-    ? pluginHost?.viewInfo(active)?.plugin?.project ?? null
-    : projectFor(projects, (sessions ?? []).find((s) => s.id === active)?.workspace)?.id ?? null
+  const contextProject = frontProject(active, { sessions, projects, viewInfo: pluginHost?.viewInfo })
   const pluginViews = pluginHost?.viewsFor(contextProject) ?? []
   const privacy = usePrivacyMode()
   const [query, setQuery] = useState('')

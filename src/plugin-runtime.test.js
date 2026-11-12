@@ -326,3 +326,17 @@ test('"Use default" saves the default by a click, and a saved default shows as s
   assert.equal(offersDefault({ key: 'x', default: null }, null, false), false)
   assert.equal(offersDefault({ key: 'x', default: '' }, null, false), false)
 })
+
+test('the front project: a plugin view is its own plugin\'s, a chat is its folder\'s, anything else none', async () => {
+  const { frontProject, viewKey } = await import('./plugin-runtime.js')
+  const projects = [{ id: 'p1', folders: ['C:/a'] }, { id: 'p2', folders: ['C:/b'] }]
+  const sessions = [{ id: 'c1', workspace: 'C:/a' }, { id: 'c2', workspace: 'C:/elsewhere' }]
+  const key = viewKey('tool@p2', 'main')
+  const viewInfo = (k) => (k === key ? { plugin: { project: 'p2' } } : null)
+  assert.equal(frontProject('c1', { sessions, projects, viewInfo }), 'p1')
+  assert.equal(frontProject('c2', { sessions, projects, viewInfo }), null, 'a chat in no project')
+  assert.equal(frontProject(key, { sessions, projects, viewInfo }), 'p2')
+  assert.equal(frontProject(viewKey('global@x', 'v'), { sessions, projects, viewInfo }), null)
+  assert.equal(frontProject(null, { sessions, projects, viewInfo }), null)
+  assert.equal(frontProject('settings'), null)
+})
