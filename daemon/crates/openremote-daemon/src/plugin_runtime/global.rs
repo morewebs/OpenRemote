@@ -71,10 +71,22 @@ pub async fn publish(app: &Arc<App>, plugin: &InstalledPlugin, resolved: String,
         None
     } else {
         let dir = crate::plugins::plugin_dir(&app.data_dir, &plugin.marketplace, &plugin.name);
-        tokio::task::spawn_blocking(move || pack(&dir).ok().map(|bytes| sha256(&bytes)))
+        let packed = tokio::task::spawn_blocking(move || pack(&dir).map(|bytes| sha256(&bytes)))
             .await
-            .ok()
-            .flatten()
+            .map_err(|e| std::io::Error::other(e.to_string()))
+            .and_then(|r| r);
+        match packed {
+            Ok(sha) => Some(sha),
+            // A record no device could check a copy against is one no
+            // device could install: it is not told to the account.
+            Err(e) => {
+                eprintln!(
+                    "plugin {}: not told to your other devices, its folder can't be packed: {e}",
+                    plugin.id()
+                );
+                return;
+            }
+        }
     };
     let record = {
         let mut store = lock_recovering(&app.store);
@@ -310,6 +322,12 @@ pub async fn fetch_for_review(
             StatusCode::NOT_FOUND,
             format!("your account has no plugin {id} for every device"),
         ))?;
+    // Nothing is asked of another device for a record no copy could be
+    // checked against.
+    let archive = record.archive.clone().ok_or((
+        StatusCode::CONFLICT,
+        "the account's record names no archive to check a copy against; install it again on the device that has it".to_string(),
+    ))?;
     let mesh = app.cloud.mesh().ok_or((
         StatusCode::CONFLICT,
         "this computer is not signed in to Cloud".to_string(),
@@ -321,22 +339,12 @@ pub async fn fetch_for_review(
         .filter(|by| online.contains(by))
         .collect();
     peers.extend(online.into_iter().filter(|p| Some(*p) != record.by));
-    let mut last = "none of your devices that has it is online".to_string();
-    let mut bytes = None;
-    for peer in peers {
-        match fetch_archive(&mesh, peer, id, &record.resolved).await {
-            Ok(got) => {
-                bytes = Some(got);
-                break;
-            }
-            Err(e) => last = e,
-        }
-    }
-    let bytes = bytes.ok_or((StatusCode::BAD_GATEWAY, last))?;
-    let archive = record.archive.clone().ok_or((
-        StatusCode::CONFLICT,
-        "the account's record names no archive to check a copy against; install it again on the device that has it".to_string(),
-    ))?;
+    let bytes = first_matching(&peers, &archive, |peer| {
+        let (mesh, resolved) = (Arc::clone(&mesh), record.resolved.clone());
+        async move { fetch_archive(&mesh, peer, id, &resolved).await }
+    })
+    .await
+    .map_err(|why| (StatusCode::BAD_GATEWAY, why))?;
     let folder = app
         .data_dir
         .join("plugins")
@@ -361,6 +369,36 @@ pub async fn fetch_for_review(
         entry: None,
         recorded: record.source.clone(),
     })
+}
+
+/// The first device's copy that is exactly the recorded archive (a .tar.gz
+/// with its sha256): a device that sends another copy is passed over for
+/// the next, and with none left the last reason is said.
+pub async fn first_matching<F, Fut>(
+    peers: &[DeviceId],
+    archive: &str,
+    mut fetch: F,
+) -> Result<Vec<u8>, String>
+where
+    F: FnMut(DeviceId) -> Fut,
+    Fut: std::future::Future<Output = Result<Vec<u8>, String>>,
+{
+    let mut last = "none of your devices that has it is online".to_string();
+    for peer in peers {
+        match fetch(*peer).await {
+            Ok(bytes) if !bytes.starts_with(&[0x1f, 0x8b]) => {
+                last =
+                    "the copy that arrived is not the one your account installed (not a .tar.gz)"
+                        .into();
+            }
+            Ok(bytes) if sha256(&bytes) != archive => {
+                last = "the copy that arrived is not the one your account installed".into();
+            }
+            Ok(bytes) => return Ok(bytes),
+            Err(e) => last = e,
+        }
+    }
+    Err(last)
 }
 
 /// Unpack a copy and keep it only when it is exactly the approved bytes:
@@ -449,14 +487,58 @@ pub fn pack(dir: &Path) -> std::io::Result<Vec<u8>> {
     }
     let mut files = Vec::new();
     walk(dir, &mut files)?;
+    let programs = programs(dir);
     let gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
     let mut builder = tar::Builder::new(gz);
-    builder.mode(tar::HeaderMode::Deterministic);
     for file in files {
         let relative = file.strip_prefix(dir).unwrap_or(&file);
-        builder.append_path_with_name(&file, relative)?;
+        let name = relative.to_string_lossy().replace('\\', "/");
+        let bytes = std::fs::read(&file)?;
+        // Every header is written the same on every system: no time, no
+        // owner, and a mode from the manifest rather than the file system
+        // (a copy on Windows has no executable bit to read).
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(tar::EntryType::Regular);
+        header.set_size(bytes.len() as u64);
+        header.set_mode(if programs.contains(&name) {
+            0o755
+        } else {
+            0o644
+        });
+        header.set_mtime(0);
+        header.set_uid(0);
+        header.set_gid(0);
+        builder.append_data(&mut header, &name, bytes.as_slice())?;
     }
     builder.into_inner()?.finish()
+}
+
+/// The files a plugin's manifest names as programs: its entry (a module or
+/// a command) and its harness driver, as paths inside its folder.
+fn programs(dir: &Path) -> std::collections::BTreeSet<String> {
+    let raw: Value = std::fs::read(dir.join("openremote.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default();
+    let mut named = Vec::new();
+    match &raw["entry"] {
+        Value::String(path) => named.push(path.clone()),
+        entry => named.extend(entry["command"].as_str().map(String::from)),
+    }
+    if let Some(drivers) = raw["harness"]["driver"].as_object() {
+        named.extend(drivers.values().filter_map(Value::as_str).map(String::from));
+    }
+    named
+        .into_iter()
+        .map(|path| {
+            let path = path.replace('\\', "/");
+            let path = path
+                .strip_prefix("${OPENREMOTE_PLUGIN_ROOT}/")
+                .unwrap_or(&path)
+                .to_string();
+            path.strip_prefix("./").unwrap_or(&path).to_string()
+        })
+        .collect()
 }
 
 /// The routes a peer reaches (Sync tier: any device of the account).
@@ -699,6 +781,86 @@ mod tests {
         assert_eq!(local_at(1_000, Some(500)), 1_000);
         // A record held from a clock ahead of this one: still replaced, later.
         assert_eq!(local_at(1_000, Some(9_000)), 9_001);
+    }
+
+    #[tokio::test]
+    async fn a_copy_that_does_not_match_is_passed_over_for_the_next_device() {
+        let from = tempfile::tempdir().unwrap();
+        std::fs::write(from.path().join("openremote.json"), "{}").unwrap();
+        let good = pack(from.path()).unwrap();
+        let archive = sha256(&good);
+        let (bad_peer, good_peer) = (DeviceId::new(), DeviceId::new());
+        let asked = std::sync::Mutex::new(Vec::new());
+        let got = first_matching(&[bad_peer, good_peer], &archive, |peer| {
+            asked.lock().unwrap().push(peer);
+            let answer = if peer == bad_peer {
+                Ok(b"\x1f\x8b another copy".to_vec())
+            } else {
+                Ok(good.clone())
+            };
+            async move { answer }
+        })
+        .await
+        .expect("the second device's copy");
+        assert_eq!(got, good);
+        assert_eq!(*asked.lock().unwrap(), [bad_peer, good_peer]);
+        // None matches: the last reason is said.
+        let err = first_matching(&[bad_peer], &archive, |_| async {
+            Ok(b"PK\x03\x04".to_vec())
+        })
+        .await
+        .unwrap_err();
+        assert!(err.contains("not the one"), "{err}");
+    }
+
+    #[test]
+    fn a_pack_is_the_same_bytes_on_every_system() {
+        let from = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(from.path().join("bin")).unwrap();
+        std::fs::write(from.path().join("bin/run"), "program").unwrap();
+        std::fs::write(from.path().join("tool.wasm"), "module").unwrap();
+        std::fs::write(from.path().join("readme.txt"), "words").unwrap();
+        std::fs::write(
+            from.path().join("openremote.json"),
+            json!({"entry": {"command": "${OPENREMOTE_PLUGIN_ROOT}/bin/run"}}).to_string(),
+        )
+        .unwrap();
+        let modes = |bytes: &[u8]| -> Vec<(String, u32, u64)> {
+            let mut archive =
+                tar::Archive::new(flate2::read::GzDecoder::new(std::io::Cursor::new(bytes)));
+            archive
+                .entries()
+                .unwrap()
+                .map(|e| {
+                    let e = e.unwrap();
+                    let h = e.header();
+                    (
+                        e.path().unwrap().to_string_lossy().replace('\\', "/"),
+                        h.mode().unwrap(),
+                        h.mtime().unwrap(),
+                    )
+                })
+                .collect()
+        };
+        // Modes follow the manifest, never the file system's own bits (a
+        // Windows copy has none), and no time is recorded.
+        let packed = pack(from.path()).unwrap();
+        assert_eq!(
+            modes(&packed),
+            [
+                ("bin/run".to_string(), 0o755, 0),
+                ("openremote.json".to_string(), 0o644, 0),
+                ("readme.txt".to_string(), 0o644, 0),
+                ("tool.wasm".to_string(), 0o644, 0),
+            ]
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let f = from.path().join("readme.txt");
+            std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o700)).unwrap();
+            assert_eq!(pack(from.path()).unwrap(), packed);
+        }
     }
 
     #[test]

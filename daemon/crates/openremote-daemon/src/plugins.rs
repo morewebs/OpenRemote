@@ -1398,8 +1398,8 @@ pub(crate) fn place(from: &Path, target: &Path) -> Result<(), PluginError> {
     }
     // A link where the folder goes is never moved aside or deleted
     // through: what it leads to is not this plugin's.
-    if std::fs::symlink_metadata(target).is_ok_and(|m| m.file_type().is_symlink() || is_reparse(&m))
-    {
+    // A symlink or junction (see scope::is_link for why only those).
+    if crate::plugin_runtime::scope::is_link(target) {
         return Err(PluginError::Invalid(format!(
             "{} is a link, so OpenRemote won't replace it",
             target.display()
@@ -1434,20 +1434,6 @@ pub(crate) fn place(from: &Path, target: &Path) -> Result<(), PluginError> {
             }
             Err(e)
         }
-    }
-}
-
-/// Whether metadata is of a Windows reparse point (a junction included).
-fn is_reparse(meta: &std::fs::Metadata) -> bool {
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        meta.file_attributes() & 0x400 != 0
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = meta;
-        false
     }
 }
 

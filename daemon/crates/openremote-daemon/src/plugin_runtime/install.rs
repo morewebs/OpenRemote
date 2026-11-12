@@ -192,26 +192,20 @@ pub async fn install(
     // Its program (if it runs one) holds the folder too: it stops before
     // the folder is replaced, and the next need starts the new version.
     app.plugin_runtime.changed(&id).await;
-    let placed = match scope {
-        PluginScope::Global | PluginScope::Machine => app.plugins.install(staged),
-        PluginScope::ProjectLocal | PluginScope::Project => app.plugins.install_at(staged, &target),
-    };
-    placed.map_err(failure)?;
-    // The repo gets its copy of the snapshot, for whoever clones it.
-    if let Some(folder) = &repo {
-        let written = {
-            let (folder, name, from) = (folder.clone(), name.clone(), target.clone());
-            tokio::task::spawn_blocking(move || scope::write_repo_copy(&folder, &name, &from))
-                .await
-                .map_err(|e| e.to_string())
-                .and_then(|r| r)
-        };
-        if let Err(why) = written {
-            if before.is_none() {
-                let _ = std::fs::remove_dir_all(&target);
-            }
-            return Err((StatusCode::CONFLICT, why));
+    match (scope, &repo) {
+        (PluginScope::Global | PluginScope::Machine, _) => {
+            app.plugins.install(staged).map_err(failure)?
         }
+        // The repo's copy first, for whoever clones it, and the snapshot
+        // that runs only once that is written: a failed repo write leaves
+        // the running snapshot as it was.
+        (_, Some(folder)) => {
+            let root = staged.root().to_path_buf();
+            project_files(folder, &name, &root, || {
+                app.plugins.install_at(staged, &target)
+            })?
+        }
+        _ => app.plugins.install_at(staged, &target).map_err(failure)?,
     }
     let now = openremote_core::now_ms();
     let harness = manifest.harness.as_ref().map(|h| PluginHarnessRef {
@@ -298,6 +292,20 @@ pub async fn install(
     // The plugin's App appears (or changes) without a restart.
     app.supervisor.reprobe_harnesses().await;
     Ok(plugin)
+}
+
+/// A Project plugin's files: the reviewed folder is written into the repo
+/// first, and only then is the snapshot that runs replaced (`place_snapshot`),
+/// so a repo that can't take the copy changes nothing that runs.
+fn project_files(
+    project_folder: &std::path::Path,
+    name: &str,
+    reviewed: &std::path::Path,
+    place_snapshot: impl FnOnce() -> Result<(), crate::plugins::PluginError>,
+) -> Result<(), Failure> {
+    scope::write_repo_copy(project_folder, name, reviewed)
+        .map_err(|e| (StatusCode::CONFLICT, e))?;
+    place_snapshot().map_err(failure)
 }
 
 /// A plugin folder's failure as the routes answer it.
@@ -449,6 +457,38 @@ mod tests {
         }
         std::fs::write(dir.path().join("openremote.json"), raw.to_string()).unwrap();
         crate::plugins::read_manifest(dir.path(), &[]).expect("a manifest")
+    }
+
+    /// An update whose repo copy can't be written leaves the snapshot that
+    /// runs as it was: the repo is written first, the snapshot only after.
+    #[test]
+    fn a_failed_repo_write_leaves_the_running_snapshot_alone() {
+        let project = tempfile::tempdir().unwrap();
+        let reviewed = tempfile::tempdir().unwrap();
+        std::fs::write(reviewed.path().join("openremote.json"), "new").unwrap();
+        // `.openremote/plugins` is a file: no folder can be made in it.
+        std::fs::create_dir_all(project.path().join(".openremote")).unwrap();
+        std::fs::write(project.path().join(".openremote/plugins"), "in the way").unwrap();
+        let mut placed = false;
+        let err = project_files(project.path(), "shout", reviewed.path(), || {
+            placed = true;
+            Ok(())
+        })
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::CONFLICT);
+        assert!(!placed, "the snapshot was not touched");
+        // A repo that takes the copy: then the snapshot.
+        std::fs::remove_file(project.path().join(".openremote/plugins")).unwrap();
+        project_files(project.path(), "shout", reviewed.path(), || {
+            placed = true;
+            Ok(())
+        })
+        .unwrap();
+        assert!(placed);
+        let copy = project
+            .path()
+            .join(".openremote/plugins/shout/openremote.json");
+        assert_eq!(std::fs::read_to_string(copy).unwrap(), "new");
     }
 
     #[test]

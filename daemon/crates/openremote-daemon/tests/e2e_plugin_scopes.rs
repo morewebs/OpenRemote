@@ -680,3 +680,40 @@ async fn repo_paths_that_are_links_are_refused_and_nothing_outside_is_touched() 
     assert_eq!(removed.status, 409, "{}", removed.raw);
     assert_eq!(tree(outside.path()), before, "nothing outside deleted");
 }
+
+/// A record that names no archive is refused before anything is asked of
+/// another device, and a Global install whose files can't be packed is not
+/// told to the account (no device could fetch it).
+#[tokio::test]
+async fn a_record_no_device_could_check_is_neither_fetched_nor_published() {
+    let (daemon, app) = start_embedded(dead_cloud()).await;
+    let record: openremote_core::GlobalPluginRecord = serde_json::from_value(json!({
+        "name": "shout", "marketplace": "local", "runtime": "wasm",
+        "source": {"kind": "folder", "path": ""},
+        "resolved": "0".repeat(64), "at": 1
+    }))
+    .unwrap();
+    app.store
+        .lock()
+        .unwrap()
+        .merge_global_plugin(record)
+        .unwrap();
+    let staged = stage_source(&daemon, json!({"kind": "account", "id": "shout@local"})).await;
+    assert_eq!(staged.status, 409, "{}", staged.raw);
+    assert!(staged.raw.contains("no archive"), "{}", staged.raw);
+
+    let plugin: openremote_core::InstalledPlugin = serde_json::from_value(json!({
+        "name": "gone", "marketplace": "local", "runtime": "wasm",
+        "source": {"kind": "folder", "path": ""}, "scope": "global",
+        "installed_at": 1, "updated_at": 1
+    }))
+    .unwrap();
+    openremote_daemon::plugin_runtime::global::publish(&app, &plugin, "0".repeat(64), false).await;
+    assert!(
+        app.store
+            .lock()
+            .unwrap()
+            .global_plugin("gone@local")
+            .is_none()
+    );
+}

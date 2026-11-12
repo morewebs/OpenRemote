@@ -64,21 +64,14 @@ pub fn project_folder(store: &Store, project: ProjectId) -> Option<PathBuf> {
     store.project(&project).ok()?.folders.first().cloned()
 }
 
-/// Whether a path is a link of any kind: a symlink, or on Windows any
-/// reparse point (a junction included). A path that isn't there is not.
-fn is_link(path: &Path) -> bool {
-    let Ok(meta) = std::fs::symlink_metadata(path) else {
-        return false;
-    };
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
-        if meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-            return true;
-        }
-    }
-    meta.file_type().is_symlink()
+/// Whether a path is a link: a symlink, or on Windows a junction. Rust's
+/// `is_symlink` answers true there for every name-surrogate reparse point,
+/// which is what a link is. Other reparse points are not refused: OneDrive's
+/// Files-On-Demand and other cloud placeholders are reparse points that
+/// lead nowhere else, and projects under Documents are often made of them.
+/// A path that isn't there is not a link.
+pub(crate) fn is_link(path: &Path) -> bool {
+    std::fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_symlink())
 }
 
 /// A path under a project's folder, checked before OpenRemote writes,
@@ -548,6 +541,39 @@ pub(crate) mod tests {
             })
             .unwrap();
         id
+    }
+
+    /// Only a real link is refused: a plain folder or file is not one, and
+    /// neither is a cloud placeholder (OneDrive's Files-On-Demand keeps
+    /// Documents as reparse points that are not links; one can't be made in
+    /// a test, so the rule is pinned in the source).
+    #[test]
+    fn only_a_real_link_is_a_link() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("file"), "x").unwrap();
+        assert!(!is_link(dir.path()));
+        assert!(!is_link(&dir.path().join("file")));
+        assert!(!is_link(&dir.path().join("missing")));
+        let outside = tempfile::tempdir().unwrap();
+        #[cfg(windows)]
+        {
+            let made = std::process::Command::new("cmd")
+                .args(["/C", "mklink", "/J"])
+                .arg(dir.path().join("j"))
+                .arg(outside.path())
+                .output()
+                .is_ok_and(|o| o.status.success());
+            assert!(made);
+        }
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(outside.path(), dir.path().join("j")).unwrap();
+        assert!(is_link(&dir.path().join("j")));
+        let source = include_str!("scope.rs");
+        let body = &source[source.find("fn is_link(").unwrap()..];
+        let body = &body[..body.find("\n}").unwrap()];
+        assert!(!body.contains("0x400"), "any reparse point is not a link");
+        let plugins = include_str!("../plugins.rs");
+        assert!(!plugins.contains("& 0x400"), "nor in place()");
     }
 
     #[test]
