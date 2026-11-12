@@ -27,22 +27,60 @@ export const MAX_INSERT = 100_000
 export const MAX_ATTACH_BYTES = 10 * 1024 * 1024
 export const INPUT_STATES = new Set(['idle', 'active', 'busy'])
 
+// A grant ends five minutes after the click that made it, at the latest.
+export const GRANT_MS = 5 * 60 * 1000
+
 // Which composers each plugin may write in. `composers` maps a composer's
-// handle to { insert, attachKey }; `grants` maps a plugin to the handles
-// the user clicked its button in (each with its composer's key, so a chat's
-// composer that opens again still counts); `lastClick` is the handle of the
-// plugin's last click.
-export function composerGrants() {
-  return { composers: new Map(), grants: new Map(), lastClick: new Map() }
+// handle to { insert, attachKey }; `grants` maps a plugin to the handles the
+// user clicked its button in, each with the button and when; `lastClick` is
+// the handle of the plugin's last click. `now` is the clock (tests set it).
+//
+// A grant is short-lived: it ends when the plugin sets that button back to
+// idle (its work is done), when the composer goes away or changes chats,
+// or GRANT_MS after the click - whichever comes first.
+export function composerGrants(now = () => Date.now()) {
+  return { composers: new Map(), grants: new Map(), lastClick: new Map(), now }
 }
 
-// The user clicked a plugin's button in the composer `handle`: the one way
-// a grant is made.
-export function grantClick(state, pluginId, handle) {
+// The user clicked a plugin's button `inputId` in the composer `handle`:
+// the one way a grant is made.
+export function grantClick(state, pluginId, handle, inputId = null) {
   const granted = state.grants.get(pluginId) ?? new Map()
-  granted.set(handle, state.composers.get(handle)?.attachKey ?? null)
+  granted.set(handle, { input: inputId, at: state.now() })
   state.grants.set(pluginId, granted)
   state.lastClick.set(pluginId, handle)
+}
+
+// The grants a plugin holds now, the expired ones gone.
+function liveGrants(state, pluginId) {
+  const granted = state.grants.get(pluginId)
+  if (!granted) return null
+  for (const [handle, grant] of [...granted]) {
+    if (state.now() - grant.at >= GRANT_MS) granted.delete(handle)
+  }
+  return granted
+}
+
+// Whether a plugin holds a live grant for the composer `handle`.
+export function holdsGrant(state, pluginId, handle) {
+  return Boolean(handle && liveGrants(state, pluginId)?.has(handle))
+}
+
+// The plugin set button `inputId` back to idle: the grants its clicks made
+// end (in the composer it names, or in every composer).
+export function endInputGrants(state, pluginId, inputId, handle = null) {
+  const granted = state.grants.get(pluginId)
+  if (!granted) return
+  for (const [h, grant] of [...granted]) {
+    if (grant.input === inputId && (handle == null || h === handle)) granted.delete(h)
+  }
+}
+
+// A composer went away, or now belongs to another chat: no plugin may write
+// in it any more.
+export function forgetComposer(state, handle) {
+  for (const granted of state.grants.values()) granted.delete(handle)
+  for (const [id, last] of [...state.lastClick]) if (last === handle) state.lastClick.delete(id)
 }
 
 // A plugin turned off or removed loses its grants.
@@ -52,20 +90,15 @@ export function dropGrants(state, livePluginIds) {
 }
 
 // The composer a plugin writes in: the one it names (a handle a click gave
-// it), else the one whose button the user clicked last. Never a composer the
-// user didn't point it at - though when the user left that chat and came
-// back, its composer is a new one, and the words still belong there.
+// it), else the one whose button the user clicked last - only while that
+// click's grant lives, and only while that very composer is open.
 export function composerFor(state, pluginId, handle) {
-  const granted = state.grants.get(pluginId)
   const chosen = handle ?? state.lastClick.get(pluginId) ?? null
-  if (!chosen || !granted?.has(chosen)) {
+  if (!holdsGrant(state, pluginId, chosen)) {
     throw new Error('A plugin writes in a composer only after the user clicks its button there.')
   }
   const target = state.composers.get(chosen)
   if (target) return target
-  const key = granted.get(chosen)
-  const again = key == null ? null : [...state.composers.values()].find((c) => c.attachKey === key)
-  if (again) return again
   throw new Error('That composer has closed.')
 }
 
@@ -117,16 +150,17 @@ export function makeCalls(deps) {
 
     'composer.setState': async ({ plugin, ui }, { input, state, label, title, composer }) => {
       if (!ui.inputs.some((i) => i.id === input)) throw new Error(`There is no composer button named ${input}.`)
-      const granted = deps.grants.grants.get(plugin.id)
-      const scoped = Boolean(composer && granted?.has(composer))
+      const scoped = holdsGrant(deps.grants, plugin.id, composer)
+      const next = INPUT_STATES.has(state) ? state : 'idle'
+      // Back at rest, the button's work is done: its grants end.
+      if (next === 'idle') endInputGrants(deps.grants, plugin.id, input, composer ?? null)
       deps.setInputState(`${plugin.id}/${input}`, {
-        state: INPUT_STATES.has(state) ? state : 'idle',
+        state: next,
         label: typeof label === 'string' && label.trim() ? label.trim().slice(0, 40) : null,
         title: typeof title === 'string' && title.trim() ? title.trim().slice(0, 120) : null,
         // One composer's button only, when the plugin names one it was
         // handed by a click; every composer's otherwise.
         composer: scoped ? composer : null,
-        composerKey: scoped ? (granted.get(composer) ?? null) : null,
       })
       return [null]
     },

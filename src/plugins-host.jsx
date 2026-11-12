@@ -31,7 +31,7 @@ import {
   viewKey,
   withDefaults,
 } from './plugin-runtime.js'
-import { answerCall, composerGrants, dropGrants, grantClick, makeCalls, settingsView } from './plugin-calls.js'
+import { answerCall, composerGrants, dropGrants, forgetComposer, grantClick, makeCalls, settingsView } from './plugin-calls.js'
 import './plugin-ui.css'
 
 const PluginContext = createContext(null)
@@ -77,6 +77,18 @@ export function PluginProvider({ children }) {
   // clicked once. A plugin costs nothing until then.
   const [awake, setAwake] = useState(() => new Set())
   const [toasts, setToasts] = useState([])
+  // The project each plugin view was opened in this session (null: none),
+  // by view key. A project's plugin's view shows only where it was opened
+  // from its project - never from a stale hash or history entry alone.
+  const [openedFor, setOpenedFor] = useState(() => new Map())
+  const noteOpened = useCallback((key, projectId) => {
+    setOpenedFor((current) => {
+      if (current.get(key) === (projectId ?? null)) return current
+      const next = new Map(current)
+      next.set(key, projectId ?? null)
+      return next
+    })
+  }, [])
 
   const framesRef = useRef(new Map())
   const grantsRef = useRef(composerGrants())
@@ -217,7 +229,13 @@ export function PluginProvider({ children }) {
     callsRef.current = makeCalls({
       api: () => live.current.api,
       toast: (name, text) => live.current.toast(name, text),
-      openView: (key) => navRef.current.openView?.(key),
+      // A plugin opens its own view: it runs for its own project only, so
+      // that is where the view is opened.
+      openView: (key) => {
+        const pluginId = parseViewKey(key)?.pluginId
+        noteOpened(key, live.current.records.get(pluginId)?.plugin.project ?? null)
+        navRef.current.openView?.(key)
+      },
       openSettings: (pluginId) => navRef.current.openSettings?.(pluginId),
       setInputState: (key, state) => setInputStates((current) => ({ ...current, [key]: state })),
       attach: (item, key) => addAttachment(item, key),
@@ -344,14 +362,16 @@ export function PluginProvider({ children }) {
     const composers = grantsRef.current.composers
     composers.set(handle, entry)
     return () => {
+      // Unmounted, or now another chat's composer: its grants end with it.
       if (composers.get(handle) === entry) composers.delete(handle)
+      forgetComposer(grantsRef.current, handle)
     }
   }, [])
 
   // The user's click on a plugin's button: the one thing that lets the
   // plugin write in that composer.
   const clickInput = useCallback((pluginId, inputId, handle) => {
-    grantClick(grantsRef.current, pluginId, handle)
+    grantClick(grantsRef.current, pluginId, handle, inputId)
     clicksRef.current.push({ pluginId, detail: { input: inputId, composer: handle } })
     setAwake((current) => (current.has(pluginId) ? current : new Set([...current, pluginId])))
     deliverClicks()
@@ -360,14 +380,11 @@ export function PluginProvider({ children }) {
   }, [])
 
   // A button's state in one composer: the plugin's, when it set it for
-  // every composer, for this one, or for this chat's composer before it
-  // opened again; at rest otherwise.
+  // every composer or for this one; at rest otherwise.
   const inputState = useCallback(
-    (pluginId, inputId, handle, composerKey) => {
+    (pluginId, inputId, handle) => {
       const state = inputStates[`${pluginId}/${inputId}`]
-      const mine =
-        state &&
-        (!state.composer || state.composer === handle || (state.composerKey != null && state.composerKey === composerKey))
+      const mine = state && (!state.composer || state.composer === handle)
       return mine ? state : { state: 'idle', label: null, title: null }
     },
     [inputStates],
@@ -429,10 +446,12 @@ export function PluginProvider({ children }) {
       setNavigation,
       openSettings,
       viewInfo,
+      noteOpened,
+      openedFor,
       loadSettings,
       saveSettings,
     }),
-    [frameSrc, records, views, inputs, viewsFor, inputsFor, settingsPlugins, registerFrame, registerComposer, clickInput, inputState, setNavigation, openSettings, viewInfo, loadSettings, saveSettings],
+    [frameSrc, records, views, inputs, viewsFor, inputsFor, settingsPlugins, registerFrame, registerComposer, clickInput, inputState, setNavigation, openSettings, viewInfo, noteOpened, openedFor, loadSettings, saveSettings],
   )
 
   return (

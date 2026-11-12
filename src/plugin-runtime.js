@@ -201,16 +201,55 @@ export function frameOf(event, frames) {
   return frame
 }
 
-// The app's keys a focused plugin view may pass up: those that move around
-// the app (navigation and layout). A key that acts on a chat - steer, stop,
-// archive, a picker - is never passed, so a plugin's page can't press it
-// for the user; nor is any key from a hidden page, or from a view that does
-// not have the focus (the bridge's message is the plugin's own word, not
-// proof of a key press).
-export const PLUGIN_KEY_GROUPS = new Set(['navigation', 'layout'])
+// The app's keys a focused plugin view may pass up, by name: ones that only
+// move around the app. The list is explicit so that it fails closed - an
+// action added to the app later passes only once it is added here. A key
+// that acts on a chat (steer, stop, archive, a picker) or closes something
+// is never passed, so a plugin's page can't press it for the user; nor is
+// any key from a hidden page, or from a view that does not have the focus
+// (the bridge's message is the plugin's own word, not proof of a key press).
+export const PLUGIN_KEY_ACTIONS = new Set([
+  'new-chat',
+  'palette',
+  'cheat-sheet',
+  'search-chats',
+  'next-chat',
+  'prev-chat',
+  'first-chat',
+  'last-chat',
+  'view-settings',
+  'view-automations',
+  'view-plugins',
+  'view-machines',
+  'view-account',
+  'view-mobile',
+  'view-metrics',
+  'toggle-sidebar',
+  'focus-pane-1',
+  'focus-pane-2',
+  'focus-pane-3',
+  'focus-pane-4',
+])
 
 export function keyPassesUp(action, { view = false, focused = false } = {}) {
-  return Boolean(view && focused && action && PLUGIN_KEY_GROUPS.has(action.group))
+  return Boolean(view && focused && action && PLUGIN_KEY_ACTIONS.has(action.id))
+}
+
+// Whether a plugin's view may show here. A Global or Machine plugin's view
+// shows anywhere; a project's plugin's view only when it was opened from
+// that project (`openedFor`, the project it was opened in, which a stale
+// hash or history entry never carries).
+export function viewShown(plugin, openedFor) {
+  const scope = plugin?.scope ?? 'machine'
+  if (scope !== 'project' && scope !== 'project_local') return true
+  return openedFor !== undefined && ridesProject(plugin, openedFor)
+}
+
+// The mark on a plugin's composer button that says whose it is: the first
+// letter of its name.
+export function pluginInitial(name) {
+  const first = String(name ?? '').trim().match(/[\p{L}\p{N}]/u)
+  return first ? first[0].toUpperCase() : '?'
 }
 
 // What a plugin's composer button says it is: the plugin's own label, and
@@ -321,6 +360,21 @@ export function frameAllow(powers) {
 export function shownValue(setting, values) {
   const saved = values?.[setting.key]
   return saved === undefined || saved === null ? setting.default : saved
+}
+
+// What a text or number field holds: only a value the user saved. The
+// daemon answers the plugin's default where none was saved, and that one
+// is left out (the placeholder shows it).
+export function typedValue(setting, value) {
+  if (value == null) return ''
+  if (setting.default != null && value === setting.default) return ''
+  return String(value)
+}
+
+// A field's placeholder: the plugin's default, else its own hint.
+export function fieldPlaceholder(setting) {
+  if (setting.default != null && setting.default !== '') return String(setting.default)
+  return setting.placeholder ?? ''
 }
 
 // The settings as a plugin reads them: every value it declares (its default

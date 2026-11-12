@@ -769,9 +769,21 @@ export default function Sidebar({
 
   // Right-click on a plugin's tile: open it, or open it in a new split.
   const viewMenuItems = (item) => {
-    const split = (dir, before) => () => onSplit(item.key, dir, before)
+    // Opened from here, in the project that is in front.
+    const opened = () => pluginHost.noteOpened(item.key, contextProject)
+    const split = (dir, before) => () => {
+      opened()
+      onSplit(item.key, dir, before)
+    }
     return [
-      { label: 'Open', icon: <PluginGlyph name={item.icon} size={14} />, onSelect: () => onSelect(item.key) },
+      {
+        label: 'Open',
+        icon: <PluginGlyph name={item.icon} size={14} />,
+        onSelect: () => {
+          opened()
+          onSelect(item.key)
+        },
+      },
       ...(onSplit && !isMobile
         ? [
             { divider: true },
@@ -1200,7 +1212,10 @@ export default function Sidebar({
                 type="button"
                 className={`sb-plugin-row${item.key === active ? ' active' : ''}`}
                 title={`${item.title} (${item.pluginName} plugin)`}
-                onClick={() => onSelect(item.key)}
+                onClick={() => {
+                  pluginHost.noteOpened(item.key, contextProject)
+                  onSelect(item.key)
+                }}
                 onContextMenu={(e) => {
                   e.preventDefault()
                   setMenu({ x: e.clientX, y: e.clientY, items: viewMenuItems(item) })

@@ -6,6 +6,7 @@
 /* ---- composer buttons: ghosts beside the send button ---- */
 
 .plg-input {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -23,6 +24,22 @@
   transition:
     background-color 0.12s ease,
     color 0.12s ease;
+}
+
+/* The plugin's initial on its own button: the mark no built-in carries. */
+.plg-input-badge {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  min-width: 11px;
+  height: 11px;
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--bg-app);
+  font: 600 8px/11px var(--font-sans, system-ui, sans-serif);
+  text-align: center;
+  pointer-events: none;
 }
 
 .plg-input:hover:not(:disabled) {

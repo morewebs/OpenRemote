@@ -4,7 +4,9 @@
 // project's composers. A click goes to the plugin's hidden frame along with
 // this composer's handle: the plugin may then write in this composer, and
 // only in one the user clicked it in. It never sends. Each button names its
-// plugin, so a plugin's button can't pass for one of the app's own. The
+// plugin - in its accessible name, its tooltip and a visible badge with the
+// plugin's initial - so a plugin's button can't pass for one of the app's
+// own. The
 // plugin sets the button's state: active (it breathes), busy, or at rest,
 // with a short label beside it. With no such plugin nothing renders.
 
@@ -12,7 +14,7 @@ import { useEffect, useId, useRef } from 'react'
 import { useConsole } from './state/console.jsx'
 import { usePlugins } from './plugins-host.jsx'
 import { PluginGlyph } from './plugin-icons.jsx'
-import { buttonWords, insertAt } from './plugin-runtime.js'
+import { buttonWords, insertAt, pluginInitial } from './plugin-runtime.js'
 import { projectFor } from './projects.js'
 
 export default function PluginComposerButtons({ inputRef, setText, composer, workspace = null, disabled = false }) {
@@ -49,7 +51,7 @@ export default function PluginComposerButtons({ inputRef, setText, composer, wor
   const shown = host.inputsFor(project)
   if (shown.length === 0) return null
   return shown.map(({ pluginId, pluginName, input }) => {
-    const state = host.inputState(pluginId, input.id, handle, composer)
+    const state = host.inputState(pluginId, input.id, handle)
     const words = buttonWords(input, pluginName, state)
     return (
       <button
@@ -65,6 +67,11 @@ export default function PluginComposerButtons({ inputRef, setText, composer, wor
         onClick={() => host.clickInput(pluginId, input.id, handle)}
       >
         <PluginGlyph name={input.icon} size={16} />
+        {/* Whose button it is, on the button itself: a plugin's paperclip
+            or microphone never passes for one of the app's own. */}
+        <span className="plg-input-badge" aria-hidden="true">
+          {pluginInitial(pluginName)}
+        </span>
         {state.label && <span className="plg-input-label">{state.label}</span>}
       </button>
     )

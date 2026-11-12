@@ -232,20 +232,80 @@ test('words go in at the cursor with a space where they would touch', () => {
   assert.deepEqual(insertAt('replace me', 0, 7, 'keep'), { text: 'keep me', caret: 4 })
 })
 
-test("a plugin view passes up only the app's moving-around keys, and only while focused", async () => {
-  const { keyPassesUp } = await import('./plugin-runtime.js')
+test("a plugin view passes up only the app's moving-around keys, by name, and only while focused", async () => {
+  const { PLUGIN_KEY_ACTIONS, keyPassesUp } = await import('./plugin-runtime.js')
   const { CATALOG } = await import('./shortcuts.js')
-  const action = (id) => CATALOG.find((a) => a.id === id)
+  // The list itself, so a change to it is a change someone made on purpose.
+  assert.deepEqual([...PLUGIN_KEY_ACTIONS].sort(), [
+    'cheat-sheet',
+    'first-chat',
+    'focus-pane-1',
+    'focus-pane-2',
+    'focus-pane-3',
+    'focus-pane-4',
+    'last-chat',
+    'new-chat',
+    'next-chat',
+    'palette',
+    'prev-chat',
+    'search-chats',
+    'toggle-sidebar',
+    'view-account',
+    'view-automations',
+    'view-machines',
+    'view-metrics',
+    'view-mobile',
+    'view-plugins',
+    'view-settings',
+  ])
+  // Every name is a real action, and every action that passes is on it.
+  const ids = new Set(CATALOG.map((a) => a.id))
+  for (const id of PLUGIN_KEY_ACTIONS) assert.ok(ids.has(id), id)
   const focusedView = { view: true, focused: true }
-  for (const id of ['new-chat', 'palette', 'toggle-sidebar', 'split-right', 'focus-pane-2']) {
-    assert.equal(keyPassesUp(action(id), focusedView), true, id)
+  const passing = CATALOG.filter((a) => keyPassesUp(a, focusedView)).map((a) => a.id).sort()
+  assert.deepEqual(passing, [...PLUGIN_KEY_ACTIONS].sort())
+  // Fails closed: an action the list doesn't name, even in a group the
+  // others belong to, does not pass.
+  assert.equal(keyPassesUp({ id: 'something-new', group: 'navigation' }, focusedView), false)
+  for (const id of ['steer', 'stop', 'archive', 'interrupt', 'close-pane', 'toggle-mode', 'pick-permission', 'browser-close-tab']) {
+    assert.equal(keyPassesUp(CATALOG.find((a) => a.id === id), focusedView), false, id)
   }
-  // A key that acts on a chat is never pressed for the user.
-  for (const id of ['steer', 'stop', 'archive', 'interrupt', 'pick-permission', 'toggle-fast', 'browser-close-tab']) {
-    assert.equal(keyPassesUp(action(id), focusedView), false, id)
-  }
-  // Nor from a hidden page, or a view without the focus, or for no action.
-  assert.equal(keyPassesUp(action('new-chat'), { view: false, focused: true }), false)
-  assert.equal(keyPassesUp(action('new-chat'), { view: true, focused: false }), false)
+  assert.equal(keyPassesUp(CATALOG.find((a) => a.id === 'new-chat'), { view: false, focused: true }), false)
+  assert.equal(keyPassesUp(CATALOG.find((a) => a.id === 'new-chat'), { view: true, focused: false }), false)
   assert.equal(keyPassesUp(undefined, focusedView), false)
+})
+
+test("a project's plugin view shows only where it was opened from its project", async () => {
+  const { viewShown } = await import('./plugin-runtime.js')
+  assert.equal(viewShown({ scope: 'machine' }, undefined), true)
+  assert.equal(viewShown({ scope: 'global' }, 'p2'), true)
+  for (const scope of ['project', 'project_local']) {
+    const plugin = { scope, project: 'p1' }
+    assert.equal(viewShown(plugin, 'p1'), true)
+    assert.equal(viewShown(plugin, undefined), false, 'a stale hash or history entry: never opened here')
+    assert.equal(viewShown(plugin, null), false)
+    assert.equal(viewShown(plugin, 'p2'), false)
+  }
+})
+
+test("a plugin's initial marks its button", async () => {
+  const { pluginInitial } = await import('./plugin-runtime.js')
+  assert.equal(pluginInitial('Dictation'), 'D')
+  assert.equal(pluginInitial('  voice notes'), 'V')
+  assert.equal(pluginInitial('élan'), 'É')
+  assert.equal(pluginInitial(''), '?')
+})
+
+test("a text field holds only the user's own value; the default is its placeholder", async () => {
+  const { fieldPlaceholder, typedValue } = await import('./plugin-runtime.js')
+  const address = { key: 'base_url', type: 'string', default: 'https://api.openai.com/v1', placeholder: 'An address' }
+  assert.equal(typedValue(address, 'https://api.openai.com/v1'), '')
+  assert.equal(typedValue(address, null), '')
+  assert.equal(typedValue(address, 'http://127.0.0.1:9000/v1'), 'http://127.0.0.1:9000/v1')
+  assert.equal(fieldPlaceholder(address), 'https://api.openai.com/v1')
+  assert.equal(fieldPlaceholder({ ...address, default: '' }), 'An address')
+  assert.equal(fieldPlaceholder({ key: 'x', default: null }), '')
+  const minutes = { key: 'max', type: 'number', default: 10 }
+  assert.equal(typedValue(minutes, 10), '')
+  assert.equal(typedValue(minutes, 12), '12')
 })

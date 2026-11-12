@@ -62,7 +62,8 @@ test("the console's CSP names only the app's own origins", () => {
   // Plugin frames are blob: pages, their scripts blob: scripts made inside
   // them; the bridge is the app's own file under each shell origin.
   assert.deepEqual(policy['script-src'], ["'self'", 'http://tauri.localhost', 'https://tauri.localhost', 'tauri://localhost', 'blob:'])
-  assert.deepEqual(policy['frame-src'], ["'self'", 'blob:'])
+  // The console frames nothing but plugin pages, which are blob: pages.
+  assert.deepEqual(policy['frame-src'], ['blob:'])
   assert.deepEqual(policy['media-src'], ["'self'", 'blob:'])
   assert.ok(!policy['script-src'].includes("'unsafe-eval'") && !policy['script-src'].includes("'unsafe-inline'"))
   assert.doesNotMatch(csp, /(^|\s)\*(\s|;|$)|https:(\s|;|$)|http:(\s|;|$)/, 'no wildcard source, no bare scheme')
@@ -125,7 +126,13 @@ test("a project's plugin shows only in its project's composers and sidebar", () 
 test('a write needs a click: the grant is made in the click handler and nowhere else', () => {
   const host = read('plugins-host.jsx')
   assert.equal((host.match(/grantClick\(/g) ?? []).length, 1)
-  assert.match(host, /const clickInput = useCallback\(\(pluginId, inputId, handle\) => \{\s*\n\s*grantClick\(grantsRef\.current, pluginId, handle\)/)
+  assert.match(host, /const clickInput = useCallback\(\(pluginId, inputId, handle\) => \{\s*\n\s*grantClick\(grantsRef\.current, pluginId, handle, inputId\)/)
+  // A composer that unmounts, or turns to another chat, takes its grants.
+  assert.match(
+    host,
+    /if \(composers\.get\(handle\) === entry\) composers\.delete\(handle\)\s*\n\s*forgetComposer\(grantsRef\.current, handle\)/,
+  )
+  assert.match(read('PluginComposerButtons.jsx'), /\}, \[registerComposer, handle, composer\]\)/)
   const buttons = read('PluginComposerButtons.jsx')
   assert.equal((buttons.match(/clickInput\(/g) ?? []).length, 1)
   assert.match(buttons, /onClick=\{\(\) => host\.clickInput\(pluginId, input\.id, handle\)\}/)
@@ -173,4 +180,50 @@ test("a plugin's view is a pane like a chat, known by its key", () => {
   assert.match(app, /isPluginView\(view\) \? \(\s*\n\s*\/\/[^\n]*\n\s*<PluginView viewKey=\{view\} \/>/)
   assert.match(app, /if \(isPluginView\(leaf\.view\)\) return <PluginView viewKey=\{leaf\.view\} \/>/)
   assert.match(app, /<PluginProvider>/)
+})
+
+test('only the fixed boot page ever becomes a blob: no plugin bytes are turned into a URL', () => {
+  // Plugin files reach a frame as bytes; the frame makes its own blob:
+  // scripts inside its sandbox. The console itself makes one blob - the
+  // boot page every frame shares - and never one from a plugin's bytes.
+  const uses = []
+  for (const file of readdirSync(new URL('./', import.meta.url))) {
+    if (!/\.jsx?$/.test(file) || file.endsWith('.test.js')) continue
+    for (const line of read(file).split('\n')) if (line.includes('createObjectURL')) uses.push([file, line.trim()])
+  }
+  const plugin = uses.filter(([file]) => /^plugin|^Plugin/.test(file))
+  assert.deepEqual(plugin, [
+    ['plugins-host.jsx', "() => URL.createObjectURL(new Blob([frameDocument(window.location.origin)], { type: 'text/html' })),"],
+  ])
+  // Elsewhere only the chat's own pictures from the daemon's store.
+  assert.deepEqual(
+    uses.filter(([file]) => !/^plugin|^Plugin/.test(file)).map(([file]) => file),
+    ['chat-images.jsx'],
+  )
+  assert.doesNotMatch(read('plugin-calls.js'), /createObjectURL|new Blob/)
+})
+
+test("a plugin's button shows whose it is, on the button", () => {
+  const buttons = read('PluginComposerButtons.jsx')
+  assert.match(buttons, /<span className="plg-input-badge" aria-hidden="true">\s*\n\s*\{pluginInitial\(pluginName\)\}/)
+  assert.match(read('plugin-ui.css'), /\.plg-input-badge \{/)
+})
+
+test("a project's plugin view opened from somewhere else shows a note, not the view", () => {
+  const view = read('PluginView.jsx')
+  assert.match(view, /if \(!viewShown\(info\.plugin, openedFor\)\) \{/)
+  assert.ok(view.indexOf('viewShown(info.plugin') < view.indexOf('<PluginFrame'), 'checked before the frame')
+  const sidebar = read('Sidebar.jsx')
+  assert.equal((sidebar.match(/pluginHost\.noteOpened\(item\.key, contextProject\)/g) ?? []).length, 2)
+  // Nothing persists it: a reload or a stale hash starts with nothing opened.
+  const host = read('plugins-host.jsx')
+  assert.match(host, /const \[openedFor, setOpenedFor\] = useState\(\(\) => new Map\(\)\)/)
+  assert.doesNotMatch(host, /sessionStorage|localStorage/)
+})
+
+test('a settings field holds only what the user typed', () => {
+  const form = read('PluginSettings.jsx')
+  assert.match(form, /const saved = typedValue\(setting, value\)/)
+  assert.match(form, /placeholder=\{fieldPlaceholder\(setting\)\}/)
+  assert.match(form, /<TextControl setting=\{setting\} value=\{view\.values\?\.\[setting\.key\]\}/)
 })

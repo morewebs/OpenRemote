@@ -5,7 +5,16 @@
 
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { answerCall, composerFor, composerGrants, dropGrants, grantClick, makeCalls } from './plugin-calls.js'
+import {
+  GRANT_MS,
+  answerCall,
+  composerFor,
+  composerGrants,
+  dropGrants,
+  forgetComposer,
+  grantClick,
+  makeCalls,
+} from './plugin-calls.js'
 import { contributionsOf } from './plugin-runtime.js'
 
 const TOKEN = 'daemon-token-0f7c'
@@ -58,7 +67,8 @@ function fakeApi() {
 
 function setup() {
   const { api, asked } = fakeApi()
-  const grants = composerGrants()
+  const clock = { t: 1_000_000 }
+  const grants = composerGrants(() => clock.t)
   const toasts = []
   const states = {}
   const calls = makeCalls({
@@ -72,7 +82,7 @@ function setup() {
     attach: () => {},
     grants,
   })
-  return { api, asked, grants, toasts, states, calls }
+  return { api, asked, grants, toasts, states, calls, clock }
 }
 
 const call = (method, params = {}, id = 1) => ({ openremote: 1, kind: 'call', id, method, params })
@@ -174,11 +184,13 @@ test('a plugin writes in a composer only after the user clicks its button there'
   assert.equal((await answerCall(other, call('composer.insert', { text: 'theirs' }), calls)).error, undefined)
   assert.deepEqual(typed.b, ['theirs'])
 
-  // The chat a click pointed at keeps the grant when its composer is new.
+  // The composer went away (or now shows another chat): the grant goes
+  // with it, and a new composer for the same chat holds none.
   grants.composers.delete(':a:')
+  forgetComposer(grants, ':a:')
   grants.composers.set(':a2:', { insert: (t) => typed.a.push(t), attachKey: 'chat-a' })
-  assert.equal((await answerCall(writer, call('composer.insert', { text: 'back' }), calls)).error, undefined)
-  assert.deepEqual(typed.a, ['hello', 'more', 'back'])
+  assert.match((await answerCall(writer, call('composer.insert', { text: 'back' }), calls)).error, /only after the user clicks/)
+  assert.deepEqual(typed.a, ['hello', 'more'])
 
   // Turned off or removed: its grants go.
   dropGrants(grants, new Set(['other@local']))
@@ -198,7 +210,6 @@ test('a button state names a composer only where the user clicked', async () => 
   grantClick(grants, 'board@local', ':a:')
   await answerCall(writer, call('composer.setState', { input: 'say', state: 'busy', label: 'x'.repeat(90), composer: ':a:' }), calls)
   assert.equal(states['board@local/say'].composer, ':a:')
-  assert.equal(states['board@local/say'].composerKey, 'chat-a')
   assert.equal(states['board@local/say'].label.length, 40)
   const unknown = await answerCall(writer, call('composer.setState', { input: 'nope' }), calls)
   assert.match(unknown.error, /no composer button named nope/)
@@ -211,4 +222,36 @@ test("a file read stays inside the plugin's folder", async () => {
     assert.match(reply.error, /not a path inside/, path)
   }
   assert.deepEqual(asked, [])
+})
+
+test('a grant ends when the button goes back to idle, or five minutes after the click', async () => {
+  const { calls, grants, clock } = setup()
+  const writer = record([])
+  const typed = []
+  grants.composers.set(':a:', { insert: (t) => typed.push(t), attachKey: 'chat-a' })
+  const insert = (text) => answerCall(writer, call('composer.insert', { text, composer: ':a:' }), calls)
+
+  // Idle: the work the click asked for is done, and so is the grant.
+  grantClick(grants, 'board@local', ':a:', 'say')
+  await answerCall(writer, call('composer.setState', { input: 'say', state: 'busy', composer: ':a:' }), calls)
+  assert.equal((await insert('one')).error, undefined)
+  await answerCall(writer, call('composer.setState', { input: 'say', state: 'idle', composer: ':a:' }), calls)
+  assert.match((await insert('two')).error, /only after the user clicks/)
+  // An idle naming no composer ends every grant of that button.
+  grantClick(grants, 'board@local', ':a:', 'say')
+  await answerCall(writer, call('composer.setState', { input: 'say', state: 'idle' }), calls)
+  assert.match((await insert('three')).error, /only after the user clicks/)
+  // A state that isn't one reads as idle, and ends it too.
+  grantClick(grants, 'board@local', ':a:', 'say')
+  await answerCall(writer, call('composer.setState', { input: 'say', state: 'whatever' }), calls)
+  assert.match((await insert('four')).error, /only after the user clicks/)
+
+  // Time: a click counts for five minutes and not a moment more.
+  grantClick(grants, 'board@local', ':a:', 'say')
+  clock.t += GRANT_MS - 1
+  assert.equal((await insert('five')).error, undefined)
+  clock.t += 1
+  assert.match((await insert('six')).error, /only after the user clicks/)
+  assert.equal(GRANT_MS, 5 * 60 * 1000)
+  assert.deepEqual(typed, ['one', 'five'])
 })

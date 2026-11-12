@@ -4,6 +4,7 @@
 // its way, the pane says so plainly.
 
 import { PluginFrame, usePlugins } from './plugins-host.jsx'
+import { viewShown } from './plugin-runtime.js'
 
 export default function PluginView({ viewKey }) {
   const host = usePlugins()
@@ -15,6 +16,13 @@ export default function PluginView({ viewKey }) {
   }
   if (!info.record) return <div className="plg-view" aria-busy="true" />
   if (!info.view) return <div className="cv-none">{info.record.name} has no view by that name any more.</div>
+  // A project's plugin is that project's: its view opens from there (its
+  // tile in the sidebar, while the project is in front), never from a
+  // stale address or history entry somewhere else.
+  const openedFor = host.openedFor.has(viewKey) ? host.openedFor.get(viewKey) : undefined
+  if (!viewShown(info.plugin, openedFor)) {
+    return <div className="cv-none">{info.record.name} belongs to one project. Open it from that project&apos;s chats.</div>
+  }
   return (
     <div className="plg-view">
       <PluginFrame

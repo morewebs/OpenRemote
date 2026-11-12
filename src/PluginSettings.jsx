@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 import PickerMenu from './PickerMenu.jsx'
 import { useConsole } from './state/console.jsx'
 import { usePlugins } from './plugins-host.jsx'
-import { parseInput, pluginSlug, shownValue } from './plugin-runtime.js'
+import { fieldPlaceholder, parseInput, pluginSlug, shownValue, typedValue } from './plugin-runtime.js'
 import { scopeLabel } from './plugins.js'
 import { projectName } from './projects.js'
 import { errorCopy } from './error-copy.js'
@@ -96,7 +96,7 @@ function SettingRow({ slug, setting, view, onSave }) {
     ) : setting.type === 'enum' ? (
       <ChoiceControl setting={setting} value={shownValue(setting, view.values)} onSave={onSave} />
     ) : (
-      <TextControl setting={setting} value={shownValue(setting, view.values)} onSave={onSave} />
+      <TextControl setting={setting} value={view.values?.[setting.key]} onSave={onSave} />
     )
   return (
     <div className="pn-row" data-stg={`plugin-${slug}-${setting.key}`}>
@@ -110,9 +110,12 @@ function SettingRow({ slug, setting, view, onSave }) {
 }
 
 // Text and numbers: saved on Enter or on leaving the field; Esc puts the
-// saved value back.
+// saved value back. The plugin's default is a placeholder, never text in the
+// field: only what the user typed is the user's word (an address the user
+// typed is one the daemon may reach for the plugin; a default is not), and
+// an emptied field goes back to the default.
 function TextControl({ setting, value, onSave }) {
-  const saved = value == null ? '' : String(value)
+  const saved = typedValue(setting, value)
   const [draft, setDraft] = useState(saved)
   const [problem, setProblem] = useState(null)
   useEffect(() => {
@@ -121,7 +124,7 @@ function TextControl({ setting, value, onSave }) {
   }, [saved])
   const commit = async () => {
     if (draft === saved) return
-    const parsed = parseInput(setting, draft)
+    const parsed = draft.trim() === '' ? { value: null } : parseInput(setting, draft)
     if (parsed.error) {
       setProblem(parsed.error)
       return
@@ -137,7 +140,7 @@ function TextControl({ setting, value, onSave }) {
         value={draft}
         min={setting.min ?? undefined}
         max={setting.max ?? undefined}
-        placeholder={setting.placeholder ?? (setting.default != null && setting.default !== '' ? String(setting.default) : '')}
+        placeholder={fieldPlaceholder(setting)}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
