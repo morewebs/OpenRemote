@@ -680,3 +680,26 @@ test("a picture past another device's 16 MiB answer says so, with its status", a
     (err) => err.status === 413 && /too large to bring over/.test(err.message),
   )
 })
+
+// ---- moving a chat ----
+
+test('a move names a project by id, or none, with the boot budget', () => {
+  const api = Object.create(DaemonApi.prototype)
+  const calls = []
+  api.call = (...args) => {
+    calls.push(args)
+    return Promise.resolve(null)
+  }
+  api.moveChat('s/1', 'p1')
+  api.moveChat('s1', null)
+  api.moveChat('s1')
+  assert.equal(calls[0][0], 'POST')
+  assert.equal(calls[0][1], '/sessions/s%2F1/workspace')
+  assert.equal(calls[0][2].project_id, 'p1')
+  assert.ok(calls[0][2].request_id, 'receipted')
+  // A running harness restarts in the new folder: the resume's budget.
+  assert.equal(calls[0][3].timeoutMs, 120000)
+  assert.equal(calls[1][2].project_id, null)
+  assert.equal(calls[2][2].project_id, null)
+  assert.deepEqual(Object.keys(calls[1][2]).sort(), ['project_id', 'request_id'], 'never a folder')
+})

@@ -529,6 +529,19 @@ export class DaemonApi {
   }
 
   // Rename a chat (the composer's /rename).
+  // Move a chat into one of its machine's projects, named by id, or out of
+  // every project with `projectId` null - never by a folder. A running
+  // harness restarts in the new folder: the boot budget, like resume. A
+  // chat that runs on another device is forwarded there by the daemon.
+  moveChat(id, projectId = null) {
+    return this.call(
+      'POST',
+      `/sessions/${seg(id)}/workspace`,
+      { request_id: newRequestId(), project_id: projectId ?? null },
+      { timeoutMs: BOOT_TIMEOUT_MS },
+    )
+  }
+
   rename(id, title) {
     return this.call('POST', `/sessions/${seg(id)}/title`, { request_id: newRequestId(), title })
   }

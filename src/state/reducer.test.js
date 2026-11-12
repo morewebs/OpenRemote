@@ -847,3 +847,27 @@ test('a chat is named from its first user message with words', () => {
   assert.equal(firstPromptText([]), null)
   assert.equal(firstPromptText(undefined), null)
 })
+
+test('a move rides session.updated: the folder, the grants left behind, a fresh resume', () => {
+  // Moved into another project: the chat regroups under the new folder.
+  let chat = chatFromSession(session({ approved_tools: ['Bash'] }))
+  chat = foldEvent(
+    chat,
+    event(12, {
+      type: 'session.updated',
+      session: session({ workspace: '/dev/api', carry_transcript: 12 }),
+    }),
+  )
+  assert.equal(chat.workspace, '/dev/api')
+  assert.equal(chat.project, 'api')
+  // An empty list is left off the wire: absent is none, so the grants the
+  // old conversation had do not survive the move.
+  assert.deepEqual(chat.approvedTools, [])
+  // It never named a conversation, yet it resumes: fresh, carrying the chat.
+  assert.equal(chat.resumable, true)
+  assert.equal(chatFromSession(session({ carry_transcript: 3 })).resumable, true)
+  // Out of every project: the whole session rides along, so an absent
+  // folder is the chat leaving its project, never a missing fact.
+  chat = foldEvent(chat, event(13, { type: 'session.updated', session: session({ workspace: null }) }))
+  assert.equal(chat.workspace, null)
+})

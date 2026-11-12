@@ -60,8 +60,10 @@ export function chatFromSession(session) {
     running: isActive(session.status),
     // The harness has its own conversation for this chat (claude's
     // `--resume` id, codex's thread id, ...). Without one - a chat stopped
-    // before its first message - there is nothing to resume, ever.
-    resumable: Boolean(session.harness_session_ref),
+    // before its first message - there is nothing to resume, ever. A chat
+    // moved where its conversation couldn't follow resumes as a fresh one,
+    // carrying the chat so far.
+    resumable: Boolean(session.harness_session_ref) || session.carry_transcript != null,
     // The daemon keeps each chat's title, so every device shows the same
     // name before the transcript loads.
     title: session.title ?? null,
@@ -333,9 +335,15 @@ export function foldEvent(chat, event) {
       if (session.model) chat.model = session.model
       if (session.effort) chat.effort = session.effort
       if (session.permission_mode) chat.permissionMode = session.permission_mode
-      if (session.harness_session_ref) chat.resumable = true
+      if (session.harness_session_ref || session.carry_transcript != null) chat.resumable = true
+      // A move: the whole session rides along, so an absent folder is the
+      // chat leaving every project, never a missing fact.
+      chat.workspace = session.workspace ?? null
+      chat.project = workspaceName(session.workspace)
       chat.fast = session.fast ?? chat.fast
-      chat.approvedTools = session.approved_tools ?? chat.approvedTools
+      // An empty list is left off the wire: absent is none (a move into a
+      // fresh conversation drops the grants the old one had).
+      chat.approvedTools = session.approved_tools ?? []
       break
     }
     case 'message.added': {

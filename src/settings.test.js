@@ -367,3 +367,14 @@ test('a stored set that cannot be read is not an empty set', () => {
   assert.equal(savePrefs({ density: 'compact' }), true)
   assert.equal(loadPrefs().reduce_motion, true, 'the first save keeps the migrated value')
 })
+test('moving a chat is asked first until the dialog or Settings says otherwise', () => {
+  localStorage.clear()
+  assert.equal(loadPrefs().ask_move_chat, true, 'on by default')
+  savePrefs({ ask_move_chat: false })
+  assert.equal(loadPrefs().ask_move_chat, false)
+  savePrefs({ ask_move_chat: true })
+  assert.equal(loadPrefs().ask_move_chat, true)
+  // Anything but an explicit false keeps asking.
+  localStorage.setItem('openremote-prefs', JSON.stringify({ ask_move_chat: 'no' }))
+  assert.equal(loadPrefs().ask_move_chat, true)
+})

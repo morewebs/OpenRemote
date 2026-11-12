@@ -858,6 +858,24 @@ export function ConsoleProvider({ children }) {
 
   const renameChat = useCallback(async (chatId, title) => api.rename(chatId, title), [api])
 
+  // Move a chat into one of its machine's projects (null: out of every
+  // project). The sidebar regroups at once from the daemon's answer; the
+  // open chat and the user's other devices hear it from session.updated.
+  const moveChat = useCallback(
+    async (chatId, projectId) => {
+      const reply = await api.moveChat(chatId, projectId)
+      const session = reply?.result ?? null
+      if (session?.id === chatId) {
+        setSessions((current) => current.map((s) => (s.id === chatId ? session : s)))
+        setChats((current) =>
+          current[chatId] ? { ...current, [chatId]: mergeSessionIntoChat(current[chatId], session) } : current,
+        )
+      }
+      return session
+    },
+    [api],
+  )
+
   // The name a chat was given from its first message, for a rename left empty
   // (the daemon refuses an empty name, so the name is made the way the daemon
   // made it: the first line of the first prompt with words). Read from the
@@ -1730,6 +1748,7 @@ export function ConsoleProvider({ children }) {
       commandsFor,
       filesFor,
       renameChat,
+      moveChat,
       firstNameFor,
       capabilitiesFor,
       refreshCloud,
@@ -1825,6 +1844,7 @@ export function ConsoleProvider({ children }) {
       commandsFor,
       filesFor,
       renameChat,
+      moveChat,
       firstNameFor,
       capabilitiesFor,
       refreshCloud,

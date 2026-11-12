@@ -45,6 +45,9 @@ export function loadPrefs() {
     density: DENSITIES.includes(raw.density) ? raw.density : 'comfortable',
     startup_view: raw.startup_view === 'last' ? 'last' : 'new',
     privacy_mode: raw.privacy_mode === true,
+    // Moving a chat to another project is asked first until the dialog's
+    // "Don't show this again" turns it off; Settings turns it back on.
+    ask_move_chat: raw.ask_move_chat !== false,
   }
 }
 
