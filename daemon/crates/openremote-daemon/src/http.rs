@@ -1485,6 +1485,20 @@ async fn install_staged(
                 ));
             }
             let manifest = staged.manifest.clone();
+            // Agent tools are named `<plugin>__<tool>`: two plugins of one
+            // name from different sources would answer to the same names.
+            {
+                let store = crate::supervisor::lock_recovering(&app.store);
+                let installed: Vec<&openremote_core::InstalledPlugin> = store.installed_plugins();
+                if let Some(why) = crate::plugin_runtime::tool_name_clash(
+                    &installed,
+                    &plugin_id,
+                    &staged.name,
+                    !manifest.contributes.tools.is_empty(),
+                ) {
+                    return Err((StatusCode::CONFLICT, why));
+                }
+            }
             let source = staged.source.clone();
             let name = staged.name.clone();
             let marketplace = staged.marketplace.clone();
@@ -1539,6 +1553,10 @@ async fn install_staged(
                     .map_err(store_failure)?;
                 plugin
             };
+            // Stopped again now the new folder and record are in place: a
+            // tool call during the swap may have started the old program,
+            // and it must not keep running the old version.
+            app.plugin_runtime.changed(&plugin_id).await;
             // The plugin's harness appears (or changes) without a restart.
             app.supervisor.reprobe_harnesses().await;
             Ok(installed_json(&app, &plugin))

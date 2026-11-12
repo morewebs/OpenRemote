@@ -131,7 +131,8 @@ fn process_plugin() -> tempfile::TempDir {
             "contributes": {
                 "tools": [
                     {"name": "echo", "description": "Echo what it was handed", "input_schema": {"type": "object"}},
-                    {"name": "ask", "description": "Ask OpenRemote for its chats"}
+                    {"name": "ask", "description": "Ask OpenRemote for its chats"},
+                    {"name": "env", "description": "Say what reached it from the environment"}
                 ],
                 "views": [{"id": "home", "title": "Home", "place": "sidebar", "entry": "ui/index.html"}],
                 "settings": [{"key": "token", "type": "secret", "label": "Token", "required": true}]
@@ -189,7 +190,14 @@ async fn a_process_plugins_tools_run_in_its_program_with_only_the_approved_power
         .iter()
         .filter_map(|t| t["name"].as_str())
         .collect();
-    assert_eq!(names, ["fixture-tools__echo", "fixture-tools__ask"]);
+    assert_eq!(
+        names,
+        [
+            "fixture-tools__echo",
+            "fixture-tools__ask",
+            "fixture-tools__env"
+        ]
+    );
 
     // A required setting unset: the program doesn't start.
     let refused = tool(&daemon, &chat, "fixture-tools__echo", json!({"x": 1})).await;
@@ -232,6 +240,22 @@ async fn a_process_plugins_tools_run_in_its_program_with_only_the_approved_power
         "{echoed}"
     );
     assert!(!said.contains("read_chats"), "{echoed}");
+
+    // The daemon's environment stays the daemon's. This test's process is
+    // the daemon, and cargo set CARGO_PKG_NAME on it (standing in for any
+    // token or key the daemon was handed): it never reaches the program,
+    // while PATH does.
+    assert!(std::env::var_os("CARGO_PKG_NAME").is_some());
+    let env = text(
+        &tool(
+            &daemon,
+            &chat,
+            "fixture-tools__env",
+            json!({"name": "CARGO_PKG_NAME"}),
+        )
+        .await,
+    );
+    assert_eq!(env, "CARGO_PKG_NAME:false path:true");
 
     // Its own call to OpenRemote needs a power it wasn't given.
     let asked = tool(&daemon, &chat, "fixture-tools__ask", json!({})).await;
@@ -471,4 +495,33 @@ async fn the_plugin_routes_answer_this_devices_console_only() {
     let daemon = start_daemon(&[]).await;
     let reply = call_with_token(&daemon, "wrong", "GET", "/plugins/x@local/settings", None).await;
     assert_eq!(reply.status, 401, "{}", reply.raw);
+}
+
+/// An update stops the plugin's program before its folder is replaced and
+/// again once the new folder and record are in place, so a tool call that
+/// started the old program during the swap can't keep it running. The
+/// window can't be hit on demand, so the order is pinned in the source.
+#[test]
+fn an_update_stops_the_program_on_both_sides_of_the_swap() {
+    let source = include_str!("../src/http.rs");
+    let start = source
+        .find("async fn install_staged")
+        .expect("install_staged");
+    let body = &source[start
+        ..start
+            + source[start..]
+                .find(
+                    "
+async fn ",
+                )
+                .expect("next fn")];
+    let first = body.find("plugin_runtime.changed").expect("a stop before");
+    let install = body
+        .find("app.plugins.install(staged)")
+        .expect("the install");
+    let record = body.find("put_installed_plugin").expect("the record");
+    let second = body.rfind("plugin_runtime.changed").expect("a stop after");
+    assert!(first < install && install < record && record < second);
+    // The 409 naming live chats still comes first.
+    assert!(body.find("plugin_chats").expect("the 409") < first);
 }

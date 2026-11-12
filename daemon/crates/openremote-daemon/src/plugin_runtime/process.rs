@@ -360,6 +360,13 @@ async fn start(
 ) -> Result<Arc<Conn>, String> {
     let _ = openremote_core::fsx::create_private_dir(&spec.data);
     let mut command = tokio::process::Command::new(&spec.program);
+    // Not the daemon's environment: only what a program needs to start and
+    // find its tools, so nothing else the daemon was handed (a token, a
+    // key) reaches a plugin.
+    command.env_clear();
+    for (key, value) in allowed_env() {
+        command.env(key, value);
+    }
     command
         .args(&spec.args)
         .current_dir(&spec.root)
@@ -427,6 +434,57 @@ async fn start(
     }
     eprintln!("plugin {}: started", spec.id);
     Ok(conn)
+}
+
+/// The daemon's environment variables a plugin's program is handed: the
+/// paths and locale a program needs to start and run on this system.
+const ALLOWED_ENV: &[&str] = &[
+    "PATH",
+    "HOME",
+    "USER",
+    "LOGNAME",
+    "SHELL",
+    "TMPDIR",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "TZ",
+    "XDG_RUNTIME_DIR",
+    // Windows: a process can't start or find its system folders without
+    // these.
+    "USERPROFILE",
+    "USERNAME",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "SystemRoot",
+    "SYSTEMDRIVE",
+    "windir",
+    "ComSpec",
+    "PATHEXT",
+    "TEMP",
+    "TMP",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "ProgramData",
+    "ProgramFiles",
+    "ProgramFiles(x86)",
+    "ProgramW6432",
+    "CommonProgramFiles",
+    "CommonProgramFiles(x86)",
+    "NUMBER_OF_PROCESSORS",
+    "PROCESSOR_ARCHITECTURE",
+    "OS",
+];
+
+/// The allowed variables the daemon has, matched by name without regard to
+/// case (Windows names them either way).
+fn allowed_env() -> Vec<(std::ffi::OsString, std::ffi::OsString)> {
+    std::env::vars_os()
+        .filter(|(key, _)| {
+            key.to_str()
+                .is_some_and(|k| ALLOWED_ENV.iter().any(|a| a.eq_ignore_ascii_case(k)))
+        })
+        .collect()
 }
 
 async fn read_stdout(
@@ -581,5 +639,24 @@ fn cut(line: &str) -> String {
         out
     } else {
         line.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_the_allowed_variables_are_handed_on() {
+        let handed = allowed_env();
+        assert!(handed.iter().any(|(k, _)| k.eq_ignore_ascii_case("PATH")));
+        for (key, _) in &handed {
+            let key = key.to_string_lossy();
+            assert!(
+                ALLOWED_ENV.iter().any(|a| a.eq_ignore_ascii_case(&key)),
+                "{key}"
+            );
+            assert!(!key.contains("TOKEN") && !key.contains("SECRET"), "{key}");
+        }
     }
 }

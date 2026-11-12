@@ -248,20 +248,12 @@ async fn call_daemon(config: &Config, token: &str, kind: &str, params: &Value) -
 /// tool error the agent can read.
 async fn call(config: &Config, token: &str, params: &Value) -> Value {
     let name = params.get("name").and_then(Value::as_str).unwrap_or("");
-    // A plugin's tools are named `<plugin>__<tool>`; OpenRemote's own never
-    // carry a double underscore, so this is asked first (a plugin named
-    // `agents` can't reach the team tools' route).
-    if name.contains("__") {
-        return call_daemon(config, token, "plugins", params).await;
-    }
-    if name.starts_with("browser_") {
-        return browser_call(config, token, params).await;
-    }
-    if name.starts_with("agents_") {
-        return agents_call(config, token, params).await;
-    }
-    if name != "read_chat" {
-        return failure(&format!("there is no tool named {name}"));
+    match route(name) {
+        Route::Plugin => return call_daemon(config, token, "plugins", params).await,
+        Route::Browser => return browser_call(config, token, params).await,
+        Route::Agents => return agents_call(config, token, params).await,
+        Route::ReadChat => {}
+        Route::Unknown => return failure(&format!("there is no tool named {name}")),
     }
     let Some(chat) = params.pointer("/arguments/chat").and_then(Value::as_str) else {
         return failure("read_chat needs the chat's id");
@@ -292,6 +284,33 @@ async fn call(config: &Config, token: &str, params: &Value) -> Value {
             }
         }
         Err(e) => failure(&format!("OpenRemote is not reachable: {e}")),
+    }
+}
+
+/// Where a tool call goes, by its name.
+#[derive(Debug, PartialEq, Eq)]
+enum Route {
+    Plugin,
+    Browser,
+    Agents,
+    ReadChat,
+    Unknown,
+}
+
+/// A plugin's tools are named `<plugin>__<tool>`; OpenRemote's own never
+/// carry a double underscore, so that is asked first: a plugin named
+/// `agents` or `browser` can't reach the team or browser routes.
+fn route(name: &str) -> Route {
+    if name.contains("__") {
+        Route::Plugin
+    } else if name.starts_with("browser_") {
+        Route::Browser
+    } else if name.starts_with("agents_") {
+        Route::Agents
+    } else if name == "read_chat" {
+        Route::ReadChat
+    } else {
+        Route::Unknown
     }
 }
 
@@ -327,5 +346,29 @@ mod tests {
         assert_eq!(config.port, 4567);
         assert!(parse(&args[..4]).is_none());
         assert_eq!(encode("ab cd/ef"), "ab%20cd%2Fef");
+    }
+
+    #[test]
+    fn a_plugins_tools_are_routed_before_openremotes_own() {
+        assert_eq!(route("agents__spawn"), Route::Plugin);
+        assert_eq!(route("browser__click"), Route::Plugin);
+        assert_eq!(route("agents_spawn"), Route::Agents);
+        assert_eq!(route("browser_click"), Route::Browser);
+        assert_eq!(route("read_chat"), Route::ReadChat);
+        assert_eq!(route("rm_rf"), Route::Unknown);
+        // No built-in tool name carries `__`, so none is routed to plugins,
+        // and each reaches its own route.
+        let builtin = std::iter::once(tool()["name"].as_str().unwrap().to_string())
+            .chain(
+                crate::browser::tools::TOOLS
+                    .iter()
+                    .map(|t| t.name.to_string()),
+            )
+            .chain(crate::team::TOOLS.iter().map(|t| t.name.to_string()));
+        for name in builtin {
+            assert!(!name.contains("__"), "{name}");
+            assert_ne!(route(&name), Route::Plugin, "{name}");
+            assert_ne!(route(&name), Route::Unknown, "{name}");
+        }
     }
 }

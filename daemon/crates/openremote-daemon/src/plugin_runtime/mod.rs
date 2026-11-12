@@ -74,6 +74,32 @@ pub fn check_staged(root: &Path, manifest: &Manifest) -> Result<(), PluginError>
     wasm::check(&path, &manifest.powers).map_err(PluginError::Invalid)
 }
 
+/// Why a plugin can't be installed beside one already here: an agent calls
+/// a plugin's tools `<name>__<tool>`, so two plugins of one name from
+/// different sources would answer to the same tool names and one would
+/// quietly take the other's place. Refused when either one offers tools.
+/// `id` is the plugin being installed; the same id is an update.
+pub fn tool_name_clash(
+    installed: &[&InstalledPlugin],
+    id: &str,
+    name: &str,
+    offers_tools: bool,
+) -> Option<String> {
+    installed
+        .iter()
+        .find(|other| {
+            other.name == name
+                && other.id() != id
+                && (offers_tools || !other.contributes.tools.is_empty())
+        })
+        .map(|other| {
+            format!(
+                "Another plugin named {name} is already installed (from {}). Their agent tools would share names, so remove that one first.",
+                other.marketplace
+            )
+        })
+}
+
 impl PluginRuntime {
     pub fn new(
         data_dir: &Path,
@@ -678,6 +704,32 @@ mod tests {
             program(),
         );
         assert!(runtime.tool_listing().is_empty());
+    }
+
+    #[test]
+    fn a_second_plugin_of_the_same_name_with_tools_is_refused() {
+        let (_data, runtime, id) = installed(
+            vec![PluginPower::RunPrograms, PluginPower::AgentTools],
+            PluginScope::Machine,
+            program(),
+        );
+        let store = lock_recovering(&runtime.store);
+        let installed = store.installed_plugins();
+        // The same name from another marketplace: refused, naming the one
+        // already here, whether the new one offers tools or not (the one
+        // here does).
+        for offers_tools in [true, false] {
+            let why =
+                tool_name_clash(&installed, "tools@other", "tools", offers_tools).expect("refused");
+            assert!(why.contains("already installed (from local)"), "{why}");
+        }
+        // An update of the same plugin, or another name: fine.
+        assert!(tool_name_clash(&installed, &id, "tools", true).is_none());
+        assert!(tool_name_clash(&installed, "else@other", "else", true).is_none());
+        // Neither offers tools: side by side is fine.
+        let mut bare = installed[0].clone();
+        bare.contributes.tools.clear();
+        assert!(tool_name_clash(&[&bare], "tools@other", "tools", false).is_none());
     }
 
     #[tokio::test]

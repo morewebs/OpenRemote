@@ -103,10 +103,14 @@ impl WasmHost {
     /// A host whose calls get `fuel` instructions (the tests use less, so
     /// a module that never stops is stopped quickly).
     pub fn with_fuel(fuel: u64) -> Self {
+        Self::with_limits(fuel, PARALLEL)
+    }
+
+    fn with_limits(fuel: u64, parallel: usize) -> Self {
         Self {
             engine: engine(),
             modules: StdMutex::new(HashMap::new()),
-            parallel: Arc::new(tokio::sync::Semaphore::new(PARALLEL)),
+            parallel: Arc::new(tokio::sync::Semaphore::new(parallel)),
             fuel,
         }
     }
@@ -141,15 +145,28 @@ impl WasmHost {
             Ok(module) => module,
             Err(e) => return error_result(&e),
         };
-        let Ok(_turn) = Arc::clone(&self.parallel).acquire_owned().await else {
-            return error_result("OpenRemote is stopping");
+        let deadline = Instant::now() + time;
+        // A turn waits no longer than the call may take: slow tools of one
+        // plugin can't hold the others back forever.
+        let turn = tokio::time::timeout_at(
+            tokio::time::Instant::from_std(deadline),
+            Arc::clone(&self.parallel).acquire_owned(),
+        )
+        .await;
+        let _turn = match turn {
+            Ok(Ok(turn)) => turn,
+            Ok(Err(_)) => return error_result("OpenRemote is stopping"),
+            Err(_) => {
+                return error_result(
+                    "OpenRemote is running other plugin tools; this one waited past its time limit",
+                );
+            }
         };
         let engine = self.engine.clone();
         let plugin = plugin.to_string();
         let network = powers.contains(&PluginPower::Network);
         let fuel = self.fuel;
         let runtime = tokio::runtime::Handle::current();
-        let deadline = Instant::now() + time;
         let run = tokio::task::spawn_blocking(move || {
             run(
                 &engine, &module, &plugin, network, fuel, deadline, &input, runtime,
@@ -399,10 +416,6 @@ fn http(host: &mut Host, raw: &[u8]) -> Value {
     let Some(url) = request["url"].as_str().map(String::from) else {
         return json!({"error": "the request names no url"});
     };
-    let addr = match host.runtime.block_on(public_address(&url)) {
-        Ok(addr) => addr,
-        Err(why) => return json!({"error": why}),
-    };
     let headers: Vec<(String, String)> = request["headers"]
         .as_object()
         .map(|h| {
@@ -420,8 +433,12 @@ fn http(host: &mut Host, raw: &[u8]) -> Value {
         (kind, text.as_bytes().to_vec())
     });
     let http = host.http.clone();
+    // The lookup and the request together get one time limit: the call's
+    // time left, at most REQUEST_TIME. A name that never resolves can't
+    // hold the call past its deadline.
     let limit = left.min(REQUEST_TIME);
-    let answer = host.runtime.block_on(async move {
+    let answer = host.runtime.block_on(within(limit, async move {
+        let addr = public_address(&url).await?;
         let header_refs: Vec<(&str, &str)> = headers
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
@@ -435,7 +452,8 @@ fn http(host: &mut Host, raw: &[u8]) -> Value {
             body.as_ref().map(|(k, b)| (k.as_str(), b.clone())),
         )
         .await
-    });
+        .map_err(|e| e.to_string())
+    }));
     match answer {
         Ok(response) => {
             let headers: serde_json::Map<String, Value> = response
@@ -455,8 +473,21 @@ fn http(host: &mut Host, raw: &[u8]) -> Value {
                 }
             }
         }
-        Err(e) => json!({"error": e.to_string()}),
+        Err(why) => json!({"error": why}),
     }
+}
+
+/// `work`, ended at `limit` with the words a module reads.
+async fn within<T>(
+    limit: Duration,
+    work: impl std::future::Future<Output = Result<T, String>>,
+) -> Result<T, String> {
+    tokio::time::timeout(limit, work).await.unwrap_or_else(|_| {
+        Err(format!(
+            "the request took longer than {}s",
+            limit.as_secs_f32()
+        ))
+    })
 }
 
 /// An http(s) address that leads to the public internet, and the one
@@ -777,6 +808,36 @@ mod tests {
             public_address("https://1.1.1.1/x").await.unwrap(),
             "1.1.1.1:443".parse().unwrap()
         );
+    }
+
+    #[tokio::test]
+    async fn a_lookup_or_request_that_never_finishes_ends_at_its_limit() {
+        let started = Instant::now();
+        let never = within::<()>(
+            Duration::from_millis(200),
+            std::future::pending::<Result<(), String>>(),
+        )
+        .await;
+        assert!(never.unwrap_err().contains("took longer"));
+        assert!(started.elapsed() < Duration::from_secs(5));
+    }
+
+    #[tokio::test]
+    async fn a_call_waits_for_a_turn_no_longer_than_its_time() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write(dir.path(), "ok.wasm", &module("", 1, ANSWER));
+        // Every turn is taken (no permits): the call gives up at its time.
+        let host = WasmHost::with_limits(FUEL, 0);
+        let started = Instant::now();
+        let result = host
+            .call("p@local", &path, &[], json!({}), Duration::from_millis(200))
+            .await;
+        assert_eq!(result["isError"], true);
+        assert!(
+            text(&result).contains("waited past its time limit"),
+            "{result}"
+        );
+        assert!(started.elapsed() < Duration::from_secs(5));
     }
 
     #[test]

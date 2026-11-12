@@ -17,7 +17,8 @@
 //! `--plugin-rpc` makes it a process plugin's program instead: OpenRemote's
 //! plugin protocol (JSON-RPC lines) with two agent tools - `echo`, which
 //! names what it was handed, and `ask`, which asks OpenRemote for its chats
-//! and answers what came back - and one view request, `ping`.
+//! and answers what came back, and `env`, which says whether a variable
+//! reached it - and one view request, `ping`.
 
 use std::io::{BufRead, Write};
 
@@ -302,6 +303,12 @@ fn plugin_rpc() {
                 }
                 json!(format!("asked: {answer}"))
             }
+            "tools/call" if params["name"] == "env" => json!(format!(
+                "{}:{} path:{}",
+                params["arguments"]["name"].as_str().unwrap_or_default(),
+                std::env::var_os(params["arguments"]["name"].as_str().unwrap_or("-")).is_some(),
+                std::env::var_os("PATH").is_some()
+            )),
             "tools/call" => json!({"content": [{"type": "text", "text": format!(
                 "echo {} token:{} powers:{} chat:{}",
                 params["arguments"],
