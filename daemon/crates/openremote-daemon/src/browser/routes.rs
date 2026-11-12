@@ -38,6 +38,7 @@ pub fn routes() -> Router<Arc<App>> {
         .route("/browser/tabs/{tab}/control", post(control))
         .route("/browser/tools", get(tool_list))
         .route("/sessions/{id}/browser/call", post(call_tool))
+        .merge(super::adblock::routes())
 }
 
 fn bad(status: StatusCode, message: &str) -> Response {

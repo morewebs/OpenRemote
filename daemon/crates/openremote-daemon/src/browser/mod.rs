@@ -11,6 +11,7 @@
 //! A daemon with no app around it (one started by hand, or a machine's
 //! service) has no browser, and its tools say so.
 
+pub mod adblock;
 pub mod routes;
 pub mod store;
 pub mod sync;
@@ -75,6 +76,8 @@ pub struct BrowserService {
     downloads: Mutex<Vec<DownloadInfo>>,
     recorded: Mutex<HashMap<String, Recorded>>,
     pub store: Mutex<store::BrowserStore>,
+    /// Ad and tracker blocking: its lists and what the browser was told.
+    pub adblock: adblock::Keeper,
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -100,6 +103,7 @@ impl BrowserService {
             downloads: Mutex::new(Vec::new()),
             recorded: Mutex::new(HashMap::new()),
             store: Mutex::new(store::BrowserStore::open(data_dir)),
+            adblock: adblock::Keeper::new(data_dir),
         }
     }
 
@@ -148,6 +152,8 @@ impl BrowserService {
                 lock(&self.tabs).clear();
                 lock(&self.leases).clear();
                 *lock(&self.link) = Some(Link { send, engine, caps });
+                // A new browser knows nothing of ad blocking yet.
+                self.adblock.hello();
             }
             FromHost::Reply { id, ok, error } => {
                 if let Some(waiting) = lock(&self.pending).remove(&id) {
@@ -655,8 +661,11 @@ fn inside_workspace(workspace: Option<&Path>, paths: &[String]) -> Result<Vec<St
         .collect()
 }
 
-/// Lets go of quiet agents' tabs every few seconds.
+/// Lets go of quiet agents' tabs every few seconds; also starts the ad
+/// blocker's keeper, which downloads nothing until blocking is on and a
+/// list is picked.
 pub fn start_sweeper(app: &Arc<crate::app::App>) {
+    adblock::start(app);
     let weak = Arc::downgrade(app);
     tokio::spawn(async move {
         loop {

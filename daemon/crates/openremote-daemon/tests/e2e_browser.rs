@@ -421,6 +421,110 @@ async fn the_browsers_own_data_lives_in_the_daemon() {
     assert_eq!(bad.status, 400);
 }
 
+/// Ad blocking is off with no list picked; turning it on, or picking a
+/// list while it is off, downloads nothing, and a browser that can block
+/// hears only "off" until a picked list is here.
+#[tokio::test]
+async fn ad_blocking_downloads_nothing_until_on_with_a_list_picked() {
+    let ws = workspace(Some("plain"));
+    let side = sidecar(ws.path()).await;
+    let daemon = &side.daemon;
+    send(
+        &side.stdin,
+        &FromHost::Hello {
+            engine: "stand-in".into(),
+            caps: openremote_browser::Caps {
+                adblock: true,
+                ..Default::default()
+            },
+        },
+    );
+    let calls = Arc::clone(&side.calls);
+    until("the browser is told blocking is off", || {
+        calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|c| matches!(c, Call::Adblock { on: false, .. }))
+    })
+    .await;
+
+    let first = call(daemon, "GET", "/browser/adblock", None).await;
+    assert_eq!(first.status, 200, "{}", first.raw);
+    assert_eq!(first.body["on"], false);
+    assert_eq!(first.body["state"], "off");
+    assert_eq!(first.body["supported"], true);
+    let lists = first.body["lists"].as_array().unwrap();
+    assert!(!lists.is_empty());
+    for list in lists {
+        assert_eq!(list["picked"], false, "{list}");
+        assert!(list["url"].as_str().unwrap().starts_with("https://"));
+        assert!(!list["licence"].as_str().unwrap().is_empty());
+    }
+
+    // Picked while off: kept, not downloaded.
+    let picked = call(
+        daemon,
+        "POST",
+        "/browser/adblock",
+        Some(json!({"lists": ["easylist"]})),
+    )
+    .await;
+    assert_eq!(picked.status, 200, "{}", picked.raw);
+    assert_eq!(picked.body["state"], "off");
+    // On with the pick taken away: nothing to block with.
+    let on = call(
+        daemon,
+        "POST",
+        "/browser/adblock",
+        Some(json!({"on": true, "lists": []})),
+    )
+    .await;
+    assert_eq!(on.body["state"], "none", "{}", on.raw);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        !daemon.data_dir().join("browser").join("filters").exists(),
+        "nothing was downloaded"
+    );
+    assert!(
+        side.calls
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|c| !matches!(c, Call::Adblock { on: true, .. }))
+    );
+
+    // A list the app doesn't offer is refused, and so is a site that isn't one.
+    let unknown = call(
+        daemon,
+        "POST",
+        "/browser/adblock",
+        Some(json!({"lists": ["https://evil.test/list.txt"]})),
+    )
+    .await;
+    assert_eq!(unknown.status, 400);
+    let site = call(
+        daemon,
+        "POST",
+        "/browser/adblock/site",
+        Some(json!({"site": "https://a.test/x", "allow": true})),
+    )
+    .await;
+    assert_eq!(site.status, 400);
+    let site = call(
+        daemon,
+        "POST",
+        "/browser/adblock/site",
+        Some(json!({"site": "News.Example.com.", "allow": true})),
+    )
+    .await;
+    assert_eq!(site.body["sites"], json!(["news.example.com"]));
+
+    // None of it is a browser setting, so none of it syncs.
+    let state = call(daemon, "GET", "/browser", None).await;
+    assert_eq!(state.body["settings"], json!({}), "{}", state.raw);
+}
+
 /// OpenRemote's MCP server, as a chat's harness starts it, lists the
 /// browser's tools and runs them through the daemon.
 #[tokio::test]

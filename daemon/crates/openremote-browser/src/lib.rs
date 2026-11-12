@@ -76,6 +76,10 @@ pub struct Caps {
     /// Files can be put into a page's file picker.
     #[serde(default)]
     pub upload: bool,
+    /// The browser can block ads and trackers: it answers [`Call::Adblock`].
+    /// A browser that never says so is never told about blocking.
+    #[serde(default)]
+    pub adblock: bool,
 }
 
 /// One tab, as the daemon and agents see it.
@@ -269,13 +273,31 @@ pub enum Call {
         #[serde(default)]
         controller: Option<Controller>,
     },
+    /// Ad and tracker blocking, as the user set it on this computer: sent
+    /// when a browser that can block says hello, and whenever any of it
+    /// changes. Off means the browser hooks no tab and builds no engine.
+    Adblock {
+        on: bool,
+        /// The filter lists to block with: files on this device the daemon
+        /// downloaded from the lists the user picked (EasyList-format text).
+        #[serde(default)]
+        lists: Vec<String>,
+        /// When the lists last changed (ms), so a refresh is noticed even
+        /// though the files keep their names.
+        #[serde(default)]
+        updated: i64,
+        /// Sites the user allows ads on (`example.com`): nothing is blocked
+        /// on their pages.
+        #[serde(default)]
+        allow: Vec<String>,
+    },
 }
 
 impl Call {
     /// The tab a call names, if it names one.
     pub fn tab(&self) -> Option<&str> {
         match self {
-            Call::Tabs | Call::Open { .. } => None,
+            Call::Tabs | Call::Open { .. } | Call::Adblock { .. } => None,
             Call::Close { tab }
             | Call::Select { tab }
             | Call::Navigate { tab, .. }
@@ -370,5 +392,28 @@ mod tests {
             Some("2")
         );
         assert_eq!(Call::Tabs.tab(), None);
+    }
+
+    #[test]
+    fn blocking_off_needs_nothing_but_the_word() {
+        let off: ToHost = parse(r#"BROWSER {"id":3,"call":{"op":"adblock","on":false}}"#).unwrap();
+        assert_eq!(
+            off.call,
+            Call::Adblock {
+                on: false,
+                lists: vec![],
+                updated: 0,
+                allow: vec![]
+            }
+        );
+        assert_eq!(off.call.tab(), None);
+    }
+
+    #[test]
+    fn a_browser_that_never_mentions_blocking_cannot_block() {
+        let caps: Caps = serde_json::from_value(json!({"console": true})).unwrap();
+        assert!(!caps.adblock);
+        let caps: Caps = serde_json::from_value(json!({"adblock": true})).unwrap();
+        assert!(caps.adblock);
     }
 }

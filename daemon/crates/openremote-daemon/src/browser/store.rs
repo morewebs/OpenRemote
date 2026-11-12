@@ -640,6 +640,61 @@ impl BrowserStore {
             self.put("session", &device, session);
         }
     }
+
+    // ---- ad blocking ----
+    //
+    // Two collections of their own, never "setting": the sync note carries
+    // only settings and bookmarks, so what this computer blocks, and which
+    // lists it downloads, is decided on this computer alone.
+
+    /// Whether the user turned ad blocking on here (off unless they did).
+    pub fn adblock_on(&self) -> bool {
+        self.get("adblock", "on").and_then(Value::as_bool) == Some(true)
+    }
+
+    pub fn set_adblock_on(&mut self, on: bool) {
+        // Off is the default: it is stored as no value at all.
+        self.put("adblock", "on", if on { json!(true) } else { Value::Null });
+    }
+
+    /// The filter lists the user picked (catalog ids), none until they pick.
+    pub fn adblock_lists(&self) -> Vec<String> {
+        self.get("adblock", "lists")
+            .and_then(Value::as_array)
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(Value::as_str)
+                    .map(String::from)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn set_adblock_lists(&mut self, ids: &[String]) {
+        let val = if ids.is_empty() {
+            Value::Null
+        } else {
+            json!(ids)
+        };
+        self.put("adblock", "lists", val);
+    }
+
+    /// The sites the user allows ads on (`example.com`), sorted. One key
+    /// per site.
+    pub fn adblock_sites(&self) -> Vec<String> {
+        let mut sites: Vec<String> = self
+            .all("adblock_allow")
+            .filter(|(_, v)| v.as_bool() == Some(true))
+            .map(|(site, _)| site.to_string())
+            .collect();
+        sites.sort();
+        sites
+    }
+
+    pub fn set_adblock_site(&mut self, site: &str, allow: bool) {
+        let val = if allow { json!(true) } else { Value::Null };
+        self.put("adblock_allow", site, val);
+    }
 }
 
 /// This device's id for the browser's logs: made once, kept in the folder.
