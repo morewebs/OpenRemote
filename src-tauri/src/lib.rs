@@ -17,6 +17,13 @@ mod desktop;
 mod geometry;
 #[cfg(target_os = "android")]
 mod mobile;
+// The phone's built-in browser: the Kotlin plugin's pages, under the
+// desktop's browser_* commands and browser:* events.
+#[cfg(target_os = "android")]
+mod mobile_browser;
+// Its rules that need no phone, so the desktop's test build checks them too.
+#[cfg(any(target_os = "android", test))]
+mod phone_browser;
 // The rule for the sign-in's in-app browser. Only the phone app opens pages,
 // so on the desktop it exists for the test build alone.
 #[cfg(any(target_os = "android", test))]

@@ -79,9 +79,16 @@ const ASKS = {
   notifications: 'show notifications',
   'clipboard-read': 'see what you copy',
   midi: 'use your MIDI devices',
+  'protected-media': 'play protected content',
 }
 
 export function permissionAsk(kind, label) {
+  // The phone asks for several things in one request ("camera,microphone").
+  const kinds = String(kind ?? '').split(',').filter(Boolean)
+  if (kinds.length > 1) {
+    if (kinds.length === 2 && kinds.includes('camera') && kinds.includes('microphone')) return 'use your camera and microphone'
+    return kinds.map((k) => permissionAsk(k)).join(' and ')
+  }
   return ASKS[kind] ?? (label ? `use ${label}` : 'use a feature of this computer')
 }
 
@@ -93,6 +100,7 @@ const NAMES = {
   notifications: 'Notifications',
   'clipboard-read': 'Clipboard',
   midi: 'MIDI devices',
+  'protected-media': 'Protected content',
 }
 
 export function permissionName(kind) {
@@ -116,8 +124,15 @@ export function permissionRows(permissions, origin = null) {
 // ask. A private tab never has one: it always asks and remembers nothing.
 export function rememberedAnswer(permissions, { origin, kind, private: priv = false } = {}) {
   if (priv) return null
-  const state = permissions?.[`${origin}|${kind}`]
-  return state === 'allow' || state === 'deny' ? state : null
+  // Several kinds in one request: allowed only when every one is, and one
+  // blocked kind blocks the request.
+  const states = String(kind ?? '')
+    .split(',')
+    .filter(Boolean)
+    .map((k) => permissions?.[`${origin}|${k}`])
+  if (!states.length) return null
+  if (states.includes('deny')) return 'deny'
+  return states.every((s) => s === 'allow') ? 'allow' : null
 }
 
 // A recording's file name in Downloads, from when it started:

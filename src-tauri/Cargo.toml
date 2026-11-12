@@ -72,7 +72,8 @@ openremote-cloud = { path = "../daemon/crates/openremote-cloud" }
 tauri-plugin-deep-link = "2"
 tauri-plugin-opener = "2"
 android_system_properties = "0.1"
-tokio = { version = "1", features = ["time"] }
+# sync: the phone browser's events are handed off its UI thread on a channel.
+tokio = { version = "1", features = ["time", "sync"] }
 
 [lib]
 name = "openremote_ui_desktop_lib"

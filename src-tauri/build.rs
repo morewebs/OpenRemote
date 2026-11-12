@@ -39,6 +39,12 @@ const COMMANDS: &[&str] = &[
     "browser_save_file",
     "browser_clear_data",
     "browser_share",
+    // The phone's own: desktop site, the share sheet, a link's download
+    // from its menu (capabilities/mobile.json grants them; no desktop
+    // handler exists).
+    "browser_desktop_site",
+    "browser_share_sheet",
+    "browser_download",
     "update_check",
     "update_install",
 ];

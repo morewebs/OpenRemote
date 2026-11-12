@@ -1,0 +1,1028 @@
+/* The built-in browser on a phone: Chrome Android's arrangement in the
+   app's own colours. The page area is a placeholder; the Android shell
+   draws the page over it. The browser covers the app's own bar while it is
+   open; Android's back leaves it. */
+
+.bp {
+  position: fixed;
+  inset: 0;
+  z-index: 32;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-app);
+  color: var(--text-1);
+  font-family: var(--font-sans);
+}
+
+/* ---- the top bar ---- */
+
+/* It slides up as the page scrolls down: the shell says how far, frame by
+   frame, so it follows the page with no transition of its own. */
+.bp-bar {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-side);
+}
+
+.bp-top {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 56px;
+  padding: 0 4px;
+}
+
+.bp-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.bp-icon:hover,
+.bp-icon:active {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.bp-icon:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.bp-address {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bp-address-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bp-address-text.quiet {
+  color: var(--text-3);
+}
+
+.bp-address-lock,
+.bp-address-private {
+  flex: none;
+  color: var(--text-2);
+}
+
+/* "Not secure" in the address bar's own amber, as on the desktop. */
+.bp-address-warn {
+  flex: none;
+  color: var(--accent);
+}
+
+/* The tab count: Chrome's square with the number in it. */
+.bp-count {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.bp-count:hover,
+.bp-count:active {
+  background: var(--bg-hover);
+}
+
+.bp-count span {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 3px;
+  border: 2px solid currentColor;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.bp-progress {
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+}
+
+/* A chat's agent is using the tab: who, and the person's way back in. */
+.bp-agent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 8px 0 16px;
+  border-top: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+
+.bp-agent-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--green);
+  animation: bp-breathe 2.4s ease-in-out infinite;
+}
+
+.bp-agent-dot.paused {
+  background: var(--accent);
+  animation: none;
+}
+
+.bp-agent-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bp-agent-btn {
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid rgba(220, 162, 75, 0.35);
+  border-radius: 999px;
+  background: rgba(220, 162, 75, 0.07);
+  color: var(--accent);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+@keyframes bp-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Find in page takes the bar's place, as in Chrome. */
+.bp-find-icon {
+  flex: none;
+  margin: 0 6px 0 12px;
+  color: var(--text-3);
+}
+
+.bp-find-input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 15px;
+}
+
+.bp-find-count {
+  flex: none;
+  min-width: 34px;
+  color: var(--text-3);
+  font-size: 12.5px;
+  text-align: right;
+}
+
+/* ---- the page area ---- */
+
+.bp-infobar {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(220, 162, 75, 0.35);
+  background: rgba(220, 162, 75, 0.07);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.bp-infobar-icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--accent);
+}
+
+.bp-page {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-app);
+}
+
+/* The page's picture while a menu covers it: exactly its box, shown only
+   once decoded. */
+.bp-picture {
+  position: absolute;
+  inset: 0;
+  display: none;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top left;
+}
+
+.bp-picture.on {
+  display: block;
+}
+
+.bp-ntp {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  overflow-y: auto;
+  padding: 48px 20px 24px;
+}
+
+.bp-ntp-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 560px;
+  height: 48px;
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-3);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: text;
+}
+
+.bp-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px 8px;
+  width: 100%;
+  max-width: 560px;
+}
+
+.bp-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bp-tile-letter {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-1);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.bp-tile-name {
+  max-width: 76px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bp-private-note {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 420px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.bp-private-note p {
+  margin: 0;
+}
+
+.bp-private-title {
+  color: var(--text-1);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.bp-private-warn {
+  padding: 10px 12px;
+  border: 1px solid rgba(220, 162, 75, 0.35);
+  border-radius: var(--radius);
+  background: rgba(220, 162, 75, 0.07);
+  color: var(--text-1);
+}
+
+.bp-crash {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+.bp-crash p {
+  margin: 0;
+}
+
+.bp-crash-title {
+  color: var(--text-1);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.bp-crash-text {
+  max-width: 320px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ---- rows under the page ---- */
+
+.bp-ask {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-side);
+}
+
+.bp-ask-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.bp-ask-text strong {
+  font-weight: 600;
+}
+
+.bp-ask-actions,
+.bp-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.bp-actions {
+  padding: 16px;
+}
+
+.bp-note {
+  flex: none;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-side);
+  color: var(--text-1);
+  font-size: 13px;
+  text-align: center;
+}
+
+.bp-button {
+  height: 36px;
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.bp-button:hover {
+  background: var(--bg-hover);
+}
+
+.bp-button:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.bp-button.primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: #1a1206;
+}
+
+/* The press pulse every primary action shares. */
+.bp-button:active {
+  transform: scale(0.9);
+}
+
+.bp-button.primary:active {
+  box-shadow: 0 0 34px rgba(220, 162, 75, 0.45);
+}
+
+/* ---- full-screen pages: the tabs, the address bar open, the menu's pages ---- */
+
+.bp-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-app);
+}
+
+.bp-surface-head,
+.bp-omnibox-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 56px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-side);
+}
+
+.bp-surface-title {
+  flex: 1;
+  min-width: 0;
+  padding-left: 8px;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bp-surface-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 0 24px;
+  scrollbar-width: thin;
+}
+
+.bp-done {
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.bp-omnibox-input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 15px;
+}
+
+.bp-current {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 6px 8px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.bp-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 6px 10px 6px 16px;
+  border: 0;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+button.bp-row:hover,
+button.bp-row:active {
+  background: var(--bg-hover);
+}
+
+.bp-row:disabled {
+  cursor: default;
+}
+
+.bp-row:disabled .bp-row-sub {
+  color: var(--text-3);
+}
+
+.bp-row-open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bp-row-letter {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-2);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.bp-row-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.bp-row-title,
+.bp-row-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bp-row-title {
+  font-size: 14px;
+}
+
+.bp-row-sub {
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+
+.bp-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  margin: 8px 16px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-3);
+}
+
+.bp-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 14px;
+}
+
+.bp-group {
+  margin: 18px 16px 6px;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.bp-link,
+.bp-link-row {
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.bp-link {
+  flex: none;
+  padding: 8px 6px;
+}
+
+.bp-link-row {
+  display: block;
+  margin: 2px 16px 6px;
+  padding: 6px 0;
+}
+
+.bp-quiet {
+  margin: 0;
+  padding: 12px 16px;
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ---- the tab grid ---- */
+
+.bp-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.bp-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-side);
+  cursor: pointer;
+}
+
+.bp-card.on {
+  border-color: var(--accent);
+}
+
+.bp-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 4px 0 10px;
+}
+
+.bp-card-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  object-fit: contain;
+}
+
+.bp-card-globe {
+  flex: none;
+  color: var(--text-3);
+}
+
+.bp-card-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bp-card-close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.bp-card-shot {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  background: var(--bg-app);
+}
+
+.bp-card-shot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+
+.bp-card-blank {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.bp-card-agent {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--green);
+  animation: bp-breathe 2.4s ease-in-out infinite;
+}
+
+.bp-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 16px 2px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.bp-section-add {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 6px 4px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* ---- the menu and a link's menu ---- */
+
+.bp-menu-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+}
+
+.bp-menu {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 264px;
+  max-height: calc(100% - 12px);
+  overflow-y: auto;
+  padding: 4px 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: var(--bg-side);
+}
+
+.bp-menu-top {
+  display: flex;
+  justify-content: space-around;
+  padding: 2px 8px 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.bp-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  height: 46px;
+  padding: 0 16px;
+  border: 0;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.bp-menu-item:hover,
+.bp-menu-item:active {
+  background: var(--bg-hover);
+}
+
+.bp-menu-item:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.bp-menu-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--text-2);
+}
+
+.bp-menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bp-menu-hint {
+  flex: none;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.bp-menu-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--line);
+}
+
+.bp-starred {
+  color: var(--accent);
+}
+
+.bp-check {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--text-3);
+  border-radius: 5px;
+  color: #1a1206;
+}
+
+.bp-check.on {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.bp-radio {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--text-3);
+  border-radius: 999px;
+}
+
+.bp-radio.on {
+  border-color: var(--accent);
+  background: radial-gradient(circle, var(--accent) 0 4px, transparent 4.5px);
+}
+
+.bp-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.bp-sheet {
+  width: 100%;
+  max-height: 80%;
+  overflow-y: auto;
+  padding: 4px 0 10px;
+  border-top: 1px solid var(--line);
+  border-radius: 14px 14px 0 0;
+  background: var(--bg-side);
+}
+
+.bp-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+
+.bp-sheet-url {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Reduced motion, both ways: the system's setting and the app's own. */
+@media (prefers-reduced-motion: reduce) {
+  .bp-agent-dot,
+  .bp-card-agent {
+    animation: none;
+  }
+
+  .bp-icon,
+  .bp-count,
+  .bp-button,
+  .bp-row,
+  .bp-menu-item {
+    transition: none;
+  }
+
+  .bp-button:active {
+    transform: none;
+  }
+
+  .bp-button.primary:active {
+    box-shadow: none;
+  }
+}
+
+html[data-reduce-motion] .bp-agent-dot,
+html[data-reduce-motion] .bp-card-agent {
+  animation: none;
+}
+
+html[data-reduce-motion] .bp-icon,
+html[data-reduce-motion] .bp-count,
+html[data-reduce-motion] .bp-button,
+html[data-reduce-motion] .bp-row,
+html[data-reduce-motion] .bp-menu-item {
+  transition: none;
+}
+
+html[data-reduce-motion] .bp-button:active {
+  transform: none;
+}
+
+html[data-reduce-motion] .bp-button.primary:active {
+  box-shadow: none;
+}

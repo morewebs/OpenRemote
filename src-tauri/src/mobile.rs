@@ -23,13 +23,44 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
+        // The built-in browser: native pages over the console, the same
+        // browser_* commands and browser:* events as the desktop.
+        .plugin(crate::mobile_browser::init())
         .manage(DaemonState {
             info: std::sync::Mutex::new(DaemonInfo {
                 mobile: true,
                 ..DaemonInfo::default()
             }),
         })
-        .invoke_handler(tauri::generate_handler![crate::daemon_info, open_url])
+        .invoke_handler(tauri::generate_handler![
+            crate::daemon_info,
+            open_url,
+            crate::mobile_browser::browser_open,
+            crate::mobile_browser::browser_features,
+            crate::mobile_browser::browser_tabs,
+            crate::mobile_browser::browser_close,
+            crate::mobile_browser::browser_set_bounds,
+            crate::mobile_browser::browser_show,
+            crate::mobile_browser::browser_hide,
+            crate::mobile_browser::browser_navigate,
+            crate::mobile_browser::browser_back,
+            crate::mobile_browser::browser_forward,
+            crate::mobile_browser::browser_reload,
+            crate::mobile_browser::browser_stop,
+            crate::mobile_browser::browser_capture,
+            crate::mobile_browser::browser_zoom,
+            crate::mobile_browser::browser_find,
+            crate::mobile_browser::browser_permission,
+            crate::mobile_browser::browser_clear_site,
+            crate::mobile_browser::browser_clear_data,
+            crate::mobile_browser::browser_open_external,
+            crate::mobile_browser::browser_share,
+            crate::mobile_browser::browser_save_file,
+            crate::mobile_browser::browser_reveal,
+            crate::mobile_browser::browser_desktop_site,
+            crate::mobile_browser::browser_share_sheet,
+            crate::mobile_browser::browser_download,
+        ])
         .setup(|app| {
             start_daemon(app.handle().clone(), app.path().app_data_dir()?);
             app.deep_link().on_open_url(move |event| {
@@ -74,6 +105,8 @@ fn start_daemon(app: tauri::AppHandle, data_dir: std::path::PathBuf) {
                     mobile: true,
                     ..DaemonInfo::default()
                 };
+                // Agents can work in the phone's tabs through this daemon.
+                crate::mobile_browser::attach_daemon(&app, &daemon.app);
                 let _ = DAEMON.set(daemon.app);
             }
             Err(e) => {

@@ -4,8 +4,8 @@
 // owns the pages; this keeps what the console knows about them and hears
 // the shell's `browser:*` events.
 
-import { hasTauri, isMobile } from './platform.js'
-import { insertAfter, newTab, popupBelongs, putAway, restoredTabs, sessionOf, toDiscard, withRestored } from './browser-tabs.js'
+import { hasTauri } from './platform.js'
+import { closeTab, insertAfter, newTab, popupBelongs, putAway, rememberClosed, restoredTabs, sessionOf, toDiscard, withRestored } from './browser-tabs.js'
 import { bookmarkFor, inFolder, positionAt, stepPosition, withBookmark, withoutBookmark } from './browser-bookmarks.js'
 import { HISTORY_CAP, recordVisit as pushVisit, visitsBefore } from './browser-history.js'
 import { linkAbort, loadConnection } from './api/daemon.js'
@@ -385,8 +385,14 @@ export function enforceMemory() {
   }))
 }
 
+// What the phone's shell says about a tab beyond the desktop's fields (its
+// load progress, desktop site, a crashed page, a problem in words, whether a
+// private tab is kept apart, its text zoom). Copied only when said, so a
+// shell that says less never blanks what the console keeps.
+const PHONE_FIELDS = ['progress', 'desktop', 'crashed', 'live', 'problem', 'isolated', 'zoom']
+
 function fieldsOf(p) {
-  return {
+  const fields = {
     url: p.url,
     title: p.title,
     loading: p.loading,
@@ -403,6 +409,8 @@ function fieldsOf(p) {
     // title }), or null: the strip's badge and the take-over bar.
     controller: p.controller ?? null,
   }
+  for (const key of PHONE_FIELDS) if (p[key] !== undefined) fields[key] = p[key]
+  return fields
 }
 
 // ---- site permissions ----
@@ -424,16 +432,25 @@ export function dropPromptsFor(native) {
 /// asked for that (never for a private tab). Resolves once the answer is
 /// kept; a remembering the daemon refused rejects, so the bar's owner can
 /// say why (the page still got its answer).
-export function answerPrompt(prompt, allow, remember) {
+export async function answerPrompt(prompt, allow, remember, caller = browserCall) {
   call('browser_permission', { tab: prompt.tab, id: prompt.id, allow })
   dropPrompt(prompt.tab, prompt.id)
-  if (!remember || prompt.private) return Promise.resolve()
-  return setSitePermission(browserCall, prompt.origin, prompt.kind, allow ? 'allow' : 'deny')
+  if (!remember || prompt.private) return
+  // The phone asks for several things in one request ("camera,microphone"):
+  // each is remembered under its own kind, the way the daemon keys them.
+  for (const kind of String(prompt.kind).split(',').filter(Boolean)) {
+    await setSitePermission(caller, prompt.origin, kind, allow ? 'allow' : 'deny')
+  }
 }
 
 /// A site asked (`browser:permission`): a remembered answer is given at
 /// once; otherwise the bar asks. A private tab always asks.
 export async function onPermission(p) {
+  // The phone withdraws a request it stopped waiting for (the page went).
+  if (p?.gone) {
+    dropPrompt(p.tab, p.id)
+    return
+  }
   // Private unless known otherwise: a request can arrive before the console
   // tab has adopted its page, so the tab list alone can't say. The shell's
   // own word about the page (kept in `early` until adopt) is used then, and
@@ -618,6 +635,25 @@ function grantWish() {
   focusTab(wanted.native)
 }
 
+/// The shell closed a page itself (`browser:closed`: the page closed its own
+/// window, or an agent closed its tab): its tab goes the way a closed tab
+/// does, and a private one leaves nothing to reopen.
+export function onClosed(native) {
+  if (!native) return
+  gone.add(native)
+  early.delete(native)
+  clearTimeout(orphans.get(native))
+  orphans.delete(native)
+  tabClosed(native)
+  setState((s) => {
+    const tab = s.tabs.find((t) => t.native === native)
+    const prompts = s.prompts.filter((p) => p.tab !== native)
+    if (!tab) return { prompts }
+    const next = closeTab(s.tabs, tab.key, s.active)
+    return { tabs: next.tabs, active: next.active, closed: rememberClosed(s.closed, next.closed), prompts }
+  })
+}
+
 /// What the shell says about a tab (`browser:tab`).
 export function onTab(p) {
   if (!p?.id || gone.has(p.id)) return
@@ -706,6 +742,10 @@ async function wire() {
   })
   listen('browser:permission', ({ payload }) => onPermission(payload))
   listen('browser:fullscreen', ({ payload }) => onFullscreen(payload))
+  // The phone's shell says when it closed a page itself, and when an agent
+  // asked for one of its tabs to be the one shown.
+  listen('browser:closed', ({ payload }) => onClosed(payload?.id))
+  listen('browser:select', ({ payload }) => focusTab(payload?.id))
   // A recorded tab's pictures (browser_screencast), for browser-record.js.
   listen('browser:frame', ({ payload }) => recordFrame(payload))
   // What this build's shell can do with a tab: find in page, the DevTools
@@ -733,7 +773,9 @@ async function wire() {
   }
 }
 
-const wired = hasTauri && !isMobile ? wire() : Promise.resolve()
+// The phone's shell answers the same commands and events as the desktop's
+// (src-tauri/src/mobile_browser.rs), so the store runs on both.
+const wired = hasTauri ? wire() : Promise.resolve()
 
 // The browser's view is the only thing that can reopen a tab (it builds the
 // page and places it), so it registers that one action while it is mounted and

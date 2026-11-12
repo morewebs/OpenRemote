@@ -19,3 +19,12 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# The built-in browser's plugin: Tauri makes it by its class name over JNI,
+# finds its commands by method name, and reads the start command's
+# arguments (the events channel) into StartArgs's fields by reflection.
+-keep class space.moreweb.openremote.browser.BrowserPlugin {
+  public <init>(...);
+  @app.tauri.annotation.Command public <methods>;
+}
+-keep class space.moreweb.openremote.browser.StartArgs { *; }

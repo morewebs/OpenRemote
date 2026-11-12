@@ -13,7 +13,7 @@ import MachinesView from './MachinesView.jsx'
 import AccountView from './AccountView.jsx'
 import MobileView from './MobileView.jsx'
 import MetricsView from './MetricsView.jsx'
-import BrowserPane from './BrowserPane.jsx'
+import BrowserPane, { BrowserPhoneView } from './BrowserPane.jsx'
 import { onBrowserRequest, openedKey, shouldAutoOpen } from './browser-placement.js'
 import { DEFAULT_PANE_WIDTH, MIN_PANE_WIDTH, clampPaneWidth, loadPaneWidth, savePaneWidth } from './pane-width.js'
 import FloatingBar from './FloatingBar.jsx'
@@ -1308,7 +1308,10 @@ function Shell() {
               {/* The browser docked right: beside the chat, never instead
                   of it. The floating bar (on the homepage) and the sidebar
                   open and close it. */}
-              {browserOpen && canBrowse && (
+              {/* On the phone it is the whole screen instead, over the app. */}
+              {browserOpen && canBrowse && (isMobile ? (
+                <BrowserPhoneView onClose={() => setBrowserOpen(false)} askToShow={browserAsk} />
+              ) : (
                 <>
                   {/* The pane is as wide as the person left it, and this grip is how they
                       leave it: drag to widen or narrow, double-click for the default.
@@ -1342,7 +1345,7 @@ function Shell() {
                     askToShow={browserAsk}
                   />
                 </>
-              )}
+              ))}
             </div>
           </main>
           {chatMove.modal}

@@ -43,7 +43,7 @@ the project's own map.
   `npm run tauri:dev` running in another terminal), plus `check-tab-acl.mjs`,
   the capability-scope guard CI runs. Run bare it prints
   `tab acl ok: 2 capability file(s), every non-phone one scoped to the main
-  webview, every declared command (38) granted` and exits 0, or exits 1 and
+  webview, every declared command (41) granted` and exits 0, or exits 1 and
   names the capability that widened; `--self-test` checks the check itself,
   and `--root` points it at another tree. Not build tooling; the one build
   script is `sync-daemon.mjs`.
@@ -169,6 +169,14 @@ an old process is still alive; find it before re-running).
   (the socket above, `src/PairingSection.jsx`), and a phone signed in to
   the account lists the synced chats and can drive a machine. Pairing
   works while Cloud says the user is signed out.
+- The phone's built-in browser is a Kotlin plugin in the Android app
+  (`src-tauri/gen/android/.../browser/`): each tab a native WebView laid
+  over `src/BrowserPhone.jsx`, reached only from Rust
+  (`src-tauri/src/mobile_browser.rs`, which gives the console the desktop's
+  `browser_*` commands; `phone_browser.rs` holds its testable rules). The
+  pages have no IPC, read no local files and load no mixed content; a private
+  tab needs WebView profiles, leaves no picture, and keeps the window secure
+  while shown. It has not been checked on a device.
 
 ## Cloud's trust model, for anyone touching it
 
@@ -267,7 +275,7 @@ Four commands check what this page claims, and a reader can run all of them
 from the repo root: `npm test` (prints a count; 1174 the last time this line
 was checked, and the run is the truth rather than this number), `node
 scripts/check-tab-acl.mjs` (says `tab acl ok: 2 capability file(s), every
-non-phone one scoped to the main webview, every declared command (38)
+non-phone one scoped to the main webview, every declared command (41)
 granted`), `cd daemon && cargo fmt --all --check` and
 `cd daemon && cargo clippy --all-targets --locked -- -D warnings` (both print
 nothing and exit 0 on the committed tree). The route and tier claims in "Cloud's

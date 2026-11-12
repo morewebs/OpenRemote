@@ -36,7 +36,7 @@ import { EffortSlider, FadingLabel, effortLabel } from './NewChat.jsx'
 import { EndpointManagerModal } from './EndpointManager.jsx'
 import { hasTauri, isMobile } from './platform.js'
 import { findDevServers } from './devservers.js'
-import { requestBrowser } from './browser-placement.js'
+import { isBrowsing, requestBrowser } from './browser-placement.js'
 import { usePrivacyMode } from './privacy.js'
 import { useHint, useModelSwitches, usePaletteSource, useShortcut } from './keyboard.jsx'
 import { useComposerMenus } from './useComposerMenus.jsx'
@@ -1421,6 +1421,15 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
       </div>
 
       <div className="cv-composer" ref={composerRef}>
+        {/* On the phone the browser never opens by itself: the chat says
+            the agent is in it, and a tap opens the browser. */}
+        {isMobile && isBrowsing(chat) && (
+          <button type="button" className="cv-browsing" onClick={() => requestBrowser({ chatId: chat.id })}>
+            <span className="cv-browsing-dot" />
+            {harnessLabel(chat.harness)} is browsing
+            <Globe size={13} />
+          </button>
+        )}
         <div className="cv-box" onDragOver={attachInput.onDragOver} onDrop={attachInput.onDrop}>
           {menus.element}
           {queue.length > 0 && (
