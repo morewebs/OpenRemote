@@ -7,7 +7,8 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { UPDATE_ASSETS, updaterManifest } from '../scripts/updater-manifest.mjs'
 
-const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8')
+// A Windows checkout can carry CRLF; the workflow pins below match \n.
+const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 
 test('latest.json names each platform\'s version-free update in this tag\'s release', () => {
   const m = updaterManifest({

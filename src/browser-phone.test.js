@@ -23,7 +23,8 @@ import { permissionAsk, rememberedAnswer } from './browser-chrome.js'
 import { getBrowserPrefs, loadBrowserPrefs } from './browser-prefs.js'
 import { answerPrompt, getState, onClosed, onPermission, onTab, setState } from './browser-store.js'
 
-const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8')
+// A Windows checkout can carry CRLF; the source pins below match \n.
+const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const android = '../src-tauri/gen/android/app/src/main/java/space/moreweb/openremote/browser/'
 
 // ---- the pure rules ----
