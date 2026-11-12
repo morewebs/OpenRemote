@@ -500,7 +500,7 @@ pub fn pack(dir: &Path) -> std::io::Result<Vec<u8>> {
         let mut header = tar::Header::new_gnu();
         header.set_entry_type(tar::EntryType::Regular);
         header.set_size(bytes.len() as u64);
-        header.set_mode(if programs.contains(&name) {
+        header.set_mode(if programs.contains(&name) || runnable(&bytes) {
             0o755
         } else {
             0o644
@@ -513,8 +513,26 @@ pub fn pack(dir: &Path) -> std::io::Result<Vec<u8>> {
     builder.into_inner()?.finish()
 }
 
-/// The files a plugin's manifest names as programs: its entry (a module or
-/// a command) and its harness driver, as paths inside its folder.
+/// Whether a file's own bytes say it runs: a script (`#!`), an ELF binary,
+/// or a Mach-O one (either byte order, and the universal form). Hooks, MCP
+/// server scripts and helpers are found this way, whatever the manifest
+/// names. The bytes are the same on every system, so the answer is too.
+fn runnable(bytes: &[u8]) -> bool {
+    const MAGIC: [&[u8]; 7] = [
+        b"#!",
+        &[0x7F, 0x45, 0x4C, 0x46],
+        &[0xFE, 0xED, 0xFA, 0xCE],
+        &[0xFE, 0xED, 0xFA, 0xCF],
+        &[0xCA, 0xFE, 0xBA, 0xBE],
+        &[0xCE, 0xFA, 0xED, 0xFE],
+        &[0xCF, 0xFA, 0xED, 0xFE],
+    ];
+    MAGIC.iter().any(|magic| bytes.starts_with(magic))
+}
+
+/// The files a plugin's manifest names as programs, as paths inside its
+/// folder: its entry (a module or a command, and every per-system command)
+/// and every form of its harness driver (one path, or one per system).
 fn programs(dir: &Path) -> std::collections::BTreeSet<String> {
     let raw: Value = std::fs::read(dir.join("openremote.json"))
         .ok()
@@ -523,10 +541,19 @@ fn programs(dir: &Path) -> std::collections::BTreeSet<String> {
     let mut named = Vec::new();
     match &raw["entry"] {
         Value::String(path) => named.push(path.clone()),
-        entry => named.extend(entry["command"].as_str().map(String::from)),
+        entry => {
+            named.extend(entry["command"].as_str().map(String::from));
+            for system in ["windows", "macos", "linux"] {
+                named.extend(entry[system]["command"].as_str().map(String::from));
+            }
+        }
     }
-    if let Some(drivers) = raw["harness"]["driver"].as_object() {
-        named.extend(drivers.values().filter_map(Value::as_str).map(String::from));
+    match &raw["harness"]["driver"] {
+        Value::String(path) => named.push(path.clone()),
+        Value::Object(drivers) => {
+            named.extend(drivers.values().filter_map(Value::as_str).map(String::from));
+        }
+        _ => {}
     }
     named
         .into_iter()
@@ -859,6 +886,80 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             let f = from.path().join("readme.txt");
             std::fs::set_permissions(&f, std::fs::Permissions::from_mode(0o700)).unwrap();
+            assert_eq!(pack(from.path()).unwrap(), packed);
+        }
+    }
+
+    /// What a plugin really runs keeps its executable mode in a copy: a
+    /// per-system program the manifest names, a per-system driver, and any
+    /// script or binary by its first bytes - read from the content, which is
+    /// the same on every system, so packs stay byte for byte the same.
+    #[test]
+    fn what_a_plugin_runs_keeps_its_mode_and_the_pack_stays_the_same() {
+        let from = tempfile::tempdir().unwrap();
+        let write = |path: &str, bytes: &[u8]| {
+            let path = from.path().join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, bytes).unwrap();
+        };
+        write("bin/run.exe", b"MZ windows program");
+        write("bin/run-linux", b"plain bytes the manifest names");
+        write("bin/drive-mac", b"named as the macOS driver");
+        write("hooks/on-start.sh", b"#!/bin/sh\necho hi\n");
+        write("lib/helper", b"\x7fELF and the rest");
+        write("lib/tool", &[0xCF, 0xFA, 0xED, 0xFE, 1, 2]);
+        write("docs/notes.md", b"words");
+        write(
+            "openremote.json",
+            json!({
+                "entry": {"command": "bin/run.exe", "linux": {"command": "./bin/run-linux"}},
+                "harness": {"driver": {"darwin": "bin/drive-mac"}}
+            })
+            .to_string()
+            .as_bytes(),
+        );
+        let packed = pack(from.path()).unwrap();
+        let mut archive =
+            tar::Archive::new(flate2::read::GzDecoder::new(std::io::Cursor::new(&packed)));
+        let modes: std::collections::BTreeMap<String, u32> = archive
+            .entries()
+            .unwrap()
+            .map(|e| {
+                let e = e.unwrap();
+                (
+                    e.path().unwrap().to_string_lossy().replace('\\', "/"),
+                    e.header().mode().unwrap(),
+                )
+            })
+            .collect();
+        for program in [
+            "bin/run.exe",
+            "bin/run-linux",
+            "bin/drive-mac",
+            "hooks/on-start.sh",
+            "lib/helper",
+            "lib/tool",
+        ] {
+            assert_eq!(modes[program], 0o755, "{program}");
+        }
+        assert_eq!(modes["docs/notes.md"], 0o644);
+        assert_eq!(modes["openremote.json"], 0o644);
+        // A fresh copy of the folder (no file-system bits carried) packs
+        // the same, as a Windows copy of a Unix plugin does.
+        let copy = tempfile::tempdir().unwrap();
+        crate::plugins::copy_folder(from.path(), &copy.path().join("p")).unwrap();
+        assert_eq!(pack(&copy.path().join("p")).unwrap(), packed);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            for f in ["docs/notes.md", "hooks/on-start.sh"] {
+                let mode = if f.ends_with(".md") { 0o755 } else { 0o600 };
+                std::fs::set_permissions(
+                    from.path().join(f),
+                    std::fs::Permissions::from_mode(mode),
+                )
+                .unwrap();
+            }
             assert_eq!(pack(from.path()).unwrap(), packed);
         }
     }

@@ -201,9 +201,14 @@ pub async fn install(
         // the running snapshot as it was.
         (_, Some(folder)) => {
             let root = staged.root().to_path_buf();
-            project_files(folder, &name, &root, || {
-                app.plugins.install_at(staged, &target)
-            })?
+            project_files(
+                folder,
+                &name,
+                &root,
+                staged,
+                |staged| app.plugins.install_at(staged, &target),
+                |staged| app.plugins.discard(staged),
+            )?
         }
         _ => app.plugins.install_at(staged, &target).map_err(failure)?,
     }
@@ -297,15 +302,21 @@ pub async fn install(
 /// A Project plugin's files: the reviewed folder is written into the repo
 /// first, and only then is the snapshot that runs replaced (`place_snapshot`),
 /// so a repo that can't take the copy changes nothing that runs.
-fn project_files(
+/// A repo that can't take the copy has the staged install discarded
+/// (`discard`), as any refused install's is, so no staging folder is left.
+fn project_files<S>(
     project_folder: &std::path::Path,
     name: &str,
     reviewed: &std::path::Path,
-    place_snapshot: impl FnOnce() -> Result<(), crate::plugins::PluginError>,
+    staged: S,
+    place_snapshot: impl FnOnce(S) -> Result<(), crate::plugins::PluginError>,
+    discard: impl FnOnce(S),
 ) -> Result<(), Failure> {
-    scope::write_repo_copy(project_folder, name, reviewed)
-        .map_err(|e| (StatusCode::CONFLICT, e))?;
-    place_snapshot().map_err(failure)
+    if let Err(why) = scope::write_repo_copy(project_folder, name, reviewed) {
+        discard(staged);
+        return Err((StatusCode::CONFLICT, why));
+    }
+    place_snapshot(staged).map_err(failure)
 }
 
 /// A plugin folder's failure as the routes answer it.
@@ -460,7 +471,8 @@ mod tests {
     }
 
     /// An update whose repo copy can't be written leaves the snapshot that
-    /// runs as it was: the repo is written first, the snapshot only after.
+    /// runs as it was, and its staging copy is discarded rather than left
+    /// behind: the repo is written first, the snapshot only after.
     #[test]
     fn a_failed_repo_write_leaves_the_running_snapshot_alone() {
         let project = tempfile::tempdir().unwrap();
@@ -469,22 +481,39 @@ mod tests {
         // `.openremote/plugins` is a file: no folder can be made in it.
         std::fs::create_dir_all(project.path().join(".openremote")).unwrap();
         std::fs::write(project.path().join(".openremote/plugins"), "in the way").unwrap();
-        let mut placed = false;
-        let err = project_files(project.path(), "shout", reviewed.path(), || {
-            placed = true;
+        let what = std::cell::RefCell::new(Vec::new());
+        let place = |staged: &str| {
+            what.borrow_mut().push(format!("placed {staged}"));
             Ok(())
-        })
+        };
+        let discard = |staged: &str| what.borrow_mut().push(format!("discarded {staged}"));
+        let err = project_files(
+            project.path(),
+            "shout",
+            reviewed.path(),
+            "s1",
+            place,
+            discard,
+        )
         .unwrap_err();
         assert_eq!(err.0, StatusCode::CONFLICT);
-        assert!(!placed, "the snapshot was not touched");
+        assert_eq!(
+            *what.borrow(),
+            ["discarded s1"],
+            "the snapshot untouched, staging gone"
+        );
         // A repo that takes the copy: then the snapshot.
         std::fs::remove_file(project.path().join(".openremote/plugins")).unwrap();
-        project_files(project.path(), "shout", reviewed.path(), || {
-            placed = true;
-            Ok(())
-        })
+        project_files(
+            project.path(),
+            "shout",
+            reviewed.path(),
+            "s2",
+            place,
+            discard,
+        )
         .unwrap();
-        assert!(placed);
+        assert_eq!(*what.borrow(), ["discarded s1", "placed s2"]);
         let copy = project
             .path()
             .join(".openremote/plugins/shout/openremote.json");
