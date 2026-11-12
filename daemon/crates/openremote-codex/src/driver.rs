@@ -235,14 +235,7 @@ impl Driver {
             driver.notify("initialized", json!({})).await?;
 
             // Thread: start or resume (cloudroom lines 70-99).
-            let mut params = thread_params(&opts);
-            let (method, thread_id) = if let Some(resume) = &opts.resume {
-                params["threadId"] = json!(resume);
-                params["excludeTurns"] = json!(true);
-                ("thread/resume", resume.clone())
-            } else {
-                ("thread/start", String::new())
-            };
+            let (method, params, thread_id) = thread_request(&opts);
             let result = race_child_death(&shared, method, driver.call(method, params)).await?;
             let id = result
                 .pointer("/thread/id")
@@ -823,6 +816,22 @@ fn choice_spec(tool: &str, summary: Option<String>, choices: &[(&str, &str)]) ->
         tool_name: Some(tool.to_string()),
         summary,
         interrupts_turn: Vec::new(),
+    }
+}
+
+/// The thread call a spawn makes: `thread/start`, or `thread/resume` on the
+/// chat's own thread - with the same params, the chat's folder as `cwd`
+/// among them, so a chat that moved to another project resumes its thread
+/// working in the new folder.
+fn thread_request(opts: &SpawnOptions) -> (&'static str, Value, String) {
+    let mut params = thread_params(opts);
+    match &opts.resume {
+        Some(resume) => {
+            params["threadId"] = json!(resume);
+            params["excludeTurns"] = json!(true);
+            ("thread/resume", params, resume.clone())
+        }
+        None => ("thread/start", params, String::new()),
     }
 }
 
@@ -1573,6 +1582,26 @@ mod tests {
         };
         assert_eq!(text, "denied");
         assert!(is_error);
+    }
+
+    #[test]
+    fn a_resumed_thread_works_in_the_chats_folder_as_it_is_now() {
+        let moved = SpawnOptions {
+            cwd: PathBuf::from("/projects/new"),
+            resume: Some("thr_1".into()),
+            ..Default::default()
+        };
+        let (method, params, thread) = thread_request(&moved);
+        assert_eq!(method, "thread/resume");
+        assert_eq!(thread, "thr_1");
+        assert_eq!(params["threadId"].as_str(), Some("thr_1"));
+        assert_eq!(params["cwd"], json!(PathBuf::from("/projects/new")));
+        let (method, params, thread) = thread_request(&SpawnOptions {
+            cwd: PathBuf::from("/w"),
+            ..Default::default()
+        });
+        assert_eq!(method, "thread/start");
+        assert!(thread.is_empty() && params.get("threadId").is_none());
     }
 
     #[test]

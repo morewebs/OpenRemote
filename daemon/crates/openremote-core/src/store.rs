@@ -1297,6 +1297,31 @@ impl Store {
         Ok(updated)
     }
 
+    /// Mark (`Some(seq)`) or clear (`None`) a moved chat's carry: its next
+    /// plain message hands a fresh conversation the chat's messages before
+    /// `seq`. `clear_grants` drops the tools the harness granted to the
+    /// conversation the chat left behind.
+    pub fn set_carry_transcript(
+        &mut self,
+        id: &SessionId,
+        carry: Option<u64>,
+        clear_grants: bool,
+    ) -> Result<Session, StoreError> {
+        let session = self
+            .state
+            .sessions
+            .get_mut(id)
+            .ok_or_else(|| StoreError::NotFound(format!("session {id}")))?;
+        session.carry_transcript = carry;
+        if clear_grants {
+            session.approved_tools.clear();
+        }
+        session.updated_at = crate::now_ms();
+        let updated = session.clone();
+        self.persist()?;
+        Ok(updated)
+    }
+
     // ---- automations ----
 
     pub fn rules(&self) -> Vec<&AutomationRule> {
@@ -2056,6 +2081,7 @@ mod tests {
             queue: Vec::new(),
             queue_paused: false,
             mentioned_chats: Vec::new(),
+            carry_transcript: None,
             parent: None,
         }
     }

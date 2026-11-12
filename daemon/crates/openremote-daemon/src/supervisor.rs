@@ -30,6 +30,7 @@ use uuid::Uuid;
 use crate::images::NewImage;
 use crate::registry::{Backend, HarnessRegistry, SessionDriver};
 
+mod carry;
 mod composer;
 pub use composer::{AgentEntry, CommandEntry, CommandsView, McpServerName};
 mod team;
@@ -1611,6 +1612,7 @@ impl Supervisor {
             queue: Vec::new(),
             queue_paused: false,
             mentioned_chats: Vec::new(),
+            carry_transcript: None,
             parent,
         };
         let id = session.id;
@@ -1920,12 +1922,20 @@ impl Supervisor {
         images: Vec<openremote_harness::Image>,
     ) -> Result<(), SupervisorError> {
         let mut driver = entry.driver.lock().await;
+        // The first plain message after a move the harness's conversation
+        // couldn't follow carries the chat so far (carry.rs); the
+        // transcript keeps the message as the user wrote it.
+        let carried = self.carried_prompt(id, text, driver.per_prompt_process());
+        let said = carried.as_deref().unwrap_or(text);
         let prompt = openremote_harness::Prompt {
-            text: self.with_prompt_note(driver.rides_mcp(), text, origin),
+            text: self.with_prompt_note(driver.rides_mcp(), said, origin),
             images,
         };
         let sent = driver.send_prompt(&prompt).await;
         drop(driver);
+        if carried.is_some() && sent.is_ok() {
+            self.settle_carry(id);
+        }
         if let Err(e) = sent {
             // The turn's existence is already durable: a write that
             // failed must not leave it open forever. The boundary rides
@@ -2117,10 +2127,7 @@ impl Supervisor {
             if let Ok(restored) = self.with_store(|s| {
                 s.restore_session_settings(id, prior.model, prior.effort, prior.fast)
             }) {
-                let _ = self.emit_all(
-                    id,
-                    vec![EventPayload::SessionUpdated { session: restored }],
-                );
+                let _ = self.emit_all(id, vec![EventPayload::SessionUpdated { session: restored }]);
             }
             return Err(error.into());
         }
@@ -2434,11 +2441,17 @@ impl Supervisor {
                 "session {id} is already running"
             )));
         }
-        let harness_ref = session.harness_session_ref.clone().ok_or_else(|| {
-            SupervisorError::Conflict(
-                "the harness never reported a conversation to resume".to_string(),
-            )
-        })?;
+        // A chat that moved where its harness's conversation couldn't follow
+        // starts a fresh one there; its next message carries the chat so far
+        // (carry.rs).
+        let harness_ref = match session.carry_transcript {
+            Some(_) => None,
+            None => Some(session.harness_session_ref.clone().ok_or_else(|| {
+                SupervisorError::Conflict(
+                    "the harness never reported a conversation to resume".to_string(),
+                )
+            })?),
+        };
         let Some(backend) = self.backend(&session.harness) else {
             return Err(SupervisorError::Harness(format!(
                 "harness '{}' is not available",
@@ -2453,7 +2466,7 @@ impl Supervisor {
             endpoint: binding,
             effort: session.effort.clone(),
             permission_mode: session.permission_mode.clone(),
-            resume: Some(harness_ref),
+            resume: harness_ref,
             include_deltas: true,
             fast: session.fast,
             mcp_servers: self.mcp_servers_for(id),
@@ -2566,9 +2579,27 @@ impl Supervisor {
             }
         }
         let before = self.session(id)?;
-        let note = move_note(&before, target.as_deref());
+        // The harness's own conversation follows where it can (carry.rs);
+        // where it can't, the chat's next message carries the chat so far.
+        let follows = self.follows(&before, target.as_deref()).await;
+        let mut note = move_note(&before, target.as_deref());
+        if !follows {
+            if let Some(left) = self.left_behind_note(&before) {
+                note.push_str(&left);
+            }
+        }
         let session = self
-            .with_store(|s| s.set_session_workspace(id, target.clone()))
+            .with_store(|s| {
+                let carry_from = s.next_seq(id);
+                s.set_session_workspace(id, target.clone())?;
+                if follows {
+                    s.set_carry_transcript(id, None, false)
+                } else {
+                    // The harness granted its tools to the conversation that
+                    // stays behind.
+                    s.set_carry_transcript(id, Some(carry_from), true)
+                }
+            })
             .map_err(store_error)?;
         self.emit_all(
             id,
@@ -3428,6 +3459,7 @@ mod tests {
             queue: Vec::new(),
             queue_paused: false,
             mentioned_chats: Vec::new(),
+            carry_transcript: None,
             parent: None,
         };
         // A spawn still under way is refused, and the word says why.
@@ -3640,6 +3672,7 @@ mod tests {
             queue: Vec::new(),
             queue_paused: false,
             mentioned_chats: Vec::new(),
+            carry_transcript: None,
             parent: None,
         };
         let id = session.id;
@@ -4284,7 +4317,9 @@ mod tests {
             .split("/// Point a stopped chat")
             .next()
             .expect("the function has a body");
-        let stored = body.find("self.store_settings(id, settings)?").expect("stored");
+        let stored = body
+            .find("self.store_settings(id, settings)?")
+            .expect("stored");
         let held = body.find("prior_live_settings()).insert(").expect("held");
         let written = body.find(".apply_settings(live)").expect("written");
         assert!(stored < held && held < written, "store, hold, then write");

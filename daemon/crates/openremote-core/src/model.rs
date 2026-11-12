@@ -446,6 +446,12 @@ pub struct Session {
     /// predates teams ignores it and shows the chat on its own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<ParentLink>,
+    /// The chat moved to a folder its harness's own conversation could not
+    /// follow it to. Its next start opens a fresh conversation there, and
+    /// its next plain message carries the chat's messages before this seq,
+    /// condensed and marked as context. Cleared once that message is sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub carry_transcript: Option<u64>,
 }
 
 /// Where a team member stands: the chat that started it, how many steps

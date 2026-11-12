@@ -559,6 +559,25 @@ fn build_view(
 /// the oldest part is cut - the end of a chat is the part an agent
 /// pointed at it most likely needs.
 pub(super) fn condensed(chat: &Session, events: &[Event], tail: Option<usize>) -> String {
+    format!(
+        "Chat \"{}\" ({}{}), id {}\n{}",
+        chat.title.as_deref().unwrap_or("untitled"),
+        chat.harness,
+        chat.model
+            .as_deref()
+            .map(|m| format!(", {m}"))
+            .unwrap_or_default(),
+        chat.id,
+        transcript(events, tail, READ_LIMIT)
+    )
+}
+
+/// A chat's messages in order, each tool call a one-line note, a message
+/// another agent sent saying so. With `tail`, only the last that many
+/// messages. Past `limit` bytes the oldest part is cut - the end of a chat
+/// is the part a reader most likely needs. Empty when there are none. The
+/// read-a-chat tool and a moved chat's carried context both read it.
+pub(super) fn transcript(events: &[Event], tail: Option<usize>, limit: usize) -> String {
     // Each message starts its own part; a tool note belongs to the part
     // before it, so a tail keeps the notes that came with its messages.
     let mut parts: Vec<String> = Vec::new();
@@ -586,24 +605,14 @@ pub(super) fn condensed(chat: &Session, events: &[Event], tail: Option<usize>) -
         parts.drain(..from);
     }
     let mut body = parts.concat();
-    if body.len() > READ_LIMIT {
-        let mut cut = body.len() - READ_LIMIT;
+    if body.len() > limit {
+        let mut cut = body.len() - limit;
         while !body.is_char_boundary(cut) {
             cut += 1;
         }
         body = format!("[earlier messages cut]\n{}", &body[cut..]);
     }
-    format!(
-        "Chat \"{}\" ({}{}), id {}\n{}",
-        chat.title.as_deref().unwrap_or("untitled"),
-        chat.harness,
-        chat.model
-            .as_deref()
-            .map(|m| format!(", {m}"))
-            .unwrap_or_default(),
-        chat.id,
-        body
-    )
+    body
 }
 
 #[cfg(test)]

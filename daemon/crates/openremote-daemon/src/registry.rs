@@ -330,6 +330,36 @@ impl Backend {
         matches!(self, Backend::Claude(_))
     }
 
+    /// Make the harness's own conversation `conversation` resumable from
+    /// `folder`, the chat's new folder, where the harness can follow it
+    /// there. `false` means it can't: the chat starts a fresh conversation
+    /// in the new folder, seeded with the chat so far. Reads and copies
+    /// files - run it off the async threads.
+    pub fn follow_conversation(&self, conversation: &str, folder: &std::path::Path) -> bool {
+        match self {
+            // claude files conversations under the folder they ran in; a
+            // copy in the new folder's directory is what `--resume` finds.
+            Backend::Claude(_) => {
+                openremote_claude::conversations::config_dir().is_some_and(|config| {
+                    openremote_claude::conversations::carry(&config, conversation, folder).is_ok()
+                })
+            }
+            // Codex keeps its threads in one place, and thread/resume
+            // takes the chat's new folder as the thread's cwd.
+            Backend::Codex(_) => true,
+            // Pi keeps its sessions inside the chat's own folder (its
+            // `--session-dir`), OpenCode files them by project, and grok's,
+            // Antigravity's and a plugin harness's own storage is unknown
+            // here: none of them is known to find a conversation from
+            // another folder.
+            Backend::Pi(_)
+            | Backend::Opencode(_)
+            | Backend::Grok(_)
+            | Backend::Agy(_)
+            | Backend::Plugin(_) => false,
+        }
+    }
+
     pub async fn models(&self) -> Result<Option<Vec<ModelDescriptor>>, DriverError> {
         match self {
             Backend::Claude(resolution) => {
