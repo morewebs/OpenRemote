@@ -3,6 +3,7 @@
 // main's errorCopy and the daemon's honors.attachments.
 
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { attachments, clearAttachments, removeAttachment } from './attachments.js'
 import {
@@ -156,4 +157,29 @@ test('a picture pasted or dropped on a no-picture app is refused in words naming
     errorCopy(consoleError(takesNoPictures('Grok Build'))),
     "The console could not do this: Grok Build doesn't read pictures, so this chat can't take them.",
   )
+})
+
+test('a paste of words and a picture keeps the words; the picture is taken or refused alone', async () => {
+  const { pastePlan } = await import('./composer-attachments.js')
+  const clip = (text, files) => ({ clipboardData: { files, getData: (t) => (t === 'text/plain' ? text : '') } })
+  const both = clip('from the doc', [file('a.png')])
+  // Where pictures are taken: the field pastes the words itself, the picture is attached.
+  assert.deepEqual(pastePlan(both, { enabled: true, refuse: null }), { take: [file('a.png')], refuse: false, keepDefault: true })
+  // A picture alone: nothing for the field to paste, so its default is held.
+  const alone = clip('', [file('a.png')])
+  assert.deepEqual(pastePlan(alone, { enabled: true, refuse: null }), { take: [file('a.png')], refuse: false, keepDefault: false })
+  // Where pictures aren't taken: the words still paste, and the refusal is for the picture only.
+  assert.deepEqual(pastePlan(both, { enabled: false, refuse: 'no' }), { take: [], refuse: true, keepDefault: true })
+  assert.deepEqual(pastePlan(alone, { enabled: false, refuse: 'no' }), { take: [], refuse: true, keepDefault: false })
+  // Words alone are the field's, untouched.
+  assert.deepEqual(pastePlan(clip('hi', []), { enabled: true, refuse: null }), { take: [], refuse: false, keepDefault: true })
+  assert.deepEqual(pastePlan(clip('hi', []), { enabled: false, refuse: 'no' }), { take: [], refuse: false, keepDefault: true })
+  // Off with no sentence to give (a composer that isn't live): nothing is said, nothing held.
+  assert.deepEqual(pastePlan(alone, { enabled: false, refuse: null }), { take: [], refuse: false, keepDefault: true })
+})
+
+test('the composer pastes through the plan, so words are never dropped with a picture', () => {
+  const view = readFileSync(new URL('./ComposerAttachments.jsx', import.meta.url), 'utf8')
+  assert.match(view, /const plan = pastePlan\(e, \{ enabled, refuse \}\)/)
+  assert.match(view, /if \(!plan\.keepDefault\) e\.preventDefault\(\)/)
 })

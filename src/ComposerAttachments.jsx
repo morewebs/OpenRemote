@@ -7,7 +7,7 @@
 import { useRef, useSyncExternalStore } from 'react'
 import { CursorClick, ImageSquare, Paperclip, X } from '@phosphor-icons/react'
 import { attachments, removeAttachment, subscribe } from './attachments.js'
-import { dragsFiles, droppedPictures, pastedPictures, takePictures } from './composer-attachments.js'
+import { dragsFiles, droppedPictures, pastePlan, takePictures } from './composer-attachments.js'
 import { consoleError, errorCopy } from './error-copy.js'
 
 const NONE = []
@@ -109,15 +109,13 @@ export function useAttachInput(composerKey, { enabled, onError, refuse = null })
     onError?.(errorCopy(consoleError(refuse)))
     return true
   }
+  // Words pasted with a picture go in as typed; only the picture is taken,
+  // or refused, on its own.
   const onPaste = (e) => {
-    const files = pastedPictures(e)
-    if (!enabled) {
-      refused(e, files)
-      return
-    }
-    if (!files.length) return
-    e.preventDefault()
-    take(files)
+    const plan = pastePlan(e, { enabled, refuse })
+    if (!plan.keepDefault) e.preventDefault()
+    if (plan.refuse) onError?.(errorCopy(consoleError(refuse)))
+    if (plan.take.length) take(plan.take)
   }
   const onDragOver = (e) => {
     if (!enabled || !dragsFiles(e)) return

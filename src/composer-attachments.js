@@ -112,6 +112,32 @@ export function pastedPictures(event) {
   return [...(event?.clipboardData?.files ?? [])].filter(isImage)
 }
 
+/** Whether a paste carries words too (a copy from a document or a page
+ *  often holds both): the text field pastes those itself. */
+export function pastedWords(event) {
+  try {
+    return Boolean(event?.clipboardData?.getData?.('text/plain'))
+  } catch {
+    return false
+  }
+}
+
+/**
+ * What a composer does with a paste: `{ take, refuse, keepDefault }`. The
+ * pictures are taken where the app reads them (`enabled`), else refused
+ * with `refuse`'s sentence when there is one. Words riding with them are
+ * never dropped: the field's own paste is held back (`keepDefault` false)
+ * only when the paste is pictures alone and something was done with them.
+ */
+export function pastePlan(event, { enabled, refuse = null }) {
+  const pictures = pastedPictures(event)
+  const words = pastedWords(event)
+  if (!pictures.length) return { take: [], refuse: false, keepDefault: true }
+  if (enabled) return { take: pictures, refuse: false, keepDefault: words }
+  if (!refuse) return { take: [], refuse: false, keepDefault: true }
+  return { take: [], refuse: true, keepDefault: words }
+}
+
 /** The pictures a drop carries. */
 export function droppedPictures(event) {
   return [...(event?.dataTransfer?.files ?? [])].filter(isImage)
