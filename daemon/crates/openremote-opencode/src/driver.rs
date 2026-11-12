@@ -245,8 +245,11 @@ impl Driver {
 /// chat and never reached OpenCode, so the chat ran on OpenCode's default -
 /// which lets edits and commands run without asking - whatever it chose.
 ///
-/// OpenCode silently drops a value it cannot parse, so a word that is not a
-/// JSON object refuses to start rather than run looser than it says.
+/// OpenCode silently drops a value it cannot parse, and carries one that
+/// parses but breaks its schema (`{"edit":"aks"}`) into its rules unchecked,
+/// so a word outside that schema refuses to start rather than run on rules
+/// nobody chose. A chat with no word has the variable removed, so one set in
+/// the daemon's own environment never stands in for the chat's choice.
 fn apply_permission(command: &mut Command, opts: &SpawnOptions) -> Result<(), DriverError> {
     let Some(word) = opts
         .permission_mode
@@ -254,16 +257,47 @@ fn apply_permission(command: &mut Command, opts: &SpawnOptions) -> Result<(), Dr
         .map(str::trim)
         .filter(|w| !w.is_empty())
     else {
+        command.env_remove("OPENCODE_PERMISSION");
         return Ok(());
     };
-    if !serde_json::from_str::<Value>(word).is_ok_and(|v| v.is_object()) {
+    if !serde_json::from_str::<Value>(word).is_ok_and(|v| is_permission_config(&v)) {
         return Err(DriverError::Spawn(
-            "opencode takes its permission setting as its own permission config,              a JSON object such as {\"edit\":\"ask\"}"
+            "opencode takes its permission setting as its own permission config: a JSON \
+             object whose values are \"ask\", \"allow\" or \"deny\", or a map of patterns \
+             to those, such as {\"edit\":\"ask\",\"bash\":{\"git *\":\"allow\"}}"
                 .into(),
         ));
     }
     command.env("OPENCODE_PERMISSION", word);
     Ok(())
+}
+
+/// The keys OpenCode's schema takes as a bare action only, never a map of
+/// patterns (its `PermissionConfig`, opencode.ai/config.json).
+const ACTION_ONLY_PERMISSIONS: [&str; 5] = [
+    "todowrite",
+    "question",
+    "webfetch",
+    "websearch",
+    "doom_loop",
+];
+
+/// OpenCode's permission object, as its schema states it: each key an action
+/// (`ask`, `allow`, `deny`) or, outside the action-only keys, a map of
+/// patterns to actions. Any other key is allowed, as the schema allows it,
+/// because tools that plugins add are named by their own keys.
+fn is_permission_config(config: &Value) -> bool {
+    let is_action = |v: &Value| matches!(v.as_str(), Some("ask" | "allow" | "deny"));
+    let Some(entries) = config.as_object() else {
+        return false;
+    };
+    entries.iter().all(|(key, rule)| match rule {
+        Value::String(_) => is_action(rule),
+        Value::Object(patterns) if !ACTION_ONLY_PERMISSIONS.contains(&key.as_str()) => {
+            patterns.values().all(is_action)
+        }
+        _ => false,
+    })
 }
 
 async fn spawn_serve(
@@ -957,8 +991,63 @@ mod tests {
         for word in [None, Some(""), Some("  ")] {
             let mut command = Command::new("opencode");
             apply_permission(&mut command, &opts_with(word)).expect("nothing to pass");
-            assert_eq!(permission_env(&command), None, "{word:?}");
+            // Removed, not merely unset: an OPENCODE_PERMISSION in the
+            // daemon's own environment never reaches a chat that chose none.
+            assert_eq!(permission_env(&command), Some(None), "{word:?}");
         }
+    }
+
+    #[test]
+    fn a_config_outside_opencodes_schema_refuses_to_start() {
+        // Valid JSON that OpenCode would carry into its rules unchecked: a
+        // misspelt action, a number, a pattern map under a key that takes
+        // only an action, a pattern map with a bad action, a map nested
+        // twice, and a top-level array inside the object.
+        for word in [
+            r#"{"edit":"aks"}"#,
+            r#"{"bash":5}"#,
+            r#"{"bash":null}"#,
+            r#"{"bash":["allow"]}"#,
+            r#"{"webfetch":{"*":"allow"}}"#,
+            r#"{"doom_loop":{"*":"allow"}}"#,
+            r#"{"bash":{"git *":"nope"}}"#,
+            r#"{"bash":{"git *":{"x":"allow"}}}"#,
+            r#"{"bash":{"git *":true}}"#,
+        ] {
+            let mut command = Command::new("opencode");
+            let refused = apply_permission(&mut command, &opts_with(Some(word)));
+            assert!(refused.is_err(), "{word} must not start");
+            assert_eq!(permission_env(&command), None, "{word}");
+        }
+    }
+
+    #[test]
+    fn opencodes_own_shapes_pass_verbatim() {
+        // An action per key, a pattern map of actions (order kept - OpenCode
+        // lets the last matching pattern win), the action-only keys as plain
+        // actions, an empty object, and a key OpenCode does not list (its
+        // schema takes any key as a rule, for tools that plugins add).
+        for word in [
+            r#"{"bash":{"git *":"allow","*":"ask"}}"#,
+            r#"{"*":"ask","read":"allow","edit":"deny"}"#,
+            r#"{"webfetch":"ask","websearch":"deny","doom_loop":"ask","todowrite":"allow","question":"allow"}"#,
+            r#"{"external_directory":{"/srv/work/*":"allow"}}"#,
+            r#"{}"#,
+            r#"{"custom_tool":"deny"}"#,
+        ] {
+            let mut command = Command::new("opencode");
+            apply_permission(&mut command, &opts_with(Some(word))).expect(word);
+            assert_eq!(permission_env(&command), Some(Some(word.to_string())));
+        }
+    }
+
+    #[test]
+    fn the_refusal_reads_as_one_sentence() {
+        let mut command = Command::new("opencode");
+        let refused = apply_permission(&mut command, &opts_with(Some("ask")))
+            .expect_err("not a config")
+            .to_string();
+        assert!(!refused.contains("  "), "stray spaces in {refused:?}");
     }
 
     #[test]
