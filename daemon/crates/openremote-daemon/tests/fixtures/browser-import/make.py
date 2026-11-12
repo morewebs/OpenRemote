@@ -323,7 +323,95 @@ def safari():
     db.close()
 
 
+def hostile():
+    """One profile per browser whose rows are far larger than a browser
+    writes: titles of 50,000 characters, a 1,000-character guid and an
+    address of 5,000. A reader must cut them while it reads, not after."""
+    root = os.path.join(HERE, "hostile")
+    big_title = "x" * 50_000
+    big_url = "https://big.example/" + "u" * 5_000
+
+    profile = os.path.join(root, "chromium")
+    os.makedirs(profile, exist_ok=True)
+    path = os.path.join(profile, "History")
+    fresh(path)
+    db = sqlite3.connect(path)
+    small(db)
+    db.executescript(
+        """
+        CREATE TABLE urls(id INTEGER PRIMARY KEY AUTOINCREMENT,url LONGVARCHAR,title LONGVARCHAR,visit_count INTEGER DEFAULT 0 NOT NULL,typed_count INTEGER DEFAULT 0 NOT NULL,last_visit_time INTEGER NOT NULL,hidden INTEGER DEFAULT 0 NOT NULL);
+        CREATE TABLE visits(id INTEGER PRIMARY KEY AUTOINCREMENT,url INTEGER NOT NULL,visit_time INTEGER NOT NULL,from_visit INTEGER,transition INTEGER DEFAULT 0 NOT NULL,segment_id INTEGER,visit_duration INTEGER DEFAULT 0 NOT NULL);
+        """
+    )
+    db.execute("INSERT INTO urls(id,url,title,last_visit_time) VALUES (1,?,?,0)", ("https://ok.example/", big_title))
+    db.execute("INSERT INTO urls(id,url,title,last_visit_time) VALUES (2,?,?,0)", (big_url, "Big"))
+    for vid, page in ((1, 1), (2, 2)):
+        db.execute(
+            "INSERT INTO visits(id,url,visit_time,transition) VALUES (?,?,?,1)",
+            (vid, page, chromium_time(NOW_MS - vid * 3_600_000)),
+        )
+    db.commit()
+    db.close()
+
+    profile = os.path.join(root, "firefox")
+    os.makedirs(profile, exist_ok=True)
+    path = os.path.join(profile, "places.sqlite")
+    fresh(path)
+    db = sqlite3.connect(path)
+    small(db)
+    db.executescript(
+        """
+        CREATE TABLE moz_places (id INTEGER PRIMARY KEY, url LONGVARCHAR, title LONGVARCHAR, hidden INTEGER DEFAULT 0 NOT NULL);
+        CREATE TABLE moz_historyvisits (id INTEGER PRIMARY KEY, from_visit INTEGER, place_id INTEGER, visit_date INTEGER, visit_type INTEGER);
+        CREATE TABLE moz_bookmarks (id INTEGER PRIMARY KEY, type INTEGER, fk INTEGER DEFAULT NULL, parent INTEGER, position INTEGER, title LONGVARCHAR, dateAdded INTEGER, guid TEXT);
+        """
+    )
+    db.execute("INSERT INTO moz_places(id,url,title) VALUES (1,'https://ok.example/',?)", (big_title,))
+    db.execute("INSERT INTO moz_places(id,url,title) VALUES (2,?,'Big')", (big_url,))
+    rows = [
+        (1, 2, None, 0, 0, "", "root________"),
+        (2, 2, None, 1, 0, "toolbar", "toolbar_____"),
+        (3, 1, 1, 2, 0, big_title, "g" * 1_000),
+        (4, 1, 2, 2, 1, "Big", "bigurl000001"),
+    ]
+    for rid, kind, fk, parent, position, title, guid in rows:
+        db.execute(
+            "INSERT INTO moz_bookmarks(id,type,fk,parent,position,title,dateAdded,guid) VALUES (?,?,?,?,?,?,?,?)",
+            (rid, kind, fk, parent, position, title, NOW_MS * 1000, guid),
+        )
+    for vid, place in ((1, 1), (2, 2)):
+        db.execute(
+            "INSERT INTO moz_historyvisits(id,place_id,visit_date,visit_type) VALUES (?,?,?,1)",
+            (vid, place, (NOW_MS - vid * 3_600_000) * 1000),
+        )
+    db.commit()
+    db.close()
+
+    profile = os.path.join(root, "safari")
+    os.makedirs(profile, exist_ok=True)
+    path = os.path.join(profile, "History.db")
+    fresh(path)
+    db = sqlite3.connect(path)
+    small(db)
+    db.executescript(
+        """
+        CREATE TABLE history_items (id INTEGER PRIMARY KEY AUTOINCREMENT,url TEXT NOT NULL UNIQUE);
+        CREATE TABLE history_visits (id INTEGER PRIMARY KEY AUTOINCREMENT,history_item INTEGER NOT NULL,visit_time REAL NOT NULL,title TEXT NULL,load_successful BOOLEAN NOT NULL DEFAULT 1);
+        """
+    )
+    db.execute("INSERT INTO history_items(id,url) VALUES (1,'https://ok.example/')")
+    db.execute("INSERT INTO history_items(id,url) VALUES (2,?)", (big_url,))
+    for vid, item in ((1, 1), (2, 2)):
+        db.execute(
+            "INSERT INTO history_visits(id,history_item,visit_time,title) VALUES (?,?,?,?)",
+            (vid, item, (NOW_MS - vid * 3_600_000) / 1000 - SAFARI_EPOCH_S, big_title),
+        )
+    db.commit()
+    db.close()
+
+
 if __name__ == "__main__":
     chromium()
     firefox()
     safari()
+    hostile()

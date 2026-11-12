@@ -26,8 +26,16 @@ export default function BrowserImport({ onClose, onImported }) {
   const [history, setHistory] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
-  useDialog(panelRef, onClose)
-  useBack(true, onClose)
+  // While an import runs the dialog cannot be closed (Esc, Back, the X, the
+  // backdrop): it stays to say how the import went, and a close would leave
+  // the person not knowing whether it happened.
+  const busyRef = useRef(false)
+  const close = () => {
+    if (busyRef.current) return
+    onClose()
+  }
+  useDialog(panelRef, close)
+  useBack(true, close)
 
   useEffect(() => {
     let live = true
@@ -56,6 +64,7 @@ export default function BrowserImport({ onClose, onImported }) {
   }
 
   const start = async () => {
+    busyRef.current = true
     setBusy(true)
     setError(null)
     try {
@@ -67,9 +76,11 @@ export default function BrowserImport({ onClose, onImported }) {
       })
       await refreshBookmarks()
       onImported?.(importLine(done))
+      busyRef.current = false
       onClose()
     } catch (err) {
       setError(errorCopy(err))
+      busyRef.current = false
       setBusy(false)
     }
   }
@@ -80,7 +91,7 @@ export default function BrowserImport({ onClose, onImported }) {
     <div
       className="dv-modal-backdrop"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        if (e.target === e.currentTarget) close()
       }}
     >
       <div
@@ -93,7 +104,7 @@ export default function BrowserImport({ onClose, onImported }) {
       >
         <div className="dv-modal-head">
           <span className="dv-modal-title">Import from another browser</span>
-          <button type="button" className="dv-modal-close" aria-label="Close" onClick={onClose}>
+          <button type="button" className="dv-modal-close" aria-label="Close" onClick={close} disabled={busy}>
             <X size={14} weight="bold" />
           </button>
         </div>
@@ -152,7 +163,7 @@ export default function BrowserImport({ onClose, onImported }) {
               Choose a folder…
             </button>
           )}
-          <button type="button" className="pn-btn" onClick={onClose} disabled={busy}>
+          <button type="button" className="pn-btn" onClick={close} disabled={busy}>
             Cancel
           </button>
           <button type="button" className="pn-btn" onClick={start} disabled={!ready}>

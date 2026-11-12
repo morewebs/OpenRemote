@@ -7,7 +7,10 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use super::sqlite::Database;
-use super::{Ctx, Entry, Failure, MAX_TEXT, Newest, Profile, READ_BOOKMARKS, Scratch};
+use super::{
+    Ctx, Entry, Failure, MAX_KEY, MAX_TEXT, MAX_TITLE, Newest, Profile, READ_BOOKMARKS, Scratch,
+    cut, fits,
+};
 use crate::browser::store::IMPORT_VISITS;
 
 /// Folders nested deeper than this are not followed.
@@ -34,6 +37,11 @@ pub fn profiles(root: &Path) -> Vec<(String, String, PathBuf)> {
             } else {
                 PathBuf::from(path)
             };
+            // A profile reached through a link, or a relative path that
+            // climbs out of Firefox's folder, is not read.
+            if !super::plain_folder(&dir, relative.then_some(root)) {
+                return;
+            }
             let id = dir
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
@@ -115,9 +123,9 @@ pub fn bookmarks(profile: &Profile, scratch: &Scratch, ctx: &Ctx) -> Result<Vec<
                     place: row[2].int(),
                     parent,
                     position: row[4].int().unwrap_or(0),
-                    title: row[5].text().unwrap_or("").to_string(),
+                    title: cut(row[5].text().unwrap_or(""), MAX_TITLE),
                     added: row[6].int().unwrap_or(0),
-                    guid: row[7].text().unwrap_or("").to_string(),
+                    guid: cut(row[7].text().unwrap_or(""), MAX_KEY),
                 });
             }
             // A tree this large is not a person's; what was read is kept.
@@ -132,9 +140,10 @@ pub fn bookmarks(profile: &Profile, scratch: &Scratch, ctx: &Ctx) -> Result<Vec<
     let places = db.table("moz_places")?;
     let mut urls: HashMap<i64, String> = HashMap::new();
     db.scan(&places, &["id", "url"], |_, row| {
-        if let (Some(id), Some(url)) =
-            (row[0].int().filter(|id| wanted.contains(id)), row[1].text())
-        {
+        if let (Some(id), Some(url)) = (
+            row[0].int().filter(|id| wanted.contains(id)),
+            row[1].text().filter(|u| fits(u)),
+        ) {
             urls.insert(id, url.to_string());
         }
         true
@@ -245,10 +254,10 @@ pub fn history(profile: &Profile, scratch: &Scratch, ctx: &Ctx) -> Result<Vec<En
         let Some(id) = row[0].int().filter(|id| wanted.contains(id)) else {
             return true;
         };
-        if let (Some(url), false) = (row[1].text(), row[3].int() == Some(1)) {
+        if let (Some(url), false) = (row[1].text().filter(|u| fits(u)), row[3].int() == Some(1)) {
             pages.insert(
                 id,
-                (url.to_string(), row[2].text().unwrap_or("").to_string()),
+                (url.to_string(), cut(row[2].text().unwrap_or(""), MAX_TITLE)),
             );
         }
         true
@@ -298,9 +307,46 @@ mod tests {
     fn the_install_default_profile_comes_first() {
         let listed = profiles(&fixtures().join("firefox"));
         let names: Vec<&str> = listed.iter().map(|p| p.1.as_str()).collect();
-        assert_eq!(names, ["default-release", "spare"]);
+        // `spare` names a folder that is not there.
+        assert_eq!(names, ["default-release"]);
         assert_eq!(listed[0].0, "abcd1234.default-release");
         assert!(profiles(&fixtures().join("nowhere")).is_empty());
+    }
+
+    /// A profile `profiles.ini` names through a link (a junction on
+    /// Windows), or by a relative path that climbs out of Firefox's folder,
+    /// is not read: it could be any folder on the computer.
+    #[test]
+    fn a_profile_reached_through_a_link_or_out_of_the_folder_is_not_listed() {
+        let home = tempfile::tempdir().unwrap();
+        let root = home.path().join("Firefox");
+        let real = home.path().join("elsewhere");
+        std::fs::create_dir_all(root.join("Profiles")).unwrap();
+        std::fs::create_dir_all(&real).unwrap();
+        std::fs::copy(
+            fixtures().join("firefox/Profiles/abcd1234.default-release/places.sqlite"),
+            real.join("places.sqlite"),
+        )
+        .unwrap();
+        assert!(super::super::tests::folder_link(
+            &real,
+            &root.join("Profiles/linked")
+        ));
+        std::fs::write(
+            root.join("profiles.ini"),
+            "[Profile0]
+Name=linked
+IsRelative=1
+Path=Profiles/linked
+
+[Profile1]
+Name=climbs
+IsRelative=1
+Path=../elsewhere
+",
+        )
+        .unwrap();
+        assert!(profiles(&root).is_empty());
     }
 
     #[test]
@@ -336,5 +382,35 @@ mod tests {
         // Renamed after the last checkpoint.
         assert_eq!(found.visits[0].title, "Visited (renamed)");
         assert_eq!(found.visits[0].at, NOW - 3_600_000);
+    }
+
+    /// Rows far larger than a browser writes are cut while they are read,
+    /// so many copies of one large row cannot fill memory before the
+    /// import's own cleaning sees them.
+    #[test]
+    fn oversized_rows_are_cut_while_they_are_read() {
+        use super::super::{Ctx, MAX_TITLE, MAX_URL, Profile, Scratch};
+        let parent = tempfile::tempdir().unwrap();
+        let scratch = Scratch::new(parent.path()).unwrap();
+        let profile = Profile::new(&fixtures().join("hostile/firefox"));
+        let ctx = Ctx::at(NOW);
+        let mut entries = Vec::new();
+        entries.extend(super::bookmarks(&profile, &scratch, &ctx).unwrap());
+        entries.extend(super::history(&profile, &scratch, &ctx).unwrap());
+        assert!(!entries.is_empty());
+        for entry in &entries {
+            assert!(
+                entry.title.chars().count() <= MAX_TITLE,
+                "{}",
+                entry.title.len()
+            );
+            assert!(entry.url.len() <= MAX_URL, "{}", entry.url.len());
+            assert!(entry.key.len() <= 128, "{}", entry.key.len());
+        }
+        // The page with the oversized address is not read at all.
+        assert!(
+            entries.iter().all(|e| e.url == "https://ok.example/"),
+            "{entries:?}"
+        );
     }
 }

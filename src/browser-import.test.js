@@ -75,8 +75,14 @@ test('the row is in Settings > Browser, registered for search, and leaves search
 
 test('the import dialog follows the dialog rules and says what is never read', () => {
   const src = read('./BrowserImport.jsx')
-  assert.match(src, /useDialog\(panelRef, onClose\)/)
-  assert.match(src, /useBack\(true, onClose\)/)
+  // Esc, Back, the X and the backdrop all go through one close that does
+  // nothing while an import runs: the dialog stays to say how it went.
+  assert.match(src, /useDialog\(panelRef, close\)/)
+  assert.match(src, /useBack\(true, close\)/)
+  assert.match(src, /const close = \(\) => \{\s*if \(busyRef\.current\) return/)
+  assert.match(src, /aria-label="Close" onClick=\{close\} disabled=\{busy\}/)
+  assert.match(src, /if \(e\.target === e\.currentTarget\) close\(\)/)
+  assert.doesNotMatch(src, /onClick=\{onClose\}/)
   assert.match(src, /role="dialog"/)
   assert.match(src, /setError\(errorCopy\(err\)\)/)
   assert.doesNotMatch(src, /addEventListener\('keydown'/)
@@ -86,4 +92,13 @@ test('the import dialog follows the dialog rules and says what is never read', (
   assert.doesNotMatch(src, /<input[^>]*type="text"/)
   // What came in reaches the bar at once.
   assert.match(src, /refreshBookmarks\(\)/)
+})
+
+test('bookmarks are not said to stay on this computer: they follow the account', () => {
+  const row = SETTINGS_ENTRIES.find((e) => e.key === 'browser-bookmarks')
+  assert.doesNotMatch(row.detail, /Nothing is sent anywhere/)
+  assert.match(row.detail, /account/)
+  const view = read('./SettingsView.jsx')
+  assert.doesNotMatch(view, /sent anywhere/)
+  assert.match(view, /follow your account/)
 })

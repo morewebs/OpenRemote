@@ -1880,7 +1880,9 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
               <h2 className="stg-title">Browser</h2>
               <p className="stg-lead">
                 How the built-in browser searches, what it keeps on this computer, and
-                where to take it back. Nothing here is sent anywhere.
+                where to take it back. With this computer in Cloud, bookmarks and these
+                settings follow your account to your other devices; history, site data
+                and downloads stay here.
               </p>
             </header>
             {hasTauri && !isMobile && (
@@ -2081,8 +2083,8 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                 <div>
                   <div className="pn-name">Bookmarks</div>
                   <div className="pn-detail">
-                    {bookmarkCount} kept on this computer, in this console. Nothing
-                    is sent anywhere.
+                    {bookmarkCount} kept. With this computer in Cloud they follow your
+                    account to your other devices.
                   </div>
                 </div>
               </div>

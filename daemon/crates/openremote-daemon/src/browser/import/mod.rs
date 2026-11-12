@@ -68,6 +68,8 @@ pub const READ_BOOKMARKS: usize = 10_000;
 pub const MAX_URL: usize = 2048;
 /// The longest title an import keeps, in characters.
 pub const MAX_TITLE: usize = 200;
+/// The longest key (a guid) a reader keeps from a row, in characters.
+pub const MAX_KEY: usize = 32;
 
 /// The browser family a profile belongs to: it decides the reader.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -175,16 +177,73 @@ fn readable(name: &str) -> io::Result<()> {
     if READABLE.contains(&name) {
         Ok(())
     } else {
-        Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            "not a file an import reads",
-        ))
+        Err(refused("not a file an import reads"))
     }
 }
 
-/// Opens a file for reading only: never for writing, never created.
-fn open_read_only(path: &Path) -> io::Result<File> {
-    OpenOptions::new().read(true).open(path)
+/// A name a profile file may have: one in [`READABLE`], or its write-ahead
+/// log beside it.
+fn allowed_name(name: &str) -> bool {
+    READABLE.contains(&name.strip_suffix("-wal").unwrap_or(name))
+}
+
+fn refused(why: &str) -> io::Error {
+    io::Error::new(io::ErrorKind::PermissionDenied, why.to_string())
+}
+
+/// Opens a file for reading only (never for writing, never created), and
+/// without following a link: on Unix a symbolic link fails to open, and on
+/// Windows the link itself is opened, so [`Profile::open`] can look at it.
+fn open_no_follow(path: &Path) -> io::Result<File> {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        /// FILE_FLAG_OPEN_REPARSE_POINT: open a link, not what it names.
+        const OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        options.custom_flags(OPEN_REPARSE_POINT);
+    }
+    options.open(path)
+}
+
+/// Whether an open file is a Windows reparse point that names another file
+/// (a symbolic link, a junction, a mount point): its tag's name-surrogate
+/// bit. Other reparse points (deduplicated or cloud files) are the file
+/// itself.
+#[cfg(windows)]
+#[allow(unsafe_code)]
+fn names_another_file(file: &File) -> io::Result<bool> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_TAG_INFO, FileAttributeTagInfo,
+        GetFileInformationByHandleEx,
+    };
+    let mut info = FILE_ATTRIBUTE_TAG_INFO {
+        FileAttributes: 0,
+        ReparseTag: 0,
+    };
+    // SAFETY: the handle is the open file's own, and `info` is a buffer of
+    // exactly the size passed for the class asked for.
+    let ok = unsafe {
+        GetFileInformationByHandleEx(
+            file.as_raw_handle() as _,
+            FileAttributeTagInfo,
+            (&mut info as *mut FILE_ATTRIBUTE_TAG_INFO).cast(),
+            std::mem::size_of::<FILE_ATTRIBUTE_TAG_INFO>() as u32,
+        )
+    };
+    if ok == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    const NAME_SURROGATE: u32 = 0x2000_0000;
+    Ok(info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
+        && info.ReparseTag & NAME_SURROGATE != 0)
 }
 
 impl Profile {
@@ -195,17 +254,68 @@ impl Profile {
         }
     }
 
-    /// Whether the profile holds this file (a name in [`READABLE`]).
+    /// Whether the profile holds this file (a name in [`READABLE`]) as a
+    /// plain file of its own.
     pub fn has(&self, name: &str) -> bool {
-        readable(name).is_ok() && self.dir.join(name).is_file()
+        readable(name).is_ok() && self.checked(name).is_ok()
+    }
+
+    /// Where a profile file is, once it is known to be what its name says: a
+    /// plain file, not a link, whose real place is directly in the real
+    /// profile folder under an allowed name. A name alone proves nothing
+    /// when `Bookmarks` can be a link to another file.
+    fn checked(&self, name: &str) -> io::Result<PathBuf> {
+        if !allowed_name(name) {
+            return Err(refused("not a file an import reads"));
+        }
+        let path = self.dir.join(name);
+        let meta = std::fs::symlink_metadata(&path)?;
+        if meta.file_type().is_symlink() || !meta.is_file() {
+            return Err(refused("the file is a link, not a browser's own file"));
+        }
+        let dir = std::fs::canonicalize(&self.dir)?;
+        let real = std::fs::canonicalize(&path)?;
+        let name_ok = real
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(allowed_name);
+        if real.parent() != Some(dir.as_path()) || !name_ok {
+            return Err(refused("the file is not where its name says"));
+        }
+        Ok(path)
+    }
+
+    /// Opens a profile file after [`Self::checked`], and checks the open
+    /// file again, so a link put in its place in between is caught too.
+    fn open(&self, name: &str) -> io::Result<File> {
+        let path = self.checked(name)?;
+        // Only Windows opens a second time; elsewhere the first file stands.
+        #[allow(unused_mut)]
+        let mut file = open_no_follow(&path)?;
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            if names_another_file(&file)? {
+                return Err(refused("the file is a link, not a browser's own file"));
+            }
+            // A reparse point that names no other file (a deduplicated or
+            // cloud file) is read through its filter, so it is opened again
+            // the ordinary way.
+            if file.metadata()?.file_attributes() & 0x400 != 0 {
+                file = OpenOptions::new().read(true).open(&path)?;
+            }
+        }
+        if !file.metadata()?.is_file() {
+            return Err(refused("the file is a link, not a browser's own file"));
+        }
+        self.opened.borrow_mut().push(path);
+        Ok(file)
     }
 
     /// A whole small file (bookmarks, a profile list), at most `cap` bytes.
     pub fn read(&self, name: &str, cap: u64) -> io::Result<Vec<u8>> {
         readable(name)?;
-        let path = self.dir.join(name);
-        let file = open_read_only(&path)?;
-        self.opened.borrow_mut().push(path);
+        let file = self.open(name)?;
         let mut bytes = Vec::new();
         file.take(cap + 1).read_to_end(&mut bytes)?;
         if bytes.len() as u64 > cap {
@@ -225,24 +335,43 @@ impl Profile {
         if to.is_file() {
             return Ok(to);
         }
-        self.copy_one(&self.dir.join(name), &to, MAX_DATABASE)?;
+        self.copy_one(name, &to, MAX_DATABASE)?;
         let wal = format!("{name}-wal");
-        let from = self.dir.join(&wal);
-        if from.is_file() {
-            self.copy_one(&from, &scratch.dir.join(&wal), sqlite::MAX_WAL)?;
+        // Looked at without following it: a log that is a link fails the
+        // import in `copy_one` rather than being skipped or followed.
+        if std::fs::symlink_metadata(self.dir.join(&wal)).is_ok() {
+            self.copy_one(&wal, &scratch.dir.join(&wal), sqlite::MAX_WAL)?;
         }
         Ok(to)
     }
 
-    fn copy_one(&self, from: &Path, to: &Path, cap: u64) -> io::Result<()> {
-        let source = open_read_only(from)?;
-        self.opened.borrow_mut().push(from.to_path_buf());
+    fn copy_one(&self, name: &str, to: &Path, cap: u64) -> io::Result<()> {
+        let source = self.open(name)?;
         let mut out = private_file(to)?;
         let copied = io::copy(&mut source.take(cap + 1), &mut out)?;
         if copied > cap {
             return Err(io::Error::other("the file is larger than a browser's"));
         }
         Ok(())
+    }
+}
+
+/// Whether a profile folder `profiles.ini` names is one to read: a real
+/// folder, not a link or junction to somewhere else, and, when it is named
+/// relative to Firefox's own folder (`inside`), really inside it.
+pub fn plain_folder(dir: &Path, inside: Option<&Path>) -> bool {
+    let Ok(meta) = std::fs::symlink_metadata(dir) else {
+        return false;
+    };
+    if meta.file_type().is_symlink() || !meta.is_dir() {
+        return false;
+    }
+    match inside {
+        None => true,
+        Some(root) => match (std::fs::canonicalize(dir), std::fs::canonicalize(root)) {
+            (Ok(dir), Ok(root)) => dir.starts_with(&root) && dir != root,
+            _ => false,
+        },
     }
 }
 
@@ -291,6 +420,49 @@ impl Drop for Scratch {
     }
 }
 
+/// At most `max` characters of `text`, copied: what a reader keeps of a
+/// row's text while it reads, so one oversized row (or the same row named
+/// many times by a damaged file) is never copied whole.
+pub fn cut(text: &str, max: usize) -> String {
+    text.chars().take(max).collect()
+}
+
+/// Whether an address is short enough to keep reading: a longer one is
+/// left in the file rather than copied out and refused later.
+pub fn fits(url: &str) -> bool {
+    url.len() <= MAX_URL
+}
+
+/// Unicode's format characters (General_Category Cf): bidirectional
+/// controls, zero-width characters, the byte-order mark and the like. They
+/// draw nothing and can make a title or an address read as something else.
+pub fn is_format(c: char) -> bool {
+    matches!(
+        c as u32,
+        0x00AD
+            | 0x0600..=0x0605
+            | 0x061C
+            | 0x06DD
+            | 0x070F
+            | 0x0890..=0x0891
+            | 0x08E2
+            | 0x180E
+            | 0x200B..=0x200F
+            | 0x202A..=0x202E
+            | 0x2060..=0x2064
+            | 0x2066..=0x206F
+            | 0xFEFF
+            | 0xFFF9..=0xFFFB
+            | 0x110BD
+            | 0x110CD
+            | 0x13430..=0x1343F
+            | 0x1BCA0..=0x1BCA3
+            | 0x1D173..=0x1D17A
+            | 0xE0001
+            | 0xE0020..=0xE007F
+    )
+}
+
 /// An address an import keeps: `http` or `https` with a host, no
 /// whitespace or control characters, at most [`MAX_URL`] bytes. Anything
 /// else (`javascript:`, `file:`, `data:`, a browser's own pages) is None.
@@ -299,7 +471,10 @@ pub fn web_address(url: &str) -> Option<String> {
     if url.is_empty() || url.len() > MAX_URL {
         return None;
     }
-    if url.chars().any(|c| c.is_control() || c.is_whitespace()) {
+    if url
+        .chars()
+        .any(|c| c.is_control() || c.is_whitespace() || is_format(c))
+    {
         return None;
     }
     let (scheme, rest) = url.split_once("://")?;
@@ -314,11 +489,13 @@ pub fn web_address(url: &str) -> Option<String> {
     Some(url.to_string())
 }
 
-/// A title as it is kept: control characters become spaces, runs of space
-/// fold to one, and it is cut at [`MAX_TITLE`] characters.
+/// A title as it is kept: control characters become spaces, format
+/// characters ([`is_format`]) are dropped, runs of space fold to one, and it
+/// is cut at [`MAX_TITLE`] characters.
 pub fn clean_title(title: &str) -> String {
     let spaced: String = title
         .chars()
+        .filter(|c| !is_format(*c))
         .map(|c| if c.is_control() { ' ' } else { c })
         .collect();
     spaced
@@ -1009,6 +1186,78 @@ mod tests {
         }
     }
 
+    /// `link` made a symbolic link to the file `target`, where this system
+    /// lets a test make one (Windows needs Developer Mode for it).
+    fn file_link(target: &Path, link: &Path) -> bool {
+        #[cfg(unix)]
+        return std::os::unix::fs::symlink(target, link).is_ok();
+        #[cfg(windows)]
+        return std::os::windows::fs::symlink_file(target, link).is_ok();
+    }
+
+    /// `link` made a link to the folder `target`: a junction on Windows (no
+    /// privilege needed), a symbolic link elsewhere.
+    pub fn folder_link(target: &Path, link: &Path) -> bool {
+        #[cfg(unix)]
+        return std::os::unix::fs::symlink(target, link).is_ok();
+        #[cfg(windows)]
+        return std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            // cmd reads only backslashes as separators.
+            .arg(link.to_string_lossy().replace('/', "\\"))
+            .arg(target.to_string_lossy().replace('/', "\\"))
+            .output()
+            .is_ok_and(|o| o.status.success());
+    }
+
+    /// A `Bookmarks` that is a link to the profile's `Login Data`, or to a
+    /// file outside the profile, is refused, though its name is allowed. The
+    /// decoy is a valid bookmarks file, so following the link would import.
+    #[test]
+    fn a_profile_file_that_is_a_link_is_not_followed() {
+        let home = tempfile::tempdir().unwrap();
+        let dir = home.path().join("Default");
+        std::fs::create_dir_all(&dir).unwrap();
+        let decoy = std::fs::read(fixtures().join("chromium/Default/Bookmarks")).unwrap();
+        std::fs::write(dir.join("Login Data"), &decoy).unwrap();
+        std::fs::write(home.path().join("elsewhere"), &decoy).unwrap();
+        let profile = Profile::new(&dir);
+        if !file_link(&dir.join("Login Data"), &dir.join("Bookmarks")) {
+            eprintln!("this system does not let a test make a file link; skipped");
+            return;
+        }
+        assert!(!profile.has("Bookmarks"));
+        assert_eq!(
+            profile.read("Bookmarks", MAX_TEXT).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied
+        );
+        std::fs::remove_file(dir.join("Bookmarks")).unwrap();
+        assert!(file_link(
+            &home.path().join("elsewhere"),
+            &dir.join("History")
+        ));
+        let parent = tempfile::tempdir().unwrap();
+        let scratch = Scratch::new(parent.path()).unwrap();
+        assert_eq!(
+            profile.copy("History", &scratch).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied
+        );
+        assert!(profile.opened.borrow().is_empty());
+    }
+
+    /// A file of the profile named by a link to a folder (a junction on
+    /// Windows) is not a file the profile holds.
+    #[test]
+    fn a_profile_name_that_is_a_folder_link_is_not_a_file() {
+        let home = tempfile::tempdir().unwrap();
+        let dir = home.path().join("Default");
+        std::fs::create_dir_all(dir.join("target")).unwrap();
+        assert!(folder_link(&dir.join("target"), &dir.join("Bookmarks")));
+        let profile = Profile::new(&dir);
+        assert!(!profile.has("Bookmarks"));
+        assert!(profile.read("Bookmarks", MAX_TEXT).is_err());
+    }
+
     #[test]
     fn the_scratch_copy_is_deleted_when_a_read_fails() {
         let home = tempfile::tempdir().unwrap();
@@ -1096,6 +1345,53 @@ mod tests {
         );
         let long = format!("https://example.com/{}", "a".repeat(MAX_URL));
         assert_eq!(web_address(&long), None);
+    }
+
+    /// Only the console runs an import. A chat's MCP server asks the daemon
+    /// for its own fixed routes (the chat's tool call and its mentions), and
+    /// the browser tools an agent has are a fixed list that never reaches
+    /// the import: no tool names it, and neither does the code that runs
+    /// them. (A program running as this user could read the browsers' files
+    /// itself; the route gives an agent nothing it does not have.)
+    #[test]
+    fn no_agent_tool_or_mcp_server_reaches_the_import() {
+        for (file, text) in [
+            ("mcp_chat.rs", include_str!("../../mcp_chat.rs")),
+            ("browser/tools.rs", include_str!("../tools.rs")),
+            ("browser/mod.rs", include_str!("../mod.rs")),
+        ] {
+            assert!(
+                !text.contains("/browser/import"),
+                "{file} names the import route"
+            );
+            assert!(!text.contains("import::"), "{file} calls the importer");
+        }
+        for tool in super::super::tools::TOOLS {
+            assert!(!tool.name.contains("import"), "{} is a tool", tool.name);
+        }
+    }
+
+    /// Bidirectional controls, zero-width characters and the byte-order
+    /// mark draw nothing and can make a title or an address read as another:
+    /// dropped from titles, and an address holding one is not kept.
+    #[test]
+    fn format_characters_leave_titles_and_refuse_addresses() {
+        assert_eq!(
+            clean_title("\u{202E}gpj.exe\u{202C} \u{200B}Bank\u{FEFF}\u{2066}"),
+            "gpj.exe Bank"
+        );
+        for url in [
+            "https://exa\u{200B}mple.com/",
+            "https://example.com/\u{202E}fdp",
+            "\u{FEFF}https://example.com/",
+            "https://example.com/\u{2066}",
+            "https://example.com/\u{E0041}",
+        ] {
+            assert_eq!(web_address(url), None, "{url:?}");
+        }
+        assert!(is_format('\u{00AD}'));
+        assert!(!is_format('a'));
+        assert!(!is_format('\u{00E9}'));
     }
 
     #[test]

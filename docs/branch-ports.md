@@ -251,7 +251,10 @@ main, or obsolete:
   is downloaded until the user picks one (the ruling for this port); the
   catalog offers EasyList and EasyPrivacy.
 - Browser import: ported (Done rows above), so br-adblock is ready to delete
-  (its section below).
+  (its section below). The import's bookmark cap is counted on the device that
+  imports, against the keys it holds: devices that import while offline from
+  each other can together pass it, and the sync note's own ceiling
+  (`CAP_BOOKMARK`, new keys refused at 5,000) is then what stops the tree.
 - br-sync profile sync: **dropped** by policy (cookies and site storage stay on
   the device, `docs/cloud-trust-model.md`). Sealed store kept as a reference.
 - SSH plugin: after the plugin runtime; add its missing `ui/ssh.html` and docs.

@@ -295,12 +295,39 @@ struct ImportBody {
 /// than read twice.
 static IMPORTING: AtomicBool = AtomicBool::new(false);
 
+/// The one import running: held by the work itself, released when it ends.
 struct Importing;
+
+impl Importing {
+    fn begin() -> Option<Self> {
+        IMPORTING
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .ok()
+            .map(|_| Importing)
+    }
+}
 
 impl Drop for Importing {
     fn drop(&mut self) {
         IMPORTING.store(false, Ordering::SeqCst);
     }
+}
+
+/// Runs an import's work on a blocking thread that holds `guard`. The guard
+/// goes when the work ends, not when the request does: a console that
+/// disconnects mid-import drops this future, but the read and the store
+/// write carry on, and a second import cannot start beside them. None when
+/// the work panicked.
+async fn detached<T: Send + 'static>(
+    guard: Importing,
+    work: impl FnOnce() -> T + Send + 'static,
+) -> Option<T> {
+    tokio::task::spawn_blocking(move || {
+        let _held = guard;
+        work()
+    })
+    .await
+    .ok()
 }
 
 /// Bring in another browser's bookmarks and history. The files are read on
@@ -356,34 +383,36 @@ async fn import_run(State(app): State<Arc<App>>, Json(body): Json<ImportBody>) -
             );
         }
     };
-    if IMPORTING
-        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        .is_err()
-    {
+    let Some(guard) = Importing::begin() else {
         return bad(StatusCode::CONFLICT, "An import is already running.");
-    }
-    let _importing = Importing;
+    };
     let want = import::Want {
         bookmarks: body.bookmarks,
         history: body.history,
     };
-    let folder = lock(&app.browser.store).folder().to_path_buf();
     let now = openremote_core::now_ms();
     let reading = source.clone();
-    let read =
-        tokio::task::spawn_blocking(move || import::read(&reading, want, now, &folder)).await;
-    let found = match read {
-        Ok(Ok(found)) => found,
-        Ok(Err(why)) => return bad(StatusCode::UNPROCESSABLE_ENTITY, &why),
-        Err(_) => {
+    let working = Arc::clone(&app);
+    // Reading and the store's write both happen off the async threads: the
+    // write appends thousands of rows and may compact the log.
+    let outcome = detached(guard, move || {
+        let folder = lock(&working.browser.store).folder().to_path_buf();
+        let found = import::read(&reading, want, now, &folder)?;
+        let refused = found.refused;
+        let done = lock(&working.browser.store).import(found.bookmarks, found.visits);
+        Ok::<_, String>((refused, done))
+    })
+    .await;
+    let (refused, done) = match outcome {
+        Some(Ok(done)) => done,
+        Some(Err(why)) => return bad(StatusCode::UNPROCESSABLE_ENTITY, &why),
+        None => {
             return bad(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "The import stopped unexpectedly.",
             );
         }
     };
-    let refused = found.refused;
-    let done = lock(&app.browser.store).import(found.bookmarks, found.visits);
     Json(json!({
         "browser": source.browser,
         "profile": source.profile,
@@ -464,4 +493,34 @@ async fn call_tool(
             .await,
     )
     .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::{Importing, detached};
+
+    /// A console that goes away mid-import (its request dropped) does not end
+    /// the import's hold: a second import is refused until the first one's
+    /// work has finished, and is welcome after.
+    #[tokio::test]
+    async fn an_import_holds_its_place_until_its_work_ends_not_its_request() {
+        let guard = Importing::begin().expect("no import is running");
+        let (finish, finished) = std::sync::mpsc::channel::<()>();
+        let run = detached(guard, move || {
+            let _ = finished.recv_timeout(Duration::from_secs(10));
+        });
+        // The request goes before the work ends.
+        let _ = tokio::time::timeout(Duration::from_millis(20), run).await;
+        assert!(Importing::begin().is_none(), "a second import could start");
+        finish.send(()).unwrap();
+        for _ in 0..500 {
+            if Importing::begin().is_some() {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        panic!("the hold was never released");
+    }
 }

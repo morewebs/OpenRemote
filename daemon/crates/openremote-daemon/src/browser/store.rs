@@ -142,6 +142,7 @@ impl BrowserStore {
     pub fn open(data_dir: &Path) -> Self {
         let dir = data_dir.join("browser");
         let _ = std::fs::create_dir_all(&dir);
+        sweep_import_scratch(&dir);
         let device = device_id(&dir);
         let mut store = Self {
             dir,
@@ -832,6 +833,22 @@ impl BrowserStore {
     }
 }
 
+/// Removes import scratch folders (`import-<id>`, see `super::import::Scratch`)
+/// that a daemon stopped mid-import left behind: copies of another browser's
+/// history have no business outliving the import that made them. Only real
+/// folders by that name go; a link by that name is left alone.
+fn sweep_import_scratch(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let named = entry.file_name().to_string_lossy().starts_with("import-");
+        if named && entry.file_type().is_ok_and(|t| t.is_dir()) {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
 /// This device's id for the browser's logs: made once, kept in the folder.
 fn device_id(dir: &Path) -> String {
     let path = dir.join("device");
@@ -1043,6 +1060,24 @@ mod tests {
         assert_eq!(other.len(), 2);
         assert!(other[0].position < other[1].position);
         assert_eq!(store.history("", None, 10).len(), 1);
+    }
+
+    /// An import's scratch copies left behind by a daemon that stopped
+    /// mid-import (a crash, a kill) are removed at the next start; nothing
+    /// else in the folder is touched.
+    #[test]
+    fn a_left_over_import_scratch_folder_is_removed_at_start() {
+        let dir = tempfile::tempdir().unwrap();
+        let browser = dir.path().join("browser");
+        let left = browser.join("import-0123abcd");
+        std::fs::create_dir_all(&left).unwrap();
+        std::fs::write(left.join("History"), b"a copy").unwrap();
+        std::fs::create_dir_all(browser.join("filters")).unwrap();
+        std::fs::write(browser.join("import-note"), b"a file, not a scratch folder").unwrap();
+        let _store = BrowserStore::open(dir.path());
+        assert!(!left.exists());
+        assert!(browser.join("filters").is_dir());
+        assert!(browser.join("import-note").is_file());
     }
 
     #[test]

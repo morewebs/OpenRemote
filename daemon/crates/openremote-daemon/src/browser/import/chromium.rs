@@ -6,7 +6,9 @@ use std::collections::{HashMap, HashSet};
 use serde_json::Value;
 
 use super::sqlite::Database;
-use super::{Ctx, Entry, Failure, MAX_TEXT, Newest, Profile, READ_BOOKMARKS, Scratch};
+use super::{
+    Ctx, Entry, Failure, MAX_TEXT, MAX_TITLE, Newest, Profile, READ_BOOKMARKS, Scratch, cut, fits,
+};
 use crate::browser::store::IMPORT_VISITS;
 
 /// Chromium counts microseconds from 1601; the unix epoch is this many
@@ -110,10 +112,10 @@ pub fn history(profile: &Profile, scratch: &Scratch, ctx: &Ctx) -> Result<Vec<En
         let Some(id) = row[0].int().filter(|id| wanted.contains(id)) else {
             return true;
         };
-        if let (Some(url), false) = (row[1].text(), row[3].int() == Some(1)) {
+        if let (Some(url), false) = (row[1].text().filter(|u| fits(u)), row[3].int() == Some(1)) {
             pages.insert(
                 id,
-                (url.to_string(), row[2].text().unwrap_or("").to_string()),
+                (url.to_string(), cut(row[2].text().unwrap_or(""), MAX_TITLE)),
             );
         }
         true
@@ -225,5 +227,34 @@ mod tests {
                 .all(|v| v.id.starts_with("imp-chrome-default-v"))
         );
         assert_eq!(found.visits[0].at, NOW - 3 * 3_600_000);
+    }
+
+    /// Rows far larger than a browser writes are cut while they are read,
+    /// so many copies of one large row cannot fill memory before the
+    /// import's own cleaning sees them.
+    #[test]
+    fn oversized_rows_are_cut_while_they_are_read() {
+        use super::super::{Ctx, MAX_TITLE, MAX_URL, Profile, Scratch};
+        let parent = tempfile::tempdir().unwrap();
+        let scratch = Scratch::new(parent.path()).unwrap();
+        let profile = Profile::new(&fixtures().join("hostile/chromium"));
+        let ctx = Ctx::at(NOW);
+        let mut entries = Vec::new();
+        entries.extend(super::history(&profile, &scratch, &ctx).unwrap());
+        assert!(!entries.is_empty());
+        for entry in &entries {
+            assert!(
+                entry.title.chars().count() <= MAX_TITLE,
+                "{}",
+                entry.title.len()
+            );
+            assert!(entry.url.len() <= MAX_URL, "{}", entry.url.len());
+            assert!(entry.key.len() <= 128, "{}", entry.key.len());
+        }
+        // The page with the oversized address is not read at all.
+        assert!(
+            entries.iter().all(|e| e.url == "https://ok.example/"),
+            "{entries:?}"
+        );
     }
 }

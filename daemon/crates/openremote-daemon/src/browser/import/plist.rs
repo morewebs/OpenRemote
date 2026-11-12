@@ -5,8 +5,10 @@
 //!
 //! The bytes are someone else's. Every offset is checked, no arithmetic can
 //! overflow, nesting stops at [`MAX_DEPTH`], and the whole list may expand
-//! to no more than [`MAX_OBJECTS`] objects: a list whose arrays all point at
-//! one shared array would otherwise unfold into billions of copies.
+//! to no more than [`MAX_OBJECTS`] objects and [`MAX_BYTES`] of text: a list
+//! whose arrays all point at one shared array, or at one large string, would
+//! otherwise unfold into billions of copies or terabytes of them. Data
+//! objects are never copied out (bookmarks have no use for them).
 
 use std::cell::Cell;
 
@@ -16,7 +18,6 @@ pub enum Plist {
     Int(i64),
     Real(f64),
     Text(String),
-    Data(Vec<u8>),
     Array(Vec<Plist>),
     Dict(Vec<(String, Plist)>),
     Other,
@@ -50,6 +51,9 @@ const MAX_DEPTH: u32 = 64;
 /// The most objects one list may unfold into. A large Safari bookmarks file
 /// is tens of thousands.
 pub const MAX_OBJECTS: usize = 500_000;
+/// The most text one list may unfold into, every copy counted. A large
+/// Safari bookmarks file holds a few megabytes of it.
+pub const MAX_BYTES: usize = 64 << 20;
 
 struct Reader<'a> {
     bytes: &'a [u8],
@@ -59,6 +63,8 @@ struct Reader<'a> {
     table: usize,
     /// Objects still allowed before the list is refused.
     budget: Cell<usize>,
+    /// Bytes of text still allowed before the list is refused.
+    bytes_left: Cell<usize>,
 }
 
 /// The list's top object, or none when the bytes aren't a binary list (or
@@ -80,6 +86,7 @@ pub fn parse(bytes: &[u8]) -> Option<Plist> {
         count: be(&trailer[8..16])?,
         table: be(&trailer[24..32])?,
         budget: Cell::new(MAX_OBJECTS),
+        bytes_left: Cell::new(MAX_BYTES),
     };
     if !(1..=8).contains(&reader.offset_size) || !(1..=8).contains(&reader.ref_size) {
         return None;
@@ -88,6 +95,13 @@ pub fn parse(bytes: &[u8]) -> Option<Plist> {
 }
 
 impl Reader<'_> {
+    /// Takes `n` bytes from the text budget; None once it is spent.
+    fn charge(&self, n: usize) -> Option<()> {
+        let left = self.bytes_left.get().checked_sub(n)?;
+        self.bytes_left.set(left);
+        Some(())
+    }
+
     /// A big-endian unsigned number of `size` bytes (at most eight) at `at`.
     fn number(&self, at: usize, size: usize) -> Option<usize> {
         if size > 8 {
@@ -159,16 +173,17 @@ impl Reader<'_> {
                     _ => Plist::Other,
                 }
             }
-            0x4 => {
-                let (len, from) = sized(at + 1)?;
-                Plist::Data(slice(from, len)?.to_vec())
-            }
+            // Data is never copied: nothing an import reads needs it.
+            0x4 => Plist::Other,
             0x5 => {
                 let (len, from) = sized(at + 1)?;
+                self.charge(len)?;
                 Plist::Text(String::from_utf8_lossy(slice(from, len)?).into_owned())
             }
             0x6 => {
                 let (len, from) = sized(at + 1)?;
+                // A UTF-16 unit can become three bytes of UTF-8.
+                self.charge(len.checked_mul(3)?)?;
                 let bytes = slice(from, len.checked_mul(2)?)?;
                 let units: Vec<u16> = bytes
                     .chunks_exact(2)
@@ -269,6 +284,56 @@ mod tests {
         let started = std::time::Instant::now();
         assert_eq!(parse(&bytes), None);
         assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    }
+
+    /// A binary list from its objects (already encoded), the first one on
+    /// top, with four-byte offsets and one-byte references.
+    fn build(objects: &[Vec<u8>]) -> Vec<u8> {
+        let mut bytes = b"bplist00".to_vec();
+        let mut offsets = Vec::new();
+        for object in objects {
+            offsets.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
+            bytes.extend(object);
+        }
+        let table = bytes.len();
+        bytes.extend(&offsets);
+        let mut trailer = vec![0u8; 32];
+        trailer[6] = 4;
+        trailer[7] = 1;
+        trailer[8..16].copy_from_slice(&(objects.len() as u64).to_be_bytes());
+        trailer[24..32].copy_from_slice(&(table as u64).to_be_bytes());
+        bytes.extend(trailer);
+        bytes
+    }
+
+    /// A marker with a length that needs the long form (an int after it).
+    fn long(kind: u8, len: u32) -> Vec<u8> {
+        let mut out = vec![(kind << 4) | 0xf, 0x12];
+        out.extend_from_slice(&len.to_be_bytes());
+        out
+    }
+
+    /// One two-megabyte string named sixty times by one array: a small file
+    /// that would be 120 MB of copies in memory. The byte budget refuses it.
+    #[test]
+    fn a_large_string_named_many_times_is_refused() {
+        let mut text = long(0x5, 2 << 20);
+        text.extend(std::iter::repeat_n(b'a', 2 << 20));
+        let mut array = vec![0xaf, 0x10, 60];
+        array.extend(std::iter::repeat_n(1u8, 60));
+        assert_eq!(parse(&build(&[array, text.clone()])), None);
+        // Named a few times, it is read.
+        let mut few = vec![0xa3];
+        few.extend([1u8, 1, 1]);
+        assert!(parse(&build(&[few, text])).is_some());
+    }
+
+    /// Data is never needed for bookmarks: it is not copied out.
+    #[test]
+    fn data_reads_as_other() {
+        let mut data = long(0x4, 1 << 20);
+        data.extend(std::iter::repeat_n(7u8, 1 << 20));
+        assert_eq!(parse(&build(&[data])), Some(Plist::Other));
     }
 
     #[test]
