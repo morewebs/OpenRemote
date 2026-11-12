@@ -35,9 +35,9 @@ fn slug(name: &str) -> String {
 use crate::events::{Event, EventPayload};
 use crate::ids::{DecisionId, DeviceId, MachineId, ProjectId, RuleId, SessionId};
 use crate::model::{
-    AutomationRule, Decision, DecisionState, InstalledPlugin, Machine, MachineStatus,
-    MarketplaceRecord, McpServerEntry, MessageRole, ModelEndpoint, Project, Receipt, ReceiptStatus,
-    Session, SessionStatus,
+    AutomationRule, Decision, DecisionState, GlobalPluginRecord, InstalledPlugin, Machine,
+    MachineStatus, MarketplaceRecord, McpServerEntry, MessageRole, ModelEndpoint, Project, Receipt,
+    ReceiptStatus, Session, SessionStatus,
 };
 
 #[derive(Debug, Error)]
@@ -125,6 +125,11 @@ struct State {
     /// The built-in harness plugins the user turned off.
     #[serde(default)]
     disabled_builtins: BTreeSet<String>,
+    /// The account's Global plugins as this device last heard of them, by
+    /// id - removed ones included, so a removal reaches every device. A
+    /// record installs nothing (see `GlobalPluginRecord`).
+    #[serde(default)]
+    global_plugins: BTreeMap<String, GlobalPluginRecord>,
     /// The plugin marketplaces on this machine, by catalog name.
     #[serde(default)]
     marketplaces: BTreeMap<String, MarketplaceRecord>,
@@ -838,8 +843,16 @@ impl Store {
             .ok_or_else(|| StoreError::NotFound(format!("plugin {id}")))
     }
 
-    /// Record an install - a new plugin, or an update of one by id.
+    /// Record an install - a new plugin, or an update of one by id. A
+    /// project install names its project: without one it would take the
+    /// plain id, this machine's own install of the plugin, and replace it.
     pub fn put_installed_plugin(&mut self, plugin: InstalledPlugin) -> Result<(), StoreError> {
+        if plugin.scope.is_project() && plugin.project.is_none() {
+            return Err(StoreError::Conflict(format!(
+                "{} is for a project but names none",
+                plugin.name
+            )));
+        }
         self.state.installed_plugins.insert(plugin.id(), plugin);
         self.persist()
     }
@@ -866,6 +879,30 @@ impl Store {
         let out = plugin.clone();
         self.persist()?;
         Ok(out)
+    }
+
+    // ---- Global plugins: the account's records ----
+
+    pub fn global_plugins(&self) -> Vec<&GlobalPluginRecord> {
+        self.state.global_plugins.values().collect()
+    }
+
+    pub fn global_plugin(&self, id: &str) -> Option<&GlobalPluginRecord> {
+        self.state.global_plugins.get(id)
+    }
+
+    /// Keep a record when it is a later write than the one held (or the
+    /// first of its id). True when it was kept.
+    pub fn merge_global_plugin(&mut self, record: GlobalPluginRecord) -> Result<bool, StoreError> {
+        let id = record.id();
+        if let Some(held) = self.state.global_plugins.get(&id) {
+            if !record.newer_than(held) {
+                return Ok(false);
+            }
+        }
+        self.state.global_plugins.insert(id, record);
+        self.persist()?;
+        Ok(true)
     }
 
     pub fn builtin_enabled(&self, id: &str) -> bool {
@@ -2233,6 +2270,89 @@ mod tests {
             .remove_installed_plugin(&format!("shout@local~{two}"))
             .unwrap();
         assert_eq!(store.installed_plugins().len(), 2);
+    }
+
+    #[test]
+    fn a_project_install_without_its_project_is_refused() {
+        // It would take the plain id, the one this machine's own install
+        // of the plugin has, and replace that record.
+        let mut store = Store::open(tempdir()).unwrap();
+        store
+            .put_installed_plugin(installed("shout", PluginScope::Machine, None))
+            .unwrap();
+        for scope in [PluginScope::Project, PluginScope::ProjectLocal] {
+            let err = store
+                .put_installed_plugin(installed("shout", scope, None))
+                .unwrap_err();
+            assert!(matches!(err, StoreError::Conflict(_)), "{err}");
+        }
+        assert_eq!(
+            store.installed_plugin("shout@local").unwrap().scope,
+            PluginScope::Machine
+        );
+    }
+
+    fn global(name: &str, at: i64, by: Option<DeviceId>) -> GlobalPluginRecord {
+        GlobalPluginRecord {
+            name: name.into(),
+            marketplace: "local".into(),
+            version: None,
+            description: None,
+            runtime: crate::model::PluginRuntime::Wasm,
+            powers: vec![crate::model::PluginPower::AgentTools],
+            source: crate::model::PluginSource::Folder {
+                path: "/somewhere".into(),
+            },
+            resolved: "abc".into(),
+            at,
+            by,
+            removed: false,
+        }
+    }
+
+    #[test]
+    fn the_accounts_global_records_keep_the_latest_write_and_survive_a_reopen() {
+        let dir = tempdir();
+        let mut store = Store::open(dir.clone()).unwrap();
+        assert!(
+            store
+                .merge_global_plugin(global("shout", 10, None))
+                .unwrap()
+        );
+        // An older write is not kept; a newer one is.
+        assert!(!store.merge_global_plugin(global("shout", 5, None)).unwrap());
+        let mut later = global("shout", 20, None);
+        later.removed = true;
+        assert!(store.merge_global_plugin(later).unwrap());
+        // The same moment from two devices settles the same way on both.
+        let (a, b) = (DeviceId::new(), DeviceId::new());
+        let (low, high) = if a.to_string() < b.to_string() {
+            (a, b)
+        } else {
+            (b, a)
+        };
+        assert!(
+            store
+                .merge_global_plugin(global("other", 30, Some(low)))
+                .unwrap()
+        );
+        assert!(
+            store
+                .merge_global_plugin(global("other", 30, Some(high)))
+                .unwrap()
+        );
+        assert!(
+            !store
+                .merge_global_plugin(global("other", 30, Some(low)))
+                .unwrap()
+        );
+        drop(store);
+        let store = Store::open(dir).unwrap();
+        assert!(store.global_plugin("shout@local").unwrap().removed);
+        assert_eq!(store.global_plugin("other@local").unwrap().by, Some(high));
+        assert_eq!(store.global_plugins().len(), 2);
+        // Records are the account's word, not an install: nothing here.
+        assert!(store.installed_plugins().is_empty());
     }
 
     #[test]

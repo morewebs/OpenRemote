@@ -218,10 +218,13 @@ fn chat(app: &App, raw: &str) -> Result<ChatInfo, Box<Response>> {
 /// The plugin tools a chat's agent gets (OpenRemote's MCP server lists
 /// them beside its own).
 async fn chat_tools(State(app): State<Arc<App>>, AxumPath(id): AxumPath<String>) -> Response {
-    if let Err(r) = chat(&app, &id) {
-        return *r;
-    }
-    Json(json!({"tools": app.plugin_runtime.tool_listing()})).into_response()
+    let chat = match chat(&app, &id) {
+        Ok(c) => c,
+        Err(r) => return *r,
+    };
+    // Only the plugins this chat gets: a project's own ride its chats alone.
+    Json(json!({"tools": app.plugin_runtime.tool_listing(chat.workspace.as_deref())}))
+        .into_response()
 }
 
 #[derive(Deserialize)]

@@ -658,6 +658,50 @@ impl InstalledPlugin {
     }
 }
 
+/// The account's word that a plugin is installed for every device (or was,
+/// when `removed`). Devices trade these over Cloud and keep the latest
+/// write. A record is news, never an approval: a device that lacks the
+/// plugin lists it for the user, who reviews the copy and installs it as
+/// any other plugin is installed. Its `powers` are what the device that
+/// installed it approved, shown for that review and granted by nothing.
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+pub struct GlobalPluginRecord {
+    pub name: String,
+    pub marketplace: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub runtime: PluginRuntime,
+    #[serde(default)]
+    pub powers: Vec<PluginPower>,
+    pub source: PluginSource,
+    /// The installed folder's content hash: a copy fetched from another
+    /// device is offered for review only when it is exactly these bytes.
+    pub resolved: String,
+    /// When and where it last changed: the latest write wins.
+    pub at: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub by: Option<crate::ids::DeviceId>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub removed: bool,
+}
+
+impl GlobalPluginRecord {
+    /// The id the plugin has on every device (`name@marketplace`).
+    pub fn id(&self) -> String {
+        plugin_id(&self.name, &self.marketplace, PluginScope::Global, None)
+    }
+
+    /// Whether this is a later write than `other`. The same moment from two
+    /// devices is settled by the device id, so every device keeps the same
+    /// one.
+    pub fn newer_than(&self, other: &GlobalPluginRecord) -> bool {
+        let key = |r: &GlobalPluginRecord| (r.at, r.by.map(|d| d.to_string()));
+        key(self) > key(other)
+    }
+}
+
 /// A plugin's id from its parts (see `InstalledPlugin::id`). Only a Project
 /// or Project-local install carries its project; for the other scopes the
 /// project is ignored, so one plugin never has two ids on a machine.

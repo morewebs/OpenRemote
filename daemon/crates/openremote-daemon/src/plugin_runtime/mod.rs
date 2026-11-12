@@ -2,7 +2,9 @@
 //! main's `plugin_driver`). Fetching, staging and the install itself live in
 //! `plugins.rs`; this is everything after: the OpenRemote part of a manifest
 //! (`manifest`), process plugins' programs (`process`), WASM agent tools
-//! (`wasm`), the user's settings (`settings`) and the routes that reach them
+//! (`wasm`), the user's settings (`settings`), who each plugin is for
+//! (`scope`), placing and removing an approved plugin (`install`), the
+//! account's Global plugins (`global`) and the routes that reach them
 //! (`routes`).
 //!
 //! The trust boundary: nothing runs that the user didn't approve. What a
@@ -12,11 +14,17 @@
 //! approved, enabled plugin, only when a chat or a view needs it, only from
 //! a file inside the plugin's own folder, and only with the powers approved
 //! at install: a process program needs `run_programs`, an agent tool needs
-//! `agent_tools`, a WASM module's network functions need `network`.
+//! `agent_tools`, a WASM module's network functions need `network`. Who a
+//! plugin is for never adds to that: a project's plugin runs only for that
+//! project's chats, and a Global plugin another device installed reaches
+//! this one as news to review, never as an install.
 
+pub mod global;
+pub mod install;
 pub mod manifest;
 pub mod process;
 pub mod routes;
+pub mod scope;
 pub mod settings;
 pub mod wasm;
 
@@ -25,7 +33,8 @@ use std::sync::{Arc, Mutex as StdMutex, Weak};
 use std::time::Duration;
 
 use openremote_core::{
-    InstalledPlugin, PluginPower, PluginRuntime as Runtime, PluginScope, SessionId, Store,
+    InstalledPlugin, PluginPower, PluginRuntime as Runtime, PluginScope, ProjectId, SessionId,
+    Store,
 };
 use serde_json::{Map, Value, json};
 
@@ -59,6 +68,9 @@ pub struct PluginRuntime {
     pub processes: process::ProcessHost,
     pub wasm: wasm::WasmHost,
     pub settings: settings::SettingsStore,
+    /// A Global plugin's folder packed for another device's copy, kept for
+    /// the slices that follow the first.
+    archive: tokio::sync::Mutex<Option<global::Packed>>,
 }
 
 /// At review: a WASM plugin's module compiles, exports what OpenRemote
@@ -74,29 +86,48 @@ pub fn check_staged(root: &Path, manifest: &Manifest) -> Result<(), PluginError>
     wasm::check(&path, &manifest.powers).map_err(PluginError::Invalid)
 }
 
+/// A plugin about to be installed, as the name-clash check sees it.
+pub struct Placing<'a> {
+    pub id: &'a str,
+    pub name: &'a str,
+    pub marketplace: &'a str,
+    pub scope: PluginScope,
+    pub project: Option<ProjectId>,
+    pub offers_tools: bool,
+}
+
 /// Why a plugin can't be installed beside one already here: an agent calls
-/// a plugin's tools `<name>__<tool>`, so two plugins of one name from
-/// different sources would answer to the same tool names and one would
-/// quietly take the other's place. Refused when either one offers tools.
-/// `id` is the plugin being installed; the same id is an update.
-pub fn tool_name_clash(
-    installed: &[&InstalledPlugin],
-    id: &str,
-    name: &str,
-    offers_tools: bool,
-) -> Option<String> {
+/// a plugin's tools `<name>__<tool>`, so two plugins of one name that ride
+/// the same chats would answer to the same tool names and one would quietly
+/// take the other's place. Refused when either one offers tools. Installs
+/// for two different projects never meet in a chat, so they never clash.
+/// The same id is an update.
+pub fn tool_name_clash(installed: &[&InstalledPlugin], new: &Placing) -> Option<String> {
     installed
         .iter()
         .find(|other| {
-            other.name == name
-                && other.id() != id
-                && (offers_tools || !other.contributes.tools.is_empty())
+            other.name == new.name
+                && other.id() != new.id
+                && (new.offers_tools || !other.contributes.tools.is_empty())
+                && scope::share_chats((new.scope, new.project), (other.scope, other.project))
         })
         .map(|other| {
-            format!(
-                "Another plugin named {name} is already installed (from {}). Their agent tools would share names, so remove that one first.",
-                other.marketplace
-            )
+            if other.marketplace == new.marketplace {
+                let place = match other.scope {
+                    PluginScope::Global => "for every device",
+                    PluginScope::Machine => "for this machine",
+                    PluginScope::ProjectLocal | PluginScope::Project => "for this project",
+                };
+                format!(
+                    "{} is already installed {place}, so this project's chats have it already. Keep one of the two: remove that one first to install it here.",
+                    new.name
+                )
+            } else {
+                format!(
+                    "Another plugin named {} is already installed (from {}). Their agent tools would share names, so remove that one first.",
+                    new.name, other.marketplace
+                )
+            }
         })
 }
 
@@ -123,6 +154,7 @@ impl PluginRuntime {
             processes: process::ProcessHost::default(),
             wasm,
             settings: settings::SettingsStore::new(data_dir),
+            archive: tokio::sync::Mutex::new(None),
         });
         let weak = Arc::downgrade(&runtime);
         runtime
@@ -147,37 +179,18 @@ impl PluginRuntime {
             .cloned()
     }
 
-    /// Where an installed plugin's files are. A Machine (or Global) plugin
-    /// lives under the data dir; the project scopes' folders arrive with
-    /// the scopes (plan step 5), so until then such a plugin runs nothing.
+    /// Where an installed plugin's files are: under the data dir for a
+    /// Machine, Global or Project-local plugin, in the repo for a Project
+    /// one; none when its project is gone.
     pub fn folder(&self, plugin: &InstalledPlugin) -> Option<PathBuf> {
-        match plugin.scope {
-            PluginScope::Machine | PluginScope::Global => Some(crate::plugins::plugin_dir(
-                &self.data_dir,
-                &plugin.marketplace,
-                &plugin.name,
-            )),
-            PluginScope::ProjectLocal | PluginScope::Project => None,
-        }
+        scope::folder(&self.data_dir, &lock_recovering(&self.store), plugin)
     }
 
-    /// The enabled plugins a chat gets, each with its folder, in id order.
-    pub fn active(&self) -> Vec<Active> {
-        let plugins: Vec<InstalledPlugin> = lock_recovering(&self.store)
-            .installed_plugins()
-            .into_iter()
-            .filter(|p| p.enabled)
-            .cloned()
-            .collect();
-        let mut out: Vec<Active> = plugins
-            .into_iter()
-            .filter_map(|plugin| {
-                let dir = self.folder(&plugin)?;
-                Some(Active { plugin, dir })
-            })
-            .collect();
-        out.sort_by_key(|a| a.plugin.id());
-        out
+    /// The enabled plugins a chat in `workspace` gets, each with its folder,
+    /// in id order: the Global and Machine ones, and that project's own.
+    /// With no workspace, only those that are for every chat.
+    pub fn active(&self, workspace: Option<&Path>) -> Vec<Active> {
+        scope::active(&lock_recovering(&self.store), &self.data_dir, workspace)
     }
 
     /// A plugin's own folder for what it keeps.
@@ -246,7 +259,13 @@ impl PluginRuntime {
         self.ready(&plugin)?;
         let root = self
             .folder(&plugin)
-            .ok_or_else(|| format!("{} runs nothing for a project yet", plugin.name))?;
+            .ok_or_else(|| format!("{}'s project is gone", plugin.name))?;
+        if !scope::approved_files(&plugin, &root) {
+            return Err(format!(
+                "{}'s files in the project changed since you approved them; review it again under Plugins",
+                plugin.name
+            ));
+        }
         let entry = Self::section(&plugin, &root)?
             .entry
             .ok_or_else(|| format!("{} names no program", plugin.name))?;
@@ -270,14 +289,14 @@ impl PluginRuntime {
         self.processes.connection(id, || self.spec(id)).await
     }
 
-    /// The agent tools a chat lists, as MCP shapes them: those of the
-    /// enabled plugins the user approved to give agents tools. Two enabled
-    /// plugins of one name would give two tools one name: the first (by
-    /// id) keeps it, and the clash is noted on stderr.
-    pub fn tool_listing(&self) -> Vec<Value> {
+    /// The agent tools a chat in `workspace` lists, as MCP shapes them:
+    /// those of the enabled plugins it gets that the user approved to give
+    /// agents tools. Two of one name would give two tools one name: the
+    /// first (by id) keeps it, and the clash is noted on stderr.
+    pub fn tool_listing(&self, workspace: Option<&Path>) -> Vec<Value> {
         let mut seen = std::collections::BTreeSet::new();
         let mut out = Vec::new();
-        for active in self.active() {
+        for active in self.active(workspace) {
             let plugin = &active.plugin;
             if !plugin.powers.contains(&PluginPower::AgentTools)
                 || !matches!(plugin.runtime, Runtime::Process | Runtime::Wasm)
@@ -313,19 +332,23 @@ impl PluginRuntime {
         let Some((plugin_name, tool_name)) = name.split_once("__") else {
             return error_result(&format!("there is no tool named {name}"));
         };
-        // The same plugin the listing named: the first by id that offers it.
-        let found = self.active().into_iter().find(|a| {
-            a.plugin.name == plugin_name
-                && a.plugin.powers.contains(&PluginPower::AgentTools)
-                && a.plugin
-                    .contributes
-                    .tools
-                    .iter()
-                    .any(|t| t.name == tool_name)
-        });
+        // The same plugin the chat's listing named: the first by id that
+        // offers it, among the plugins this chat gets.
+        let found = self
+            .active(chat.workspace.as_deref())
+            .into_iter()
+            .find(|a| {
+                a.plugin.name == plugin_name
+                    && a.plugin.powers.contains(&PluginPower::AgentTools)
+                    && a.plugin
+                        .contributes
+                        .tools
+                        .iter()
+                        .any(|t| t.name == tool_name)
+            });
         let Some(active) = found else {
             return error_result(&format!(
-                "no plugin this chat has offers {name} (it may be off, removed, or not given the power to offer agents tools)"
+                "no plugin this chat has offers {name} (it may be off, removed, for another project, or not given the power to offer agents tools)"
             ));
         };
         let plugin = active.plugin;
@@ -594,6 +617,7 @@ mod tests {
         scope: PluginScope,
         entry: Value,
     ) -> (tempfile::TempDir, Arc<PluginRuntime>, String) {
+        let project = scope.is_project().then(ProjectId::new);
         let data = tempfile::tempdir().unwrap();
         let dir = crate::plugins::plugin_dir(data.path(), "local", "tools");
         std::fs::create_dir_all(dir.join("bin")).unwrap();
@@ -621,7 +645,7 @@ mod tests {
                 path: dir.to_string_lossy().into_owned(),
             },
             scope,
-            project: None,
+            project,
             contributes: PluginContributions {
                 tools: vec![ToolContribution {
                     name: "t".into(),
@@ -668,10 +692,10 @@ mod tests {
             .set_installed_plugin_enabled(&id, false)
             .unwrap();
         assert!(runtime.spec(&id).err().unwrap().contains("turned off"));
-        // A project install has no folder here until the scopes land.
-        let (_data, runtime, _) = installed(all, PluginScope::Project, program());
-        let id = lock_recovering(&runtime.store).installed_plugins()[0].id();
-        assert!(runtime.spec(&id).is_err());
+        // A project install whose project is gone runs nothing.
+        let (_data, runtime, id) = installed(all, PluginScope::Project, program());
+        let err = runtime.spec(&id).err().expect("refused");
+        assert!(err.contains("project is gone"), "{err}");
     }
 
     #[test]
@@ -695,7 +719,7 @@ mod tests {
             PluginScope::Machine,
             program(),
         );
-        let listed = runtime.tool_listing();
+        let listed = runtime.tool_listing(None);
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0]["name"], "tools__t");
         let (_data, runtime, _) = installed(
@@ -703,7 +727,25 @@ mod tests {
             PluginScope::Machine,
             program(),
         );
-        assert!(runtime.tool_listing().is_empty());
+        assert!(runtime.tool_listing(None).is_empty());
+    }
+
+    fn placing<'a>(
+        id: &'a str,
+        name: &'a str,
+        marketplace: &'a str,
+        scope: PluginScope,
+        project: Option<ProjectId>,
+        offers_tools: bool,
+    ) -> Placing<'a> {
+        Placing {
+            id,
+            name,
+            marketplace,
+            scope,
+            project,
+            offers_tools,
+        }
     }
 
     #[test]
@@ -715,21 +757,87 @@ mod tests {
         );
         let store = lock_recovering(&runtime.store);
         let installed = store.installed_plugins();
+        let machine = PluginScope::Machine;
         // The same name from another marketplace: refused, naming the one
         // already here, whether the new one offers tools or not (the one
         // here does).
         for offers_tools in [true, false] {
-            let why =
-                tool_name_clash(&installed, "tools@other", "tools", offers_tools).expect("refused");
+            let new = placing("tools@other", "tools", "other", machine, None, offers_tools);
+            let why = tool_name_clash(&installed, &new).expect("refused");
             assert!(why.contains("already installed (from local)"), "{why}");
         }
         // An update of the same plugin, or another name: fine.
-        assert!(tool_name_clash(&installed, &id, "tools", true).is_none());
-        assert!(tool_name_clash(&installed, "else@other", "else", true).is_none());
+        let update = placing(&id, "tools", "local", PluginScope::Global, None, true);
+        assert!(tool_name_clash(&installed, &update).is_none());
+        let other = placing("else@other", "else", "other", machine, None, true);
+        assert!(tool_name_clash(&installed, &other).is_none());
         // Neither offers tools: side by side is fine.
         let mut bare = installed[0].clone();
         bare.contributes.tools.clear();
-        assert!(tool_name_clash(&[&bare], "tools@other", "tools", false).is_none());
+        let new = placing("tools@other", "tools", "other", machine, None, false);
+        assert!(tool_name_clash(&[&bare], &new).is_none());
+    }
+
+    #[test]
+    fn a_name_clash_is_judged_by_the_chats_the_two_would_share() {
+        let (_data, runtime, _) = installed(
+            vec![PluginPower::RunPrograms, PluginPower::AgentTools],
+            PluginScope::Machine,
+            program(),
+        );
+        let (one, two) = (ProjectId::new(), ProjectId::new());
+        let mut store = lock_recovering(&runtime.store);
+        // The same plugin from the same marketplace, for one project, while
+        // this machine has it for every chat: refused, saying so in its own
+        // words rather than as another marketplace's plugin.
+        let for_one = format!("tools@local~{one}");
+        let new = placing(
+            &for_one,
+            "tools",
+            "local",
+            PluginScope::Project,
+            Some(one),
+            true,
+        );
+        let why = tool_name_clash(&store.installed_plugins(), &new).expect("refused");
+        assert!(!why.contains("from local"), "{why}");
+        assert!(why.contains("already installed for this machine"), "{why}");
+        // Installed for project one only: project two's install never
+        // meets it in a chat, so both may stay.
+        store.remove_installed_plugin("tools@local").unwrap();
+        let mut first = super::scope::tests::record("tools", PluginScope::ProjectLocal, Some(one));
+        first.contributes.tools = vec![ToolContribution {
+            name: "t".into(),
+            description: "d".into(),
+            input_schema: json!({"type": "object"}),
+            read_only: false,
+            timeout_secs: None,
+        }];
+        store.put_installed_plugin(first).unwrap();
+        let installed = store.installed_plugins();
+        let for_two = format!("tools@other~{two}");
+        let new = placing(
+            &for_two,
+            "tools",
+            "other",
+            PluginScope::Project,
+            Some(two),
+            true,
+        );
+        assert!(tool_name_clash(&installed, &new).is_none());
+        // ...but the same project's chats would get both.
+        let new = placing("x", "tools", "other", PluginScope::Project, Some(one), true);
+        assert!(tool_name_clash(&installed, &new).is_some());
+        // And so would every chat, for a Machine install.
+        let new = placing(
+            "tools@other",
+            "tools",
+            "other",
+            PluginScope::Machine,
+            None,
+            true,
+        );
+        assert!(tool_name_clash(&installed, &new).is_some());
     }
 
     #[tokio::test]

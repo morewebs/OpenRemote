@@ -28,21 +28,23 @@ from a peer's client. That is a property of the design, not an oversight to patc
 
 | tier | what the gate checks on top of the pinned link |
 |---|---|
-| Sync | nothing. Any device of the account may copy synced chat logs. |
+| Sync | nothing. Any device of the account may copy synced chat logs, and the account's Global plugin records and copies. |
 | Machine | this computer must be a machine. The check is on the receiver (`mesh().kind() == "machine"`), not on the caller: a phone may drive a machine. |
 | Chat | this computer must be a machine, and the chat must be synced and executing here. A private chat answers 404, the same answer as a chat that does not exist. |
 
 ## The rows
 
-32 rows: 2 Sync, 17 Machine, 13 Chat. "Sessions" and "chats" are the same thing; the API calls them
+34 rows: 4 Sync, 17 Machine, 13 Chat. "Sessions" and "chats" are the same thing; the API calls them
 sessions.
 
-### Sync tier (2)
+### Sync tier (4)
 
 | route | tier | what a peer can do | what it cannot |
 |---|---|---|---|
 | `GET /sync/summary` | Sync | list every synced chat on this computer: id, executor device, head, updated_at, plus deletion tombstones | see a private chat at all: the store filters to chats with an executor (`store.rs`, `summaries`) |
 | `GET /sync/sessions/{id}/events` | Sync | read a synced chat's event log verbatim, from an event number (`seq >= from`, `store.rs`): the whole transcript, tool inputs and outputs included | read a private chat (404, `sync.rs`, `range`), read a tombstoned chat (410), or write anything into the log through this route |
+| `GET /sync/plugins` | Sync | list the account's Global plugin records this computer holds: name, marketplace, version, runtime, the powers the installing device approved, the content hash, removed or not (`plugin_runtime/global.rs`) | install anything, here or on the caller: a record is shown to the user on the caller for review |
+| `GET /sync/plugins/{id}/archive` | Sync | copy the files of a plugin installed here for every device, in slices, only while they are exactly the bytes the caller names | copy a plugin installed for this machine or a project (404), another version (409), its settings or secrets (kept outside the plugin's folder) |
 
 ### Machine tier (17)
 
@@ -99,7 +101,8 @@ paths (the Sync tier reads logs, the note channel appends them; see One-way note
 Some of what a peer can do is not a route. The mesh also carries notes, handled by `on_note` in
 `daemon/crates/openremote-daemon/src/sync.rs`, so `PEER_ROUTES` does not gate them and no tier
 applies. Five types reach it. Four of them are about chats, and none of the four can touch a private
-chat; the fifth carries no chat at all and is the one described after the table.
+chat; the fifth carries no chat at all and is the one described after the table. A sixth,
+`plugins.global`, is handled beside them by `plugin_runtime/global.rs` and is described last.
 
 | note | what it does on this computer | a private chat |
 |---|---|---|
@@ -108,6 +111,8 @@ chat; the fifth carries no chat at all and is the one described after the table.
 | `sync.head` | makes this computer pull from the sender when the sender's head is ahead of its own (`pull`) | nothing happens: it writes nothing itself, and what comes back is checked the same way as an append |
 | `sync.tombstone` | deletes a synced chat: stops it if it is running here, records the tombstone, and stops syncing it (`apply_tombstone`) | returns before it stops, tombstones or forgets anything |
 | `sync.browser` | rewrites this computer's browser settings and bookmark tree: every row newer than the local one is taken, key by key, deletions (a bookmark removed) included. Any device of the account may send it (`browser/sync.rs`, `on_note`) | nothing at all: the note names no session, so it never reaches chat data, and history, cookies, site storage and the tabs to restore are not in it |
+
+| `plugins.global` | keeps the account's newer record of a Global plugin. A live record installs, updates and grants nothing: the user is shown it under Plugins, and installing it means fetching the copy, checking it is exactly the recorded bytes, reviewing it and approving it here, where its powers are read from the copy. A removed record takes this computer's Global copy of that plugin off, with its settings, unless a chat runs on its App; a copy installed here for this machine or a project is never touched | nothing at all: the note names no session |
 
 The tombstone is a deletion, and it is the one that matters. It is also how a deletion crosses
 devices: the computer where a synced chat was deleted sends one, the copies apply it, and that is why

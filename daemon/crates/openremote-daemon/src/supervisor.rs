@@ -421,6 +421,8 @@ pub struct Supervisor {
     /// receives it - never to what is stored or shown (the browser's open
     /// tabs). Set once by whoever assembles the app.
     prompt_note: std::sync::OnceLock<PromptNote>,
+    /// The plugin runtime's ear for a plugin folder replaced here.
+    plugin_changed: std::sync::OnceLock<PluginChanged>,
     /// Agent teams: the user's limits and the reports in flight.
     team: team::Team,
     /// The chats' pictures: what the user attached, what tools answered
@@ -430,6 +432,9 @@ pub struct Supervisor {
 
 /// Where the note riding each delivered message comes from.
 type PromptNote = Box<dyn Fn() -> Option<String> + Send + Sync>;
+
+type PluginChanged =
+    Box<dyn Fn(String) -> futures_util::future::BoxFuture<'static, ()> + Send + Sync>;
 
 /// A message held for the next turn: its words, who sent it when another
 /// agent did, and its pictures, already kept.
@@ -486,6 +491,7 @@ impl Supervisor {
             command_cache: StdMutex::new(HashMap::new()),
             controls: std::sync::OnceLock::new(),
             prompt_note: std::sync::OnceLock::new(),
+            plugin_changed: std::sync::OnceLock::new(),
             team: team::Team::open(&data_dir),
             blobs,
         });
@@ -1041,19 +1047,29 @@ impl Supervisor {
             .map_err(store_error)
     }
 
-    /// The folders of the plugins installed here and left on that claude
-    /// can load - each has Claude's own plugin.json (the install writes
-    /// one where Claude parts arrived without it).
-    fn plugin_dirs(&self) -> Vec<std::path::PathBuf> {
+    /// The folders of the plugins a chat in `workspace` gets that claude
+    /// can load - each has Claude's own plugin.json (the install writes one
+    /// where Claude parts arrived without it). A chat in a project gets
+    /// that project's plugins too, and no other project's.
+    fn plugin_dirs(&self, workspace: Option<&std::path::Path>) -> Vec<std::path::PathBuf> {
         self.with_store(|s| {
             let data_dir = s.dir().to_path_buf();
-            s.installed_plugins()
+            crate::plugin_runtime::scope::active(s, &data_dir, workspace)
                 .into_iter()
-                .filter(|p| p.enabled)
-                .map(|p| crate::plugins::plugin_dir(&data_dir, &p.marketplace, &p.name))
+                .map(|active| active.dir)
                 .filter(|dir| dir.join(".claude-plugin").join("plugin.json").is_file())
                 .collect()
         })
+    }
+
+    /// How the supervisor tells the plugin runtime that a plugin's folder
+    /// changed under it (a command plugin made again): its program stops,
+    /// and the next need starts the new one.
+    pub fn set_plugin_changed(
+        &self,
+        changed: impl Fn(String) -> futures_util::future::BoxFuture<'static, ()> + Send + Sync + 'static,
+    ) {
+        let _ = self.plugin_changed.set(Box::new(changed));
     }
 
     /// Before a claude chat starts: each enabled plugin installed from a
@@ -1081,6 +1097,11 @@ impl Supervisor {
                     updated.resolved = Some(hash);
                     updated.updated_at = now_ms();
                     let _ = self.with_store(|s| s.put_installed_plugin(updated));
+                    // The folder was replaced: a program still running the
+                    // old copy stops, and the next need starts this one.
+                    if let Some(changed) = self.plugin_changed.get() {
+                        changed(plugin.id()).await;
+                    }
                 }
                 Ok(None) => {}
                 Err(e) => notes.push(format!(
@@ -1609,7 +1630,7 @@ impl Supervisor {
             include_deltas: true,
             fast: current.fast,
             mcp_servers: self.mcp_servers_for(&id),
-            plugin_dirs: self.plugin_dirs(),
+            plugin_dirs: self.plugin_dirs(current.workspace.as_deref()),
             allowed_tools: self.allowed_tools(),
         };
         match backend.spawn(opts).await {
@@ -2429,7 +2450,7 @@ impl Supervisor {
             include_deltas: true,
             fast: session.fast,
             mcp_servers: self.mcp_servers_for(id),
-            plugin_dirs: self.plugin_dirs(),
+            plugin_dirs: self.plugin_dirs(session.workspace.as_deref()),
             allowed_tools: self.allowed_tools(),
         };
         let (driver, rx) = match backend.spawn(opts).await {

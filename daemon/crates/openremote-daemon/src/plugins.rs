@@ -343,6 +343,11 @@ pub fn installed_harnesses(data_dir: &Path, installed: &[&InstalledPlugin]) -> V
         let Some(recorded) = &plugin.harness else {
             continue;
         };
+        // An App sits in every picker on the machine: it is never one
+        // project's (the install refuses that scope for it).
+        if plugin.scope.is_project() {
+            continue;
+        }
         let dir = plugin_dir(data_dir, &plugin.marketplace, &plugin.name);
         let (manifest, problem) = match read_manifest(&dir, &[]) {
             Ok(manifest) => match manifest.harness {
@@ -788,7 +793,7 @@ fn one_segment(name: &str) -> bool {
 /// which folder an install replaces or an update swaps into, so a name
 /// that came from a catalog - or from an old `state.json` - is checked
 /// again here rather than trusted.
-fn plugin_dir_checked(
+pub(crate) fn plugin_dir_checked(
     data_dir: &Path,
     marketplace: &str,
     name: &str,
@@ -990,6 +995,17 @@ pub enum SourceRequest {
         #[serde(default)]
         approve_command: Option<String>,
     },
+    /// A plugin a registered project's repo carries
+    /// (`.openremote/plugins/<name>`), read for this machine's approval.
+    Project {
+        project: String,
+        name: String,
+    },
+    /// The copy of one of the account's Global plugins another device has,
+    /// fetched for this device's own review.
+    Account {
+        id: String,
+    },
 }
 
 impl SourceRequest {
@@ -1019,7 +1035,9 @@ impl SourceRequest {
                     location: location.clone(),
                 },
             ),
-            SourceRequest::Marketplace { .. } => return None,
+            SourceRequest::Marketplace { .. }
+            | SourceRequest::Project { .. }
+            | SourceRequest::Account { .. } => return None,
         };
         Some(StageRequest {
             fetch,
@@ -1213,6 +1231,21 @@ impl PluginHost {
         result
     }
 
+    /// A staged install that went nowhere: its staging folder goes.
+    pub fn discard(&self, staged: Staged) {
+        let _ = std::fs::remove_dir_all(&staged.dir);
+    }
+
+    /// Move an approved install to a project scope's folder, which may be
+    /// on another drive (a project's repo). The name passes the same gate
+    /// as any install's.
+    pub fn install_at(&self, staged: Staged, target: &Path) -> Result<(), PluginError> {
+        let result = plugin_dir_checked(&self.data_dir, &staged.marketplace, &staged.name)
+            .and_then(|_| place(&staged.root, target));
+        let _ = std::fs::remove_dir_all(&staged.dir);
+        result
+    }
+
     /// Remove an installed plugin's folder, whatever its record says.
     ///
     /// The record names the folder, and a record written before the name
@@ -1348,6 +1381,46 @@ pub(crate) fn swap_in(plugins_root: &Path, from: &Path, target: &Path) -> Result
         std::fs::rename(from, target)?;
     }
     Ok(())
+}
+
+/// Put `from` at `target`, replacing what is there whole. A rename is
+/// tried first; a target on another drive (a project's folder) gets a
+/// copy. The old folder moves aside, beside it, before anything lands, and
+/// comes back if the new one can't.
+pub(crate) fn place(from: &Path, target: &Path) -> Result<(), PluginError> {
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let aside = target.with_file_name(format!(
+        ".{}.old-{}",
+        target
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default(),
+        uuid::Uuid::new_v4()
+    ));
+    let had = target.exists();
+    if had {
+        std::fs::rename(target, &aside)?;
+    }
+    let landed = std::fs::rename(from, target)
+        .map_err(PluginError::from)
+        .or_else(|_| copy_tree(from, target, &mut CopyBudget::default()));
+    match landed {
+        Ok(()) => {
+            if had {
+                let _ = std::fs::remove_dir_all(&aside);
+            }
+            Ok(())
+        }
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(target);
+            if had {
+                let _ = std::fs::rename(&aside, target);
+            }
+            Err(e)
+        }
+    }
 }
 
 /// The first plugin builds put a plugin straight under `plugins/<name>`;
@@ -2350,7 +2423,7 @@ fn write_bare_claude_manifest(root: &Path, manifest: &Manifest) -> Result<(), Pl
 
 /// Unpack a .zip or .tar.gz into `to`, refusing any entry that would land
 /// outside it and any archive that unpacks past the size limit.
-fn unpack(bytes: &[u8], to: &Path) -> Result<(), PluginError> {
+pub(crate) fn unpack(bytes: &[u8], to: &Path) -> Result<(), PluginError> {
     std::fs::create_dir_all(to)?;
     let mut total: u64 = 0;
     if bytes.starts_with(b"PK\x03\x04") {

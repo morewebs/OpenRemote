@@ -110,6 +110,11 @@ impl CloudHost for DaemonHost {
 
     fn note(&self, peer: PeerContext, note: Value) {
         if let Some(app) = self.app.upgrade() {
+            // The account's Global plugins have notes of their own.
+            if crate::plugin_runtime::global::is_note(&note) {
+                crate::plugin_runtime::global::on_note(&app, peer, note);
+                return;
+            }
             crate::sync::on_note(&app, peer, note);
         }
     }
@@ -122,7 +127,12 @@ impl CloudHost for DaemonHost {
 
     fn online(&self, peer: DeviceId) {
         if let Some(app) = self.app.upgrade() {
+            let plugins = Arc::clone(&app);
             tokio::spawn(async move { crate::sync::sync_with(&app, peer).await });
+            // The account's Global plugin records catch up the same way.
+            tokio::spawn(
+                async move { crate::plugin_runtime::global::sync_with(&plugins, peer).await },
+            );
             // A link event is not the only thing that should trigger a compare:
             // on an account where both machines simply stay on there may never
             // be another one, and the compare is what retries a tombstone this

@@ -503,18 +503,13 @@ async fn the_plugin_routes_answer_this_devices_console_only() {
 /// window can't be hit on demand, so the order is pinned in the source.
 #[test]
 fn an_update_stops_the_program_on_both_sides_of_the_swap() {
-    let source = include_str!("../src/http.rs");
-    let start = source
-        .find("async fn install_staged")
-        .expect("install_staged");
+    let source = include_str!("../src/plugin_runtime/install.rs");
+    let start = source.find("pub async fn install(").expect("install");
     let body = &source[start
         ..start
             + source[start..]
-                .find(
-                    "
-async fn ",
-                )
-                .expect("next fn")];
+                .find("pub async fn remove(")
+                .expect("the next fn")];
     let first = body.find("plugin_runtime.changed").expect("a stop before");
     let install = body
         .find("app.plugins.install(staged)")

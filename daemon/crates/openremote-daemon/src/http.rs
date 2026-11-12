@@ -150,6 +150,11 @@ const PEER_ROUTES: &[(&str, &str, Tier)] = &[
     ("POST", "/decisions/{id}/answer", Tier::Chat),
     // A synced chat's pictures, for the devices that show it.
     ("GET", "/sessions/{id}/blobs/{sha}", Tier::Read),
+    // The account's Global plugins: their records, and the files of one a
+    // device lacks (only a copy that is exactly the one its record names).
+    // What arrives is reviewed on that device before anything installs.
+    ("GET", "/sync/plugins", Tier::Sync),
+    ("GET", "/sync/plugins/{id}/archive", Tier::Sync),
 ];
 
 async fn peer_gate(
@@ -310,6 +315,7 @@ fn api_routes() -> Router<Arc<App>> {
         .route("/sessions/{id}/sync", post(post_sync))
         .route("/decisions/{id}/answer", post(post_answer))
         .route("/receipts/{request_id}", get(get_receipt))
+        .merge(crate::plugin_runtime::global::peer_routes())
 }
 
 /// The console is a webview on a different origin than the daemon
@@ -1286,12 +1292,28 @@ async fn list_plugins(State(app): State<Arc<App>>) -> Response {
             })
         })
         .collect();
-    let installed: Vec<openremote_core::InstalledPlugin> = {
+    let (installed, found, global_pending) = {
         let store = crate::supervisor::lock_recovering(&app.store);
-        store.installed_plugins().into_iter().cloned().collect()
+        let installed: Vec<openremote_core::InstalledPlugin> =
+            store.installed_plugins().into_iter().cloned().collect();
+        (
+            installed,
+            crate::plugin_runtime::scope::found(&store),
+            crate::plugin_runtime::global::pending(&store, &app.data_dir),
+        )
     };
     let installed: Vec<Value> = installed.iter().map(|p| installed_json(&app, p)).collect();
-    Json(json!({"builtin": builtin, "installed": installed})).into_response()
+    Json(json!({
+        "builtin": builtin,
+        "installed": installed,
+        // Plugins a project's repo carries that wait for this machine's
+        // review: new ones, and ones whose files changed.
+        "found": found,
+        // The account's Global plugins not on this device yet (or a newer
+        // copy of one), each waiting for this device's own review.
+        "global_pending": global_pending,
+    }))
+    .into_response()
 }
 
 /// An installed plugin as the console reads it: its record, its id, and
@@ -1332,6 +1354,10 @@ fn resolve_stage(
     source: crate::plugins::SourceRequest,
 ) -> Result<Resolved, PluginFailure> {
     use crate::marketplace::{EntrySource, entry_source, read_catalog};
+    if let crate::plugins::SourceRequest::Project { project, name } = &source {
+        return crate::plugin_runtime::install::project_source(app, project, name)
+            .map(|request| Resolved::Fetch(Box::new(request)));
+    }
     if let Some(direct) = source.direct() {
         return Ok(Resolved::Fetch(Box::new(direct)));
     }
@@ -1341,7 +1367,7 @@ fn resolve_stage(
         approve_command,
     } = source
     else {
-        unreachable!("direct() answers every other source");
+        unreachable!("direct() answers every other source, and an account's copy is fetched first");
     };
     let record = {
         let store = crate::supervisor::lock_recovering(&app.store);
@@ -1405,28 +1431,59 @@ fn resolve_stage(
 /// user approves what the answer shows (name, runtime, powers).
 async fn stage_plugin(State(app): State<Arc<App>>, Json(body): Json<StageBody>) -> Response {
     let ids = builtin_ids(&app);
+    // A repo's plugin read for review belongs to its project; an account's
+    // Global plugin is reviewed here as any other is.
+    let for_project = match &body.source {
+        crate::plugins::SourceRequest::Project { project, .. } => {
+            openremote_core::ProjectId::parse(project)
+        }
+        _ => None,
+    };
+    let for_account = matches!(body.source, crate::plugins::SourceRequest::Account { .. });
     let task = {
         let app = Arc::clone(&app);
         async move {
-            let request = match resolve_stage(&app, body.source)? {
-                Resolved::NeedsCommand(command) => return Ok(json!({"needs_command": command})),
-                Resolved::Fetch(request) => *request,
+            let request = match body.source {
+                crate::plugins::SourceRequest::Account { id } => {
+                    crate::plugin_runtime::global::fetch_for_review(&app, &id).await?
+                }
+                source => match resolve_stage(&app, source)? {
+                    Resolved::NeedsCommand(command) => {
+                        return Ok(json!({"needs_command": command}));
+                    }
+                    Resolved::Fetch(request) => *request,
+                },
+            };
+            // An account's copy was unpacked for this review only.
+            let unpacked = match (&request.fetch, for_account) {
+                (crate::plugins::Fetch::Folder(folder), true) => Some(folder.clone()),
+                _ => None,
             };
             let command = match &request.fetch {
                 crate::plugins::Fetch::Command(approved) => Some(approved.clone()),
                 _ => None,
             };
             let marketplace = request.marketplace.clone();
-            let (stage_id, manifest, name) = app
-                .plugins
-                .stage(request, ids)
-                .await
-                .map_err(plugin_failure)?;
-            let id = format!("{name}@{marketplace}");
+            let staged = app.plugins.stage(request, ids).await;
+            if let Some(folder) = unpacked {
+                let _ = std::fs::remove_dir_all(folder);
+            }
+            let (stage_id, manifest, name) = staged.map_err(plugin_failure)?;
+            let id = match for_project {
+                Some(project) => openremote_core::plugin_id(
+                    &name,
+                    &marketplace,
+                    openremote_core::PluginScope::Project,
+                    Some(project),
+                ),
+                None => format!("{name}@{marketplace}"),
+            };
             let installed = {
                 let store = crate::supervisor::lock_recovering(&app.store);
                 store.installed_plugin(&id).ok().cloned()
             };
+            let scopes =
+                crate::plugin_runtime::install::allowed_scopes(&manifest, command.is_some());
             let new_powers: Vec<openremote_core::PluginPower> = match &installed {
                 Some(have) => manifest
                     .powers
@@ -1437,6 +1494,15 @@ async fn stage_plugin(State(app): State<Arc<App>>, Json(body): Json<StageBody>) 
                 None => Vec::new(),
             };
             Ok(json!({
+                // Who it may be for (global, machine, project_local,
+                // project), and where the copy it would replace is.
+                "scopes": scopes,
+                "installed_scope": installed.as_ref().map(|p| p.scope),
+                "installed_project": installed.as_ref().and_then(|p| p.project),
+                // Read from a project's repo: it installs for that project.
+                "for_project": for_project,
+                // The account's Global plugin, offered for every device.
+                "for_account": for_account,
                 "stage_id": stage_id,
                 "id": id,
                 "name": name,
@@ -1454,111 +1520,45 @@ async fn stage_plugin(State(app): State<Arc<App>>, Json(body): Json<StageBody>) 
     receipted_plain(&app, body.request_id, task).await
 }
 
-/// The user approved: move the staged plugin into place and record it.
-/// An update keeps the plugin on or off as it was.
+#[derive(Deserialize)]
+struct InstallBody {
+    request_id: String,
+    /// Who it is for: `global`, `machine` (the default), `project_local` or
+    /// `project`. Who it is for never adds to what it may do: the powers
+    /// are the reviewed manifest's, and nothing here can name one.
+    #[serde(default)]
+    scope: Option<openremote_core::PluginScope>,
+    /// The project, for the two project scopes.
+    #[serde(default)]
+    project: Option<String>,
+}
+
+/// The user approved: place the staged plugin where its scope keeps it and
+/// record it. An update keeps the plugin on or off as it was.
 async fn install_staged(
     State(app): State<Arc<App>>,
     AxumPath(id): AxumPath<String>,
-    Json(body): Json<RequestBody>,
+    Json(body): Json<InstallBody>,
 ) -> Response {
     let task = {
         let app = Arc::clone(&app);
         async move {
+            let project = match body.project.as_deref() {
+                Some(raw) => Some(
+                    openremote_core::ProjectId::parse(raw)
+                        .ok_or((StatusCode::BAD_REQUEST, "bad project id".to_string()))?,
+                ),
+                None => None,
+            };
             let staged = app.plugins.take_staged(&id).ok_or_else(|| {
                 (
                     StatusCode::NOT_FOUND,
                     "that install is no longer waiting - stage it again".to_string(),
                 )
             })?;
-            let plugin_id = staged.id();
-            // A plugin update replaces the folder its driver runs from. On
-            // Windows a live chat holds that folder open, so refuse with the
-            // chats named instead of an access-denied from the filesystem.
-            let chats = app.supervisor.plugin_chats(&plugin_id).await;
-            if !chats.is_empty() {
-                return Err((
-                    StatusCode::CONFLICT,
-                    format!(
-                        "stop {} running on this plugin's harness before updating it",
-                        chats.join(", ")
-                    ),
-                ));
-            }
-            let manifest = staged.manifest.clone();
-            // Agent tools are named `<plugin>__<tool>`: two plugins of one
-            // name from different sources would answer to the same names.
-            {
-                let store = crate::supervisor::lock_recovering(&app.store);
-                let installed: Vec<&openremote_core::InstalledPlugin> = store.installed_plugins();
-                if let Some(why) = crate::plugin_runtime::tool_name_clash(
-                    &installed,
-                    &plugin_id,
-                    &staged.name,
-                    !manifest.contributes.tools.is_empty(),
-                ) {
-                    return Err((StatusCode::CONFLICT, why));
-                }
-            }
-            let source = staged.source.clone();
-            let name = staged.name.clone();
-            let marketplace = staged.marketplace.clone();
-            let resolved = staged.resolved.clone();
-            let command = staged.command.clone();
-            // Its program (if it runs one) holds the folder too: it stops
-            // before the folder is replaced, and the next need starts the
-            // new version.
-            app.plugin_runtime.changed(&plugin_id).await;
-            app.plugins.install(staged).map_err(plugin_failure)?;
-            let now = openremote_core::now_ms();
-            let harness =
-                manifest
-                    .harness
-                    .as_ref()
-                    .map(|harness| openremote_core::PluginHarnessRef {
-                        id: harness.id.clone(),
-                        name: harness.name.clone(),
-                    });
-            // What the review showed and the user approved: the harness,
-            // tools, composer inputs, views and settings. The runtime reads
-            // what a plugin may do from here, never from its folder.
-            let contributes = manifest.contributes.clone();
-            let plugin = {
-                let mut store = crate::supervisor::lock_recovering(&app.store);
-                let before = store.installed_plugin(&plugin_id).ok().cloned();
-                let plugin = openremote_core::InstalledPlugin {
-                    name,
-                    marketplace,
-                    resolved,
-                    command,
-                    version: manifest.version,
-                    description: manifest.description,
-                    runtime: manifest.runtime,
-                    powers: manifest.powers,
-                    source,
-                    // An update keeps the scope its install was approved
-                    // for; a new install is for this machine (the install
-                    // screen's scope choice arrives with the scopes).
-                    scope: before
-                        .as_ref()
-                        .map_or(openremote_core::PluginScope::Machine, |p| p.scope),
-                    project: None,
-                    contributes,
-                    harness,
-                    enabled: before.as_ref().is_none_or(|p| p.enabled),
-                    installed_at: before.as_ref().map_or(now, |p| p.installed_at),
-                    updated_at: now,
-                };
-                store
-                    .put_installed_plugin(plugin.clone())
-                    .map_err(store_failure)?;
-                plugin
-            };
-            // Stopped again now the new folder and record are in place: a
-            // tool call during the swap may have started the old program,
-            // and it must not keep running the old version.
-            app.plugin_runtime.changed(&plugin_id).await;
-            // The plugin's harness appears (or changes) without a restart.
-            app.supervisor.reprobe_harnesses().await;
+            let scope = body.scope.unwrap_or(openremote_core::PluginScope::Machine);
+            let plugin =
+                crate::plugin_runtime::install::install(&app, staged, scope, project).await?;
             Ok(installed_json(&app, &plugin))
         }
     };
@@ -1637,38 +1637,9 @@ async fn remove_plugin(
                     format!("{id} is built in - turn it off instead"),
                 ));
             }
-            let plugin = {
-                let store = crate::supervisor::lock_recovering(&app.store);
-                store
-                    .installed_plugin(&id)
-                    .cloned()
-                    .map_err(store_failure)?
-            };
-            // A removal deletes the folder its driver runs from; a live chat
-            // holds that folder open on Windows. Name the chats instead of
-            // failing later with an access-denied.
-            let chats = app.supervisor.plugin_chats(&id).await;
-            if !chats.is_empty() {
-                return Err((
-                    StatusCode::CONFLICT,
-                    format!(
-                        "stop {} running on this plugin's harness before removing it",
-                        chats.join(", ")
-                    ),
-                ));
-            }
-            // Its program stops first: it holds the folder open too.
-            app.plugin_runtime.changed(&id).await;
-            app.plugins
-                .uninstall(&plugin.marketplace, &plugin.name)
-                .map_err(plugin_failure)?;
-            {
-                let mut store = crate::supervisor::lock_recovering(&app.store);
-                store.remove_installed_plugin(&id).map_err(store_failure)?;
-            }
-            // Its settings go with it, secrets too.
-            app.plugin_runtime.removed(&id).await;
-            app.supervisor.reprobe_harnesses().await;
+            // Its files, record and settings go; a Global plugin goes from
+            // every device.
+            crate::plugin_runtime::install::remove(&app, &id, true).await?;
             Ok(json!({"removed": id}))
         }
     };

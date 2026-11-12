@@ -133,6 +133,17 @@ impl App {
         let weak = Arc::downgrade(&app);
         app.supervisor
             .set_prompt_note(move || weak.upgrade().and_then(|app| app.browser.tabs_note()));
+        // A command plugin made again before a chat replaces its folder: the
+        // runtime stops the program that ran the old copy.
+        let runtime = Arc::downgrade(&app.plugin_runtime);
+        app.supervisor.set_plugin_changed(move |id| {
+            let runtime = runtime.clone();
+            Box::pin(async move {
+                if let Some(runtime) = runtime.upgrade() {
+                    runtime.changed(&id).await;
+                }
+            })
+        });
         crate::sync::start_pusher(&app);
         crate::browser::start_sweeper(&app);
         app.start_cloud();

@@ -190,7 +190,9 @@ an old process is still alive; find it before re-running).
   outside `PEER_ROUTES` (`on_note`, `sync.rs`), and rewrite this
   computer's browser settings and bookmark tree through a `sync.browser`
   note, deletions included, with no confirm and no record of which device
-  did it. The approval gate guards against a harness, not against a
+  did it. A `plugins.global` note can also take a plugin installed for
+  every device off this computer (never install one: a Global plugin from
+  another device waits for this computer's own review and approval). The approval gate guards against a harness, not against a
   device; it is not a promise that a peer cannot answer.
   `docs/cloud-trust-model.md` is the route-by-route table, with what does
   protect the user instead.
