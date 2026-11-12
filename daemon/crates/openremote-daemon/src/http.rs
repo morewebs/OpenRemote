@@ -224,6 +224,7 @@ fn api_routes() -> Router<Arc<App>> {
         .route("/commands", get(get_commands))
         .route("/files", get(get_files))
         .route("/sessions/{id}/mentions/{chat}", get(get_mentioned_chat))
+        .route("/sessions/{id}/tools/gates", get(get_tool_gates))
         .route("/sessions/{id}/title", post(post_title))
         .route("/sync/summary", get(sync_summary))
         .route("/sync/sessions/{id}/events", get(sync_range))
@@ -1996,6 +1997,21 @@ async fn get_mentioned_chat(
         Ok(text) => Json(json!({"text": text})).into_response(),
         Err(err) => supervisor_error(err),
     }
+}
+
+/// What a chat's MCP server lists beyond the tools every chat gets (see
+/// `mcp_chat`): every browser tool once the chat has the browser in play,
+/// and the tools that manage workers once it has some. Both only ever turn
+/// on. Local only, like the tools themselves.
+async fn get_tool_gates(State(app): State<Arc<App>>, AxumPath(id): AxumPath<String>) -> Response {
+    let Some(chat) = SessionId::parse(&id) else {
+        return error(StatusCode::BAD_REQUEST, "bad session id");
+    };
+    Json(json!({
+        "browser": app.browser_in_play(&chat),
+        "team": app.supervisor.has_workers(&chat),
+    }))
+    .into_response()
 }
 
 // ---- MCP servers ----

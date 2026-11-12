@@ -458,6 +458,12 @@ impl Supervisor {
         }
     }
 
+    /// Whether a chat has started workers (any, live or not): its MCP
+    /// server then lists the tools that manage them.
+    pub(crate) fn has_workers(&self, id: &SessionId) -> bool {
+        Tree::new(self.sessions()).children.contains_key(id)
+    }
+
     // ---- the tools ----
 
     /// `agents_harnesses`: what a worker can run on.
@@ -1611,7 +1617,7 @@ fn worker_brief(
     brief: &str,
 ) -> String {
     let mut text = format!(
-        "You are a worker in an OpenRemote team. The chat \"{lead}\" ({lead_harness}) started you with the task below.          When your turn ends, your final message is sent to the lead as your report, so put the result in it.          You work for the lead, so do not ask the user questions; if you are blocked, say so in your final message."
+        "You are a worker in an OpenRemote team. The chat \"{lead}\" ({lead_harness}) started you with the task below. When your turn ends, your final message is sent to the lead as your report, so put the result in it. You work for the lead, so do not ask the user questions; if you are blocked, say so in your final message."
     );
     if tools.report {
         text.push_str(
@@ -1645,6 +1651,29 @@ Task:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_workers_brief_has_no_runs_of_spaces() {
+        let text = worker_brief(
+            "Lead",
+            "claude",
+            None,
+            BriefTools {
+                report: true,
+                spawn: true,
+                sideways: true,
+            },
+            "Do the thing.",
+        );
+        assert!(!text.contains("  "), "{text:?}");
+        assert!(
+            text.ends_with(
+                "Task:
+Do the thing."
+            ),
+            "{text:?}"
+        );
+    }
 
     #[test]
     fn settings_change_by_name_and_keep_to_their_range() {

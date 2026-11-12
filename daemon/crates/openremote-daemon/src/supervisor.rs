@@ -444,7 +444,7 @@ pub struct Supervisor {
 }
 
 /// Where the note riding each delivered message comes from.
-type PromptNote = Box<dyn Fn() -> Option<String> + Send + Sync>;
+type PromptNote = Box<dyn Fn(&SessionId) -> Option<String> + Send + Sync>;
 
 type PluginChanged =
     Box<dyn Fn(String) -> futures_util::future::BoxFuture<'static, ()> + Send + Sync>;
@@ -1625,6 +1625,7 @@ impl Supervisor {
             queue_paused: false,
             mentioned_chats: Vec::new(),
             carry_transcript: None,
+            browser_used: false,
             parent,
         };
         let id = session.id;
@@ -1650,7 +1651,7 @@ impl Supervisor {
             resume: None,
             include_deltas: true,
             fast: current.fast,
-            mcp_servers: self.mcp_servers_for(&id),
+            mcp_servers: self.mcp_servers_for(&id, &current.harness),
             plugin_dirs: self.plugin_dirs(current.workspace.as_deref()),
             allowed_tools: self.allowed_tools(),
         };
@@ -1896,8 +1897,12 @@ impl Supervisor {
             .unwrap_or_else(|| id.to_string())
     }
 
-    /// The note added to each delivered message, from here on.
-    pub fn set_prompt_note(&self, note: impl Fn() -> Option<String> + Send + Sync + 'static) {
+    /// The note added to a chat's delivered messages, from here on: asked
+    /// once per message, and None when there is nothing to tell that chat.
+    pub fn set_prompt_note(
+        &self,
+        note: impl Fn(&SessionId) -> Option<String> + Send + Sync + 'static,
+    ) {
         let _ = self.prompt_note.set(Box::new(note));
     }
 
@@ -1905,7 +1910,13 @@ impl Supervisor {
     /// note where this harness has OpenRemote's tools. The note is never
     /// stored or shown, and a message that starts with a / command goes
     /// without it, so it never becomes that command's arguments.
-    fn with_prompt_note(&self, rides_mcp: bool, text: &str, origin: Option<&Origin>) -> String {
+    fn with_prompt_note(
+        &self,
+        id: &SessionId,
+        rides_mcp: bool,
+        text: &str,
+        origin: Option<&Origin>,
+    ) -> String {
         // Another agent's message is read behind a line that says so: an
         // agent must never take it for the user's word.
         let mut words = match origin {
@@ -1913,7 +1924,7 @@ impl Supervisor {
             None => text.to_string(),
         };
         if rides_mcp && self.controls.get().is_some() && !text.trim_start().starts_with('/') {
-            if let Some(note) = self.prompt_note.get().and_then(|note| note()) {
+            if let Some(note) = self.prompt_note.get().and_then(|note| note(id)) {
                 if !words.is_empty() {
                     words.push_str("\n\n");
                 }
@@ -1940,7 +1951,7 @@ impl Supervisor {
         let carried = self.carried_prompt(id, text, driver.per_prompt_process());
         let said = carried.as_deref().unwrap_or(text);
         let prompt = openremote_harness::Prompt {
-            text: self.with_prompt_note(driver.rides_mcp(), said, origin),
+            text: self.with_prompt_note(id, driver.rides_mcp(), said, origin),
             images,
         };
         let sent = driver.send_prompt(&prompt).await;
@@ -2488,7 +2499,7 @@ impl Supervisor {
             resume: harness_ref,
             include_deltas: true,
             fast: session.fast,
-            mcp_servers: self.mcp_servers_for(id),
+            mcp_servers: self.mcp_servers_for(id, &session.harness),
             plugin_dirs: self.plugin_dirs(session.workspace.as_deref()),
             allowed_tools: self.allowed_tools(),
         };
@@ -3481,6 +3492,7 @@ mod tests {
             queue_paused: false,
             mentioned_chats: Vec::new(),
             carry_transcript: None,
+            browser_used: false,
             parent: None,
         };
         // A spawn still under way is refused, and the word says why.
@@ -3694,6 +3706,7 @@ mod tests {
             queue_paused: false,
             mentioned_chats: Vec::new(),
             carry_transcript: None,
+            browser_used: false,
             parent: None,
         };
         let id = session.id;
@@ -3737,6 +3750,7 @@ mod tests {
             queue_paused: false,
             mentioned_chats: Vec::new(),
             carry_transcript: None,
+            browser_used: false,
             parent: None,
         };
         let id = session.id;

@@ -43,6 +43,18 @@ pub struct AppOptions {
 }
 
 impl App {
+    /// Whether a chat has the browser in play: its agent has used the
+    /// browser, or the user asked for every chat to be told about the tabs
+    /// (Settings > Browser). Such a chat is listed every browser tool and
+    /// hears about its tabs; any other is listed the tools that start
+    /// browsing, and finds tabs with `browser_tabs`.
+    pub fn browser_in_play(&self, id: &openremote_core::SessionId) -> bool {
+        let used = crate::supervisor::lock_recovering(&self.store)
+            .session(id)
+            .is_ok_and(|s| s.browser_used);
+        used || self.browser.every_chat_sees_tabs()
+    }
+
     pub async fn new(options: AppOptions) -> Arc<Self> {
         let store = Store::open(options.data_dir.clone()).expect("store opens");
         let store = Arc::new(StdMutex::new(store));
@@ -126,13 +138,17 @@ impl App {
             port: OnceLock::new(),
             sync: crate::sync::SyncState::default(),
         });
-        // Each message a harness receives carries a short note of the
-        // browser's open tabs (information, never instructions; never in
-        // what is stored or shown). A weak link, so the app and its
+        // A message a harness receives carries a short note of what changed
+        // in the browser's open tabs since that chat was last told, when the
+        // chat has the browser in play (information, never instructions;
+        // never in what is stored or shown). A weak link, so the app and its
         // supervisor don't keep each other alive.
         let weak = Arc::downgrade(&app);
-        app.supervisor
-            .set_prompt_note(move || weak.upgrade().and_then(|app| app.browser.tabs_note()));
+        app.supervisor.set_prompt_note(move |id| {
+            let app = weak.upgrade()?;
+            app.browser
+                .tabs_note(&id.to_string(), app.browser_in_play(id))
+        });
         // A command plugin made again before a chat replaces its folder: the
         // runtime stops the program that ran the old copy.
         let runtime = Arc::downgrade(&app.plugin_runtime);

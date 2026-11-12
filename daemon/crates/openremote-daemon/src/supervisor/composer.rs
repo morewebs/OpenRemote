@@ -100,6 +100,13 @@ pub struct CommandsView {
     pub error: Option<String>,
 }
 
+/// Whether a harness's MCP client re-lists tools on
+/// `notifications/tools/list_changed`, checked against each App's client:
+/// Claude Code does, for a server that declares `tools.listChanged`.
+pub(super) fn stages_tools(harness: &str) -> bool {
+    harness == "claude"
+}
+
 /// The name a plugin's commands carry: its Claude manifest's own name.
 fn manifest_name(dir: &Path) -> Option<String> {
     let raw = std::fs::read(dir.join(".claude-plugin").join("plugin.json")).ok()?;
@@ -120,22 +127,37 @@ impl Supervisor {
     /// daemon is on now, kept as the fallback for a one-release mismatch:
     /// the server prefers the port the daemon publishes in that same data
     /// folder, because a restart moves it and the chat outlives us.
-    pub(super) fn mcp_servers_for(&self, id: &SessionId) -> Vec<openremote_harness::McpServer> {
+    ///
+    /// Claude Code's server is `--staged`: it lists tools as the chat comes
+    /// to need them and says when the list grew, because Claude Code lists
+    /// again on `notifications/tools/list_changed`. Codex holds that behind a
+    /// feature still under development and off by default, and a plugin's
+    /// App may ignore it, so they are listed everything from the start: a
+    /// tool they could never be told about would be a feature lost.
+    pub(super) fn mcp_servers_for(
+        &self,
+        id: &SessionId,
+        harness: &str,
+    ) -> Vec<openremote_harness::McpServer> {
         let mut servers = self.mcp_servers();
         if let Some(controls) = self.controls.get() {
             let data_dir = self.with_store(|s| s.dir().to_path_buf());
+            let mut args = vec![
+                "mcp-chat".into(),
+                "--session".into(),
+                id.to_string(),
+                "--port".into(),
+                controls.port.to_string(),
+                "--data-dir".into(),
+                data_dir.to_string_lossy().into_owned(),
+            ];
+            if stages_tools(harness) {
+                args.push("--staged".into());
+            }
             servers.push(openremote_harness::McpServer {
                 id: "openremote".into(),
                 command: controls.exe.to_string_lossy().into_owned(),
-                args: vec![
-                    "mcp-chat".into(),
-                    "--session".into(),
-                    id.to_string(),
-                    "--port".into(),
-                    controls.port.to_string(),
-                    "--data-dir".into(),
-                    data_dir.to_string_lossy().into_owned(),
-                ],
+                args,
             });
         }
         servers
@@ -619,6 +641,14 @@ pub(super) fn transcript(events: &[Event], tail: Option<usize>, limit: usize) ->
 mod tests {
     use super::*;
     use openremote_harness::{AgentDescriptor, CommandDescriptor};
+
+    #[test]
+    fn only_an_app_that_relists_on_a_change_is_listed_tools_in_stages() {
+        assert!(stages_tools("claude"));
+        for harness in ["codex", "freebuff", "opencode", "pi", "grok", "agy"] {
+            assert!(!stages_tools(harness), "{harness}");
+        }
+    }
 
     fn plugin_folder() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();

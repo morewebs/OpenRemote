@@ -64,7 +64,7 @@ fn object(props: Value, required: &[&str]) -> Value {
 }
 
 fn agent_prop() -> Value {
-    json!({"type": "string", "description": "The agent's id (from agents_list or agents_spawn), or at least its first 6 characters."})
+    json!({"type": "string", "description": "Agent id (from agents_list or agents_spawn), or its first 6+ characters."})
 }
 
 pub const TOOLS: &[Tool] = &[
@@ -77,19 +77,19 @@ pub const TOOLS: &[Tool] = &[
     },
     Tool {
         name: "agents_spawn",
-        description: "Start a worker: another chat, on the harness you pick (any installed one; a different one from yours is fine), that works on the brief you write while you carry on. It returns at once with the worker's id. The worker's final message comes back to you as its report - use agents_wait to wait for reports, or carry on: a report that arrives while you are busy waits for the end of your turn. Start workers only when the user asked for help in parallel, or the task splits into parts that can run side by side and touch different files; never for small things you can do yourself. A worker knows nothing you do not tell it: write a self-contained brief - the goal, the files and limits, and what its final message should contain. Workers share your folder.",
+        description: "Start a worker: another chat, on any installed harness, working on your brief while you carry on. Returns at once with its id; its final message comes back to you as its report (agents_wait waits for it). Only for work the user wants in parallel or that splits into parts touching different files, never for small things you can do yourself. Workers share your folder and know only the brief: make it self-contained (goal, files, limits, what to report).",
         reads: false,
         group: Group::Spawn,
         schema: || {
             object(
                 json!({
-                    "harness": {"type": "string", "description": "The harness's id, from agents_harnesses (for example claude, codex, opencode, pi)."},
-                    "brief": {"type": "string", "description": "What the worker should do, and what to put in its final message."},
-                    "title": {"type": "string", "description": "A short name for the worker's chat (up to 60 characters). Leave out to take it from the brief."},
-                    "model": {"type": "string", "description": "A model the harness offers. Leave out for its default."},
-                    "effort": {"type": "string", "description": "An effort level the model offers. Leave out for its default."},
-                    "permission": {"type": "string", "description": "Leave out. Workers run with the permission the user set for the harness; naming it changes nothing."},
-                    "workspace": {"type": "string", "description": "Only \"inherit\" - the worker shares your folder - is available for now."},
+                    "harness": {"type": "string", "description": "Id from agents_harnesses, like claude or codex."},
+                    "brief": {"type": "string", "description": "The task, and what to put in the final message."},
+                    "title": {"type": "string", "description": "Short chat name (60 chars). Default: from the brief."},
+                    "model": {"type": "string", "description": "Default: the harness's own."},
+                    "effort": {"type": "string", "description": "Default: the model's own."},
+                    "permission": {"type": "string", "description": "Leave out: workers run with the permission the user set."},
+                    "workspace": {"type": "string", "description": "Only \"inherit\" (your folder)."},
                 }),
                 &["harness", "brief"],
             )
@@ -104,14 +104,14 @@ pub const TOOLS: &[Tool] = &[
     },
     Tool {
         name: "agents_read",
-        description: "Read what one of your workers did: its messages in order, each tool call as one line (long ones keep their end). With tail, only its last few messages: tail 1 is its latest message, which is its report.",
+        description: "What one of your workers did: its messages in order, each tool call as one line (long ones keep their end). tail 1 is its latest message, its report.",
         reads: true,
         group: Group::Manage,
         schema: || {
             object(
                 json!({
                     "agent": agent_prop(),
-                    "tail": {"type": "integer", "description": "Only the last this-many messages."},
+                    "tail": {"type": "integer", "description": "Only its last this-many messages."},
                 }),
                 &["agent"],
             )
@@ -119,19 +119,19 @@ pub const TOOLS: &[Tool] = &[
     },
     Tool {
         name: "agents_wait",
-        description: "Wait for your workers. Answers as soon as one finishes or sends a note - with its report - or after timeout_s seconds (30 unless you say, 40 at most) with where each stands. Call it again to keep waiting. A report also reaches you by itself when you are not waiting, so wait only when you have nothing else to do.",
+        description: "Wait for a worker to finish or send a note (answers with its report), or for timeout_s seconds, then says where each stands. Reports also reach you by themselves, so wait only when you have nothing else to do.",
         reads: true,
         group: Group::Manage,
         schema: || {
             object(
-                json!({"timeout_s": {"type": "integer", "description": "How long to wait: 1 to 40 seconds. Default 30."}}),
+                json!({"timeout_s": {"type": "integer", "description": "1 to 40; default 30."}}),
                 &[],
             )
         },
     },
     Tool {
         name: "agents_report",
-        description: "Send the chat that started you a note without ending your turn: progress it needs to know, a question you cannot settle yourself, or that you are blocked. Your final message is already your report to it - do not repeat that here. Notes less than 15 seconds apart are refused.",
+        description: "Send your lead a note without ending your turn: progress, a question you cannot settle, or that you are blocked. Your final message is already your report; do not repeat it here. Notes under 15 seconds apart are refused.",
         reads: true,
         group: Group::Report,
         schema: || {
@@ -146,7 +146,7 @@ pub const TOOLS: &[Tool] = &[
     },
     Tool {
         name: "agents_message",
-        description: "Send a message to one of your workers. By default it waits for the worker's current turn to end (or starts one at once if the worker is idle); with mode steer it goes into the turn that is running now. The worker reads it as coming from you, not from the user.",
+        description: "Message one of your workers: queued for the end of its turn (at once if it is idle), or with mode steer, into the turn running now. It reads as from you, not the user.",
         reads: false,
         group: Group::Manage,
         schema: || {
@@ -154,7 +154,7 @@ pub const TOOLS: &[Tool] = &[
                 json!({
                     "agent": agent_prop(),
                     "text": {"type": "string", "description": "The message."},
-                    "mode": {"type": "string", "enum": ["queue", "steer"], "description": "queue (default) or steer."},
+                    "mode": {"type": "string", "enum": ["queue", "steer"]},
                 }),
                 &["agent", "text"],
             )
@@ -177,6 +177,14 @@ pub fn reading_tool_names(server: &str) -> Vec<String> {
         .filter(|t| t.reads)
         .map(|t| format!("mcp__{server}__{}", t.name))
         .collect()
+}
+
+/// Whether a tool manages workers (list, read, wait, message, stop): a chat's
+/// MCP server can hold these back until the chat has workers.
+pub fn manages(name: &str) -> bool {
+    TOOLS
+        .iter()
+        .any(|t| t.name == name && t.group == Group::Manage)
 }
 
 /// The tools a chat is offered, as MCP lists them.
@@ -387,5 +395,20 @@ mod tests {
             ["agents_report"]
         );
         assert!(names(Offer::default()).is_empty());
+        let managing: Vec<&str> = TOOLS
+            .iter()
+            .map(|t| t.name)
+            .filter(|n| manages(n))
+            .collect();
+        assert_eq!(
+            managing,
+            [
+                "agents_list",
+                "agents_read",
+                "agents_wait",
+                "agents_message",
+                "agents_stop"
+            ]
+        );
     }
 }

@@ -402,3 +402,123 @@ async fn a_chats_mcp_server_carries_only_the_team_tools_it_can_use() {
     let (names, _) = tools_of(&daemon, &lead, false).await;
     assert!(names.iter().all(|n| !n.starts_with("agents_")), "{names:?}");
 }
+
+/// A Claude chat's server is staged: the tools that manage workers are
+/// listed once the chat has one, and the server says the list changed the
+/// moment it does, so the next request carries them.
+#[tokio::test]
+async fn a_staged_server_lists_the_manage_tools_once_the_chat_has_a_worker() {
+    use std::process::Stdio;
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    let daemon = start_daemon(&[]).await;
+    std::fs::write(daemon.data_dir().join("token"), &daemon.token).unwrap();
+    let ws = workspace(None);
+    let lead = chat(&daemon, "claude", &ws).await;
+    let gates = call(
+        &daemon,
+        "GET",
+        &format!("/sessions/{lead}/tools/gates"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        gates.body,
+        json!({"browser": false, "team": false}),
+        "{}",
+        gates.raw
+    );
+
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_openremote-daemon"))
+        .args([
+            "mcp-chat",
+            "--session",
+            &lead,
+            "--port",
+            &daemon.addr.port().to_string(),
+            "--data-dir",
+        ])
+        .arg(daemon.data_dir())
+        .arg("--staged")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+    // Every line up to and including the answer to `id`.
+    let mut rpc = async |id: u64, method: &str, params: Value| -> Vec<Value> {
+        let frame = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
+        stdin
+            .write_all(format!("{frame}\n").as_bytes())
+            .await
+            .unwrap();
+        stdin.flush().await.unwrap();
+        let mut seen = Vec::new();
+        loop {
+            let line = tokio::time::timeout(std::time::Duration::from_secs(60), lines.next_line())
+                .await
+                .expect("the server answers")
+                .unwrap()
+                .unwrap();
+            let value: Value = serde_json::from_str(&line).unwrap();
+            let done = value["id"] == json!(id);
+            seen.push(value);
+            if done {
+                return seen;
+            }
+        }
+    };
+    let names = |lines: &[Value]| -> Vec<String> {
+        lines.last().unwrap()["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|t| t["name"].as_str().map(str::to_string))
+            .collect()
+    };
+    let hello = rpc(1, "initialize", json!({"protocolVersion": "2025-06-18"})).await;
+    assert_eq!(
+        hello[0]["result"]["capabilities"]["tools"]["listChanged"],
+        true
+    );
+    let before = names(&rpc(2, "tools/list", json!({})).await);
+    assert!(before.contains(&"agents_spawn".to_string()), "{before:?}");
+    assert!(!before.contains(&"agents_wait".to_string()), "{before:?}");
+
+    let spawned_lines = rpc(
+        3,
+        "tools/call",
+        json!({"name": "agents_spawn", "arguments": {"harness": "codex", "brief": "x", "title": "One"}}),
+    )
+    .await;
+    assert!(
+        spawned_lines.last().unwrap()["result"]["isError"].is_null(),
+        "{spawned_lines:?}"
+    );
+    // The change comes right after the answer, before anything else is asked.
+    let changed = rpc(4, "ping", json!({})).await;
+    assert_eq!(
+        changed[0]["method"], "notifications/tools/list_changed",
+        "{changed:?}"
+    );
+    let after = names(&rpc(5, "tools/list", json!({})).await);
+    for wanted in [
+        "agents_list",
+        "agents_read",
+        "agents_wait",
+        "agents_message",
+        "agents_stop",
+    ] {
+        assert!(after.contains(&wanted.to_string()), "{after:?}");
+    }
+    let gates = call(
+        &daemon,
+        "GET",
+        &format!("/sessions/{lead}/tools/gates"),
+        None,
+    )
+    .await;
+    assert_eq!(gates.body["team"], true, "{}", gates.raw);
+}

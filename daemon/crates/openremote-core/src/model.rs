@@ -452,6 +452,12 @@ pub struct Session {
     /// condensed and marked as context. Cleared once that message is sent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub carry_transcript: Option<u64>,
+    /// The chat's agent has used OpenRemote's browser. From then on its MCP
+    /// server lists every browser tool and its messages carry the tabs note;
+    /// before, it is listed only the tools that start browsing. Never
+    /// cleared, so a tool a chat has used is never taken from it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub browser_used: bool,
 }
 
 /// Where a team member stands: the chat that started it, how many steps

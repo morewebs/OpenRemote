@@ -35,6 +35,13 @@ pub const ROOT_VAR: &str = "${OPENREMOTE_PLUGIN_ROOT}";
 const MCP_SERVER: &str = "openremote";
 const MAX_FULL_TOOL_NAME: usize = 64;
 
+/// What one plugin may add to every request of every chat it reaches: its
+/// agent tools' definitions are sent with each one, so their count, each
+/// description and each input schema are capped.
+const MAX_TOOLS: usize = 16;
+const MAX_TOOL_DESCRIPTION: usize = 1024;
+const MAX_TOOL_SCHEMA: usize = 4096;
+
 /// The places a plugin's view can show.
 pub const VIEW_PLACES: &[&str] = &["sidebar", "machines", "settings"];
 
@@ -444,7 +451,27 @@ fn check_tools(
         ));
     }
     unique(tools.iter().map(|t| t.name.as_str()), "tools")?;
+    if tools.len() > MAX_TOOLS {
+        return Err(invalid(format!(
+            "the plugin offers {} agent tools; at most {MAX_TOOLS}: every tool's definition is sent with every request of every chat it reaches",
+            tools.len()
+        )));
+    }
     for t in tools {
+        let described = t.description.chars().count();
+        if described > MAX_TOOL_DESCRIPTION {
+            return Err(invalid(format!(
+                "the tool '{}''s description is {described} characters; at most {MAX_TOOL_DESCRIPTION}: it is sent with every request",
+                t.name
+            )));
+        }
+        let schema = serde_json::to_string(&t.input_schema).map_or(0, |s| s.len());
+        if schema > MAX_TOOL_SCHEMA {
+            return Err(invalid(format!(
+                "the tool '{}''s input_schema is {schema} characters; at most {MAX_TOOL_SCHEMA}: it is sent with every request",
+                t.name
+            )));
+        }
         if !snake(&t.name, 48) {
             return Err(invalid(format!(
                 "the tool name '{}' must be lowercase letters, digits and underscores, a letter first",
@@ -843,6 +870,21 @@ mod tests {
                 json!({"contributes": {"tools": [{"name": "t", "description": "d"}]}}),
                 PluginRuntime::Content,
                 "only a process or wasm plugin",
+            ),
+            (
+                json!({"entry": "tool.wasm", "contributes": {"tools": [{"name": "t", "description": "d".repeat(1025)}]}}),
+                PluginRuntime::Wasm,
+                "at most 1024",
+            ),
+            (
+                json!({"entry": "tool.wasm", "contributes": {"tools": [{"name": "t", "description": "d", "input_schema": {"type": "object", "description": "x".repeat(4100)}}]}}),
+                PluginRuntime::Wasm,
+                "at most 4096",
+            ),
+            (
+                json!({"entry": "tool.wasm", "contributes": {"tools": (0..17).map(|i| json!({"name": format!("t{i}"), "description": "d"})).collect::<Vec<_>>()}}),
+                PluginRuntime::Wasm,
+                "at most 16",
             ),
         ];
         for (raw, runtime, says) in cases {

@@ -21,7 +21,7 @@ import { SETTINGS_ENTRIES, searchSettings } from './settings-search.js'
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
 test('a setting reads as saved, else its default; the bar is on unless turned off', () => {
-  assert.deepEqual(BROWSER_DEFAULTS, { search: 'google', bookmarks_bar: true, startup: 'continue' })
+  assert.deepEqual(BROWSER_DEFAULTS, { search: 'google', bookmarks_bar: true, startup: 'continue', agent_tabs: false })
   assert.equal(browserSetting({}, 'search'), 'google')
   assert.equal(browserSetting({ search: 'duckduckgo' }, 'search'), 'duckduckgo')
   // An engine this build does not list reads as the default, never undefined.
@@ -29,6 +29,10 @@ test('a setting reads as saved, else its default; the bar is on unless turned of
   assert.equal(browserSetting(null, 'bookmarks_bar'), true)
   assert.equal(browserSetting({ bookmarks_bar: false }, 'bookmarks_bar'), false)
   assert.equal(browserSetting({ bookmarks_bar: 'yes' }, 'bookmarks_bar'), false)
+  // Telling every chat about the tabs is off unless turned on.
+  assert.equal(browserSetting({}, 'agent_tabs'), false)
+  assert.equal(browserSetting({ agent_tabs: true }, 'agent_tabs'), true)
+  assert.equal(browserSetting({ agent_tabs: 'yes' }, 'agent_tabs'), false)
 })
 
 test('the cache loads the daemon\'s settings and tells its subscribers', async () => {
@@ -110,6 +114,8 @@ test('the new rows are registered and found by the words a person types', () => 
     ['search engine', 'browser-search'],
     ['duckduckgo', 'browser-search'],
     ['bookmarks bar', 'browser-bookmarks-bar'],
+    ['tabs agents', 'browser-agent-tabs'],
+    ['open tabs', 'browser-agent-tabs'],
     ['browsing data', 'browser-clear-data'],
   ]) {
     const rows = searchSettings(word, SETTINGS_ENTRIES)
@@ -125,6 +131,11 @@ test('Settings draws the rows, writes through the shared cache, and hides what c
   assert.match(view, /setBrowserPref\(browserCall, key, value\)\.catch\(\(err\) => setBrowserNote\(errorCopy\(err\)\)\)/)
   assert.match(view, /changeBrowserSetting\('search', id\)/)
   assert.match(view, /changeBrowserSetting\('bookmarks_bar', !barEverywhere\)/)
+  // The daemon reads this key (browser/mod.rs AGENT_TABS) to tell every chat.
+  assert.match(view, /data-stg="browser-agent-tabs"/)
+  assert.match(view, /changeBrowserSetting\('agent_tabs', !agentTabs\)/)
+  assert.match(view, /keys\.add\('browser-agent-tabs'\)/)
+  assert.match(read('../daemon/crates/openremote-daemon/src/browser/mod.rs'), /pub const AGENT_TABS: &str = "agent_tabs";/)
   // The settings need the desktop app's browser; clearing needs a shell that can.
   assert.match(view, /if \(!hasTauri \|\| isMobile\) \{\s*keys\.add\('browser-search'\)\s*keys\.add\('browser-bookmarks-bar'\)/)
   assert.match(view, /if \(!profileClearable\) keys\.add\('browser-clear-data'\)/)

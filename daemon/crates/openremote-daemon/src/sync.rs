@@ -1004,6 +1004,7 @@ mod tests {
             queue_paused: false,
             mentioned_chats: Vec::new(),
             carry_transcript: None,
+            browser_used: false,
             parent: None,
         };
         let private = session(None);

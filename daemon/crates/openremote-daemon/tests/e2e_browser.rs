@@ -600,3 +600,151 @@ async fn a_chats_mcp_server_carries_the_browser_tools() {
         .unwrap_or("");
     assert!(text.starts_with("[tab 1] https://example.com/"), "{opened}");
 }
+
+/// Every line a server writes up to and including its answer to `id`.
+async fn rpc_lines(
+    stdin: &mut tokio::process::ChildStdin,
+    lines: &mut tokio::io::Lines<BufReader<tokio::process::ChildStdout>>,
+    id: u64,
+    method: &str,
+    params: Value,
+) -> Vec<Value> {
+    let frame = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
+    stdin
+        .write_all(format!("{frame}\n").as_bytes())
+        .await
+        .unwrap();
+    stdin.flush().await.unwrap();
+    let mut seen = Vec::new();
+    loop {
+        let line = tokio::time::timeout(Duration::from_secs(60), lines.next_line())
+            .await
+            .expect("the server answers")
+            .unwrap()
+            .unwrap();
+        let value: Value = serde_json::from_str(&line).unwrap();
+        let done = value["id"] == json!(id);
+        seen.push(value);
+        if done {
+            return seen;
+        }
+    }
+}
+
+fn listed_names(lines: &[Value]) -> Vec<String> {
+    lines.last().unwrap()["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|t| t["name"].as_str().map(str::to_string))
+        .collect()
+}
+
+/// A Claude chat's server is staged: before the chat uses the browser it is
+/// listed only the tools that start browsing; using one lists the rest at
+/// once (the server says the list changed), and the chat keeps them in every
+/// later server, so a tool it used is never taken away.
+#[tokio::test]
+async fn a_staged_server_lists_every_browser_tool_once_the_chat_uses_one() {
+    let ws = workspace(Some("plain"));
+    let side = sidecar(ws.path()).await;
+    let daemon = &side.daemon;
+    send(
+        &side.stdin,
+        &FromHost::Hello {
+            engine: "stand-in".into(),
+            caps: Default::default(),
+        },
+    );
+    let created = call(
+        daemon,
+        "POST",
+        "/sessions",
+        Some(json!({"request_id": "s-create", "harness": "claude", "workspace": ws.path()})),
+    )
+    .await;
+    let chat = created.body["id"].as_str().unwrap().to_string();
+    let server = || {
+        tokio::process::Command::new(env!("CARGO_BIN_EXE_openremote-daemon"))
+            .args([
+                "mcp-chat",
+                "--session",
+                &chat,
+                "--port",
+                &daemon.addr.port().to_string(),
+                "--data-dir",
+            ])
+            .arg(daemon.data_dir())
+            .arg("--staged")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap()
+    };
+
+    let mut child = server();
+    let mut stdin = child.stdin.take().unwrap();
+    let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+    let hello = rpc_lines(&mut stdin, &mut lines, 1, "initialize", json!({})).await;
+    assert_eq!(
+        hello[0]["result"]["capabilities"]["tools"]["listChanged"],
+        true
+    );
+    assert!(
+        hello[0]["result"]["instructions"]
+            .as_str()
+            .is_some_and(|i| i.contains("browser_")),
+        "{hello:?}"
+    );
+    let before = listed_names(&rpc_lines(&mut stdin, &mut lines, 2, "tools/list", json!({})).await);
+    for kept in ["read_chat", "browser_tabs", "browser_tab_open"] {
+        assert!(before.contains(&kept.to_string()), "{before:?}");
+    }
+    assert!(!before.contains(&"browser_click".to_string()), "{before:?}");
+
+    let opened = rpc_lines(
+        &mut stdin,
+        &mut lines,
+        3,
+        "tools/call",
+        json!({"name": "browser_tab_open", "arguments": {"url": "https://example.com/"}}),
+    )
+    .await;
+    let text = opened.last().unwrap()["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        text.starts_with("[tab 1] https://example.com/"),
+        "{opened:?}"
+    );
+    let changed = rpc_lines(&mut stdin, &mut lines, 4, "ping", json!({})).await;
+    assert_eq!(
+        changed[0]["method"], "notifications/tools/list_changed",
+        "{changed:?}"
+    );
+    let after = listed_names(&rpc_lines(&mut stdin, &mut lines, 5, "tools/list", json!({})).await);
+    assert!(after.contains(&"browser_click".to_string()), "{after:?}");
+    // Nothing more changed: no second notice.
+    let quiet = rpc_lines(&mut stdin, &mut lines, 6, "ping", json!({})).await;
+    assert_eq!(quiet.len(), 1, "{quiet:?}");
+    drop(stdin);
+    drop(child);
+
+    // The chat's next server (a resume, a restart) lists them from the start.
+    let mut child = server();
+    let mut stdin = child.stdin.take().unwrap();
+    let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+    rpc_lines(&mut stdin, &mut lines, 1, "initialize", json!({})).await;
+    let again = listed_names(&rpc_lines(&mut stdin, &mut lines, 2, "tools/list", json!({})).await);
+    assert!(again.contains(&"browser_click".to_string()), "{again:?}");
+    let gates = call(
+        daemon,
+        "GET",
+        &format!("/sessions/{chat}/tools/gates"),
+        None,
+    )
+    .await;
+    assert_eq!(gates.body["browser"], true, "{}", gates.raw);
+}

@@ -6,8 +6,12 @@
 
 const PREFIX = 'mcp__openremote__browser_'
 
+// Some tools take the action as an argument (browser_tabs selects or lists
+// downloads, browser_navigate goes back, browser_logs reads the network);
+// the old one-action names stay so chats from before still read.
 const VERBS = {
   tabs: 'tabs',
+  logs: 'logs',
   tab_open: 'open tab',
   tab_close: 'close tab',
   tab_select: 'switch tab',
@@ -47,6 +51,14 @@ export function browserTool(name, input) {
     mono: false,
   }
   switch (verb) {
+    case 'tabs':
+      if (words(args.select)) facts.label = `Browser · ${VERBS.tab_select}`
+      else if (args.downloads === true) facts.label = `Browser · ${VERBS.downloads}`
+      break
+    case 'logs':
+      if (args.kind === 'console' || args.kind === 'network') facts.label = `Browser · ${args.kind}`
+      break
+    case 'navigate':
     case 'go':
       if (words(args.direction)) facts.label = `Browser · ${args.direction}`
       break

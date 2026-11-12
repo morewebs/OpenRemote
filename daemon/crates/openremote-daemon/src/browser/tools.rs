@@ -26,8 +26,10 @@ impl Tool {
     }
 }
 
+// These three ride most tools, so every word in them is paid once per tool
+// on every model request: they stay short.
 fn tab_prop() -> Value {
-    json!({"type": "string", "description": "The tab's id (from browser_tabs). Leave out for the tab you used last."})
+    json!({"type": "string", "description": "Tab id; default: the last one used."})
 }
 
 fn target_props() -> serde_json::Map<String, Value> {
@@ -35,11 +37,11 @@ fn target_props() -> serde_json::Map<String, Value> {
     props.insert("tab".into(), tab_prop());
     props.insert(
         "ref".into(),
-        json!({"type": "string", "description": "The element's ref from the latest browser_snapshot, like e12."}),
+        json!({"type": "string", "description": "Ref from browser_snapshot, like e12."}),
     );
     props.insert(
         "element".into(),
-        json!({"type": "string", "description": "What the element is, in words (\"the Sign in button\"): shown to the user when they're asked."}),
+        json!({"type": "string", "description": "The element in words; shown to the user."}),
     );
     props
 }
@@ -57,9 +59,17 @@ fn only_tab() -> Value {
 pub const TOOLS: &[Tool] = &[
     Tool {
         name: "browser_tabs",
-        description: "List the tabs open in the user's OpenRemote browser: id, address, title, and which chat's agent is using each. The browser is shared: the user sees every tab you open and act on.",
+        description: "The user's OpenRemote browser (shared: the user sees every tab you open and act on). Lists its tabs: id, address, title, who is using each. With select, makes that tab the default for later tools; with downloads, lists recent downloads instead.",
         reads: true,
-        schema: || object(serde_json::Map::new(), &[]),
+        schema: || {
+            let mut props = serde_json::Map::new();
+            props.insert(
+                "select".into(),
+                json!({"type": "string", "description": "A tab id to make the default."}),
+            );
+            props.insert("downloads".into(), json!({"type": "boolean"}));
+            object(props, &[])
+        },
     },
     Tool {
         name: "browser_tab_open",
@@ -75,16 +85,6 @@ pub const TOOLS: &[Tool] = &[
         },
     },
     Tool {
-        name: "browser_tab_select",
-        description: "Make a tab the one later browser tools use by default.",
-        reads: true,
-        schema: || {
-            let mut props = serde_json::Map::new();
-            props.insert("tab".into(), tab_prop());
-            object(props, &["tab"])
-        },
-    },
-    Tool {
         name: "browser_tab_close",
         description: "Close a tab.",
         reads: false,
@@ -92,30 +92,17 @@ pub const TOOLS: &[Tool] = &[
     },
     Tool {
         name: "browser_navigate",
-        description: "Go to an address in a tab.",
+        description: "Go to an address in a tab, or go back, forward or reload.",
         reads: false,
         schema: || {
             let mut props = serde_json::Map::new();
             props.insert("tab".into(), tab_prop());
-            props.insert(
-                "url".into(),
-                json!({"type": "string", "description": "The address to go to."}),
-            );
-            object(props, &["url"])
-        },
-    },
-    Tool {
-        name: "browser_go",
-        description: "Go back, go forward, or reload a tab.",
-        reads: false,
-        schema: || {
-            let mut props = serde_json::Map::new();
-            props.insert("tab".into(), tab_prop());
+            props.insert("url".into(), json!({"type": "string"}));
             props.insert(
                 "direction".into(),
-                json!({"type": "string", "enum": ["back", "forward", "reload"]}),
+                json!({"type": "string", "enum": ["back", "forward", "reload"], "description": "In place of url."}),
             );
-            object(props, &["direction"])
+            object(props, &[])
         },
     },
     Tool {
@@ -224,16 +211,18 @@ pub const TOOLS: &[Tool] = &[
         },
     },
     Tool {
-        name: "browser_console",
-        description: "The page's console messages and errors since the last read.",
+        name: "browser_logs",
+        description: "The page's console messages and errors, or its network requests (method, address, status), since the last read.",
         reads: true,
-        schema: only_tab,
-    },
-    Tool {
-        name: "browser_network",
-        description: "The page's network requests since the last read: method, address, status.",
-        reads: true,
-        schema: only_tab,
+        schema: || {
+            let mut props = serde_json::Map::new();
+            props.insert("tab".into(), tab_prop());
+            props.insert(
+                "kind".into(),
+                json!({"type": "string", "enum": ["console", "network"]}),
+            );
+            object(props, &["kind"])
+        },
     },
     Tool {
         name: "browser_evaluate",
@@ -290,13 +279,46 @@ pub const TOOLS: &[Tool] = &[
             object(props, &["ref", "element", "paths"])
         },
     },
-    Tool {
-        name: "browser_downloads",
-        description: "The browser's recent downloads and where each landed.",
-        reads: true,
-        schema: || object(serde_json::Map::new(), &[]),
-    },
 ];
+
+/// The tools every chat is listed, browser in play or not: enough to see what
+/// the user has open and to start browsing, so an agent finds the browser on
+/// its own. Using either puts the browser in play for the chat, and its MCP
+/// server then lists the rest.
+pub const ENTRY: &[&str] = &["browser_tabs", "browser_tab_open"];
+
+/// A call by a name an earlier release listed, as the call it is now: a
+/// conversation that used the old name keeps working after an update.
+/// An unknown name comes back empty.
+pub fn current_name(name: &str, args: &Value) -> (&'static str, Value) {
+    let mut args = match args {
+        Value::Object(_) => args.clone(),
+        _ => json!({}),
+    };
+    let name = match name {
+        "browser_tab_select" => {
+            if let Some(tab) = args.get("tab").cloned() {
+                args["select"] = tab;
+            }
+            "browser_tabs"
+        }
+        "browser_downloads" => {
+            args["downloads"] = json!(true);
+            "browser_tabs"
+        }
+        "browser_go" => "browser_navigate",
+        "browser_console" => {
+            args["kind"] = json!("console");
+            "browser_logs"
+        }
+        "browser_network" => {
+            args["kind"] = json!("network");
+            "browser_logs"
+        }
+        other => return (find(other).map_or("", |t| t.name), args),
+    };
+    (name, args)
+}
 
 pub fn find(name: &str) -> Option<&'static Tool> {
     TOOLS.iter().find(|t| t.name == name)
@@ -326,21 +348,23 @@ fn flag(args: &Value, key: &str) -> bool {
     args.get(key).and_then(Value::as_bool).unwrap_or(false)
 }
 
-/// A tool call as a browser call on `tab`. Tools the daemon answers itself
-/// (tabs, select, downloads) are not browser calls.
+/// A tool call as a browser call on `tab`. What the daemon answers itself
+/// (browser_tabs: the list, select, downloads) is not a browser call.
 pub fn to_call(name: &str, args: &Value, tab: String) -> Result<Call, String> {
     let target = || need(args, "ref").map(|r| r.trim_start_matches("ref=").to_string());
     Ok(match name {
         "browser_tab_close" => Call::Close { tab },
-        "browser_navigate" => Call::Navigate {
-            tab,
-            url: need(args, "url")?,
-        },
-        "browser_go" => match need(args, "direction")?.as_str() {
-            "back" => Call::Back { tab },
-            "forward" => Call::Forward { tab },
-            "reload" => Call::Reload { tab },
-            other => return Err(format!("'{other}' is not back, forward or reload")),
+        "browser_navigate" => match text(args, "direction").filter(|d| !d.trim().is_empty()) {
+            Some(direction) => match direction.as_str() {
+                "back" => Call::Back { tab },
+                "forward" => Call::Forward { tab },
+                "reload" => Call::Reload { tab },
+                other => return Err(format!("'{other}' is not back, forward or reload")),
+            },
+            None => Call::Navigate {
+                tab,
+                url: need(args, "url").map_err(|_| "'url' (or 'direction') is needed")?,
+            },
         },
         "browser_snapshot" => Call::Snapshot { tab },
         "browser_screenshot" => Call::Screenshot {
@@ -398,8 +422,11 @@ pub fn to_call(name: &str, args: &Value, tab: String) -> Result<Call, String> {
                 .and_then(Value::as_u64)
                 .map(|ms| ms.min(30_000)),
         },
-        "browser_console" => Call::Console { tab },
-        "browser_network" => Call::Network { tab },
+        "browser_logs" => match need(args, "kind")?.as_str() {
+            "console" => Call::Console { tab },
+            "network" => Call::Network { tab },
+            other => return Err(format!("'{other}' is not console or network")),
+        },
         "browser_evaluate" => Call::Evaluate {
             tab,
             script: need(args, "script")?,
@@ -520,9 +547,56 @@ mod tests {
             }
         );
         assert_eq!(
-            to_call("browser_go", &json!({"direction": "back"}), "1".into()).unwrap(),
+            to_call(
+                "browser_navigate",
+                &json!({"direction": "back"}),
+                "1".into()
+            )
+            .unwrap(),
             Call::Back { tab: "1".into() }
         );
+        assert_eq!(
+            to_call("browser_logs", &json!({"kind": "network"}), "1".into()).unwrap(),
+            Call::Network { tab: "1".into() }
+        );
+        assert!(to_call("browser_navigate", &json!({}), "1".into()).is_err());
+    }
+
+    #[test]
+    fn an_earlier_releases_tool_names_still_call() {
+        let (name, args) = current_name("browser_tab_select", &json!({"tab": "3"}));
+        assert_eq!((name, args["select"].as_str()), ("browser_tabs", Some("3")));
+        let (name, args) = current_name("browser_downloads", &json!({}));
+        assert_eq!(
+            (name, args["downloads"].as_bool()),
+            ("browser_tabs", Some(true))
+        );
+        assert_eq!(current_name("browser_go", &json!({})).0, "browser_navigate");
+        let (name, args) = current_name("browser_console", &Value::Null);
+        assert_eq!(
+            (name, args["kind"].as_str()),
+            ("browser_logs", Some("console"))
+        );
+        assert_eq!(current_name("browser_click", &json!({})).0, "browser_click");
+        assert_eq!(current_name("browser_nope", &json!({})).0, "");
+        for entry in ENTRY {
+            assert!(find(entry).is_some(), "{entry}");
+        }
+        // Merging never joined a tool that only reads with one that acts:
+        // the reading ones still run without asking.
+        for t in TOOLS {
+            let reads = matches!(
+                t.name,
+                "browser_tabs"
+                    | "browser_snapshot"
+                    | "browser_screenshot"
+                    | "browser_hover"
+                    | "browser_scroll"
+                    | "browser_wait"
+                    | "browser_logs"
+            );
+            assert_eq!(t.reads, reads, "{}", t.name);
+        }
     }
 
     #[test]

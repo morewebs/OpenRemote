@@ -622,6 +622,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
   const draftSite = siteOf(siteDraft)
   const searchEngine = browserSetting(browserPrefs.settings, 'search')
   const barEverywhere = browserSetting(browserPrefs.settings, 'bookmarks_bar')
+  const agentTabs = browserSetting(browserPrefs.settings, 'agent_tabs')
   const browserStartup = browserSetting(browserPrefs.settings, 'startup')
   // Shown at once; a write the daemon refuses goes back and says why.
   const changeBrowserSetting = (key, value) => {
@@ -748,6 +749,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
       keys.add('browser-permissions')
       keys.add('browser-startup')
       keys.add('browser-import')
+      keys.add('browser-agent-tabs')
     }
     if (!profileClearable) keys.add('browser-clear-data')
     // Ad blocking is drawn only where the browser here says it can block.
@@ -1961,6 +1963,20 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                     checked={barEverywhere}
                     onChange={() => changeBrowserSetting('bookmarks_bar', !barEverywhere)}
                     label="Show bookmarks bar"
+                  />
+                </div>
+                <div className="pn-row" data-stg="browser-agent-tabs">
+                  <div>
+                    <div className="pn-name">Tell every chat about my tabs</div>
+                    <div className="pn-detail">
+                      Each chat's agent hears which tabs you have open and gets every browser tool. Off, only a chat
+                      whose agent has used the browser does; the others can still ask for the tabs.
+                    </div>
+                  </div>
+                  <Toggle
+                    checked={agentTabs}
+                    onChange={() => changeBrowserSetting('agent_tabs', !agentTabs)}
+                    label="Tell every chat about my tabs"
                   />
                 </div>
                 <div className="pn-row" data-stg="browser-import">

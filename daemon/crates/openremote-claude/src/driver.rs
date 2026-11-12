@@ -28,6 +28,19 @@ pub struct Driver {
     next_request_id: u64,
 }
 
+/// Claude Code's switch for loading MCP tool definitions on demand through
+/// its tool search, rather than sending every definition with every request.
+const TOOL_SEARCH: &str = "ENABLE_TOOL_SEARCH";
+
+/// The tool-search setting a chat starts with: on, so OpenRemote's tools and
+/// the user's other MCP servers cost a request only once the model looks
+/// them up, but only on Anthropic's own API (a custom endpoint may not
+/// support it, and Claude Code turns it off there itself), and never over a
+/// value the user set.
+fn tool_search(opts: &SpawnOptions, user_set: bool) -> Option<&'static str> {
+    (opts.endpoint.is_none() && !user_set).then_some("true")
+}
+
 impl Driver {
     /// Spawn the harness process and start its reader loops. Returns the
     /// driver (for steering) and the event stream (for observing).
@@ -84,6 +97,9 @@ impl Driver {
                     command.env_remove("ANTHROPIC_API_KEY");
                 }
             }
+        }
+        if let Some(value) = tool_search(&opts, std::env::var_os(TOOL_SEARCH).is_some()) {
+            command.env(TOOL_SEARCH, value);
         }
         command
             .stdin(Stdio::piped())
@@ -1381,6 +1397,25 @@ mod tests {
         });
         let list = catalog_list(&body).expect("the flat catalog is found");
         assert_eq!(list.len(), 1);
+    }
+
+    #[test]
+    fn tool_search_is_on_for_anthropics_api_unless_the_user_set_it() {
+        let first_party = SpawnOptions::default();
+        assert_eq!(tool_search(&first_party, false), Some("true"));
+        assert_eq!(tool_search(&first_party, true), None);
+        let custom = SpawnOptions {
+            endpoint: Some(openremote_harness::EndpointBinding {
+                endpoint_id: "e1".into(),
+                harness: "claude".into(),
+                endpoint_name: "proxy".into(),
+                base_url: "https://proxy.test".into(),
+                auth_kind: openremote_core::EndpointAuthKind::None,
+                secret: None,
+            }),
+            ..SpawnOptions::default()
+        };
+        assert_eq!(tool_search(&custom, false), None);
     }
 
     #[test]

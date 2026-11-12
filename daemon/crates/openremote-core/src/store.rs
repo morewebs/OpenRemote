@@ -1572,6 +1572,22 @@ impl Store {
         Ok(())
     }
 
+    /// A chat's agent used OpenRemote's browser (see `Session::browser_used`).
+    /// A fact this device keeps for the chat it runs, not history: the
+    /// browser is used only where the chat runs.
+    pub fn note_browser_used(&mut self, session_id: &SessionId) -> Result<(), StoreError> {
+        let session = self
+            .state
+            .sessions
+            .get_mut(session_id)
+            .ok_or_else(|| StoreError::NotFound(format!("session {session_id}")))?;
+        if !session.browser_used {
+            session.browser_used = true;
+            self.persist()?;
+        }
+        Ok(())
+    }
+
     /// Append one event; see `append_batch`.
     pub fn append(
         &mut self,
@@ -1967,6 +1983,9 @@ impl Store {
                     if session.parent.is_none() {
                         session.parent = existing.parent.clone();
                     }
+                    // Kept by this device, never cleared: an update written
+                    // elsewhere does not take the browser tools back.
+                    session.browser_used |= existing.browser_used;
                 }
                 self.state.sessions.insert(session.id, session);
             }
@@ -2082,6 +2101,7 @@ mod tests {
             queue_paused: false,
             mentioned_chats: Vec::new(),
             carry_transcript: None,
+            browser_used: false,
             parent: None,
         }
     }
@@ -2502,6 +2522,31 @@ mod tests {
             .append(worker.id, EventPayload::SessionUpdated { session: older })
             .unwrap();
         assert_eq!(store.session(&worker.id).unwrap().parent, worker.parent);
+    }
+
+    #[test]
+    fn a_chats_browser_use_is_kept_and_never_taken_back() {
+        let dir = tempdir();
+        let mut store = Store::open(dir.clone()).unwrap();
+        let s = session();
+        store
+            .append(s.id, EventPayload::SessionCreated { session: s.clone() })
+            .unwrap();
+        store.note_browser_used(&s.id).unwrap();
+        // An update written without it (another device, an older copy of the
+        // session) leaves it on.
+        store
+            .append(s.id, EventPayload::SessionUpdated { session: s.clone() })
+            .unwrap();
+        assert!(store.session(&s.id).unwrap().browser_used);
+        drop(store);
+        assert!(
+            Store::open(dir)
+                .unwrap()
+                .session(&s.id)
+                .unwrap()
+                .browser_used
+        );
     }
 
     #[test]

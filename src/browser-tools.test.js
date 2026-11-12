@@ -24,6 +24,19 @@ test('a call reads as "Browser · <verb>" with the element and the address', () 
   assert.equal(browserTool(`${P}go`, { direction: 'back' }).label, 'Browser · back')
 })
 
+test('a merged tool reads as the action it took, and the old names still read', () => {
+  assert.equal(browserTool(`${P}tabs`, {}).label, 'Browser · tabs')
+  assert.equal(browserTool(`${P}tabs`, { select: '2' }).label, 'Browser · switch tab')
+  assert.equal(browserTool(`${P}tabs`, { downloads: true }).label, 'Browser · downloads')
+  assert.equal(browserTool(`${P}navigate`, { url: 'https://a.test/' }).label, 'Browser · go to')
+  assert.equal(browserTool(`${P}navigate`, { direction: 'reload' }).label, 'Browser · reload')
+  assert.equal(browserTool(`${P}logs`, { kind: 'network' }).label, 'Browser · network')
+  assert.equal(browserTool(`${P}logs`, {}).label, 'Browser · logs')
+  // Chats from before the merge keep their words.
+  assert.equal(browserTool(`${P}tab_select`, {}).label, 'Browser · switch tab')
+  assert.equal(browserTool(`${P}console`, {}).label, 'Browser · console')
+})
+
 test('the argument worth reading before saying yes is shown, never a JSON dump', () => {
   assert.equal(browserTool(`${P}type`, { text: 'hello', submit: true }).detail, '"hello", then Enter')
   assert.equal(browserTool(`${P}press`, { key: 'Enter' }).detail, 'Enter')

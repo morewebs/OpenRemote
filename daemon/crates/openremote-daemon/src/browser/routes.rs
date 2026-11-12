@@ -487,6 +487,11 @@ async fn call_tool(
             Err(_) => return bad(StatusCode::NOT_FOUND, "no such chat"),
         }
     };
+    // Any browser tool, even one that fails, puts the browser in play for
+    // the chat: its MCP server lists the rest from now on.
+    if let Err(e) = crate::supervisor::lock_recovering(&app.store).note_browser_used(&session_id) {
+        eprintln!("browser use not kept for {session_id}: {e}");
+    }
     Json(
         app.browser
             .run_tool(&chat, &body.name, &body.arguments)

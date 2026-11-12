@@ -870,6 +870,19 @@ fn thread_params(opts: &SpawnOptions) -> Value {
         config[format!("mcp_servers.{}.command", server.id)] = json!(server.command);
         config[format!("mcp_servers.{}.args", server.id)] = json!(server.args);
     }
+    // Tools that run without asking (OpenRemote's tools that only read):
+    // codex's per-tool `approval_mode`, on the servers this chat starts.
+    for name in &opts.allowed_tools {
+        let Some((server, tool)) = name
+            .strip_prefix("mcp__")
+            .and_then(|rest| rest.split_once("__"))
+        else {
+            continue;
+        };
+        if opts.mcp_servers.iter().any(|s| s.id == server) {
+            config[format!("mcp_servers.{server}.tools.{tool}.approval_mode")] = json!("approve");
+        }
+    }
     // The chat's effort, on every start and resume.
     if let Some(effort) = &opts.effort {
         config["model_reasoning_effort"] = json!(effort);
@@ -1686,6 +1699,36 @@ mod tests {
         assert_eq!(
             params["config"]["mcp_servers.github.args"],
             json!(["-y", "@modelcontextprotocol/server-github"])
+        );
+
+        // Tools allowed without asking are approved on codex's own wire,
+        // only for a server the chat starts.
+        let allowing = thread_params(&SpawnOptions {
+            cwd: PathBuf::from("/w"),
+            mcp_servers: vec![openremote_harness::McpServer {
+                id: "openremote".into(),
+                command: "openremote-daemon".into(),
+                args: Vec::new(),
+            }],
+            allowed_tools: vec![
+                "mcp__openremote__browser_snapshot".into(),
+                "mcp__elsewhere__read".into(),
+                "Bash".into(),
+            ],
+            ..Default::default()
+        });
+        let config = allowing["config"].as_object().unwrap();
+        assert_eq!(
+            config["mcp_servers.openremote.tools.browser_snapshot.approval_mode"],
+            "approve"
+        );
+        assert_eq!(
+            config
+                .keys()
+                .filter(|k| k.contains("approval_mode"))
+                .count(),
+            1,
+            "{config:?}"
         );
 
         // No plugins, no config map.
