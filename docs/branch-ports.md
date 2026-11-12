@@ -17,6 +17,10 @@ recorded as dropped below.
 | `reveal_in_folder` shell command | br-sidebar f09d32d, 22aee00 | be979ed, 31c6ae3 |
 | Project menu; Ctrl/Cmd+Shift+N new chat in this project | br-sidebar 3b1044d, 7c4ce53 | 57c7621 |
 | Archive undo on every path; polled status on unopened chats | br-sidebar 295ac62, 8074ec7 | 24935cf |
+| A folded project's head rolls up its failed and running chats | br-sidebar 2a3a990 | 238188f |
+| An empty rename puts back the first-message name | br-sidebar 8909e98, 4160f65 (its empty-name rule) | ae91138 |
+| Double click a chat's name to rename it | br-sidebar 4160f65 (its double click) | ca474fd |
+| A hint on "Show N more": failed and running among what it leaves out, and the unread step | br-sidebar b941184 (its dot on the line) | fa90551 |
 | Browser smoke fixes (`*.localhost`, Mod+Shift+B, CDP port) | browser 051803a | 1d534ff |
 | Open-tabs note on delivered prompts | browser 25e69c8 | 8236744 |
 | Daemon lifetime: job object, private stdio, parent watch, bounded leave | br-backlog 6872f11 | 5d972a7 |
@@ -142,9 +146,24 @@ Deleting br-zcode loses none of them.
 ### br-sidebar
 - Machine grouping in Cloud mode and on the phone (3bacabb). **Needs a design
   call**: main keys folds, pins and paging by local project id.
-- Optional: rollup of failed/running in a folded head, empty rename restores
-  the first-message name, double-click to rename, a hint on "Show more".
-- Obsolete: separate Pinned group, inline rename, row dots, DESIGN.md.
+
+Every other br-sidebar commit (head 22aee00) is ported (Done rows above), in
+main, or obsolete:
+
+- In main: a project with no chats still shows "No chats yet." (b86e949);
+  folded projects are kept on this device (00d12d7); paging, five per project
+  and fifteen in Chats (b941184, main's `planList`); the daemon's name wins and
+  a rename lands at once (8909e98, main's reducer and the rename overlay).
+- Obsolete: the separate Pinned group (1bd5339) - main pins a chat to the top
+  of its own list (`sidebar-list.js`), so a second group would show it twice;
+  inline rename (4160f65) - main renames in the shell's `RenameChatModal`, one
+  dialog for the sidebar and the palette, so a field in the row would be a
+  second rename path with its own rules; row dots (d6cc026's done-not-seen dot,
+  2a3a990's dot on a folded head, b941184's dot on "Show more") - main's rows
+  carry status as the title's text tier and unread as the quiet tint, with
+  waiting chats in the group above, so the rollup and the hint are words in the
+  head's own parts instead; DESIGN.md (c9fbc27) - it describes the branch's
+  sidebar (the Pinned group, row dots), which is not main's.
 
 ### Browser (browser, br-console, br-android, br-images)
 - Android phone browser, as one block (5df13bd, f768051, 25aee6d, 1c6f04b,
