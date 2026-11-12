@@ -41,6 +41,7 @@ import { hostOf, permissionName, permissionRows } from './browser-chrome.js'
 import { SEARCH_ENGINES } from './browser-omnibox.js'
 import BrowserClearData from './BrowserClearData.jsx'
 import BrowserFilterLists from './BrowserFilterLists.jsx'
+import BrowserImport from './BrowserImport.jsx'
 import { adblockLine, listLabel, loadAdblock, setAdblock, setAdblockSite, siteOf } from './browser-adblock.js'
 import { useBack } from './use-back.js'
 import { useConsole } from './state/console.jsx'
@@ -569,6 +570,8 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
   // computer. Its rows show only where the browser here can block.
   const [adblock, setAdblockStatus] = useState(null)
   const [choosingLists, setChoosingLists] = useState(false)
+  // Importing from another browser (browser-import.js): its dialog.
+  const [importingBrowser, setImportingBrowser] = useState(false)
   const [siteDraft, setSiteDraft] = useState('')
   const adblockShown = hasTauri && !isMobile && adblock?.supported === true
   useEffect(() => {
@@ -744,6 +747,7 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
       keys.add('browser-bookmarks-bar')
       keys.add('browser-permissions')
       keys.add('browser-startup')
+      keys.add('browser-import')
     }
     if (!profileClearable) keys.add('browser-clear-data')
     // Ad blocking is drawn only where the browser here says it can block.
@@ -1957,6 +1961,25 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                     label="Show bookmarks bar"
                   />
                 </div>
+                <div className="pn-row" data-stg="browser-import">
+                  <div>
+                    <div className="pn-name">Import from another browser</div>
+                    <div className="pn-detail">
+                      Bookmarks and history from Chrome, Edge, Brave, Firefox or Safari on this computer. Only those are
+                      read, never sign-ins, passwords or site data.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="pn-btn"
+                    onClick={() => {
+                      setBrowserNote(null)
+                      setImportingBrowser(true)
+                    }}
+                  >
+                    Import…
+                  </button>
+                </div>
                 {adblockShown && (
                   <>
                     <div className="pn-row" data-stg="browser-adblock">
@@ -2204,6 +2227,9 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                 onClose={() => setChoosingLists(false)}
                 onSaved={setAdblockStatus}
               />
+            )}
+            {importingBrowser && (
+              <BrowserImport onClose={() => setImportingBrowser(false)} onImported={setBrowserNote} />
             )}
             {clearingData && (
               <BrowserClearData
