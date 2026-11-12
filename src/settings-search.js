@@ -98,6 +98,8 @@ const ROWS = [
   // the section that says which build and which process are running, in the
   // order the section draws them.
   row('install-version', 'this-install', 'OpenRemote version', 'The build and the daemon it talks to.', ['about', 'build', 'release', 'update', 'daemon']),
+  row('install-updates', 'this-install', 'Updates', 'Looks for a newer signed release, and installs it when you say so.', ['update', 'updates', 'upgrade', 'new version', 'release', 'check']),
+  row('install-updates-auto', 'this-install', 'Look for updates automatically', 'Once a day. Installing still waits for you.', ['update', 'updates', 'automatic', 'daily', 'check']),
   row('daemon-connection', 'this-install', 'Daemon connection', 'The local process the chats run through.', ['connect', 'connection', 'token', 'local']),
   row('daemon-connect', 'this-install', 'Connect by address', 'The address and token of a daemon you run yourself.', ['connect', 'address', 'token', 'manual', 'elsewhere']),
   row('daemon-chats', 'this-install', 'Chats on record', 'Sessions survive daemon restarts; stopped ones can resume.', ['sessions', 'record', 'history', 'resume']),

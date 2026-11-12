@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use tauri::{Emitter, Manager, State, WindowEvent};
+use tauri::{Emitter, Manager, WindowEvent};
 use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 
@@ -104,15 +104,23 @@ pub fn write_to_daemon(app: &tauri::AppHandle, line: &str) {
 /// in the daemon's stdin watchdog never fires and every harness CLI it
 /// started keeps running with no daemon to talk to - still working, still
 /// spending, still holding its folder. Closing stdin is the daemon's own
-/// stop button, and the sweep is what it does with it. The console heals on
-/// its own (on a connection error it re-polls daemon_info every 2.5s and
-/// follows a new port), so this returns before the new daemon is ready.
+/// stop button, and the sweep is what it does with it.
 #[tauri::command]
-async fn daemon_restart(
-    app: tauri::AppHandle,
-    state: State<'_, DaemonState>,
-    sidecar: State<'_, Sidecar>,
-) -> Result<(), String> {
+async fn daemon_restart(app: tauri::AppHandle) -> Result<(), String> {
+    stop_daemon(&app).await;
+    start_daemon(&app);
+    Ok(())
+}
+
+/// Stop the running daemon the graceful way and wait until it is gone: close
+/// its stdin so it stops itself (and the harnesses it ran), wait a bounded
+/// moment, and only then fall back to the pid. Its watcher sees the slot
+/// emptied and does not respawn it; `start_daemon` is what brings one back.
+///
+/// The restart button uses it, and so does an update: the installer has to
+/// replace the daemon's binary, which a running daemon holds open.
+pub(crate) async fn stop_daemon(app: &tauri::AppHandle) {
+    let sidecar = app.state::<Sidecar>();
     let old = sidecar.child.lock().expect("daemon state lock").take();
     if let Some(child) = old {
         let pid = child.pid();
@@ -140,10 +148,18 @@ async fn daemon_restart(
             stop_by_pid(pid);
         }
     }
-    *state.info.lock().expect("daemon state lock") = DaemonInfo::default();
-    tell_console(&app);
-    spawn_daemon(app);
-    Ok(())
+    *app.state::<DaemonState>()
+        .info
+        .lock()
+        .expect("daemon state lock") = DaemonInfo::default();
+    tell_console(app);
+}
+
+/// Start a fresh daemon after `stop_daemon`. The console heals on its own (on
+/// a connection error it re-polls daemon_info every 2.5s and follows a new
+/// port), so this returns before the new daemon is ready.
+pub(crate) fn start_daemon(app: &tauri::AppHandle) {
+    spawn_daemon(app.clone());
 }
 
 /// Stop a daemon by pid, for the case the graceful path could not.
@@ -237,6 +253,9 @@ pub fn run() {
             None,
         ))
         .plugin(tauri_plugin_dialog::init())
+        // Updates: verified against the public key in tauri.conf.json, read
+        // only from the endpoint configured there (updates.rs).
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .manage(DaemonState::default())
         .manage(Sidecar::default())
@@ -281,7 +300,9 @@ pub fn run() {
             browser::browser_screencast,
             browser::browser_save_file,
             browser::browser_clear_data,
-            browser::browser_share
+            browser::browser_share,
+            crate::updates::update_check,
+            crate::updates::update_install
         ])
         .setup(|app| {
             // Before the first paint: fit the window to the screen it is on

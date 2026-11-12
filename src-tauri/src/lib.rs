@@ -23,6 +23,10 @@ mod mobile;
 mod signin;
 #[cfg(desktop)]
 mod tray;
+// Updates: a newer signed release, checked once a day by the console and
+// installed on the user's click. Desktop only; a phone updates from its store.
+#[cfg(desktop)]
+mod updates;
 // Whether the window stays in front of other apps. Desktop only, like the
 // window itself.
 #[cfg(desktop)]

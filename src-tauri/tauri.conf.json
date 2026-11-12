@@ -26,6 +26,14 @@
       "csp": "default-src 'self'; script-src 'self' http://tauri.localhost https://tauri.localhost tauri://localhost blob:; frame-src blob:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:*; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; media-src 'self' blob:"
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/morewebs/OpenRemote/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
     "copyright": "Copyright (C) 2026 moreweb",

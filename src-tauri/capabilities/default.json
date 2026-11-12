@@ -55,6 +55,8 @@
     "allow-browser-screencast",
     "allow-browser-save-file",
     "allow-browser-clear-data",
-    "allow-browser-share"
+    "allow-browser-share",
+    "allow-update-check",
+    "allow-update-install"
   ]
 }

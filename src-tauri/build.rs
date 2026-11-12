@@ -39,6 +39,8 @@ const COMMANDS: &[&str] = &[
     "browser_save_file",
     "browser_clear_data",
     "browser_share",
+    "update_check",
+    "update_install",
 ];
 
 fn main() {

@@ -82,14 +82,15 @@ produces a package directory with no launcher in it (verified on npm 10 and
 11 on Windows), while an install from a published tarball works. That is
 why the channel is the registry.
 
-## An installed app does not update itself
+## An installed app updates on the user's click
 
-Nothing in OpenRemote looks for a newer version. Moving to a newer release
-means downloading the installer from the URLs above and running it, which
-installs over the copy already there. An in-app updater is a named
-follow-up, not a shipped feature: until it exists, a fixed release reaches
-a user when that user downloads it, and no user is ever told a release
-happened.
+The desktop app looks once a day for `latest.json` in the newest stable
+release and offers a newer version, which installs only when the user clicks
+Update and restart (`docs/releasing-updates.md`). Updates are signed, and the
+switch-on is a one-time step: until the signing key exists, the app says
+updates aren't switched on, and moving to a newer release means downloading
+the installer from the URLs above and running it over the copy already there.
+The nightly is never offered in-app: the app reads `releases/latest` only.
 
 ## A tag must be on the default branch
 

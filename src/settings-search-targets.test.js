@@ -20,7 +20,7 @@ const read = (name) => readFileSync(new URL(`./${name}`, import.meta.url), 'utf8
 
 // The files that can carry a marking attribute: a key produced for one of these
 // views has to be marked somewhere among them.
-const VIEWS = ['SettingsView.jsx', 'McpServersSection.jsx', 'EndpointManager.jsx', 'PluginsView.jsx', 'PluginSettings.jsx']
+const VIEWS = ['SettingsView.jsx', 'McpServersSection.jsx', 'EndpointManager.jsx', 'PluginsView.jsx', 'PluginSettings.jsx', 'UpdatesRow.jsx']
 
 const shape = (key) => key.replace(/\$\{[^}]+\}/g, '*')
 

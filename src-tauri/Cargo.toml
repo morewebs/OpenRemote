@@ -34,6 +34,23 @@ tokio = { version = "1", features = ["sync", "time"] }
 # what kept the Linux and macOS builds from compiling after the browser landed.
 base64 = "0.22"
 
+# Updates: signed releases checked and installed from the app. Every download
+# is verified against the public key in tauri.conf.json before it runs. The
+# system's own TLS on Windows and macOS keeps the download client small; macOS
+# updates arrive as a .app.tar.gz, so it also unpacks archives.
+[target.'cfg(windows)'.dependencies.tauri-plugin-updater]
+version = "2"
+default-features = false
+features = ["native-tls"]
+
+[target.'cfg(target_os = "macos")'.dependencies.tauri-plugin-updater]
+version = "2"
+default-features = false
+features = ["native-tls", "zip"]
+
+[target.'cfg(target_os = "linux")'.dependencies]
+tauri-plugin-updater = "2"
+
 [target.'cfg(windows)'.dependencies]
 # The browser drives each tab's WebView2 directly (the DevTools protocol,
 # browser keys, history): the same versions wry already links, so nothing

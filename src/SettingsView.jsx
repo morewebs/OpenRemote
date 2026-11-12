@@ -20,6 +20,7 @@ import {
   X,
 } from '@phosphor-icons/react'
 import AboutModal from './AboutModal.jsx'
+import UpdatesRow from './UpdatesRow.jsx'
 import McpServersSection from './McpServersSection.jsx'
 import PluginSettings from './PluginSettings.jsx'
 import { usePlugins } from './plugins-host.jsx'
@@ -706,6 +707,10 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
     if (!BROWSER_KEYS) for (const a of BROWSER_ACTIONS) keys.add(`keyboard-${a.id}`)
     // This install is a phone tab, but the daemon rows and the first-run step
     // are drawn on the desktop only: a result that lands nowhere is dead UI.
+    if (isMobile || !hasTauri) {
+      keys.add('install-updates')
+      keys.add('install-updates-auto')
+    }
     if (isMobile) {
       for (const key of [
         'install-first-run',
@@ -2209,6 +2214,9 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
               </div>
               <button type="button" className="pn-btn" onClick={() => setAbout(true)}>About</button>
             </div>
+            {/* Updates arrive through the desktop shell's updater: a phone
+                updates from its store, and a browser tab has no shell. */}
+            {!isMobile && hasTauri && <UpdatesRow />}
             {/* The daemon is this install's own process, not a tab of its own:
                 its rows read here, beside the build they belong to. All of
                 them are desktop-only - a phone runs no local daemon, and this

@@ -43,7 +43,7 @@ the project's own map.
   `npm run tauri:dev` running in another terminal), plus `check-tab-acl.mjs`,
   the capability-scope guard CI runs. Run bare it prints
   `tab acl ok: 2 capability file(s), every non-phone one scoped to the main
-  webview, every declared command (35) granted` and exits 0, or exits 1 and
+  webview, every declared command (38) granted` and exits 0, or exits 1 and
   names the capability that widened; `--self-test` checks the check itself,
   and `--root` points it at another tree. Not build tooling; the one build
   script is `sync-daemon.mjs`.
@@ -228,6 +228,13 @@ an old process is still alive; find it before re-running).
   tag.
 - Installers are unsigned by decision; the release notes say so
   (SmartScreen, More info > Run anyway).
+- In-app updates are signed separately, with the updater's own key: the app
+  carries its public half (`plugins.updater.pubkey` in `tauri.conf.json`) and
+  looks once a day at `releases/latest/download/latest.json`; the private key
+  lives only in the repo's secrets. The platform jobs stage each `.sig` at the
+  release root and `publish` writes `latest.json`. Until the key exists the
+  app says updates aren't switched on. `docs/releasing-updates.md` is the
+  switch-on, and the path is not yet proven by a test release.
 - `npm/` is a second front door: a small launcher published to the registry as
   `@morewebs/openremote`. It holds no build, it reads `releases/latest` at run
   time, fetches the portable Windows pair the Windows job stages beside the six
@@ -260,7 +267,7 @@ Four commands check what this page claims, and a reader can run all of them
 from the repo root: `npm test` (prints a count; 1174 the last time this line
 was checked, and the run is the truth rather than this number), `node
 scripts/check-tab-acl.mjs` (says `tab acl ok: 2 capability file(s), every
-non-phone one scoped to the main webview, every declared command (35)
+non-phone one scoped to the main webview, every declared command (38)
 granted`), `cd daemon && cargo fmt --all --check` and
 `cd daemon && cargo clippy --all-targets --locked -- -D warnings` (both print
 nothing and exit 0 on the committed tree). The route and tier claims in "Cloud's
