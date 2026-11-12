@@ -1280,6 +1280,8 @@ impl PluginHost {
                 apply_entry(&root, entry)?;
             }
             let mut manifest = read_manifest(&root, &builtin_ids)?;
+            crate::plugin_runtime::manifest::tool_budget(&manifest.contributes.tools)
+                .map_err(PluginError::Invalid)?;
             if let Some(notes) = adapted {
                 manifest.adapted = notes.adapted;
                 manifest.left_out = notes.left_out;

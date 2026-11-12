@@ -488,9 +488,16 @@ async fn call_tool(
         }
     };
     // Any browser tool, even one that fails, puts the browser in play for
-    // the chat: its MCP server lists the rest from now on.
-    if let Err(e) = crate::supervisor::lock_recovering(&app.store).note_browser_used(&session_id) {
-        eprintln!("browser use not kept for {session_id}: {e}");
+    // the chat: its MCP server lists the rest from now on. A name that is no
+    // browser tool (old names included, as they still call) puts nothing.
+    let real = !tools::current_name(&body.name, &body.arguments)
+        .0
+        .is_empty();
+    if real {
+        let kept = crate::supervisor::lock_recovering(&app.store).note_browser_used(&session_id);
+        if let Err(e) = kept {
+            eprintln!("browser use not kept for {session_id}: {e}");
+        }
     }
     Json(
         app.browser

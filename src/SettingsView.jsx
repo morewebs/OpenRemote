@@ -1967,16 +1967,17 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
                 </div>
                 <div className="pn-row" data-stg="browser-agent-tabs">
                   <div>
-                    <div className="pn-name">Tell every chat about my tabs</div>
+                    <div className="pn-name">Give every chat my tabs and browser tools</div>
                     <div className="pn-detail">
                       Each chat's agent hears which tabs you have open and gets every browser tool. Off, only a chat
-                      whose agent has used the browser does; the others can still ask for the tabs.
+                      whose agent has used the browser does; the others can still list them. A chat already running
+                      picks this up at its next tool call.
                     </div>
                   </div>
                   <Toggle
                     checked={agentTabs}
                     onChange={() => changeBrowserSetting('agent_tabs', !agentTabs)}
-                    label="Tell every chat about my tabs"
+                    label="Give every chat my tabs and browser tools"
                   />
                 </div>
                 <div className="pn-row" data-stg="browser-import">

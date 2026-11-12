@@ -433,7 +433,7 @@ pub struct Supervisor {
     /// A short note for the agent added to each message as the harness
     /// receives it - never to what is stored or shown (the browser's open
     /// tabs). Set once by whoever assembles the app.
-    prompt_note: std::sync::OnceLock<PromptNote>,
+    prompt_note: std::sync::OnceLock<Arc<dyn PromptNotes>>,
     /// The plugin runtime's ear for a plugin folder replaced here.
     plugin_changed: std::sync::OnceLock<PluginChanged>,
     /// Agent teams: the user's limits and the reports in flight.
@@ -443,8 +443,18 @@ pub struct Supervisor {
     blobs: Arc<openremote_core::blobs::Blobs>,
 }
 
-/// Where the note riding each delivered message comes from.
-type PromptNote = Box<dyn Fn(&SessionId) -> Option<String> + Send + Sync>;
+/// Where the note riding a chat's delivered messages comes from (the
+/// browser's open tabs), and what it hears back: a note counts as told only
+/// once the message carrying it reached the harness.
+pub trait PromptNotes: Send + Sync {
+    /// The note for a chat's next message, if there is anything to tell it.
+    fn note(&self, id: &SessionId) -> Option<String>;
+    /// The message carrying the latest note was delivered, or was not.
+    fn settled(&self, id: &SessionId, delivered: bool);
+    /// The chat's conversation starts over (a fresh start, /clear) or the
+    /// chat is gone: it was told nothing.
+    fn forget(&self, id: &SessionId);
+}
 
 type PluginChanged =
     Box<dyn Fn(String) -> futures_util::future::BoxFuture<'static, ()> + Send + Sync>;
@@ -1625,7 +1635,6 @@ impl Supervisor {
             queue_paused: false,
             mentioned_chats: Vec::new(),
             carry_transcript: None,
-            browser_used: false,
             parent,
         };
         let id = session.id;
@@ -1653,7 +1662,7 @@ impl Supervisor {
             fast: current.fast,
             mcp_servers: self.mcp_servers_for(&id, &current.harness),
             plugin_dirs: self.plugin_dirs(current.workspace.as_deref()),
-            allowed_tools: self.allowed_tools(),
+            allowed_tools: self.allowed_tools(&current.harness),
         };
         match backend.spawn(opts).await {
             Ok((driver, rx)) => {
@@ -1897,41 +1906,63 @@ impl Supervisor {
             .unwrap_or_else(|| id.to_string())
     }
 
-    /// The note added to a chat's delivered messages, from here on: asked
-    /// once per message, and None when there is nothing to tell that chat.
-    pub fn set_prompt_note(
-        &self,
-        note: impl Fn(&SessionId) -> Option<String> + Send + Sync + 'static,
-    ) {
-        let _ = self.prompt_note.set(Box::new(note));
+    /// The note added to a chat's delivered messages, from here on.
+    pub fn set_prompt_notes(&self, notes: Arc<dyn PromptNotes>) {
+        let _ = self.prompt_note.set(notes);
+    }
+
+    /// A chat's conversation starts over, or the chat is gone.
+    pub(crate) fn forget_prompt_note(&self, id: &SessionId) {
+        if let Some(notes) = self.prompt_note.get() {
+            notes.forget(id);
+        }
+    }
+
+    /// Whether the message that carried a note (`noted`) reached the harness.
+    fn note_delivered(&self, id: &SessionId, noted: bool, delivered: bool) {
+        if !noted {
+            return;
+        }
+        if let Some(notes) = self.prompt_note.get() {
+            notes.settled(id, delivered);
+        }
     }
 
     /// A message as its harness receives it: the words, then the open-tabs
-    /// note where this harness has OpenRemote's tools. The note is never
-    /// stored or shown, and a message that starts with a / command goes
-    /// without it, so it never becomes that command's arguments.
+    /// note where this harness has OpenRemote's tools, and whether a note
+    /// rode along. The note is never stored or shown, and a message that
+    /// starts with a / command goes without it, so it never becomes that
+    /// command's arguments; `/clear` starts the conversation over.
     fn with_prompt_note(
         &self,
         id: &SessionId,
         rides_mcp: bool,
         text: &str,
         origin: Option<&Origin>,
-    ) -> String {
+    ) -> (String, bool) {
         // Another agent's message is read behind a line that says so: an
         // agent must never take it for the user's word.
         let mut words = match origin {
             Some(origin) => format!("{}\n{text}", origin_line(origin)),
             None => text.to_string(),
         };
-        if rides_mcp && self.controls.get().is_some() && !text.trim_start().starts_with('/') {
-            if let Some(note) = self.prompt_note.get().and_then(|note| note(id)) {
-                if !words.is_empty() {
-                    words.push_str("\n\n");
-                }
-                words.push_str(&note);
-            }
+        let mut noted = false;
+        let command = text.trim_start();
+        if !rides_mcp || self.controls.get().is_none() {
+            return (words, noted);
         }
-        words
+        if command.starts_with('/') {
+            if command.split_whitespace().next() == Some("/clear") {
+                self.forget_prompt_note(id);
+            }
+        } else if let Some(note) = self.prompt_note.get().and_then(|notes| notes.note(id)) {
+            if !words.is_empty() {
+                words.push_str("\n\n");
+            }
+            words.push_str(&note);
+            noted = true;
+        }
+        (words, noted)
     }
 
     /// Write a prompt whose turn is already open to the harness. A failed
@@ -1950,12 +1981,11 @@ impl Supervisor {
         // transcript keeps the message as the user wrote it.
         let carried = self.carried_prompt(id, text, driver.per_prompt_process());
         let said = carried.as_deref().unwrap_or(text);
-        let prompt = openremote_harness::Prompt {
-            text: self.with_prompt_note(id, driver.rides_mcp(), said, origin),
-            images,
-        };
+        let (text, noted) = self.with_prompt_note(id, driver.rides_mcp(), said, origin);
+        let prompt = openremote_harness::Prompt { text, images };
         let sent = driver.send_prompt(&prompt).await;
         drop(driver);
+        self.note_delivered(id, noted, sent.is_ok());
         if carried.is_some() && sent.is_ok() {
             self.settle_carry(id);
         }
@@ -2475,7 +2505,11 @@ impl Supervisor {
         // starts a fresh one there; its next message carries the chat so far
         // (carry.rs).
         let harness_ref = match session.carry_transcript {
-            Some(_) => None,
+            Some(_) => {
+                // A fresh conversation has been told nothing.
+                self.forget_prompt_note(id);
+                None
+            }
             None => Some(session.harness_session_ref.clone().ok_or_else(|| {
                 SupervisorError::Conflict(
                     "the harness never reported a conversation to resume".to_string(),
@@ -2501,7 +2535,7 @@ impl Supervisor {
             fast: session.fast,
             mcp_servers: self.mcp_servers_for(id, &session.harness),
             plugin_dirs: self.plugin_dirs(session.workspace.as_deref()),
-            allowed_tools: self.allowed_tools(),
+            allowed_tools: self.allowed_tools(&session.harness),
         };
         let (driver, rx) = match backend.spawn(opts).await {
             Ok(pair) => pair,
@@ -3454,6 +3488,52 @@ mod tests {
 
     /// A supervisor over a throwaway store with no harnesses: enough for
     /// the maps and rule removal - nothing here spawns a session.
+    /// Records what the supervisor asks of the tabs note.
+    #[derive(Default)]
+    struct Notes(StdMutex<Vec<String>>);
+
+    impl PromptNotes for Notes {
+        fn note(&self, _: &SessionId) -> Option<String> {
+            self.0.lock().unwrap().push("note".into());
+            Some("<tabs>".into())
+        }
+        fn settled(&self, _: &SessionId, delivered: bool) {
+            self.0.lock().unwrap().push(format!("settled {delivered}"));
+        }
+        fn forget(&self, _: &SessionId) {
+            self.0.lock().unwrap().push("forget".into());
+        }
+    }
+
+    use std::path::PathBuf;
+
+    #[tokio::test]
+    async fn a_note_counts_only_once_delivered_and_a_cleared_conversation_forgets_it() {
+        let supervisor = supervisor();
+        supervisor.set_controls(PathBuf::from("openremote-daemon"), 1);
+        let notes = Arc::new(Notes::default());
+        supervisor.set_prompt_notes(notes.clone());
+        let id = SessionId::new();
+        let calls = || std::mem::take(&mut *notes.0.lock().unwrap());
+
+        let (text, noted) = supervisor.with_prompt_note(&id, true, "hi", None);
+        assert_eq!((text.as_str(), noted), ("hi\n\n<tabs>", true));
+        supervisor.note_delivered(&id, noted, false);
+        assert_eq!(calls(), ["note", "settled false"]);
+        supervisor.note_delivered(&id, true, true);
+        assert_eq!(calls(), ["settled true"]);
+
+        // /clear starts the conversation over: what it was told is gone, and
+        // the command itself carries no note.
+        let (text, noted) = supervisor.with_prompt_note(&id, true, "/clear", None);
+        assert_eq!((text.as_str(), noted), ("/clear", false));
+        assert_eq!(calls(), ["forget"]);
+        // An App without OpenRemote's tools is never asked.
+        let (_, noted) = supervisor.with_prompt_note(&id, false, "hi", None);
+        supervisor.note_delivered(&id, noted, true);
+        assert!(calls().is_empty());
+    }
+
     fn supervisor() -> Arc<Supervisor> {
         let dir = std::env::temp_dir().join(format!("or-supervisor-{}", Uuid::new_v4()));
         let store = Arc::new(StdMutex::new(Store::open(dir).expect("store opens")));
@@ -3492,7 +3572,6 @@ mod tests {
             queue_paused: false,
             mentioned_chats: Vec::new(),
             carry_transcript: None,
-            browser_used: false,
             parent: None,
         };
         // A spawn still under way is refused, and the word says why.
@@ -3706,7 +3785,6 @@ mod tests {
             queue_paused: false,
             mentioned_chats: Vec::new(),
             carry_transcript: None,
-            browser_used: false,
             parent: None,
         };
         let id = session.id;
@@ -3750,7 +3828,6 @@ mod tests {
             queue_paused: false,
             mentioned_chats: Vec::new(),
             carry_transcript: None,
-            browser_used: false,
             parent: None,
         };
         let id = session.id;

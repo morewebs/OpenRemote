@@ -437,6 +437,36 @@ fn unique<'a>(ids: impl Iterator<Item = &'a str>, what: &str) -> Result<(), Plug
     Ok(())
 }
 
+/// What a plugin's agent tools would add to every request of every chat it
+/// reaches, checked when the user reviews an install: too many tools, or a
+/// description or input schema too long, is refused with the reason. A
+/// plugin installed before the caps keeps working (see `read_section`).
+pub fn tool_budget(tools: &[ToolContribution]) -> Result<(), String> {
+    if tools.len() > MAX_TOOLS {
+        return Err(format!(
+            "the plugin offers {} agent tools; at most {MAX_TOOLS}: every tool's definition is sent with every request of every chat it reaches",
+            tools.len()
+        ));
+    }
+    for t in tools {
+        let described = t.description.chars().count();
+        if described > MAX_TOOL_DESCRIPTION {
+            return Err(format!(
+                "the tool '{}''s description is {described} characters; at most {MAX_TOOL_DESCRIPTION} characters: it is sent with every request",
+                t.name
+            ));
+        }
+        let schema = serde_json::to_string(&t.input_schema).map_or(0, |s| s.len());
+        if schema > MAX_TOOL_SCHEMA {
+            return Err(format!(
+                "the tool '{}''s input_schema is {schema} bytes; at most {MAX_TOOL_SCHEMA} bytes: it is sent with every request",
+                t.name
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn check_tools(
     tools: &[ToolContribution],
     plugin: &str,
@@ -451,27 +481,7 @@ fn check_tools(
         ));
     }
     unique(tools.iter().map(|t| t.name.as_str()), "tools")?;
-    if tools.len() > MAX_TOOLS {
-        return Err(invalid(format!(
-            "the plugin offers {} agent tools; at most {MAX_TOOLS}: every tool's definition is sent with every request of every chat it reaches",
-            tools.len()
-        )));
-    }
     for t in tools {
-        let described = t.description.chars().count();
-        if described > MAX_TOOL_DESCRIPTION {
-            return Err(invalid(format!(
-                "the tool '{}''s description is {described} characters; at most {MAX_TOOL_DESCRIPTION}: it is sent with every request",
-                t.name
-            )));
-        }
-        let schema = serde_json::to_string(&t.input_schema).map_or(0, |s| s.len());
-        if schema > MAX_TOOL_SCHEMA {
-            return Err(invalid(format!(
-                "the tool '{}''s input_schema is {schema} characters; at most {MAX_TOOL_SCHEMA}: it is sent with every request",
-                t.name
-            )));
-        }
         if !snake(&t.name, 48) {
             return Err(invalid(format!(
                 "the tool name '{}' must be lowercase letters, digits and underscores, a letter first",
@@ -871,21 +881,6 @@ mod tests {
                 PluginRuntime::Content,
                 "only a process or wasm plugin",
             ),
-            (
-                json!({"entry": "tool.wasm", "contributes": {"tools": [{"name": "t", "description": "d".repeat(1025)}]}}),
-                PluginRuntime::Wasm,
-                "at most 1024",
-            ),
-            (
-                json!({"entry": "tool.wasm", "contributes": {"tools": [{"name": "t", "description": "d", "input_schema": {"type": "object", "description": "x".repeat(4100)}}]}}),
-                PluginRuntime::Wasm,
-                "at most 4096",
-            ),
-            (
-                json!({"entry": "tool.wasm", "contributes": {"tools": (0..17).map(|i| json!({"name": format!("t{i}"), "description": "d"})).collect::<Vec<_>>()}}),
-                PluginRuntime::Wasm,
-                "at most 16",
-            ),
         ];
         for (raw, runtime, says) in cases {
             let err = read_section(&raw, dir.path(), "a-plugin-with-a-long-name", runtime)
@@ -893,6 +888,36 @@ mod tests {
                 .to_string();
             assert!(err.contains(says), "{raw}: {err}");
         }
+    }
+
+    /// What a plugin's tools add to every request is capped at install
+    /// review; a plugin already installed reads and runs whatever it holds.
+    #[test]
+    fn the_tool_budget_is_checked_at_install_review_only() {
+        let dir = folder(&["tool.wasm"]);
+        let over = [
+            (
+                json!({"entry": "tool.wasm", "contributes": {"tools": [{"name": "t", "description": "d".repeat(1025)}]}}),
+                "at most 1024 characters",
+            ),
+            (
+                json!({"entry": "tool.wasm", "contributes": {"tools": [{"name": "t", "description": "d", "input_schema": {"type": "object", "description": "x".repeat(4100)}}]}}),
+                "at most 4096 bytes",
+            ),
+            (
+                json!({"entry": "tool.wasm", "contributes": {"tools": (0..17).map(|i| json!({"name": format!("t{i}"), "description": "d"})).collect::<Vec<_>>()}}),
+                "at most 16",
+            ),
+        ];
+        for (raw, says) in over {
+            let section = read_section(&raw, dir.path(), "p", PluginRuntime::Wasm)
+                .expect("an installed plugin still reads");
+            let why = tool_budget(&section.contributes.tools).unwrap_err();
+            assert!(why.contains(says), "{raw}: {why}");
+        }
+        let ok = json!({"entry": "tool.wasm", "contributes": {"tools": [{"name": "t", "description": "d"}]}});
+        let section = read_section(&ok, dir.path(), "p", PluginRuntime::Wasm).unwrap();
+        assert!(tool_budget(&section.contributes.tools).is_ok());
     }
 
     #[test]

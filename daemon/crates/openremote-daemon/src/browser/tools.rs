@@ -355,6 +355,9 @@ pub fn to_call(name: &str, args: &Value, tab: String) -> Result<Call, String> {
     Ok(match name {
         "browser_tab_close" => Call::Close { tab },
         "browser_navigate" => match text(args, "direction").filter(|d| !d.trim().is_empty()) {
+            Some(_) if text(args, "url").is_some_and(|u| !u.trim().is_empty()) => {
+                return Err("give either 'url' or 'direction', not both".into());
+            }
             Some(direction) => match direction.as_str() {
                 "back" => Call::Back { tab },
                 "forward" => Call::Forward { tab },
@@ -560,6 +563,14 @@ mod tests {
             Call::Network { tab: "1".into() }
         );
         assert!(to_call("browser_navigate", &json!({}), "1".into()).is_err());
+        // A merged tool takes one action at a time, never a silent pick.
+        let both = to_call(
+            "browser_navigate",
+            &json!({"url": "https://a.test/", "direction": "back"}),
+            "1".into(),
+        )
+        .unwrap_err();
+        assert!(both.contains("either"), "{both}");
     }
 
     #[test]

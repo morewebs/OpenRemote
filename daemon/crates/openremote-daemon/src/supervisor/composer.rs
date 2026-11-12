@@ -100,6 +100,19 @@ pub struct CommandsView {
     pub error: Option<String>,
 }
 
+/// The tools a harness runs without asking. Codex pre-approves by tool
+/// (`approval_mode = "approve"`) and its chats are asked before a note goes
+/// to their lead (`agents_report`), which changes another chat.
+pub(super) fn allowed_for(harness: &str, names: Vec<String>) -> Vec<String> {
+    if harness != "codex" {
+        return names;
+    }
+    names
+        .into_iter()
+        .filter(|n| !n.ends_with("__agents_report"))
+        .collect()
+}
+
 /// Whether a harness's MCP client re-lists tools on
 /// `notifications/tools/list_changed`, checked against each App's client:
 /// Claude Code does, for a server that declares `tools.listChanged`.
@@ -166,11 +179,11 @@ impl Supervisor {
     /// The tools a chat runs without asking: OpenRemote's browser tools
     /// that only read (reading, hovering, scrolling, switching tabs), named
     /// as its MCP server's tools.
-    pub(super) fn allowed_tools(&self) -> Vec<String> {
+    pub(super) fn allowed_tools(&self, harness: &str) -> Vec<String> {
         if self.controls.get().is_some() {
             let mut names = crate::browser::tools::reading_tool_names("openremote");
             names.extend(crate::team::reading_tool_names("openremote"));
-            names
+            allowed_for(harness, names)
         } else {
             Vec::new()
         }
@@ -641,6 +654,21 @@ pub(super) fn transcript(events: &[Event], tail: Option<usize>, limit: usize) ->
 mod tests {
     use super::*;
     use openremote_harness::{AgentDescriptor, CommandDescriptor};
+
+    #[test]
+    fn codex_runs_reads_without_asking_but_asks_before_a_note_to_the_lead() {
+        let names = |harness| {
+            let mut names = crate::browser::tools::reading_tool_names("openremote");
+            names.extend(crate::team::reading_tool_names("openremote"));
+            allowed_for(harness, names)
+        };
+        let report = "mcp__openremote__agents_report".to_string();
+        assert!(names("claude").contains(&report));
+        let codex = names("codex");
+        assert!(!codex.contains(&report), "{codex:?}");
+        assert!(codex.contains(&"mcp__openremote__browser_snapshot".to_string()));
+        assert!(codex.contains(&"mcp__openremote__agents_wait".to_string()));
+    }
 
     #[test]
     fn only_an_app_that_relists_on_a_change_is_listed_tools_in_stages() {

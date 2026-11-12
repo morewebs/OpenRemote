@@ -26,13 +26,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 /// The MCP revision this server speaks when the client names none.
 const PROTOCOL: &str = "2025-06-18";
 
-/// How often a staged server asks whether the user opened a gate (turned on
-/// the browser for every chat) while some gate is still shut. The chat's own
-/// calls are followed at once.
-const GATE_POLL: std::time::Duration = std::time::Duration::from_secs(5);
-
-/// What a staged server tells the agent it holds, for an App that loads tool
-/// definitions on demand (Claude Code's tool search) and for the tools not
+/// What a staged server tells the agent it holds, including the tools not
 /// yet listed. Sent with every request, so it stays one short line.
 const INSTRUCTIONS: &str = "OpenRemote: read_chat reads chats the user @-mentions; browser_* drive the user's built-in browser (all of them are listed once you use one); agents_* start worker agents and manage them.";
 
@@ -134,24 +128,17 @@ pub async fn run(args: &[String]) -> ExitCode {
     // The gates seen open so far, and the ones the last listing was made
     // through (None: the client has not listed yet, so there is nothing to
     // say has changed).
-    let mut open = Gates::default();
+    // Nothing here runs on a timer: the gates are read when the server
+    // starts, when the client lists, and after each tool call while one is
+    // still shut. A gate the user opens from Settings reaches a running chat
+    // at its next tool call.
+    let mut open = if config.staged {
+        gates(&config, &token).await
+    } else {
+        Gates::default()
+    };
     let mut listed: Option<Gates> = None;
-    let mut poll = tokio::time::interval(GATE_POLL);
-    poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    loop {
-        let polling = config.staged && listed.is_some() && !open.all_open();
-        let line = tokio::select! {
-            line = lines.next_line() => match line {
-                Ok(Some(line)) => line,
-                _ => break,
-            },
-            _ = poll.tick(), if polling => {
-                if !regate(&config, &token, &mut open, &mut listed, &mut stdout).await {
-                    break;
-                }
-                continue;
-            }
-        };
+    while let Ok(Some(line)) = lines.next_line().await {
         let Ok(message) = serde_json::from_str::<Value>(&line) else {
             continue;
         };
@@ -201,10 +188,12 @@ pub async fn run(args: &[String]) -> ExitCode {
             break;
         }
         // A call is how a chat usually opens a gate (its first browser tool,
-        // its first worker): say so before the agent's next request.
+        // its first worker): say so before the agent's next request. Once
+        // every gate is open there is nothing left to ask.
         if method == "tools/call"
             && config.staged
             && listed.is_some()
+            && !open.all_open()
             && !regate(&config, &token, &mut open, &mut listed, &mut stdout).await
         {
             break;

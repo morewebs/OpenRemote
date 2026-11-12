@@ -310,6 +310,8 @@ pub async fn apply_tombstone(app: &Arc<App>, id: SessionId, stone: Tombstone) {
     }
     let _ = lock_recovering(&app.store).tombstone(id, stone);
     app.sync.forget(id);
+    // What its tabs note told it goes with it too.
+    app.supervisor.forget_prompt_note(&id);
     // A held live-settings change belongs to the chat; it goes with it.
     crate::supervisor::forget_live_settings(&id);
 }
@@ -1004,7 +1006,6 @@ mod tests {
             queue_paused: false,
             mentioned_chats: Vec::new(),
             carry_transcript: None,
-            browser_used: false,
             parent: None,
         };
         let private = session(None);

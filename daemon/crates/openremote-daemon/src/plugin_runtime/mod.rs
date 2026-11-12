@@ -335,6 +335,14 @@ impl PluginRuntime {
             {
                 continue;
             }
+            // Installed before the caps an install now passes: it keeps
+            // working, and the log says what it costs.
+            if let Err(why) = manifest::tool_budget(&plugin.contributes.tools) {
+                eprintln!(
+                    "plugin {}: over the agent tool budget a new install passes: {why}",
+                    plugin.id()
+                );
+            }
             for tool in &plugin.contributes.tools {
                 let name = manifest::agent_tool_name(&plugin.name, &tool.name);
                 if !seen.insert(name.clone()) {

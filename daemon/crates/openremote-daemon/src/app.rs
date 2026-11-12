@@ -42,6 +42,29 @@ pub struct AppOptions {
     pub cloud: openremote_cloud::CloudConfig,
 }
 
+/// The open-tabs note, as the supervisor asks for it per chat.
+struct TabsNotes(std::sync::Weak<App>);
+
+impl crate::supervisor::PromptNotes for TabsNotes {
+    fn note(&self, id: &openremote_core::SessionId) -> Option<String> {
+        let app = self.0.upgrade()?;
+        app.browser
+            .tabs_note(&id.to_string(), app.browser_in_play(id))
+    }
+
+    fn settled(&self, id: &openremote_core::SessionId, delivered: bool) {
+        if let Some(app) = self.0.upgrade() {
+            app.browser.note_settled(&id.to_string(), delivered);
+        }
+    }
+
+    fn forget(&self, id: &openremote_core::SessionId) {
+        if let Some(app) = self.0.upgrade() {
+            app.browser.forget_chat(&id.to_string());
+        }
+    }
+}
+
 impl App {
     /// Whether a chat has the browser in play: its agent has used the
     /// browser, or the user asked for every chat to be told about the tabs
@@ -49,9 +72,7 @@ impl App {
     /// hears about its tabs; any other is listed the tools that start
     /// browsing, and finds tabs with `browser_tabs`.
     pub fn browser_in_play(&self, id: &openremote_core::SessionId) -> bool {
-        let used = crate::supervisor::lock_recovering(&self.store)
-            .session(id)
-            .is_ok_and(|s| s.browser_used);
+        let used = crate::supervisor::lock_recovering(&self.store).browser_used(id);
         used || self.browser.every_chat_sees_tabs()
     }
 
@@ -143,12 +164,8 @@ impl App {
         // chat has the browser in play (information, never instructions;
         // never in what is stored or shown). A weak link, so the app and its
         // supervisor don't keep each other alive.
-        let weak = Arc::downgrade(&app);
-        app.supervisor.set_prompt_note(move |id| {
-            let app = weak.upgrade()?;
-            app.browser
-                .tabs_note(&id.to_string(), app.browser_in_play(id))
-        });
+        app.supervisor
+            .set_prompt_notes(Arc::new(TabsNotes(Arc::downgrade(&app))));
         // A command plugin made again before a chat replaces its folder: the
         // runtime stops the program that ran the old copy.
         let runtime = Arc::downgrade(&app.plugin_runtime);

@@ -146,6 +146,12 @@ struct State {
     this_device: Option<DeviceId>,
     #[serde(default)]
     tombstones: BTreeMap<SessionId, Tombstone>,
+    /// The chats whose agent has used OpenRemote's browser here. This
+    /// device's own fact, never in a chat's events, so it never travels:
+    /// the browser is used where the chat runs. Never cleared while the
+    /// chat lives, so its browser tools are never taken from it.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    browser_used: BTreeSet<SessionId>,
 }
 
 pub struct Store {
@@ -1572,20 +1578,20 @@ impl Store {
         Ok(())
     }
 
-    /// A chat's agent used OpenRemote's browser (see `Session::browser_used`).
-    /// A fact this device keeps for the chat it runs, not history: the
-    /// browser is used only where the chat runs.
+    /// A chat's agent used OpenRemote's browser (see `State::browser_used`).
     pub fn note_browser_used(&mut self, session_id: &SessionId) -> Result<(), StoreError> {
-        let session = self
-            .state
-            .sessions
-            .get_mut(session_id)
-            .ok_or_else(|| StoreError::NotFound(format!("session {session_id}")))?;
-        if !session.browser_used {
-            session.browser_used = true;
+        if !self.state.sessions.contains_key(session_id) {
+            return Err(StoreError::NotFound(format!("session {session_id}")));
+        }
+        if self.state.browser_used.insert(*session_id) {
             self.persist()?;
         }
         Ok(())
+    }
+
+    /// Whether a chat's agent has used OpenRemote's browser here.
+    pub fn browser_used(&self, session_id: &SessionId) -> bool {
+        self.state.browser_used.contains(session_id)
     }
 
     /// Append one event; see `append_batch`.
@@ -1855,6 +1861,7 @@ impl Store {
         }
         self.state.sessions.remove(session_id);
         self.state.next_seq.remove(session_id);
+        self.state.browser_used.remove(session_id);
         self.state
             .decisions
             .retain(|_, d| d.session_id != *session_id);
@@ -1983,9 +1990,6 @@ impl Store {
                     if session.parent.is_none() {
                         session.parent = existing.parent.clone();
                     }
-                    // Kept by this device, never cleared: an update written
-                    // elsewhere does not take the browser tools back.
-                    session.browser_used |= existing.browser_used;
                 }
                 self.state.sessions.insert(session.id, session);
             }
@@ -2101,7 +2105,6 @@ mod tests {
             queue_paused: false,
             mentioned_chats: Vec::new(),
             carry_transcript: None,
-            browser_used: false,
             parent: None,
         }
     }
@@ -2532,21 +2535,23 @@ mod tests {
         store
             .append(s.id, EventPayload::SessionCreated { session: s.clone() })
             .unwrap();
+        assert!(!store.browser_used(&s.id));
         store.note_browser_used(&s.id).unwrap();
-        // An update written without it (another device, an older copy of the
-        // session) leaves it on.
+        // An update to the chat leaves it on.
         store
             .append(s.id, EventPayload::SessionUpdated { session: s.clone() })
             .unwrap();
-        assert!(store.session(&s.id).unwrap().browser_used);
+        assert!(store.browser_used(&s.id));
+        // It is this device's own fact: the chat as it travels to the
+        // user's other devices (in its events) does not carry it.
+        let shared = serde_json::to_string(store.session(&s.id).unwrap()).unwrap();
+        assert!(!shared.contains("browser"), "{shared}");
         drop(store);
-        assert!(
-            Store::open(dir)
-                .unwrap()
-                .session(&s.id)
-                .unwrap()
-                .browser_used
-        );
+        let mut store = Store::open(dir).unwrap();
+        assert!(store.browser_used(&s.id));
+        // A chat that is gone takes it along.
+        store.forget_session(&s.id).unwrap();
+        assert!(!store.browser_used(&s.id));
     }
 
     #[test]

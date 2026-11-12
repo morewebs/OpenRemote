@@ -135,6 +135,16 @@ test('Settings draws the rows, writes through the shared cache, and hides what c
   assert.match(view, /data-stg="browser-agent-tabs"/)
   assert.match(view, /changeBrowserSetting\('agent_tabs', !agentTabs\)/)
   assert.match(view, /keys\.add\('browser-agent-tabs'\)/)
+  // The switch says what it gives, that the others can still list the tabs,
+  // and that a running chat picks it up at its next tool call; the search
+  // row reads the same.
+  const title = 'Give every chat my tabs and browser tools'
+  const detail = "Each chat's agent hears which tabs you have open and gets every browser tool. Off, only a chat whose agent has used the browser does; the others can still list them. A chat already running picks this up at its next tool call."
+  assert.ok(view.includes(`<div className="pn-name">${title}</div>`), 'the switch is named')
+  assert.ok(view.replace(/\s+/g, ' ').includes(detail), 'the switch explains itself')
+  const row = SETTINGS_ENTRIES.find((e) => e.key === 'browser-agent-tabs')
+  assert.equal(row.label, title)
+  assert.equal(row.detail, detail)
   assert.match(read('../daemon/crates/openremote-daemon/src/browser/mod.rs'), /pub const AGENT_TABS: &str = "agent_tabs";/)
   // The settings need the desktop app's browser; clearing needs a shell that can.
   assert.match(view, /if \(!hasTauri \|\| isMobile\) \{\s*keys\.add\('browser-search'\)\s*keys\.add\('browser-bookmarks-bar'\)/)

@@ -81,6 +81,10 @@ pub struct BrowserService {
     recorded: Mutex<HashMap<String, Recorded>>,
     /// The tabs each chat was last told about in its tabs note.
     noted: Mutex<HashMap<String, Vec<NotedTab>>>,
+    /// The tabs a chat's latest note told it, until the message carrying it
+    /// is delivered (then they are what it was told) or is not (then it was
+    /// told nothing).
+    unsettled: Mutex<HashMap<String, Vec<NotedTab>>>,
     pub store: Mutex<store::BrowserStore>,
     /// Ad and tracker blocking: its lists and what the browser was told.
     pub adblock: adblock::Keeper,
@@ -109,6 +113,7 @@ impl BrowserService {
             downloads: Mutex::new(Vec::new()),
             recorded: Mutex::new(HashMap::new()),
             noted: Mutex::new(HashMap::new()),
+            unsettled: Mutex::new(HashMap::new()),
             store: Mutex::new(store::BrowserStore::open(data_dir)),
             adblock: adblock::Keeper::new(data_dir),
         }
@@ -422,18 +427,23 @@ impl BrowserService {
     }
 
     async fn run(&self, chat: &Chat, name: &str, args: &Value) -> Result<Value, String> {
+        let asked = name;
         let (name, args) = tools::current_name(name, args);
         let args = &args;
-        let tool = tools::find(name).ok_or_else(|| format!("no browser tool named {name}"))?;
+        let tool = tools::find(name).ok_or_else(|| format!("no browser tool named {asked}"))?;
         if !self.connected() {
             return Err(NO_BROWSER.into());
         }
         match name {
             "browser_tabs" => {
+                let select = args.get("select").and_then(Value::as_str);
                 if args.get("downloads").and_then(Value::as_bool) == Some(true) {
+                    if select.is_some() {
+                        return Err("give either 'select' or 'downloads', not both".into());
+                    }
                     return Ok(tools::text_result(self.download_list()));
                 }
-                let Some(named) = args.get("select").and_then(Value::as_str) else {
+                let Some(named) = select else {
                     return Ok(tools::text_result(self.tab_list(&chat.id)));
                 };
                 let tab = self.resolve_tab(&chat.id, Some(named))?;
@@ -623,22 +633,56 @@ impl BrowserService {
     /// only the tabs opened, moved to another address, or closed since. A
     /// chat without the browser in play (`in_play`: it has never used the
     /// browser, and the user has not asked for every chat to be told) gets
-    /// nothing; `browser_tabs` lists them whenever it wants.
+    /// nothing; `browser_tabs` lists them whenever it wants. What a note
+    /// says counts as told only once [`note_settled`](Self::note_settled)
+    /// hears the message carrying it was delivered.
     pub fn tabs_note(&self, chat: &str, in_play: bool) -> Option<String> {
         if !in_play || !self.connected() {
             return None;
         }
+        // The full address is kept for the comparison (a new query is a new
+        // page); the note shows it shortened.
         let now: Vec<NotedTab> = self
             .tabs()
             .iter()
             .map(|t| NotedTab {
                 id: t.id.clone(),
-                url: short_url(&t.url),
+                url: t.url.clone(),
                 title: shorten(&t.title, NOTE_TITLE),
             })
             .collect();
-        let before = lock(&self.noted).insert(chat.to_string(), now.clone());
-        tabs_note_text(before.as_deref(), &now)
+        let note = {
+            let noted = lock(&self.noted);
+            tabs_note_text(noted.get(chat).map(Vec::as_slice), &now)
+        };
+        let mut unsettled = lock(&self.unsettled);
+        match note {
+            Some(_) => unsettled.insert(chat.to_string(), now),
+            None => unsettled.remove(chat),
+        };
+        note
+    }
+
+    /// The message that carried a chat's latest note was delivered (or not:
+    /// then the chat was told nothing, and its next note says it all).
+    pub fn note_settled(&self, chat: &str, delivered: bool) {
+        let told = lock(&self.unsettled).remove(chat);
+        match (delivered, told) {
+            (true, Some(tabs)) => {
+                lock(&self.noted).insert(chat.to_string(), tabs);
+            }
+            (true, None) => {}
+            (false, _) => {
+                lock(&self.noted).remove(chat);
+            }
+        }
+    }
+
+    /// A chat's conversation starts over, or the chat is gone: it holds no
+    /// note any more.
+    pub fn forget_chat(&self, chat: &str) {
+        lock(&self.unsettled).remove(chat);
+        lock(&self.noted).remove(chat);
     }
 }
 
@@ -666,8 +710,9 @@ fn shorten(text: &str, max: usize) -> String {
     cut
 }
 
-/// An address without its query or fragment (they are long, and often
-/// carry tokens), cut to [`NOTE_URL`].
+/// An address as a note shows it: without its query or fragment (they are
+/// long), cut to [`NOTE_URL`]. This keeps the note short; it is not a
+/// privacy line, since `browser_tabs` gives the agent the whole address.
 fn short_url(url: &str) -> String {
     let bare = url.split(['?', '#']).next().unwrap_or(url);
     shorten(bare, NOTE_URL)
@@ -676,8 +721,12 @@ fn short_url(url: &str) -> String {
 /// The note for `now`, given what the chat was told `before` (None: never).
 /// None when there is nothing new to say.
 fn tabs_note_text(before: Option<&[NotedTab]>, now: &[NotedTab]) -> Option<String> {
-    let line =
-        |t: &NotedTab, mark: &str| format!("{mark} {}\n", tools::header(&t.id, &t.url, &t.title));
+    let line = |t: &NotedTab, mark: &str| {
+        format!(
+            "{mark} {}\n",
+            tools::header(&t.id, &short_url(&t.url), &t.title)
+        )
+    };
     let (lead, lines): (&str, Vec<String>) = match before {
         None => (
             "The user's OpenRemote browser has these tabs open",
@@ -915,31 +964,40 @@ mod tests {
             false,
         ));
         service.receive(tab("2", "https://b.test/", "Two", false));
+        // A note counts as told once the message carrying it was delivered.
+        let told = |chat: &str| {
+            let note = service.tabs_note(chat, true);
+            service.note_settled(chat, true);
+            note
+        };
         // A chat without the browser in play is told nothing.
         assert_eq!(service.tabs_note("c1", false), None);
-        // The first note lists every tab, its address without the query.
-        let first = service.tabs_note("c1", true).unwrap();
+        // The first note lists every tab, its address shortened.
+        let first = told("c1").unwrap();
         assert!(
             first.contains("- [tab 1] https://a.test/one · \"One\""),
             "{first}"
         );
         assert!(first.contains("- [tab 2] https://b.test/"), "{first}");
-        assert!(!first.contains("secret"), "{first}");
         // Nothing changed: no note. A title settling is not a change.
-        assert_eq!(service.tabs_note("c1", true), None);
+        assert_eq!(told("c1"), None);
         service.receive(tab("2", "https://b.test/", "Two, loaded", false));
-        assert_eq!(service.tabs_note("c1", true), None);
+        assert_eq!(told("c1"), None);
+        // A new query on the same page is a new address, shown shortened.
+        service.receive(tab("2", "https://b.test/?page=2", "Two", false));
+        let moved = told("c1").unwrap();
+        assert!(moved.contains("+ [tab 2] https://b.test/ ·"), "{moved}");
         // Another chat has been told nothing yet, so it hears everything.
-        assert!(service.tabs_note("c2", true).unwrap().contains("[tab 1]"));
+        assert!(told("c2").unwrap().contains("[tab 1]"));
         // Opened and closed since: only those.
         service.receive(tab("3", "https://c.test/", "Three", false));
         service.receive(FromHost::Closed { tab: "1".into() });
-        let delta = service.tabs_note("c1", true).unwrap();
+        let delta = told("c1").unwrap();
         assert!(delta.contains("changed since the last note"), "{delta}");
         assert!(delta.contains("+ [tab 3] https://c.test/"), "{delta}");
         assert!(delta.contains("- [tab 1] closed"), "{delta}");
         assert!(!delta.contains("[tab 2]"), "{delta}");
-        assert_eq!(service.tabs_note("c1", true), None);
+        assert_eq!(told("c1"), None);
         // Every chat hears about the tabs only once the user says so.
         assert!(!service.every_chat_sees_tabs());
         lock(&service.store).set_setting(AGENT_TABS, json!(true));
@@ -947,11 +1005,62 @@ mod tests {
     }
 
     #[test]
+    fn a_note_that_never_arrived_or_a_fresh_start_means_the_chat_was_told_nothing() {
+        let (_dir, service, _) = service();
+        service.receive(FromHost::Hello {
+            engine: "test".into(),
+            caps: Caps::default(),
+        });
+        service.receive(tab("1", "https://a.test/", "One", false));
+        assert!(service.tabs_note("c1", true).is_some());
+        // The message carrying it was never delivered: the next one says it all.
+        service.note_settled("c1", false);
+        assert!(service.tabs_note("c1", true).unwrap().contains("- [tab 1]"));
+        service.note_settled("c1", true);
+        assert_eq!(service.tabs_note("c1", true), None);
+        // A fresh conversation (a move it could not follow, /clear) or a
+        // deleted chat forgets what it was told.
+        service.forget_chat("c1");
+        assert!(service.tabs_note("c1", true).unwrap().contains("- [tab 1]"));
+        service.note_settled("c1", true);
+        // Asked but not yet settled: what it holds is still the last delivery.
+        service.receive(tab("2", "https://b.test/", "Two", false));
+        assert!(service.tabs_note("c1", true).is_some());
+        assert!(service.tabs_note("c1", true).is_some());
+    }
+
+    #[tokio::test]
+    async fn browser_tabs_takes_one_action_at_a_time() {
+        let (_dir, service, _) = service();
+        service.receive(FromHost::Hello {
+            engine: "test".into(),
+            caps: Caps::default(),
+        });
+        service.receive(tab("1", "https://a.test/", "One", false));
+        let chat = Chat {
+            id: "c1".into(),
+            title: "A chat".into(),
+            workspace: None,
+        };
+        let both = service
+            .run_tool(
+                &chat,
+                "browser_tabs",
+                &json!({"select": "1", "downloads": true}),
+            )
+            .await;
+        assert_eq!(both["isError"], true, "{both}");
+        assert!(both.to_string().contains("either"), "{both}");
+        let unknown = service.run_tool(&chat, "browser_nope", &json!({})).await;
+        assert!(unknown.to_string().contains("browser_nope"), "{unknown}");
+    }
+
+    #[test]
     fn a_tabs_note_is_short() {
         let now: Vec<NotedTab> = (1..=8)
             .map(|i| NotedTab {
                 id: i.to_string(),
-                url: short_url(&format!("https://example.test/{}", "x".repeat(200))),
+                url: format!("https://example.test/{}?q=1", "x".repeat(200)),
                 title: shorten(&"A long title ".repeat(20), NOTE_TITLE),
             })
             .collect();
@@ -969,7 +1078,8 @@ mod tests {
             note.contains("and 3 more (browser_tabs lists them)"),
             "{note}"
         );
-        assert!(now[0].url.chars().count() <= NOTE_URL);
+        assert!(!note.contains(&"x".repeat(NOTE_URL)), "{note}");
+        assert!(!note.contains("?q=1"), "{note}");
         assert!(now[0].title.chars().count() <= NOTE_TITLE);
         assert!(note.starts_with(
             "<openremote-browser>

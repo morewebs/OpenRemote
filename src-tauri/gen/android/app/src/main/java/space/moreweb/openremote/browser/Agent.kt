@@ -147,7 +147,7 @@ class AgentHost(private val browser: Browser) {
 
   /** The tab's page, awake and rendering behind the console while the agent works. */
   private fun live(tab: Tab): WebView {
-    if (tab.crashed) throw Fail("The page in this tab stopped working. Reload it (browser_go with reload), then try again.")
+    if (tab.crashed) throw Fail("The page in this tab stopped working. Reload it (browser_navigate with direction \"reload\"), then try again.")
     browser.busy(tab)
     return tab.page ?: throw Fail("the tab's page couldn't be opened")
   }
@@ -534,7 +534,7 @@ class AgentHost(private val browser: Browser) {
             page.evaluateJavascript("__openremote_host.run('$slot', async () => {\n$script\n})", null)
             page.evaluateJavascript("__openremote_host.take('$slot')") { second ->
               guard(out) {
-                if (!settled(second)) throw Fail("The script didn't run: it isn't valid JavaScript (browser_console has the page's error).")
+                if (!settled(second)) throw Fail("The script didn't run: it isn't valid JavaScript (browser_logs with kind \"console\" has the page's error).")
               }
             }
           }

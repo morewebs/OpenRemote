@@ -460,8 +460,14 @@ impl Supervisor {
 
     /// Whether a chat has started workers (any, live or not): its MCP
     /// server then lists the tools that manage them.
+    /// A scan under the store lock, copying nothing: it runs on every tool
+    /// call of every staged chat that has none yet.
     pub(crate) fn has_workers(&self, id: &SessionId) -> bool {
-        Tree::new(self.sessions()).children.contains_key(id)
+        self.with_store(|s| {
+            s.sessions()
+                .into_iter()
+                .any(|c| c.parent.as_ref().is_some_and(|p| p.chat == *id))
+        })
     }
 
     // ---- the tools ----

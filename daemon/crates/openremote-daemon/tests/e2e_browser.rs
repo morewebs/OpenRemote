@@ -748,3 +748,112 @@ async fn a_staged_server_lists_every_browser_tool_once_the_chat_uses_one() {
     .await;
     assert_eq!(gates.body["browser"], true, "{}", gates.raw);
 }
+
+/// A staged server never asks on a timer: the Settings switch that gives
+/// every chat the browser reaches a running chat at its next tool call.
+#[tokio::test]
+async fn the_every_chat_switch_reaches_a_running_chat_at_its_next_tool_call() {
+    let ws = workspace(Some("plain"));
+    let side = sidecar(ws.path()).await;
+    let daemon = &side.daemon;
+    send(
+        &side.stdin,
+        &FromHost::Hello {
+            engine: "stand-in".into(),
+            caps: Default::default(),
+        },
+    );
+    let created = call(
+        daemon,
+        "POST",
+        "/sessions",
+        Some(json!({"request_id": "w-create", "harness": "claude", "workspace": ws.path()})),
+    )
+    .await;
+    let chat = created.body["id"].as_str().unwrap().to_string();
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_openremote-daemon"))
+        .args([
+            "mcp-chat",
+            "--session",
+            &chat,
+            "--port",
+            &daemon.addr.port().to_string(),
+            "--data-dir",
+        ])
+        .arg(daemon.data_dir())
+        .arg("--staged")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+    rpc_lines(&mut stdin, &mut lines, 1, "initialize", json!({})).await;
+    let before = listed_names(&rpc_lines(&mut stdin, &mut lines, 2, "tools/list", json!({})).await);
+    assert!(!before.contains(&"browser_click".to_string()), "{before:?}");
+
+    let set = call(
+        daemon,
+        "POST",
+        "/browser/settings",
+        Some(json!({"agent_tabs": true})),
+    )
+    .await;
+    assert_eq!(set.status, 200, "{}", set.raw);
+    // Longer than any poll would take: nothing arrives on its own.
+    tokio::time::sleep(Duration::from_secs(6)).await;
+    let quiet = rpc_lines(&mut stdin, &mut lines, 3, "ping", json!({})).await;
+    assert_eq!(quiet.len(), 1, "{quiet:?}");
+    // Any tool call, even one that fails, looks again.
+    let read = rpc_lines(
+        &mut stdin,
+        &mut lines,
+        4,
+        "tools/call",
+        json!({"name": "read_chat", "arguments": {"chat": "nobody"}}),
+    )
+    .await;
+    assert_eq!(read.len(), 1, "{read:?}");
+    let changed = rpc_lines(&mut stdin, &mut lines, 5, "ping", json!({})).await;
+    assert_eq!(
+        changed[0]["method"], "notifications/tools/list_changed",
+        "{changed:?}"
+    );
+    let after = listed_names(&rpc_lines(&mut stdin, &mut lines, 6, "tools/list", json!({})).await);
+    assert!(after.contains(&"browser_click".to_string()), "{after:?}");
+}
+
+/// A name that is no browser tool is refused by that name, and does not
+/// put the browser in play.
+#[tokio::test]
+async fn an_unknown_browser_tool_is_named_and_opens_nothing() {
+    let ws = workspace(Some("plain"));
+    let side = sidecar(ws.path()).await;
+    let daemon = &side.daemon;
+    let created = call(
+        daemon,
+        "POST",
+        "/sessions",
+        Some(json!({"request_id": "u-create", "harness": "claude", "workspace": ws.path()})),
+    )
+    .await;
+    let chat = created.body["id"].as_str().unwrap().to_string();
+    let answer = call(
+        daemon,
+        "POST",
+        &format!("/sessions/{chat}/browser/call"),
+        Some(json!({"name": "browser_nope", "arguments": {}})),
+    )
+    .await;
+    assert_eq!(answer.body["isError"], true, "{}", answer.raw);
+    assert!(answer.raw.contains("browser_nope"), "{}", answer.raw);
+    let gates = call(
+        daemon,
+        "GET",
+        &format!("/sessions/{chat}/tools/gates"),
+        None,
+    )
+    .await;
+    assert_eq!(gates.body["browser"], false, "{}", gates.raw);
+}
