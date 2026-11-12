@@ -9,6 +9,7 @@
 //! turn state from absence of output.
 
 pub mod config;
+pub mod conversations;
 pub mod driver;
 pub mod resolve;
 
