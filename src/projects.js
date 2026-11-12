@@ -4,6 +4,7 @@
 
 import { workspaceName } from './state/reducer.js'
 import { isWaiting } from './needs-you.js'
+import { canonical } from './status-words.js'
 
 /** A project's name: its first folder's basename. */
 export function projectName(project) {
@@ -139,7 +140,7 @@ export function waitingProjects(rows, index) {
  * colour the waiting part with the status colour and leave the rest quiet:
  * a count in the same amber as a waiting row reads as a warning, not a tally.
  */
-export function projectLine({ chats = 0, waiting = 0 } = {}, { collapsed = false } = {}) {
+export function projectLine({ chats = 0, waiting = 0, failed = 0, running = 0 } = {}, { collapsed = false } = {}) {
   const parts = []
   if (collapsed) {
     parts.push({ kind: 'chats', text: `${chats} ${chats === 1 ? 'chat' : 'chats'}` })
@@ -147,5 +148,29 @@ export function projectLine({ chats = 0, waiting = 0 } = {}, { collapsed = false
   if (waiting > 0) {
     parts.push({ kind: 'waiting', text: `${waiting} waiting` })
   }
+  // Folded, the rows that would show a failure or a running turn are out of
+  // sight, so the head rolls them up (ported from br-sidebar 2a3a990, in
+  // main's words rather than the branch's row dots). Open, the rows say it.
+  if (collapsed && failed > 0) parts.push({ kind: 'failed', text: `${failed} failed` })
+  if (collapsed && running > 0) parts.push({ kind: 'running', text: `${running} running` })
   return parts.length ? parts : null
+}
+
+/**
+ * How many of `rows` failed and how many are running (starting or working),
+ * for a folded project's head. Either status vocabulary counts the same. A
+ * copy whose device is away is skipped: its last status is stale. Waiting
+ * chats are not counted here - they sit in the group above, and the head
+ * counts them from there (`waitingProjects`).
+ */
+export function heldStates(rows) {
+  let failed = 0
+  let running = 0
+  for (const row of rows ?? []) {
+    if (!row || row.offline) continue
+    const word = canonical(row.status)
+    if (word === 'failed') failed += 1
+    else if (word === 'starting' || word === 'working') running += 1
+  }
+  return { failed, running }
 }

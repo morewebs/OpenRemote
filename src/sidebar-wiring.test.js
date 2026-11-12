@@ -61,8 +61,12 @@ test('a registered project with no chats keeps its row and says so', () => {
   // something is waiting. projects.js owns the copy; the view renders parts.
   // The count holds the workers nested under a lead, so it matches the rows.
   assert.ok(
-    source.includes("projectLine({ chats: items.reduce((n, row) => n + 1 + teamSize(row), 0), waiting: waitingIn.get(project.id) ?? 0 }, { collapsed: isCollapsed })"),
-    'the head reads its line from the shared rule',
+    source.includes("projectLine({ chats: items.reduce((n, row) => n + 1 + teamSize(row), 0), waiting: waitingIn.get(project.id) ?? 0, ...heldStates(items.flatMap(withTeam)) }, { collapsed: isCollapsed })"),
+    'the head reads its line from the shared rule, its folded rollup counting workers too',
+  )
+  assert.ok(
+    source.includes("part.kind === 'failed' ? ' is-failed' : ''"),
+    'a failure inside a folded project wears the failed colour',
   )
   assert.ok(source.includes('{held && ('), 'and draws it only when there is something to say')
   assert.ok(

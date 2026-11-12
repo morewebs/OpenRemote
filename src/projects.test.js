@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { projectIndex, projectLine, projectName, projectFor, sections, unreadProjects, waitingProjects } from './projects.js'
+import { heldStates, projectIndex, projectLine, projectName, projectFor, sections, unreadProjects, waitingProjects } from './projects.js'
 
 const P1 = { id: 'p1', folders: ['/home/u/website'] }
 const P2 = { id: 'p2', folders: ['/home/u/daemon'] }
@@ -175,4 +175,42 @@ test('the head counts waiting with the row rule, not a second one', () => {
   assert.deepEqual([...waitingProjects([waiting[0], waiting[0]], index).values()], [2])
   assert.equal(waitingProjects(undefined, index).size, 0)
   assert.equal(waitingProjects(waiting, null).size, 0)
+})
+// ---- a folded project still says what runs and what failed inside it ----
+
+test('a folded head rolls up its failed and running chats; an open one leaves them to the rows', () => {
+  // Folded, nothing inside can be seen, so a failure or a running turn would
+  // hide behind the fold. The head says both, after the tally and the waiting
+  // count, and says nothing of a state no chat is in.
+  assert.deepEqual(projectLine({ chats: 4, waiting: 1, failed: 1, running: 2 }, { collapsed: true }), [
+    { kind: 'chats', text: '4 chats' },
+    { kind: 'waiting', text: '1 waiting' },
+    { kind: 'failed', text: '1 failed' },
+    { kind: 'running', text: '2 running' },
+  ])
+  assert.deepEqual(projectLine({ chats: 2, failed: 0, running: 1 }, { collapsed: true }), [
+    { kind: 'chats', text: '2 chats' },
+    { kind: 'running', text: '1 running' },
+  ])
+  // Open, the rows are on screen: the head keeps to what it said before.
+  assert.equal(projectLine({ chats: 4, failed: 1, running: 2 }, { collapsed: false }), null)
+})
+
+test('the rollup counts failed and running chats in either vocabulary, and never an away copy', () => {
+  const rows = [
+    { status: 'failed' },
+    { status: 'running' },
+    { status: 'working' },
+    { status: 'starting' },
+    { status: 'idle' },
+    { status: 'stopped' },
+    // Waiting chats sit in the group above and are counted there.
+    { status: 'waiting' },
+    // A copy whose device is away has no trustworthy status.
+    { status: 'failed', offline: true },
+    null,
+  ]
+  assert.deepEqual(heldStates(rows), { failed: 1, running: 3 })
+  assert.deepEqual(heldStates([]), { failed: 0, running: 0 })
+  assert.deepEqual(heldStates(), { failed: 0, running: 0 })
 })

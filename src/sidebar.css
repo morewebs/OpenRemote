@@ -388,6 +388,12 @@ button:active,
   color: var(--accent);
 }
 
+/* A folded project's rollup: a failure inside wears red, so the fold never
+   hides it; "running" stays quiet, a fact rather than a warning. */
+.project-count-part.is-failed {
+  color: var(--red);
+}
+
 .group-label {
   padding: 8px 0 4px;
   font-size: 11px;

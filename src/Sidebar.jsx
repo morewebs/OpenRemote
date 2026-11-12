@@ -37,7 +37,7 @@ import PickerMenu from './PickerMenu.jsx'
 import { useConsole } from './state/console.jsx'
 import { chatStatus } from './state/reducer.js'
 import { attentionTitle, needsYou } from './needs-you.js'
-import { duplicatedNames, folderless, projectFor, projectIndex, projectLine, projectName, sections, unreadProjects, waitingProjects } from './projects.js'
+import { duplicatedNames, folderless, heldStates, projectFor, projectIndex, projectLine, projectName, sections, unreadProjects, waitingProjects } from './projects.js'
 import { activeSessions } from './archive.js'
 import { deviceName, isPhone, sessionsForMode } from './cloud.js'
 import { hasTauri, isMobile } from './platform.js'
@@ -511,6 +511,9 @@ export default function Sidebar({
   // workers too, so it matches the rows under its head.
   const teamSize = (row) =>
     (nest.kids.get(row.id) ?? []).reduce((n, kid) => n + 1 + teamSize(kid), 0)
+  // A row and every worker nested under it, for a folded head's rollup: a
+  // worker that failed is as hidden by the fold as its lead.
+  const withTeam = (row) => [row, ...(nest.kids.get(row.id) ?? []).flatMap(withTeam)]
   // A lead's open team is walked right after it, as it is drawn.
   const walk = (row) => [
     row.id,
@@ -1287,9 +1290,10 @@ export default function Sidebar({
           // What the head says beside the name, or null when it has nothing to
           // add: the count answers a collapsed head, the waiting count is the
           // one fact the expanded list does not show at a glance. Both numbers
-          // were counted in the grouping pass (projects.js), so this is only
-          // formatting.
-          const held = projectLine({ chats: items.reduce((n, row) => n + 1 + teamSize(row), 0), waiting: waitingIn.get(project.id) ?? 0 }, { collapsed: isCollapsed })
+          // were counted in the grouping pass (projects.js). A folded head also
+          // rolls up the failed and running chats under it, workers included,
+          // so the fold never hides a failure.
+          const held = projectLine({ chats: items.reduce((n, row) => n + 1 + teamSize(row), 0), waiting: waitingIn.get(project.id) ?? 0, ...heldStates(items.flatMap(withTeam)) }, { collapsed: isCollapsed })
           return (
             <section
               key={project.id}
@@ -1329,7 +1333,7 @@ export default function Sidebar({
                     {held.map((part) => (
                       <span
                         key={part.kind}
-                        className={`project-count-part${part.kind === 'waiting' ? ' is-waiting' : ''}`}
+                        className={`project-count-part${part.kind === 'waiting' ? ' is-waiting' : ''}${part.kind === 'failed' ? ' is-failed' : ''}`}
                       >
                         {part.text}
                       </span>
