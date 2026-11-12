@@ -27,6 +27,15 @@ use uuid::Uuid;
 /// Default approval policy when the session didn't pick one - Codex's own
 /// word for "ask me before running things".
 const DEFAULT_APPROVAL_POLICY: &str = "on-request";
+/// The sandbox every thread starts in, whatever its approval word. Codex
+/// keeps the two settings apart: the approval word says when it asks, the
+/// sandbox says what a command can reach. `never` means never ask - a
+/// command the workspace sandbox blocks fails back to the model instead of
+/// asking - and the app-server runs `never` with `workspace-write` exactly
+/// as given (no network, writes inside the workspace). Codex's own Full
+/// Access pairs `never` with `danger-full-access`, but that is a second
+/// choice; lifting the sandbox for a chat that only picked "Never ask"
+/// would let it do more than its word says.
 const DEFAULT_SANDBOX: &str = "workspace-write";
 
 const CALL_TIMEOUT: Duration = Duration::from_secs(60);
@@ -1630,6 +1639,31 @@ mod tests {
         };
         let params = thread_params(&opts);
         assert_eq!(params["approvalPolicy"].as_str(), Some("never"));
+    }
+
+    #[test]
+    fn never_asking_keeps_the_workspace_sandbox() {
+        // The approval word never widens the sandbox: "Never ask" stops the
+        // questions, not the workspace's bounds. Every word the registry
+        // offers, and no word at all, starts the thread in workspace-write.
+        for word in [
+            None,
+            Some("untrusted"),
+            Some("on-failure"),
+            Some("on-request"),
+            Some("never"),
+        ] {
+            let opts = SpawnOptions {
+                cwd: PathBuf::from("/w"),
+                permission_mode: word.map(String::from),
+                ..Default::default()
+            };
+            assert_eq!(
+                thread_params(&opts)["sandbox"].as_str(),
+                Some("workspace-write"),
+                "{word:?} must keep the workspace sandbox"
+            );
+        }
     }
 
     #[test]
