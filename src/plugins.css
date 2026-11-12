@@ -1032,3 +1032,23 @@ html[data-reduce-motion] .pg-spin {
   gap: 10px;
   flex-wrap: wrap;
 }
+
+/* who a plugin is for: the scope picker in the review, and the project a
+   project scope names, under it */
+.pg-scope .pn-pick button {
+  padding: 6px 8px;
+}
+
+.pg-scope-projects {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+/* a plugin waiting for this computer's review */
+.pg-found {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}

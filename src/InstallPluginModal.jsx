@@ -1,15 +1,30 @@
 // Install a plugin: say where it is (a folder, a git repo, an archive) or
 // pick it in Discover, read what it is - its runtime, the powers it asks
-// for, whether it runs outside a sandbox - and only then approve. Nothing
-// is installed until the Install button; closing before that leaves
-// nothing behind. A plugin a marketplace makes with a command shows the
-// command first: nothing runs until the user has seen it.
+// for, what it adds, whether it runs outside a sandbox - choose who it is
+// for, and only then approve. Nothing is installed until the Install
+// button; closing before that leaves nothing behind. A plugin a
+// marketplace makes with a command shows the command first: nothing runs
+// until the user has seen it. A plugin a project's repo carries, or one
+// the account has on its other devices, comes in as `source` and is read
+// at once, for this computer's own approval.
 
 import { useEffect, useRef, useState } from 'react'
 import { X } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { canPickFolder, pickFile, pickFolder } from './pick-folder.js'
-import { CLAUDE_PART_LABEL, POWER_LABEL, RUNTIME_LABEL, entrySource, installFailedNote, sourceRequest } from './plugins.js'
+import {
+  CLAUDE_PART_LABEL,
+  POWER_LABEL,
+  RUNTIME_LABEL,
+  SCOPE_HINT,
+  SCOPE_LABEL,
+  contributionLines,
+  defaultScope,
+  entrySource,
+  installFailedNote,
+  sourceRequest,
+} from './plugins.js'
+import { projectName } from './projects.js'
 import { checkSource } from './form-checks.js'
 import { errorCopy } from './error-copy.js'
 import { useDialog } from './dialog-focus.js'
@@ -22,8 +37,8 @@ const KINDS = [
   { id: 'archive', label: 'Archive', placeholder: 'A .zip or .tar.gz - a file or a link' },
 ]
 
-export default function InstallPluginModal({ onClose, entry = null }) {
-  const { stagePlugin, installStagedPlugin, cancelStagedPlugin } = useConsole()
+export default function InstallPluginModal({ onClose, entry = null, source = null }) {
+  const { stagePlugin, installStagedPlugin, cancelStagedPlugin, projects } = useConsole()
   const [kind, setKind] = useState('folder')
   const [value, setValue] = useState('')
   // The source's own shape, said under the field once the person has left it:
@@ -31,8 +46,12 @@ export default function InstallPluginModal({ onClose, entry = null }) {
   // button refuses the same shapes, so the field and the button agree.
   const sourceProblem = checkSource(kind, value)
   const [sourceTouched, setSourceTouched] = useState(false)
-  const [busy, setBusy] = useState(Boolean(entry))
+  const [busy, setBusy] = useState(Boolean(entry || source))
   const [staged, setStaged] = useState(null)
+  // Who it is for, chosen in the review: a scope, and a project for the
+  // two project scopes.
+  const [scope, setScope] = useState('machine')
+  const [project, setProject] = useState(null)
   const [needsCommand, setNeedsCommand] = useState(null)
   const [error, setError] = useState(null)
   const stagedRef = useRef(null)
@@ -74,6 +93,8 @@ export default function InstallPluginModal({ onClose, entry = null }) {
       } else {
         setNeedsCommand(null)
         setStaged(reply.result)
+        setScope(defaultScope(reply.result))
+        setProject(reply.result?.for_project ?? reply.result?.installed_project ?? projects?.[0]?.id ?? null)
       }
     } catch (err) {
       setError(errorCopy(err))
@@ -82,17 +103,20 @@ export default function InstallPluginModal({ onClose, entry = null }) {
     }
   }
 
-  // From Discover: read the entry straight away.
+  // From Discover, a project's repo or the account: read it straight away.
   useEffect(() => {
     if (entry) read(entrySource(entry))
+    else if (source) read(source)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const forProject = scope === 'project' || scope === 'project_local'
 
   const install = async () => {
     setBusy(true)
     setError(null)
     try {
-      await installStagedPlugin(staged.stage_id)
+      await installStagedPlugin(staged.stage_id, { scope, project: forProject ? project : undefined })
       setStaged(null)
       onClose()
     } catch (err) {
@@ -112,7 +136,9 @@ export default function InstallPluginModal({ onClose, entry = null }) {
   }
 
   const manifest = staged?.manifest
-  const name = entry?.display_name ?? entry?.name ?? manifest?.name
+  const name = entry?.display_name ?? entry?.name ?? source?.name ?? manifest?.name
+  const adds = contributionLines(manifest?.contributes)
+  const scopes = staged?.scopes ?? ['machine']
   const updating = staged?.replaces != null
   const newPowers = staged?.new_powers ?? []
   const fromMarketplace = staged && staged.marketplace !== 'local'
@@ -120,8 +146,8 @@ export default function InstallPluginModal({ onClose, entry = null }) {
     ? `${updating ? 'Update' : 'Install'} ${manifest.name}?`
     : needsCommand
       ? 'Run this command?'
-      : entry
-        ? `Install ${name}`
+      : entry || source
+        ? `Install ${name ?? 'the plugin'}`
         : 'Install a plugin'
 
   // What the X says while the guard refuses it. A disabled control with a
@@ -197,8 +223,21 @@ export default function InstallPluginModal({ onClose, entry = null }) {
               )}
               <div className="pg-review-row">
                 <span className="pg-review-label">Runs as</span>
-                <span>{RUNTIME_LABEL[manifest.runtime] ?? manifest.runtime}</span>
+                <span>
+                  {RUNTIME_LABEL[manifest.runtime] ?? manifest.runtime}
+                  {manifest.entry && <code className="pg-command pg-review-sub pv">{manifest.entry}</code>}
+                </span>
               </div>
+              {adds.length > 0 && (
+                <div className="pg-review-row">
+                  <span className="pg-review-label">Adds</span>
+                  <ul className="pg-powers">
+                    {adds.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {manifest.claude_parts.length > 0 && (
                 <div className="pg-review-row">
                   <span className="pg-review-label">Carries</span>
@@ -230,6 +269,45 @@ export default function InstallPluginModal({ onClose, entry = null }) {
                 </div>
               )}
             </div>
+            <div className="pg-review-row pg-scope">
+              <span className="pg-review-label">For</span>
+              <div>
+                <div className="pn-pick" role="radiogroup" aria-label="Who it is for">
+                  {scopes.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      role="radio"
+                      aria-checked={s === scope}
+                      className={s === scope ? 'on' : ''}
+                      onClick={() => setScope(s)}
+                    >
+                      <span className="pn-pick-name">{SCOPE_LABEL[s] ?? s}</span>
+                    </button>
+                  ))}
+                </div>
+                <span className="pg-review-sub">{SCOPE_HINT[scope]}</span>
+                {forProject &&
+                  ((projects ?? []).length ? (
+                    <div className="pn-pick pg-scope-projects" role="radiogroup" aria-label="Which project">
+                      {projects.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={p.id === project}
+                          className={p.id === project ? 'on' : ''}
+                          onClick={() => setProject(p.id)}
+                        >
+                          <span className="pn-pick-name">{projectName(p)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="pg-review-sub">Add a project first: there is none on this computer yet.</span>
+                  ))}
+              </div>
+            </div>
             {manifest.not_sandboxed && (
               <p className="pg-warn-block">
                 Runs as you, not sandboxed. It runs programs with your account&apos;s rights, and no
@@ -242,7 +320,7 @@ export default function InstallPluginModal({ onClose, entry = null }) {
               <button type="button" className="pn-btn" onClick={close} disabled={busy}>
                 Cancel
               </button>
-              <button type="button" className="dv-act" onClick={install} disabled={busy}>
+              <button type="button" className="dv-act" onClick={install} disabled={busy || (forProject && !project)}>
                 {busy ? (updating ? 'Updating…' : 'Installing…') : updating ? 'Update' : 'Install'}
               </button>
             </div>
@@ -269,7 +347,7 @@ export default function InstallPluginModal({ onClose, entry = null }) {
               </button>
             </div>
           </>
-        ) : entry ? (
+        ) : entry || source ? (
           <>
             <p className="dv-modal-hint">
               {busy ? `Fetching ${name} to read what it asks for…` : 'Nothing is installed until you have seen what it asks for.'}
@@ -280,7 +358,7 @@ export default function InstallPluginModal({ onClose, entry = null }) {
                 <button type="button" className="pn-btn" onClick={close}>
                   Close
                 </button>
-                <button type="button" className="dv-act" onClick={() => read(entrySource(entry))}>
+                <button type="button" className="dv-act" onClick={() => read(entry ? entrySource(entry) : source)}>
                   Try again
                 </button>
               </div>

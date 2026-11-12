@@ -44,6 +44,77 @@ export const CLAUDE_PART_LABEL = {
   mcp: 'MCP servers',
 }
 
+// Who a plugin is for, as the install review offers it.
+export const SCOPE_LABEL = {
+  global: 'Every device',
+  machine: 'This machine',
+  project_local: 'One project, outside its repo',
+  project: 'One project, in its repo',
+}
+
+// What each scope means, under the picker. Who a plugin is for never
+// changes what it may do: the powers above are the same in every scope.
+export const SCOPE_HINT = {
+  global:
+    'For every device on your account. Each of your other devices lists it for its own review before it installs there, and any device can turn it off for itself.',
+  machine: 'Only this computer gets it.',
+  project_local: "Only chats in the project get it. Its files stay in OpenRemote's folder.",
+  project:
+    'Only chats in the project get it. Its files go into the project at .openremote/plugins, so whoever clones it has them - and reviews it before it runs.',
+}
+
+// The scope an installed row shows; a project install names its project.
+export function scopeLabel(plugin, projectName) {
+  const project = projectName ? `Project ${projectName}` : 'A project'
+  if (plugin.scope === 'project_local') return project
+  if (plugin.scope === 'project') return `${project}, in its repo`
+  return SCOPE_LABEL[plugin.scope] ?? plugin.scope
+}
+
+// The scope the review starts on: where the copy it replaces is, the
+// project it was read from, every device for the account's own copy, else
+// this machine - whichever the plugin allows.
+export function defaultScope(staged) {
+  const allowed = staged?.scopes ?? ['machine']
+  const wanted =
+    staged?.installed_scope ?? (staged?.for_project ? 'project' : staged?.for_account ? 'global' : 'machine')
+  return allowed.includes(wanted) ? wanted : allowed.includes('machine') ? 'machine' : allowed[0]
+}
+
+// What a plugin adds to OpenRemote, a line per kind, for the review. A
+// harness a plugin drives is an App, as everywhere a person reads.
+export function contributionLines(contributes) {
+  const c = contributes ?? {}
+  const names = (list, key) => list.map((x) => x?.[key]).filter(Boolean).join(', ')
+  const lines = []
+  const add = (list, one, many, key) => {
+    if (list?.length) lines.push(`${list.length === 1 ? one : many}: ${names(list, key)}`)
+  }
+  add(c.harnesses, 'An App', 'Apps', 'name')
+  add(c.tools, 'Agent tool', 'Agent tools', 'name')
+  add(c.composer_inputs, 'Composer button', 'Composer buttons', 'label')
+  add(c.views, 'View', 'Views', 'title')
+  add(c.settings, 'Setting', 'Settings', 'label')
+  return lines
+}
+
+// What the armed remove takes beyond this computer's copy, when it does.
+export function removeScopeNote(plugin) {
+  if (plugin?.scope === 'project') return "Its files leave the project's repo too, for you to commit."
+  if (plugin?.scope === 'global') return 'It is removed from every device on your account.'
+  return null
+}
+
+// Why a plugin waits for this computer's review: a repo's (new, or changed
+// since it was approved) or the account's (not here yet, or a newer copy).
+export function reviewWaitingLine(item, projectName = null) {
+  if (item?.kind === 'account') {
+    return item.why === 'update' ? 'A newer copy is on your other devices' : 'On your other devices, not here yet'
+  }
+  if (item?.why === 'changed') return 'Changed in the repo since you approved it'
+  return projectName ? `New in the repo of ${projectName}` : 'New in the repo'
+}
+
 // A plugin that runs programs itself - a program, or a Claude plugin's
 // hooks and MCP servers - runs as the user, outside any sandbox. JS and
 // WebAssembly plugins are sandboxed whatever they ask for.

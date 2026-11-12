@@ -22,9 +22,13 @@ import {
   installedSearchHint,
   notSandboxed,
   pluginTitle,
+  removeScopeNote,
+  reviewWaitingLine,
+  scopeLabel,
   searchInstalled,
   sourceLabel,
 } from './plugins.js'
+import { projectName } from './projects.js'
 import { useArmedRow } from './use-armed-row.js'
 import { errorCopy } from './error-copy.js'
 import './devices.css'
@@ -118,7 +122,10 @@ export default function PluginsView() {
       </div>
       {tab === 'installed' && (
         <div className="pg-stage">
-          <InstalledPlugins onUpdate={(entry) => setInstalling({ entry })} />
+          <InstalledPlugins
+            onUpdate={(entry) => setInstalling({ entry })}
+            onReview={(source) => setInstalling({ source })}
+          />
         </div>
       )}
       {tab === 'marketplaces' && (
@@ -127,13 +134,15 @@ export default function PluginsView() {
         </div>
       )}
 
-      {installing && <InstallPluginModal entry={installing.entry} onClose={() => setInstalling(null)} />}
+      {installing && (
+        <InstallPluginModal entry={installing.entry} source={installing.source} onClose={() => setInstalling(null)} />
+      )}
     </div>
   )
 }
 
-function InstalledPlugins({ onUpdate }) {
-  const { plugins, catalog, marketplaces, setPluginEnabled, removePlugin } = useConsole()
+function InstalledPlugins({ onUpdate, onReview }) {
+  const { plugins, catalog, marketplaces, projects, setPluginEnabled, removePlugin } = useConsole()
   const [confirmRemove, setConfirmRemove] = useState(null)
   // The arm ends when the row scrolls out of view or loses focus, so a first
   // press cannot outlive the user's attention (use-armed-row.js).
@@ -154,6 +163,15 @@ function InstalledPlugins({ onUpdate }) {
   const entries = new Map((catalog?.entries ?? []).map((e) => [e.id, e]))
   const known = new Set((marketplaces ?? []).map((m) => m.name))
   const clashing = clashes(installed)
+  // Waiting for this computer's review: a project's repo plugins (new, or
+  // changed since they were approved) and the account's Global plugins
+  // that are not here yet. Nothing in either list runs until reviewed.
+  const found = plugins?.found ?? []
+  const pending = plugins?.global_pending ?? []
+  const nameOf = (id) => {
+    const project = (projects ?? []).find((p) => p.id === id)
+    return project ? projectName(project) : null
+  }
 
   const run = async (action) => {
     setError(null)
@@ -199,6 +217,44 @@ function InstalledPlugins({ onUpdate }) {
           </div>
         ))}
       </div>
+
+      {(found.length > 0 || pending.length > 0) && (
+        <>
+          <h2 className="pn-section">Waiting for your review</h2>
+          <p className="pn-lead">Nothing here runs on this computer until you have seen what it asks for.</p>
+          <div className="pn-list pg-list-full pn-list--tight">
+            {found.map((f) => (
+              <div className="pn-row pg-found" key={`${f.project}/${f.name}`}>
+                <div>
+                  <div className="pn-name">{pluginTitle(f.name)}</div>
+                  <div className="pn-detail">{reviewWaitingLine(f, nameOf(f.project))}</div>
+                </div>
+                <button
+                  type="button"
+                  className="pn-btn"
+                  onClick={() => onReview({ kind: 'project', project: f.project, name: f.name })}
+                >
+                  Review
+                </button>
+              </div>
+            ))}
+            {pending.map((g) => (
+              <div className="pn-row pg-found" key={g.id}>
+                <div>
+                  <div className="pn-name">
+                    {pluginTitle(g.name)}
+                    {g.version && <span className="pg-version">{g.version}</span>}
+                  </div>
+                  <div className="pn-detail">{reviewWaitingLine({ ...g, kind: 'account' })}</div>
+                </div>
+                <button type="button" className="pn-btn" onClick={() => onReview({ kind: 'account', id: g.id })}>
+                  Review
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       <h2 className="pn-section">Installed</h2>
       {/* The list's one way in. A field over an empty list would be a control
@@ -322,6 +378,7 @@ function InstalledPlugins({ onUpdate }) {
               </div>
               <div className="pg-facts">
                 <span className="pg-chip">{RUNTIME_LABEL[p.runtime] ?? p.runtime}</span>
+                <span className="pg-chip">{scopeLabel(p, nameOf(p.project))}</span>
                 {(p.powers ?? []).map((w) => (
                   <span key={w} className="pg-chip">
                     {POWER_SHORT[w] ?? w}
@@ -333,13 +390,19 @@ function InstalledPlugins({ onUpdate }) {
               {orphaned && (
                 <div className="pg-sub">Its marketplace was removed: it keeps working, with no more updates.</div>
               )}
+              {p.process?.state === 'waiting' && (
+                <div className="pg-sub">
+                  Its program stopped by itself{p.process.error ? ` (${p.process.error})` : ''} and starts again on
+                  its next use, after a short pause.
+                </div>
+              )}
               {confirmRemove === p.id && (
                 // What the second press takes, in the row it takes it from: a
                 // tooltip is not saying it before it happens, because a person
                 // reading the armed row is not hovering anything.
                 <div className="pg-sub">
                   Its folder on this computer is deleted. Its marketplace still lists it, so it can be
-                  installed again from there.
+                  installed again from there.{removeScopeNote(p) ? ` ${removeScopeNote(p)}` : ''}
                 </div>
               )}
             </div>

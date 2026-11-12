@@ -1476,13 +1476,16 @@ export function ConsoleProvider({ children }) {
   const stagePlugin = useCallback(async (source) => api.stagePlugin(source), [api])
   const cancelStagedPlugin = useCallback(async (stageId) => api.cancelStagedPlugin(stageId), [api])
 
+  // `where` is who it is for: { scope, project } (the daemon's default is
+  // this machine). A plugin's App joins the pickers, so capabilities
+  // refresh too.
   const installStagedPlugin = useCallback(
-    async (stageId) => {
-      const reply = await api.installStagedPlugin(stageId)
-      await refreshPlugins()
+    async (stageId, where) => {
+      const reply = await api.installStagedPlugin(stageId, where)
+      await Promise.all([refreshPlugins(), refreshCapabilities()])
       return reply
     },
-    [api, refreshPlugins],
+    [api, refreshPlugins, refreshCapabilities],
   )
 
   // A built-in harness turned off leaves every picker - the pickers read
@@ -1498,9 +1501,9 @@ export function ConsoleProvider({ children }) {
   const removePlugin = useCallback(
     async (id) => {
       await api.removePlugin(id)
-      await refreshPlugins()
+      await Promise.all([refreshPlugins(), refreshCapabilities()])
     },
-    [api, refreshPlugins],
+    [api, refreshPlugins, refreshCapabilities],
   )
 
   // ---- MCP servers ----

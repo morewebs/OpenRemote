@@ -691,8 +691,16 @@ export class DaemonApi {
   // No client timeout, like the harness installer: the daemon holds its
   // own limit, and a client that gave up first would report a failure
   // while the install finished without anyone to show it.
-  installStagedPlugin(stageId) {
-    return this.call('POST', `/plugins/stage/${seg(stageId)}/install`, { request_id: newRequestId() }, { timeoutMs: INSTALL_TIMEOUT_MS })
+  // `where` is who it is for: { scope: 'global' | 'machine' |
+  // 'project_local' | 'project', project } - the daemon's default is this
+  // machine. It never names a power: those are the reviewed plugin's own.
+  installStagedPlugin(stageId, { scope, project } = {}) {
+    return this.call(
+      'POST',
+      `/plugins/stage/${seg(stageId)}/install`,
+      { request_id: newRequestId(), ...(scope ? { scope } : {}), ...(project ? { project } : {}) },
+      { timeoutMs: INSTALL_TIMEOUT_MS },
+    )
   }
 
   cancelStagedPlugin(stageId) {
