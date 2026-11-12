@@ -33,6 +33,37 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
+/* A row that opens its own list says so at its end. */
+.ctx-caret {
+  display: grid;
+  flex: none;
+  place-items: center;
+  margin-left: auto;
+  color: var(--text-3);
+}
+
+.nc-item.cursor .ctx-caret {
+  color: var(--text-2);
+}
+
+/* The submenu: names (projects, folders) can run long, so they end in an
+   ellipsis, and a long list scrolls inside the window. */
+.ctx-sub {
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+}
+
+.ctx-sub .nc-item-main {
+  min-width: 0;
+}
+
+.ctx-sub .nc-item-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ctx-menu {
     animation: none;
