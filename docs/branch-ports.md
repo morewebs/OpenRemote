@@ -75,6 +75,8 @@ recorded as dropped below.
 | Ad blocking, daemon: on/off, the picked lists and the allowed sites in the store's own `adblock` collections (never synced); a catalog of EasyList and EasyPrivacy with each licence, **none picked by default**; a list downloads only while blocking is on and it is picked (HTTPS on every hop, 16 MB, 60 s a hop, trimmed before it is kept); `Caps.adblock`, so only a browser that can block is told; routes `GET/POST /browser/adblock`, `POST /browser/adblock/site` (not peer routes) | br-adblock 4df6edf, 77e6d0b | 852143c |
 | Ad blocking, shell (Windows): Brave's engine (adblock 0.13, MPL-2.0) over WebView2 request hooks, hide rules, the blocked count; **no list ships** (the branch's brotli snapshots and `update-filter-lists.mjs` dropped); only `tab-N` webviews are hooked, never the console, and nothing on the user's machine or network (so never the daemon); off, no hook and no engine; a hostile-list test. Notices name the crates and each offered list's licence | br-adblock 35a116c, ea815f7 | b2b3383 |
 | Ad blocking, console (new; no branch had one): Settings > Browser's Block ads and trackers, Filter lists (a `useDialog` chooser, licence beside each list) and Sites allowed to show ads, registered in `settings-search.js`, refusals through `errorCopy`. Not yet looked at in the running app | new | 3915e0a |
+| Browser import, daemon: bookmarks and history from Chromium browsers (Chrome, Edge, Brave, Vivaldi, Opera, Chromium), Firefox and Safari; profiles only from each browser's own folder or a folder the user picks; only `Bookmarks`, `History`, `places.sqlite`, `profiles.ini`, `Bookmarks.plist`, `History.db` are ever opened (read-only; a test fails if a reader names a sign-in, password or site-storage file); databases read from a private scratch copy deleted afterwards; the pure-Rust SQLite and plist readers hardened and fuzzed (no new dependency); http(s) only; capped at 2,000 bookmarks an import and `CAP_BOOKMARK - 500` in all, 20,000 visits from 90 days; visits stay local, bookmarks sync as usual; `GET/POST /browser/import`, not a peer route. `import/mod.rs` and `safari.rs` written new | br-adblock d6f1839, 4df6edf (`store.import`, `put_all`) | c2fa152 |
+| Browser import, console (new): Settings > Browser's Import from another browser, a `useDialog` dialog (found profiles or a picked folder, Bookmarks / History), `errorCopy`, registered in `settings-search.js`. Not yet looked at in the running app | new | e9484d7 |
 
 Deleted (fully in main): `security-policy`, `br-guard`, `br-harness`,
 `wip/browser-daemon`, `pr-10`, `feat/delete-chat`, `npm/github-install`,
@@ -99,6 +101,20 @@ tag keeps it.
 | 01aee56 | Restore when agents opened tabs first | ported (f9c17fd) |
 | f118e43 | Bookmarks bar picture ahead | in main |
 | 52705e9 | Picture ahead on address focus and the star | ported (4862afa) |
+
+### Ready to delete: br-adblock
+
+Every br-adblock commit (head d6f1839; kept as `archive/br-adblock`) is
+ported. 83161ac is the merge of `browser` into it, whose commits are tracked
+under that branch. The branch is not deleted here.
+
+| Commit | What | State |
+|---|---|---|
+| 4df6edf | Daemon blocking setting, allowed sites, list keeper, routes; `store.import` bulk write | blocking ported (852143c); `store.import` and `put_all` ported (c2fa152), now capped below the sync ceiling |
+| 77e6d0b | `Caps.adblock` | ported (852143c) |
+| 35a116c | Shell engine and hooks, bundled list snapshots | engine and hooks ported (b2b3383); snapshots and `update-filter-lists.mjs` dropped by ruling |
+| ea815f7 | Hooks split from the glue | ported (b2b3383, decisions in `rules.rs`) |
+| d6f1839 | Saved working tree: browser import (`chromium.rs`, `firefox.rs`, `plist.rs`, `sqlite.rs`) | ported (c2fa152) after a line-by-line review: readers hardened, two draft bugs fixed (quoted column names, a self-parented Firefox folder), `mod.rs` and `safari.rs` new |
 
 ### Ready to delete: br-chatmove
 
@@ -233,11 +249,9 @@ main, or obsolete:
 - Ad blocking: ported (Done rows above). **Open, for the user to decide:
   which filter lists ship enabled by default.** Today none is picked and none
   is downloaded until the user picks one (the ruling for this port); the
-  catalog offers EasyList and EasyPrivacy. br-adblock's d6f1839 (its saved
-  working tree) is browser import code, not ad blocking: it goes with the
-  import item below, so br-adblock is not ready to delete until that lands.
-- Browser import from Chromium, Firefox, Safari: unfinished (no `import/mod.rs`,
-  no `safari.rs`); finish, cap imports below the bookmark sync limit.
+  catalog offers EasyList and EasyPrivacy.
+- Browser import: ported (Done rows above), so br-adblock is ready to delete
+  (its section below).
 - br-sync profile sync: **dropped** by policy (cookies and site storage stay on
   the device, `docs/cloud-trust-model.md`). Sealed store kept as a reference.
 - SSH plugin: after the plugin runtime; add its missing `ui/ssh.html` and docs.
