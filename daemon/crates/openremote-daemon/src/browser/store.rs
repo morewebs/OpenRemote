@@ -19,7 +19,7 @@ use serde_json::{Value, json};
 
 /// History older than this is dropped when the log is compacted (Chrome
 /// keeps 90 days too).
-const HISTORY_DAYS: i64 = 90;
+pub const HISTORY_DAYS: i64 = 90;
 /// The log is rewritten with only what is still true once it holds this
 /// many superseded operations.
 const COMPACT_AFTER: usize = 20_000;
@@ -31,6 +31,34 @@ const COMPACT_AFTER: usize = 20_000;
 /// key is refused and the rows already held stay (see [`BrowserStore::merge_row`]).
 pub const CAP_SETTING: usize = 200;
 pub const CAP_BOOKMARK: usize = 5_000;
+
+/// The most bookmarks one import from another browser may add. Bookmarks
+/// follow the account, so an import is capped well below [`CAP_BOOKMARK`]:
+/// one browser's ten-year pile must not fill every device's tree, and the
+/// user keeps room to add their own.
+pub const IMPORT_BOOKMARKS: usize = 2_000;
+/// An import never takes the bookmark collection above `CAP_BOOKMARK` minus
+/// this many keys, whatever is already held, so a second or third import
+/// stops short of the sync ceiling too.
+pub const IMPORT_ROOM: usize = 500;
+/// The most visits one import adds. History stays on this device (the sync
+/// note never carries it), and only the last [`HISTORY_DAYS`] are kept.
+pub const IMPORT_VISITS: usize = 20_000;
+const _: () = assert!(IMPORT_BOOKMARKS + IMPORT_ROOM < CAP_BOOKMARK);
+
+/// What one import added.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct Imported {
+    /// Bookmarks new to this store.
+    pub bookmarks: usize,
+    /// Bookmarks left out because the page is already bookmarked here (or
+    /// the import holds it twice).
+    pub already: usize,
+    /// Bookmarks left out because the import reached its cap.
+    pub over_cap: usize,
+    /// Visits added to this device's history.
+    pub visits: usize,
+}
 
 /// A hybrid logical clock stamp: wall-clock milliseconds, a counter for
 /// operations within one millisecond, and the device as the tie-break.
@@ -602,6 +630,113 @@ impl BrowserStore {
         self.put("bookmark", id, Value::Null);
     }
 
+    // ---- import ----
+
+    /// Brings in another browser's bookmarks and visits in one write. Their
+    /// ids come from the importer and are the same every time, so importing
+    /// the same browser twice adds nothing twice.
+    ///
+    /// A bookmark is left out when its page is already bookmarked here or its
+    /// id is already held, so an import never moves or renames what the user
+    /// has. New keys stop at [`IMPORT_BOOKMARKS`], and at `CAP_BOOKMARK -
+    /// IMPORT_ROOM` keys in all (deleted rows count: their tombstones are
+    /// keys the sync note carries). Imported bookmarks go to the end of
+    /// Other bookmarks, never onto the bar.
+    pub fn import(&mut self, marks: Vec<Bookmark>, visits: Vec<Visit>) -> Imported {
+        let mut done = Imported::default();
+        let mut pages: std::collections::HashSet<String> =
+            self.bookmarks().into_iter().map(|b| b.url).collect();
+        let held = self.state.keys().filter(|(c, _)| c == "bookmark").count();
+        let room = (CAP_BOOKMARK - IMPORT_ROOM)
+            .saturating_sub(held)
+            .min(IMPORT_BOOKMARKS);
+        let mut position = self
+            .bookmarks()
+            .iter()
+            .filter(|b| b.folder == "other")
+            .map(|b| b.position)
+            .fold(0.0, f64::max);
+        let mut writes = Vec::new();
+        let mut new_keys = 0usize;
+        for mut mark in marks {
+            if self.get("bookmark", &mark.id).is_some() || pages.contains(&mark.url) {
+                done.already += 1;
+                continue;
+            }
+            let slot = ("bookmark".to_string(), mark.id.clone());
+            // A key deleted here before comes back without growing the
+            // collection; only a key never held counts against the room.
+            if !self.state.contains_key(&slot) {
+                if new_keys >= room {
+                    done.over_cap += 1;
+                    continue;
+                }
+                new_keys += 1;
+            }
+            done.bookmarks += 1;
+            pages.insert(mark.url.clone());
+            position += 1.0;
+            mark.folder = "other".into();
+            mark.position = position;
+            let mut val = serde_json::to_value(&mark).expect("a bookmark serializes");
+            if let Some(map) = val.as_object_mut() {
+                map.remove("id");
+            }
+            writes.push(("bookmark", mark.id, val));
+        }
+        for visit in visits.into_iter().take(IMPORT_VISITS) {
+            if self.get("visit", &visit.id).is_some() {
+                continue;
+            }
+            done.visits += 1;
+            writes.push((
+                "visit",
+                visit.id,
+                json!({"url": visit.url, "title": visit.title, "at": visit.at}),
+            ));
+        }
+        self.put_all(writes);
+        done
+    }
+
+    /// Writes many keys with one append to the log, not one per key.
+    fn put_all(&mut self, writes: Vec<(&str, String, Value)>) {
+        if writes.is_empty() {
+            return;
+        }
+        let now = openremote_core::now_ms();
+        let mut lines = String::new();
+        let mut ops = Vec::with_capacity(writes.len());
+        for (col, key, val) in writes {
+            let op = Op {
+                at: self.stamp(now),
+                col: col.into(),
+                key,
+                val,
+            };
+            lines.push_str(&serde_json::to_string(&op).expect("an op serializes"));
+            lines.push('\n');
+            ops.push(op);
+        }
+        let path = self.log_path(&self.device);
+        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&path) {
+            let _ = file.write_all(lines.as_bytes());
+        }
+        self.ops_written += ops.len();
+        for op in ops {
+            self.apply(op);
+        }
+        if self.ops_written > self.live_count() + COMPACT_AFTER {
+            self.compact();
+        }
+    }
+
+    /// The folder the browser's data lives in (`<data_dir>/browser`): an
+    /// import makes its private scratch folder in here.
+    pub fn folder(&self) -> &Path {
+        &self.dir
+    }
+
     // ---- settings, permissions, the tabs to restore ----
 
     /// Every setting the user changed (the console knows the defaults).
@@ -817,6 +952,97 @@ mod tests {
         store.remove_tile("https://news.test/");
         let urls: Vec<String> = store.tiles(8).into_iter().map(|t| t.url).collect();
         assert_eq!(urls, vec!["https://mine.test/", "https://shop.test/"]);
+    }
+
+    fn imported(n: usize, tag: &str) -> Vec<Bookmark> {
+        (0..n)
+            .map(|i| Bookmark {
+                id: format!("imp-{tag}-{i}"),
+                url: format!("https://{tag}.example/{i}"),
+                title: format!("Page {i}"),
+                folder: "bar".into(),
+                position: 0.0,
+                added: 1,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn an_import_is_capped_below_the_bookmark_sync_ceiling() {
+        let (_dir, mut store) = fresh();
+        let first = store.import(imported(IMPORT_BOOKMARKS + 500, "a"), Vec::new());
+        assert_eq!(first.bookmarks, IMPORT_BOOKMARKS);
+        assert_eq!(first.over_cap, 500);
+        // Two more browsers: the second fits under the per-import cap, the
+        // third only up to the room kept below the sync ceiling.
+        let second = store.import(imported(IMPORT_BOOKMARKS, "b"), Vec::new());
+        assert_eq!(second.bookmarks, IMPORT_BOOKMARKS);
+        let third = store.import(imported(IMPORT_BOOKMARKS, "c"), Vec::new());
+        assert_eq!(
+            third.bookmarks,
+            CAP_BOOKMARK - IMPORT_ROOM - 2 * IMPORT_BOOKMARKS
+        );
+        assert_eq!(store.rows("bookmark").len(), CAP_BOOKMARK - IMPORT_ROOM);
+        assert!(store.rows("bookmark").len() < CAP_BOOKMARK);
+        // The user's own hand is not capped by an import.
+        store.save_bookmark(Bookmark {
+            id: String::new(),
+            url: "https://mine.example/".into(),
+            title: String::new(),
+            folder: "bar".into(),
+            position: 0.0,
+            added: 0,
+        });
+        assert_eq!(store.bookmarks().len(), CAP_BOOKMARK - IMPORT_ROOM + 1);
+    }
+
+    #[test]
+    fn deleted_rows_count_against_the_room() {
+        let (_dir, mut store) = fresh();
+        store.import(imported(IMPORT_BOOKMARKS, "a"), Vec::new());
+        store.import(imported(IMPORT_BOOKMARKS, "b"), Vec::new());
+        for mark in store.bookmarks() {
+            store.remove_bookmark(&mark.id);
+        }
+        // 4,000 tombstones are 4,000 keys a sync note carries.
+        let again = store.import(imported(IMPORT_BOOKMARKS, "c"), Vec::new());
+        assert_eq!(
+            again.bookmarks,
+            CAP_BOOKMARK - IMPORT_ROOM - 2 * IMPORT_BOOKMARKS
+        );
+    }
+
+    #[test]
+    fn importing_twice_adds_nothing_twice_and_leaves_the_users_own_alone() {
+        let (dir, mut store) = fresh();
+        let mine = store.save_bookmark(Bookmark {
+            id: String::new(),
+            url: "https://a.example/1".into(),
+            title: "Mine".into(),
+            folder: "bar".into(),
+            position: 0.0,
+            added: 0,
+        });
+        let visits = vec![Visit {
+            id: "imp-a-v1".into(),
+            url: "https://a.example/0".into(),
+            title: "Zero".into(),
+            at: openremote_core::now_ms(),
+        }];
+        let once = store.import(imported(3, "a"), visits.clone());
+        assert_eq!((once.bookmarks, once.already, once.visits), (2, 1, 1));
+        let twice = store.import(imported(3, "a"), visits);
+        assert_eq!((twice.bookmarks, twice.already, twice.visits), (0, 3, 0));
+        drop(store);
+        let store = BrowserStore::open(dir.path());
+        let marks = store.bookmarks();
+        assert_eq!(marks.len(), 3);
+        // The user's bookmark is untouched; imported ones go to Other.
+        assert!(marks.contains(&mine));
+        let other: Vec<&Bookmark> = marks.iter().filter(|m| m.folder == "other").collect();
+        assert_eq!(other.len(), 2);
+        assert!(other[0].position < other[1].position);
+        assert_eq!(store.history("", None, 10).len(), 1);
     }
 
     #[test]

@@ -1,11 +1,14 @@
 //! The browser's routes, for this device's console and the chats' MCP
-//! server only: none of them answers the user's other devices. Writes are
+//! server only: none of them answers the user's other devices (none is in
+//! `PEER_ROUTES`, and a test in `http.rs` keeps it so). That matters most for
+//! the import, which reads other browsers' files on this computer. Writes are
 //! keyed (a bookmark's id, a setting's name) and the latest one wins, so a
 //! retried request lands the same way twice. The bookmark write and delete
 //! also record a receipt when the caller names a request, because the console
 //! shows the answer and a second press must not read as a second change.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use axum::extract::{Path as AxumPath, Query, State};
 use axum::http::StatusCode;
@@ -17,7 +20,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::store::Bookmark;
-use super::{Chat, lock, tools};
+use super::{Chat, import, lock, tools};
 use crate::app::App;
 use crate::http::receipt_response;
 
@@ -36,6 +39,7 @@ pub fn routes() -> Router<Arc<App>> {
         .route("/browser/permissions", post(set_permission))
         .route("/browser/session", post(save_session))
         .route("/browser/tabs/{tab}/control", post(control))
+        .route("/browser/import", get(import_sources).post(import_run))
         .route("/browser/tools", get(tool_list))
         .route("/sessions/{id}/browser/call", post(call_tool))
         .merge(super::adblock::routes())
@@ -257,6 +261,139 @@ async fn set_permission(State(app): State<Arc<App>>, Json(body): Json<Permission
 async fn save_session(State(app): State<Arc<App>>, Json(body): Json<Value>) -> Response {
     lock(&app.browser.store).save_session(body);
     Json(json!({"ok": true})).into_response()
+}
+
+/// The profiles of the other browsers on this computer, found in their own
+/// folders: names and what each holds, never a path.
+async fn import_sources() -> Response {
+    let sources = tokio::task::spawn_blocking(|| import::sources(&import::Places::here()))
+        .await
+        .unwrap_or_default();
+    let listed: Vec<Value> = sources.iter().map(import::Source::listing).collect();
+    Json(json!({"sources": listed})).into_response()
+}
+
+fn yes() -> bool {
+    true
+}
+
+/// One import: a profile [`import_sources`] listed (by its id), or a folder
+/// the user picked in the console's own folder dialog.
+#[derive(Deserialize)]
+struct ImportBody {
+    #[serde(default)]
+    source: Option<String>,
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default = "yes")]
+    bookmarks: bool,
+    #[serde(default = "yes")]
+    history: bool,
+}
+
+/// One import at a time: a second press while one runs is refused rather
+/// than read twice.
+static IMPORTING: AtomicBool = AtomicBool::new(false);
+
+struct Importing;
+
+impl Drop for Importing {
+    fn drop(&mut self) {
+        IMPORTING.store(false, Ordering::SeqCst);
+    }
+}
+
+/// Bring in another browser's bookmarks and history. The files are read on
+/// a blocking thread from private copies (see [`import`]); the store then
+/// takes what fits under the import's caps in one write.
+async fn import_run(State(app): State<Arc<App>>, Json(body): Json<ImportBody>) -> Response {
+    if !body.bookmarks && !body.history {
+        return bad(
+            StatusCode::BAD_REQUEST,
+            "Pick bookmarks, history or both to import.",
+        );
+    }
+    let source = match (body.source, body.path) {
+        (Some(id), None) => {
+            let found = tokio::task::spawn_blocking(move || {
+                import::sources(&import::Places::here())
+                    .into_iter()
+                    .find(|s| s.id == id)
+            })
+            .await
+            .ok()
+            .flatten();
+            match found {
+                Some(source) => source,
+                None => {
+                    return bad(
+                        StatusCode::NOT_FOUND,
+                        "That browser profile isn't on this computer any more.",
+                    );
+                }
+            }
+        }
+        (None, Some(path)) => {
+            match tokio::task::spawn_blocking(move || {
+                import::source_at(std::path::Path::new(&path))
+            })
+            .await
+            {
+                Ok(Ok(source)) => source,
+                Ok(Err(why)) => return bad(StatusCode::BAD_REQUEST, &why),
+                Err(_) => {
+                    return bad(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "The import stopped unexpectedly.",
+                    );
+                }
+            }
+        }
+        _ => {
+            return bad(
+                StatusCode::BAD_REQUEST,
+                "Name a browser profile, or pick its folder.",
+            );
+        }
+    };
+    if IMPORTING
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return bad(StatusCode::CONFLICT, "An import is already running.");
+    }
+    let _importing = Importing;
+    let want = import::Want {
+        bookmarks: body.bookmarks,
+        history: body.history,
+    };
+    let folder = lock(&app.browser.store).folder().to_path_buf();
+    let now = openremote_core::now_ms();
+    let reading = source.clone();
+    let read =
+        tokio::task::spawn_blocking(move || import::read(&reading, want, now, &folder)).await;
+    let found = match read {
+        Ok(Ok(found)) => found,
+        Ok(Err(why)) => return bad(StatusCode::UNPROCESSABLE_ENTITY, &why),
+        Err(_) => {
+            return bad(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "The import stopped unexpectedly.",
+            );
+        }
+    };
+    let refused = found.refused;
+    let done = lock(&app.browser.store).import(found.bookmarks, found.visits);
+    Json(json!({
+        "browser": source.browser,
+        "profile": source.profile,
+        "bookmarks": done.bookmarks,
+        "already": done.already,
+        "over_cap": done.over_cap,
+        "visits": done.visits,
+        "refused": refused,
+    }))
+    .into_response()
 }
 
 #[derive(Deserialize)]

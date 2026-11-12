@@ -1,0 +1,4 @@
+# The profiles are byte-exact copies of what a browser writes: no line-ending
+# conversion, ever (a damaged fixture would test the wrong thing).
+* -text
+make.py text

@@ -1,0 +1,86 @@
+{
+  "checksum": "0",
+  "version": 1,
+  "roots": {
+    "bookmark_bar": {
+      "type": "folder",
+      "name": "Bookmarks bar",
+      "children": [
+        {
+          "type": "folder",
+          "name": "Work",
+          "children": [
+            {
+              "type": "url",
+              "guid": "0b5c1c0e-0000-4000-8000-000000000001",
+              "name": "Work page",
+              "url": "https://work.example.com/",
+              "date_added": "13434422400000000"
+            }
+          ]
+        },
+        {
+          "type": "url",
+          "guid": "0b5c1c0e-0000-4000-8000-000000000002",
+          "name": "Example org",
+          "url": "https://example.org/",
+          "date_added": "13434422400000000"
+        },
+        {
+          "type": "url",
+          "guid": "0b5c1c0e-0000-4000-8000-000000000003",
+          "name": "A bookmarklet",
+          "url": "javascript:alert(1)",
+          "date_added": "13434422400000000"
+        }
+      ]
+    },
+    "other": {
+      "type": "folder",
+      "name": "Other bookmarks",
+      "children": [
+        {
+          "type": "url",
+          "guid": "0b5c1c0e-0000-4000-8000-000000000004",
+          "name": "A local file",
+          "url": "file:///C:/notes.txt",
+          "date_added": "13434422400000000"
+        },
+        {
+          "type": "url",
+          "guid": "0b5c1c0e-0000-4000-8000-000000000005",
+          "name": "Inline page",
+          "url": "data:text/html,<b>hi</b>",
+          "date_added": "13434422400000000"
+        },
+        {
+          "type": "url",
+          "guid": "0b5c1c0e-0000-4000-8000-000000000006",
+          "name": "Tabs\tand\nnewlines",
+          "url": "https://example.net/a",
+          "date_added": "13434422400000000"
+        },
+        {
+          "type": "url",
+          "guid": "0b5c1c0e-0000-4000-8000-000000000007",
+          "name": "Example org again",
+          "url": "https://example.org/",
+          "date_added": "13434422400000000"
+        }
+      ]
+    },
+    "synced": {
+      "type": "folder",
+      "name": "Mobile bookmarks",
+      "children": [
+        {
+          "type": "url",
+          "guid": "../../not-a-guid",
+          "name": "Phone page",
+          "url": "https://m.example.com/",
+          "date_added": "13434422400000000"
+        }
+      ]
+    }
+  }
+}

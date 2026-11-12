@@ -3441,6 +3441,19 @@ fn after_cursor(query: &str) -> Cursor {
 mod tests {
     use super::*;
 
+    /// The browser's routes are this device's alone: its bookmarks, settings,
+    /// history and the import that reads other browsers' files here. A peer
+    /// reaches none of them (the `sync.browser` note is not a route).
+    #[test]
+    fn no_browser_route_is_open_to_another_device() {
+        for (method, path, _) in PEER_ROUTES {
+            assert!(
+                !path.starts_with("/browser") && !path.contains("/browser/"),
+                "{method} {path} is a peer route"
+            );
+        }
+    }
+
     #[test]
     fn an_absent_cursor_is_a_full_replay_and_a_garbage_one_is_invalid() {
         assert!(matches!(after_cursor(""), Cursor::Absent));

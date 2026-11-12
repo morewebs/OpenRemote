@@ -12,6 +12,7 @@
 //! service) has no browser, and its tools say so.
 
 pub mod adblock;
+pub mod import;
 pub mod routes;
 pub mod store;
 pub mod sync;
