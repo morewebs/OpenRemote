@@ -46,6 +46,7 @@ import { pickable } from './harness-manager.js'
 import { chatTitle } from './shape.js'
 import ViewPopup from './ViewPopup.jsx'
 import { POPUP_VIEWS, onPopup } from './popups.js'
+import { onAppRequest } from './app-requests.js'
 import { KeyboardProvider, useKeyboard, useShortcut } from './keyboard.jsx'
 import { PluginProvider, usePlugins } from './plugins-host.jsx'
 import PluginView from './PluginView.jsx'
@@ -797,7 +798,18 @@ function Shell() {
   const [pendingRestore, setPendingRestore] = useState(null)
   // The view open over the app, if any: settings, metrics or mobile.
   const [popup, setPopup] = useState(null)
-  useEffect(() => onPopup((name) => setPopup(name)), [])
+  // A popup may name where in it to open (a chat's /mcp opens Settings at
+  // MCP servers).
+  useEffect(
+    () =>
+      onPopup((name, options = {}) => {
+        if (name === 'settings' && options.section) {
+          setSettingsTarget({ section: options.section, key: options.key ?? null, at: Date.now() })
+        }
+        setPopup(name)
+      }),
+    [],
+  )
   const [sheet, setSheet] = useState(false)
   const [presetProject, setPresetProject] = useState(null)
   // A New chat opened from "New chat with this setup": the fields chat-setup.js
@@ -874,6 +886,15 @@ function Shell() {
   // settles against today's lists (the preset path in NewChat.jsx). Without a
   // harness this console can offer there is no setup to copy, so nothing opens:
   // a New chat on a different harness is not the setup that was asked for.
+  // A chat's / commands ask the app for a view or a new chat (app-requests.js).
+  // Set on every render: the handlers read this render's layout and chats.
+  const appRequestRef = useRef(null)
+  appRequestRef.current = (kind, payload) => {
+    if (kind === 'view' && payload.id) goView(payload.id)
+    else if (kind === 'new-chat' && payload.chatId) newChatWithSetup(payload.chatId)
+  }
+  useEffect(() => onAppRequest((kind, payload) => appRequestRef.current?.(kind, payload)), [])
+
   const newChatWithSetup = (chatId) => {
     const record = chats?.[chatId] ?? (sessions ?? []).find((s) => s.id === chatId) ?? null
     const setup = chatSetup(record, {

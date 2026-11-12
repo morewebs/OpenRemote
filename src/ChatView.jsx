@@ -41,6 +41,12 @@ import { usePrivacyMode } from './privacy.js'
 import { useHint, useModelSwitches, usePaletteSource, useShortcut } from './keyboard.jsx'
 import { useComposerMenus } from './useComposerMenus.jsx'
 import { mentionedChats, ownCommands, takeCommands } from './composer-menus.js'
+import { ACTION_TARGETS, lastAnswer, refusalFor } from './slash-actions.js'
+import { HelpModal, StatusModal } from './SlashDialogs.jsx'
+import { requestApp } from './app-requests.js'
+import { openPopup } from './popups.js'
+import { openChanges } from './ChangesModal.jsx'
+import { chatMarkdown, copiedLine } from './chat-markdown.js'
 import { claimInserter } from './composer-insert.js'
 import { addAttachment, removeAttachment, setFocusedComposer } from './attachments.js'
 import { AttachmentChips, useAttachInput, useAttachments } from './ComposerAttachments.jsx'
@@ -556,6 +562,10 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
   } = useConsole()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [confirmSync, setConfirmSync] = useState(false)
+  // /help and /status open the console's own dialogs; /copy and /export say
+  // what they did on the line under the composer.
+  const [slashDialog, setSlashDialog] = useState(null)
+  const [slashNote, setSlashNote] = useState(null)
   // A synced chat may run on another device: what can be done from here.
   const access = chatAccess(chat, devices, thisDevice, cloud)
   const reachable = access === 'here' || access === 'remote'
@@ -703,7 +713,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
       if (arg === 'model') return modelItems.map((m) => ({ id: m.id, name: m.name }))
       if (arg === 'effort') return efforts.map((e) => ({ id: e }))
       if (arg === 'fast') return [{ id: 'on' }, { id: 'off' }]
-      if (arg === 'permission') return (harness?.permission_modes ?? []).map((w) => ({ id: w.w, name: w.l }))
+      if (arg === 'permission' || arg === 'permissions') return (harness?.permission_modes ?? []).map((w) => ({ id: w.w, name: w.l }))
       return []
     },
   })
@@ -749,7 +759,36 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
 
   // An OpenRemote command from the composer, run here before the rest of
   // the message goes: the same paths the pickers and buttons take.
-  const runCommand = async ({ name, arg }) => {
+  const runCommand = async ({ name: typed, action, arg }) => {
+    // An App's own word for an action (/clear, /models, /thinking) runs the
+    // action it names.
+    const name = action ?? typed
+    if (name === 'new') {
+      requestApp('new-chat', { chatId: chat.id })
+      return
+    }
+    if (name === 'help' || name === 'status') {
+      setSlashDialog(name)
+      return
+    }
+    if (name === 'changes') {
+      openChanges(chat.id)
+      return
+    }
+    if (ACTION_TARGETS[name]) {
+      const target = ACTION_TARGETS[name]
+      if (target.view) requestApp('view', { id: target.view })
+      else openPopup('settings', { section: target.settings })
+      return
+    }
+    if (name === 'copy' || name === 'export') {
+      const words = name === 'copy' ? lastAnswer(chat) : chatMarkdown(chat, { harnesses: capabilities?.harnesses })?.text
+      if (!words) throw new Error(name === 'copy' ? 'There is no answer to copy yet.' : 'Nothing to copy in this chat.')
+      if (!navigator.clipboard?.writeText) throw new Error('Could not copy: this window has no clipboard.')
+      await navigator.clipboard.writeText(words)
+      setSlashNote(name === 'copy' ? 'Copied the last answer.' : copiedLine({ lines: words.split(/\n/).length - 1 }))
+      return
+    }
     if (name === 'model' || name === 'effort' || name === 'permissions') {
       if (!arg) throw new Error(`/${name} needs a choice - pick one from its menu`)
       const key = { model: 'model', effort: 'effort', permissions: 'permissionMode' }[name]
@@ -773,7 +812,14 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
   // and the picked elements' words. A message that can't carry what is
   // attached is refused before any command runs.
   const prepare = async () => {
-    const { run, text: message } = takeCommands(text.trim(), ownCommands({ inChat: true, cloud: cloudReady }))
+    // A command this App can only run in its terminal is refused here, with
+    // the reason, and the draft stays.
+    const refused = refusalFor(text.trim(), menus.commands)
+    if (refused) throw new Error(refused)
+    const { run, text: message } = takeCommands(text.trim(), [
+      ...ownCommands({ inChat: true, cloud: cloudReady }),
+      ...menus.appCommands,
+    ])
     const sent = attached
     const payload = outgoingOrThrow(message, sent, {
       images: takesImages,
@@ -972,6 +1018,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
     if (!canSend) return
     setBusy(true)
     setError(null)
+    setSlashNote(null)
     try {
       const { message, pointed, attachments, sent } = await prepare()
       if (message || attachments.length) {
@@ -1796,6 +1843,23 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
         </div>
         {(error || connection.state === 'error') && (
           <p className="cv-error-line">{error ?? connection.error}</p>
+        )}
+        {slashNote && !error && <p className="cv-error-line cv-note-line">{slashNote}</p>}
+        {slashDialog === 'help' && (
+          <HelpModal
+            app={harnessText ?? 'this App'}
+            own={ownCommands({ inChat: true, cloud: cloudReady })}
+            commands={menus.commands}
+            onClose={() => setSlashDialog(null)}
+          />
+        )}
+        {slashDialog === 'status' && (
+          <StatusModal
+            chat={chat}
+            app={harnessText}
+            permissionLabel={(harness?.permission_modes ?? []).find((w) => w.w === (chat.permissionMode ?? chat.permission_mode))?.l ?? null}
+            onClose={() => setSlashDialog(null)}
+          />
         )}
         {managingHarnesses && !web && (
           <HarnessManagerModal

@@ -19,6 +19,14 @@ export const OPENREMOTE_COMMANDS = [
   { name: 'rename', arg: 'title', description: 'Rename the chat: /rename "New name"' },
   { name: 'sync', description: 'Put the chat on Cloud - your other devices see it after their next sync, and it keeps running here', cloud: true },
   { name: 'cloud', description: 'Put the chat on Cloud (the same as /sync)', cloud: true },
+  // Every App gets these, whatever its own list says: each is something
+  // OpenRemote shows or does better than a terminal could.
+  { name: 'new', action: 'new', description: 'Start a new chat with this App and folder', chat: true },
+  { name: 'help', action: 'help', description: 'List every command this App has here' },
+  { name: 'status', action: 'status', description: "Show this chat's App, model and settings", chat: true },
+  { name: 'copy', action: 'copy', description: 'Copy the last answer', chat: true },
+  { name: 'export', action: 'export', description: 'Copy the whole chat as Markdown', chat: true },
+  { name: 'diff', action: 'changes', description: 'Show the files this chat changed', chat: true },
 ]
 
 const OWN = new Map(OPENREMOTE_COMMANDS.map((c) => [c.name, c]))
@@ -36,7 +44,7 @@ export function words(text) {
 // The menu the caret is in, if any: a / or @ word at the caret that
 // starts the message or follows whitespace (both open anywhere), or the
 // argument of an OpenRemote command just picked (`/model ` then a model).
-export function menuAt(text, caret) {
+export function menuAt(text, caret, extra = []) {
   let start = caret
   while (start > 0 && !/\s/.test(text[start - 1])) start -= 1
   const word = text.slice(start, caret)
@@ -49,7 +57,8 @@ export function menuAt(text, caret) {
   // The word before: an OpenRemote command that takes a pickable argument.
   const before = text.slice(0, start).trimEnd()
   const previous = before.slice(before.search(/\S+$/))
-  const command = previous.startsWith('/') ? OWN.get(previous.slice(1)) : null
+  const name = previous.startsWith('/') ? previous.slice(1) : null
+  const command = name ? (OWN.get(name) ?? extra.find((c) => c.name === name) ?? null) : null
   if (command?.arg && command.arg !== 'title' && before.length < start) {
     return { kind: 'arg', command: command.name, arg: command.arg, query: word, start, end: caret }
   }
@@ -124,12 +133,43 @@ export function ownCommands({ inChat = true, cloud = false } = {}) {
   return OPENREMOTE_COMMANDS.filter((c) => (inChat || !c.chat) && (cloud || !c.cloud))
 }
 
+// The query as the starts of the name's words, each start optionally
+// followed by more of that word: `/sr` and `/secrev` find
+// `/security-review`, while letters scattered inside words (`deep` in
+// `auto-mode-setup`) do not count.
+export function fuzzyScore(query, name) {
+  const q = query.toLowerCase()
+  const n = name.toLowerCase()
+  const starts = (i) => i === 0 || /[-_:\s]/.test(n[i - 1])
+  let at = 0
+  let first = true
+  for (const ch of q) {
+    if (!first && n[at] === ch) {
+      at += 1
+      continue
+    }
+    let found = -1
+    for (let i = at; i < n.length; i += 1) {
+      if (n[i] === ch && starts(i)) {
+        found = i
+        break
+      }
+    }
+    if (found < 0) return 0
+    at = found + 1
+    first = false
+  }
+  return 1.5
+}
+
 function rankBy(query, name, description = '') {
   const q = query.toLowerCase()
   const n = name.toLowerCase()
   if (!q) return 1
   if (n.startsWith(q)) return 3
   if (n.includes(q)) return 2
+  const fuzzy = q.length > 1 ? fuzzyScore(q, n) : 0
+  if (fuzzy) return fuzzy
   if (description.toLowerCase().includes(q)) return 1
   return 0
 }
@@ -146,7 +186,11 @@ const NOISE_WORDS = /^\((removed|deprecated)\)|\bdeprecated\b/i
 
 // The harness commands most people reach for, shown before any typing
 // when the harness has them.
-const EVERYDAY = ['compact', 'init', 'review', 'security-review', 'pr-comments', 'context', 'cost', 'todos']
+const EVERYDAY = ['compact', 'init', 'review', 'code-review', 'security-review', 'context', 'usage', 'goal']
+
+// The badge a row carries, so the user can tell the App's /review from
+// their own /review-pr.
+const BADGES = { plugin: 'plugin', mcp: 'MCP', custom: 'custom' }
 
 function shortDescription(text = '') {
   const first = text.split(/(?<=[.!?])\s/)[0].trim()
@@ -175,9 +219,10 @@ function commandRow(c, group, score) {
     label: `/${c.name}`,
     detail: shortDescription(c.description),
     hint: shortHint(c.argument_hint),
-    badge: c.source === 'plugin' ? 'plugin' : null,
+    badge: BADGES[c.source] ?? null,
     disabled: c.available === false,
     why: c.why ?? null,
+    route: c.route ?? 'native',
     insertion: `/${c.name}`,
     score,
   }
@@ -413,13 +458,17 @@ export function takeCommands(text, own = OPENREMOTE_COMMANDS) {
     // /fast's on/off is optional: the next word is its argument only when
     // it is one of the two.
     const takesNext =
-      command.arg && list[i + 1] && (command.arg !== 'fast' || /^(on|off)$/i.test(list[i + 1].word))
+      command.arg &&
+      list[i + 1] &&
+      (command.arg !== 'fast' || /^(on|off)$/i.test(list[i + 1].word)) &&
+      // An App's console row with no choice list (/rename) takes the rest.
+      !list[i + 1].word.startsWith('/')
     if (takesNext) {
       arg = list[i + 1].word.replace(/^"|"$/g, '')
       stop = list[i + 1].end
       i += 1
     }
-    run.push({ name: command.name, arg })
+    run.push(command.action && command.action !== command.name ? { name: command.name, action: command.action, arg } : { name: command.name, arg })
     cut.push([start, stop])
   }
   let rest = text

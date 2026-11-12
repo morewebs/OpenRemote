@@ -1,0 +1,112 @@
+/* /help and /status, and the argument hint under a picked command. */
+
+.sl-help {
+  width: min(640px, calc(100vw - 32px));
+  max-height: min(78vh, 720px);
+  display: flex;
+  flex-direction: column;
+}
+
+.sl-help-search {
+  margin: 0 0 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
+  background: var(--field, rgba(255, 255, 255, 0.04));
+  color: inherit;
+  font: inherit;
+}
+
+.sl-help-list {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.sl-help-group + .sl-help-group {
+  margin-top: 12px;
+}
+
+.sl-help-title {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.sl-help-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 30%) 1fr auto;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 13px;
+  align-items: baseline;
+}
+
+.sl-help-row.is-off {
+  opacity: 0.5;
+}
+
+.sl-help-name {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  overflow-wrap: anywhere;
+}
+
+.sl-help-hint,
+.sl-help-how {
+  opacity: 0.6;
+}
+
+.sl-help-how {
+  font-size: 12px;
+  text-align: right;
+  max-width: 220px;
+}
+
+@media (max-width: 560px) {
+  .sl-help-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+  .sl-help-how {
+    text-align: left;
+  }
+}
+
+.sl-status {
+  margin: 0;
+}
+
+.sl-status-row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 13px;
+}
+
+.sl-status-row dt {
+  opacity: 0.6;
+}
+
+.sl-status-row dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cm-arghint {
+  padding: 6px 10px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.cm-arghint-name {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+}
+
+/* What /copy and /export did: a plain line where errors go, not an error. */
+.cv-error-line.cv-note-line {
+  color: inherit;
+  opacity: 0.75;
+}

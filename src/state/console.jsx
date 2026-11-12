@@ -828,14 +828,18 @@ export function ConsoleProvider({ children }) {
   // What a composer's / and @ menus offer, kept per chat (or per harness
   // and folder) for this console's life; a plugin installed, removed or
   // turned on or off clears it, since the lists carry the plugins.
+  // The daemon's commands_rev moves when a watched command folder, a plugin
+  // or an MCP server changes (hot reload): the cache goes with it, and
+  // the composers ask again.
+  const commandsRev = capabilities?.commands_rev ?? null
   const commandCache = useRef(new Map())
   useEffect(() => {
     commandCache.current.clear()
-  }, [plugins])
+  }, [plugins, commandsRev])
   const commandsFor = useCallback(
-    async ({ harness, workspace = null, session = null, deviceId = null }) => {
+    async ({ harness, workspace = null, session = null, deviceId = null, fresh = false }) => {
       const key = `${deviceId ?? ''}|${session ?? `${harness}|${workspace ?? ''}`}`
-      const cached = commandCache.current.get(key)
+      const cached = fresh ? null : commandCache.current.get(key)
       if (cached) return cached
       const asked = api
         .device(deviceId)
@@ -1746,6 +1750,7 @@ export function ConsoleProvider({ children }) {
       thisDevice: cloud?.device?.id ?? null,
       apiFor,
       commandsFor,
+      commandsRev,
       filesFor,
       renameChat,
       moveChat,
@@ -1842,6 +1847,7 @@ export function ConsoleProvider({ children }) {
       devices,
       apiFor,
       commandsFor,
+      commandsRev,
       filesFor,
       renameChat,
       moveChat,

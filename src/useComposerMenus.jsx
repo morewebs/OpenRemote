@@ -8,28 +8,28 @@ import { useEffect, useMemo, useState } from 'react'
 import { useConsole } from './state/console.jsx'
 import ComposerMenu from './ComposerMenu.jsx'
 import { applyPick, argItems, chatList, commandItems, filesForQuery, holdDismissal, mentionItems, menuAt, menuKeyOf, ownCommands } from './composer-menus.js'
+import { consoleCommands, pendingHint, recentKey } from './slash-actions.js'
 
-// The / commands this device picked lately, newest first: the menu's
-// "Recent" before anything is typed.
-const RECENT_KEY = 'openremote-recent-commands'
-
-function readRecent() {
+// The / commands this device picked lately on each App, newest first: the
+// menu's "Recent" before anything is typed.
+function readRecent(harness) {
   try {
-    const list = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]')
+    const list = JSON.parse(localStorage.getItem(recentKey(harness)) ?? '[]')
     return Array.isArray(list) ? list.filter((n) => typeof n === 'string') : []
   } catch {
     return []
   }
 }
 
-function noteRecent(name) {
+function noteRecent(harness, name) {
   try {
-    const list = [name, ...readRecent().filter((n) => n !== name)].slice(0, 8)
-    localStorage.setItem(RECENT_KEY, JSON.stringify(list))
+    const list = [name, ...readRecent(harness).filter((n) => n !== name)].slice(0, 8)
+    localStorage.setItem(recentKey(harness), JSON.stringify(list))
   } catch {
     /* storage unavailable: no recents, nothing else lost */
   }
 }
+
 
 export function useComposerMenus({
   text,
@@ -44,7 +44,7 @@ export function useComposerMenus({
   choicesFor = null,
   enabled = true,
 }) {
-  const { commandsFor, filesFor, chats, connection } = useConsole()
+  const { commandsFor, commandsRev, filesFor, chats, connection } = useConsole()
   const [caret, setCaret] = useState(0)
   const [active, setActive] = useState(0)
   // The menu the user closed with Esc stays closed until the caret leaves
@@ -59,7 +59,8 @@ export function useComposerMenus({
   // its failure gets its own line and never borrows the commands' one.
   const [filesFailed, setFilesFailed] = useState(false)
 
-  const menu = enabled ? menuAt(text, caret) : null
+  const appConsole = consoleCommands(view?.commands ?? [])
+  const menu = enabled ? menuAt(text, caret, appConsole) : null
   const menuKey = menuKeyOf(menu)
   const open = Boolean(menu) && dismissed !== menuKey
 
@@ -74,15 +75,26 @@ export function useComposerMenus({
   // folder a new chat will use) changes, and again when the daemon comes
   // back - a failed ask has to retry on its own, since nothing else about
   // the ask changes.
+  const target = `${deviceId ?? ''}|${sessionId ?? ''}|${harness ?? ''}|${workspace ?? ''}`
+  const [shownTarget, setShownTarget] = useState(target)
+  const opened = Boolean(menu) && (menu.kind === '/' || menu.kind === '@')
   useEffect(() => {
     // A new chat is not the last one: drop the previous answer while this ask
     // is in flight, so a rejection leaves an honest empty menu rather than
-    // the commands and agents of the harness the user just left.
-    setView(null)
+    // the commands and agents of the harness the user just left. The same
+    // chat asking again (a command folder changed, the menu opened) keeps
+    // its rows on screen until the answer lands, so nothing flickers.
+    const sameChat = shownTarget === target
+    if (!sameChat) {
+      setView(null)
+      setShownTarget(target)
+    }
     setUnavailable(false)
     if (!enabled || (!harness && !sessionId)) return undefined
     let live = true
-    commandsFor({ harness, workspace, session: sessionId, deviceId })
+    // Opening the menu asks again past the cache: another machine's list
+    // has no revision this console hears, so this is when it shows.
+    commandsFor({ harness, workspace, session: sessionId, deviceId, fresh: opened && sameChat })
       .then((next) => {
         if (live) setView(next)
       })
@@ -92,7 +104,8 @@ export function useComposerMenus({
     return () => {
       live = false
     }
-  }, [enabled, harness, workspace, sessionId, deviceId, commandsFor, connection?.state])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, target, commandsFor, commandsRev, connection?.state, opened])
 
   // Said in place of a list the machine did not answer. What it names is the
   // whole of the retry: the ask runs again when the chat or harness changes,
@@ -157,7 +170,7 @@ export function useComposerMenus({
       items = commandItems(menu.query, {
         harnessCommands: view?.commands ?? [],
         own: ownCommands({ inChat, cloud: cloudReady }),
-        recent: readRecent(),
+        recent: readRecent(view?.harness ?? harness),
         unavailable: unavailableLine,
       })
     } else if (menu.kind === '@') {
@@ -182,7 +195,7 @@ export function useComposerMenus({
 
   const pick = (item) => {
     if (!item || item.disabled || !menu) return
-    if (item.kind === 'command') noteRecent(item.insertion.slice(1))
+    if (item.kind === 'command') noteRecent(view?.harness ?? harness, item.insertion.slice(1))
     const next = applyPick(text, menu, item.insertion, { space: item.space !== false })
     setText(next.text)
     setCaret(next.caret)
@@ -237,10 +250,30 @@ export function useComposerMenus({
   // the caret never moved and nothing recomputed the menu.
   const dismiss = () => setDismissed(menuKey)
 
-  const element =
+  const menuElement =
     open && items.length > 0 ? (
       <ComposerMenu items={items} active={Math.min(active, items.length - 1)} onPick={pick} onHover={setActive} />
     ) : null
+  // With no menu up, a command just picked shows what it takes.
+  const hint = !menuElement && enabled ? pendingHint(text, caret, view?.commands ?? []) : null
+  const element =
+    menuElement ??
+    (hint ? (
+      <div className="cm-arghint" aria-live="polite">
+        <span className="cm-arghint-name">/{hint.name}</span> {hint.hint}
+      </div>
+    ) : null)
 
-  return { element, onKeyDown, track, dismiss, open: Boolean(element) }
+  // The App's rows the console runs itself, for the send path (takeCommands),
+  // and the App's whole list, for the refusal and /help.
+  return {
+    element,
+    onKeyDown,
+    track,
+    dismiss,
+    open: Boolean(menuElement),
+    appCommands: appConsole,
+    commands: view?.commands ?? [],
+    harnessName: view?.harness ?? harness,
+  }
 }
