@@ -193,6 +193,9 @@ let state = (() => {
     tabs: [first],
     active: first.key,
     closed: [],
+    // The phone's tab groups, by id: { id, name, color }. A tab names its
+    // group as `group`; private tabs are never grouped.
+    groups: {},
     downloads: [],
     finds: {},
     // Sites' requests waiting for the user's answer (the permission bar):
@@ -269,7 +272,7 @@ export function setState(change) {
   }
   rememberActive()
   for (const fn of listeners) fn()
-  if (state.tabs !== before.tabs || state.active !== before.active) scheduleSave()
+  if (state.tabs !== before.tabs || state.active !== before.active || state.groups !== before.groups) scheduleSave()
 }
 
 export function subscribe(fn) {
@@ -542,7 +545,7 @@ export function startSession(caller = browserCall) {
     markRestored()
     if (first && browserSetting(prefs.settings, 'startup') === 'continue') {
       const restored = restoredTabs(prefs.session)
-      setState((s) => withRestored(s.tabs, s.active, restored))
+      setState((s) => ({ ...withRestored(s.tabs, s.active, restored), ...(restored.groups ? { groups: { ...restored.groups, ...s.groups } } : {}) }))
     }
     lastSaved = JSON.stringify(prefs.session ?? null)
     restoring = false
@@ -553,7 +556,7 @@ export function startSession(caller = browserCall) {
 
 function scheduleSave() {
   if (restoring) return
-  const session = sessionOf(state.tabs, state.active)
+  const session = sessionOf(state.tabs, state.active, state.groups)
   const json = JSON.stringify(session)
   if (json === lastSaved) return
   clearTimeout(saveTimer)

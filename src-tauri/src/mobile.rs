@@ -60,6 +60,7 @@ pub fn run() {
             crate::mobile_browser::browser_desktop_site,
             crate::mobile_browser::browser_share_sheet,
             crate::mobile_browser::browser_download,
+            crate::mobile_browser::browser_haptic,
         ])
         .setup(|app| {
             start_daemon(app.handle().clone(), app.path().app_data_dir()?);

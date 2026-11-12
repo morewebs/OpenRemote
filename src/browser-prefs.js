@@ -14,7 +14,10 @@ import { SEARCH_ENGINES } from './browser-omnibox.js'
 //   bookmarks_bar  the bar on every page; off, on the new tab page only
 //   startup        'continue' (the last session's tabs come back at the
 //                  first open after a start) or 'new_tab'
-export const BROWSER_DEFAULTS = { search: 'google', bookmarks_bar: true, startup: 'continue' }
+// `bar_bottom` (the phone's address bar at the bottom) and `sync_tabs` (this
+// device's open tabs listed under Recent tabs on the user's other devices;
+// the daemon reads it too, browser/devices.rs) are the phone browser's.
+export const BROWSER_DEFAULTS = { search: 'google', bookmarks_bar: true, startup: 'continue', bar_bottom: false, sync_tabs: true }
 
 // What "On startup" offers, in Settings > Browser.
 export const STARTUP_CHOICES = [
@@ -28,7 +31,8 @@ export function browserSetting(settings, key) {
   const value = settings?.[key]
   if (value === undefined || value === null) return BROWSER_DEFAULTS[key]
   if (key === 'search' && !Object.hasOwn(SEARCH_ENGINES, value)) return BROWSER_DEFAULTS.search
-  if (key === 'bookmarks_bar') return value === true
+  if (key === 'bookmarks_bar' || key === 'bar_bottom') return value === true
+  if (key === 'sync_tabs') return value !== false
   if (key === 'startup' && !STARTUP_CHOICES.some((c) => c.id === value)) return BROWSER_DEFAULTS.startup
   return value
 }

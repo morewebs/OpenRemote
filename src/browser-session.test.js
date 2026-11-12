@@ -141,3 +141,34 @@ test('the view opens a waiting tab when shown; Settings offers On startup; a rel
     assert.ok(searchSettings(word, SETTINGS_ENTRIES).some((e) => e.key === 'browser-startup'), word)
   }
 })
+
+test('tab groups come back with their tabs; a private tab and an unused group are never saved', () => {
+  const groups = { g1: { id: 'g1', name: 'Trip', color: 'blue' }, g2: { id: 'g2', name: 'Unused', color: 'red' } }
+  const tabs = [
+    { key: 'a', url: 'https://a.test/', title: 'A', group: 'g1' },
+    { key: 'b', url: 'https://b.test/', title: 'B' },
+    { key: 'p', url: 'https://secret.test/', private: true, group: 'g1' },
+    { key: 'x', url: 'https://x.test/', group: 'gone' },
+  ]
+  const session = sessionOf(tabs, 'a', groups)
+  assert.deepEqual(session, {
+    tabs: [
+      { url: 'https://a.test/', title: 'A', group: 'g1' },
+      { url: 'https://b.test/', title: 'B' },
+      { url: 'https://x.test/', title: '' },
+    ],
+    active: 0,
+    groups: { g1: { name: 'Trip', color: 'blue' } },
+  })
+  assert.ok(!JSON.stringify(session).includes('secret'))
+  const back = restoredTabs(session)
+  assert.deepEqual(
+    back.tabs.map((t) => t.group ?? null),
+    ['g1', null, null],
+  )
+  assert.deepEqual(back.groups, { g1: { id: 'g1', name: 'Trip', color: 'blue' } })
+  // A tab naming a group the session doesn't hold comes back ungrouped.
+  const odd = restoredTabs({ tabs: [{ url: 'https://a.test/', group: 'nope' }] })
+  assert.equal(odd.tabs[0].group, undefined)
+  assert.equal(odd.groups, undefined)
+})

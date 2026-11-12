@@ -57,6 +57,8 @@ class Frame(
   val still: Boolean,
   /** Android's back goes to the page's history; false while the console needs it. */
   val back: Boolean,
+  /** The console's bar is below the page: the page grows down as the bar slides away, it never moves up. */
+  val bottom: Boolean = false,
 ) {
   /** The console moved the page out of sight while one of its menus covers it. */
   val parked: Boolean get() = left + width <= 0 || top + height <= 0
@@ -143,6 +145,13 @@ class PageView(context: Context, val tab: Tab) : WebView(context) {
   override fun onScrollChanged(l: Int, t: Int, oldl: Int, oldt: Int) {
     super.onScrollChanged(l, t, oldl, oldt)
     if (t != oldt) onScrolled?.invoke(t - oldt)
+  }
+
+  /** How far down the page is, 0 at the top to 1 at the end (0 for a page that doesn't scroll). */
+  fun readFraction(): Float {
+    val room = computeVerticalScrollRange() - computeVerticalScrollExtent()
+    if (room <= 0) return 0f
+    return (computeVerticalScrollOffset().toFloat() / room).coerceIn(0f, 1f)
   }
 }
 

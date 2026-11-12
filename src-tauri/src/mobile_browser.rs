@@ -316,6 +316,10 @@ pub struct Bounds {
     /// the console's own strips, like find in page, needs it).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub back: Option<bool>,
+    /// Which side of the page the console's bar is on, `top` or `bottom`:
+    /// at the bottom the page grows down into the room the bar leaves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edge: Option<String>,
 }
 
 /// A part of the page, in CSS pixels.
@@ -563,6 +567,15 @@ pub async fn browser_share(app: AppHandle, tab: String, on: bool) -> Result<(), 
     ask(&app, "shareWithAgents", json!({ "tab": tab, "shared": on }))
         .await
         .map(drop)
+}
+
+/// The phone only: a small tap the hand feels. `kind` is `tick` (a tab
+/// swipe, a tab closed) or `confirm` (a bookmark or a group kept); anything
+/// else is a tick.
+#[tauri::command]
+pub async fn browser_haptic(app: AppHandle, kind: String) -> Result<(), String> {
+    let kind = if kind == "confirm" { "confirm" } else { "tick" };
+    ask(&app, "haptic", json!({ "kind": kind })).await.map(drop)
 }
 
 /// The phone only: downloads a link or picture chosen from its menu.

@@ -1,8 +1,11 @@
 // The built-in browser on a phone: Chrome Android's arrangement in the
-// app's colours. A top bar (home, the address, the tab count, the menu)
-// that slides away as the page scrolls down and comes back as it scrolls
-// up, a tab grid with a Private section, the menu's pages (history,
-// downloads, bookmarks, settings) and the address bar's suggestions.
+// app's colours. A bar (home, the address, the tab count, the menu) on top
+// or, if the user asks, at the bottom, that slides away as the page scrolls
+// down and comes back as it scrolls up, and that a sideways swipe moves
+// between tabs; a tab grid with tab groups and a Private section; Chrome's
+// menu and its pages (history, downloads, bookmarks, Recent tabs with the
+// tabs open on the user's other devices, the new tab page's shortcuts,
+// settings) and the address bar's suggestions.
 //
 // Each page is a native view the Android shell lays over this view's
 // placeholder (src-tauri/src/mobile_browser.rs and its Kotlin plugin). A
@@ -20,6 +23,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import {
   ArrowClockwise,
+  ArrowCounterClockwise,
   ArrowLeft,
   ArrowRight,
   ArrowSquareOut,
@@ -31,6 +35,7 @@ import {
   Copy,
   Desktop,
   Detective,
+  Devices,
   DotsThreeVertical,
   DownloadSimple,
   GearSix,
@@ -40,10 +45,13 @@ import {
   Link as LinkIcon,
   Lock,
   MagnifyingGlass,
+  PencilSimple,
   Plus,
   ShareNetwork,
+  SquaresFour,
   Star,
   Trash,
+  Broom,
   Warning,
   WarningCircle,
   X,
@@ -75,13 +83,23 @@ import { fileName, permissionAsk, permissionName, permissionRows } from './brows
 import {
   addressLine,
   agentLine,
+  ago,
+  barTransform,
   contextActions,
+  devicesFrom,
   downloadLine,
+  gridEntries,
   gridSections,
+  groupLabel,
+  liveGroups,
+  menuRows,
+  newGroup,
   openerTab,
   pageBounds,
+  readWidth,
   shownPage,
   siteOf,
+  swipeTab,
   thumbWanted,
 } from './browser-phone.js'
 import BrowserClearData from './BrowserClearData.jsx'
@@ -169,7 +187,7 @@ function useShellEvent(name, handler) {
 // ---- the view ----
 
 export default function BrowserPhone({ onClose = null, askToShow = null }) {
-  const { tabs, active, downloads, finds, prompts, bookmarks, bookmarksNote, history } = useSyncExternalStore(subscribe, getState)
+  const { tabs, active, downloads, finds, prompts, bookmarks, bookmarksNote, history, closed, groups } = useSyncExternalStore(subscribe, getState)
   const prefs = useBrowserPrefs()
   const current = tabs.find((t) => t.key === active) ?? tabs[0]
   const [surface, setSurface] = useState(null)
@@ -181,6 +199,8 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
   const [clearing, setClearing] = useState(false)
   const [note, setNote] = useState(null)
   const [thumbs, setThumbs] = useState({})
+  // How far down the page on screen is (0 to 1), from the shell.
+  const [read, setRead] = useState(0)
   const pageRef = useRef(null)
   const barRef = useRef(null)
   const pictureRef = useRef(null)
@@ -193,6 +213,10 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
   coveredRef.current = covered
 
   const engine = browserSetting(prefs.settings, 'search')
+  // The address bar at the bottom, as Chrome offers it.
+  const bottom = browserSetting(prefs.settings, 'bar_bottom')
+  const bottomRef = useRef(bottom)
+  bottomRef.current = bottom
   const engineName = SEARCH_ENGINES[engine].name
   const activeTab = () => getState().tabs.find((t) => t.key === getState().active)
 
@@ -224,6 +248,7 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
       bar: barRef.current?.offsetHeight ?? 0,
       still: still(),
       finding: findingRef.current,
+      bottom: bottomRef.current,
     })
 
   const syncBounds = () => {
@@ -287,13 +312,16 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
 
   useEffect(() => {
     syncBounds()
-  }, [finding])
+  }, [finding, bottom])
 
   // The bar slides as the page scrolls: the shell says how far, once a frame.
+  // It also says how far down the page is, for the reading line.
   useShellEvent('browser:chrome', (p) => {
     if (p.tab !== shownNative.current || !barRef.current) return
-    barRef.current.style.transform = p.offset > 0 ? `translateY(${-p.offset}px)` : ''
+    barRef.current.style.transform = barTransform(p.offset, bottomRef.current)
+    if (Number.isFinite(p.read)) setRead(p.read)
   })
+  useEffect(() => setRead(0), [wanted])
 
   // A long press on a link or a picture in the page.
   useShellEvent('browser:context', (p) => {
@@ -374,14 +402,14 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
 
   // Opens what was typed (an address, or a search) in the active tab, or a
   // new one.
-  const go = async (line, { fresh = false, private: priv } = {}) => {
+  const go = async (line, { fresh = false, private: priv, group = null } = {}) => {
     const url = omnibox(line, engine)
     if (!url) return
     setEditing(false)
     setSurface(null)
     let tab = activeTab()
     if (fresh || !tab) {
-      const made = newTab(priv ? { private: true } : {})
+      const made = newTab(priv ? { private: true } : group && getState().groups?.[group] ? { group } : {})
       setState((s) => ({ tabs: [...s.tabs, made], active: made.key }))
       tab = made
     }
@@ -404,8 +432,8 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
     openInRef.current(current, current.url)
   }, [current?.key, current?.native, current?.url, current?.loading, current?.failed, covered])
 
-  const openNewTab = (priv) => {
-    const tab = newTab(priv ? { private: true } : {})
+  const openNewTab = (priv, group = null) => {
+    const tab = newTab(priv ? { private: true } : group ? { group } : {})
     setState((s) => ({ tabs: [...s.tabs, tab], active: tab.key }))
     setSurface(null)
     setMenu(false)
@@ -418,7 +446,8 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
     setState((s) => {
       const next = closeTab(s.tabs, key, s.active)
       const show = then && next.tabs.some((t) => t.key === then) ? then : next.active
-      return { tabs: next.tabs, active: show, closed: rememberClosed(s.closed, next.closed) }
+      // A group whose last tab closed goes with it.
+      return { tabs: next.tabs, active: show, closed: rememberClosed(s.closed, next.closed), groups: liveGroups(s.groups, next.tabs) }
     })
   }
 
@@ -481,7 +510,7 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
   // then a tab another tab opened goes back to its opener; then the
   // browser closes back to the chat.
   const opener = openerTab(tabs, current)
-  useBack(Boolean(surface), () => setSurface(null))
+  useBack(Boolean(surface), () => setSurface((now) => (now?.startsWith('group:') ? 'tabs' : null)))
   useBack(editing, () => setEditing(false))
   useBack(menu, () => setMenu(false))
   useBack(Boolean(context), () => setContext(null))
@@ -547,7 +576,60 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
     if (!live || !current?.url) return
     if (bookmark) removeBookmark(bookmark.id)
     else saveBookmark({ url: current.url, title: current.title ?? '' })
+    haptic('confirm')
     say(bookmark ? 'Bookmark removed' : 'Bookmarked')
+  }
+
+  // Chrome's menu "Download page": the page's own address, through the
+  // phone's downloads (the shell's download rules, private tabs' included).
+  const downloadPage = async () => {
+    setMenu(false)
+    if (!live || !/^https?:/i.test(current?.url ?? '')) return
+    try {
+      await shell('browser_download', { tab: current.native, url: current.url })
+      say('Downloading')
+    } catch (err) {
+      say(errorCopy(err))
+    }
+  }
+
+  // "Add tab to new group": the tab on screen starts a group, and the group's
+  // page opens so it can be named. Private tabs are never grouped.
+  const groupThisTab = () => {
+    setMenu(false)
+    const tab = activeTab()
+    if (!tab || tab.private) return
+    const id = `g${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+    setState((s) => ({
+      groups: { ...s.groups, [id]: newGroup(s.groups, id) },
+      tabs: s.tabs.map((t) => (t.key === tab.key ? { ...t, group: id } : t)),
+    }))
+    haptic('confirm')
+    openGrid().then(() => setSurface(`group:${id}`))
+  }
+
+  const renameGroup = (id, name) => {
+    setState((s) => (s.groups?.[id] ? { groups: { ...s.groups, [id]: { ...s.groups[id], name: name.slice(0, 60) } } } : {}))
+  }
+
+  const ungroup = (id) => {
+    setState((s) => {
+      const rest = { ...s.groups }
+      delete rest[id]
+      return { groups: rest, tabs: s.tabs.map((t) => (t.group === id ? { ...t, group: null } : t)) }
+    })
+    setSurface('tabs')
+  }
+
+  const closeGroup = (id) => {
+    for (const t of getState().tabs.filter((t) => t.group === id)) close(t.key)
+    setSurface('tabs')
+  }
+
+  // A tab another device has open, or one closed here, opens in a new tab.
+  const reopen = (entry) => {
+    setState((s) => ({ closed: (s.closed ?? []).filter((e) => e.url !== entry.url) }))
+    go(entry.url, { fresh: true })
   }
 
   const control = async (action) => {
@@ -557,6 +639,37 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
     } catch (err) {
       say(errorCopy(err))
     }
+  }
+
+  // A small tap the hand feels: a tick for a tab swipe or a close, a firmer
+  // one for a change kept (a bookmark, a group). Nothing where the shell has
+  // no such command.
+  const haptic = (kind) => {
+    call('browser_haptic', { kind })
+  }
+
+  // ---- swiping the bar between tabs ----
+
+  const swipe = useRef(null)
+  const swiped = useRef(false)
+  const onBarTouchStart = (e) => {
+    const t = e.touches?.[0]
+    swipe.current = t && e.touches.length === 1 ? { x: t.clientX, y: t.clientY } : null
+  }
+  const onBarTouchEnd = (e) => {
+    const from = swipe.current
+    swipe.current = null
+    const t = e.changedTouches?.[0]
+    if (!from || !t) return
+    const s = getState()
+    const next = swipeTab(s.tabs, s.active, t.clientX - from.x, t.clientY - from.y)
+    if (!next) return
+    swiped.current = true
+    setTimeout(() => {
+      swiped.current = false
+    }, 400)
+    setState(() => ({ active: next }))
+    haptic('tick')
   }
 
   // The phone's share sheet. Handing a private tab to agents is the
@@ -570,7 +683,8 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
     setContext(null)
     if (!c) return
     const target = c.link ?? c.url
-    if (what === 'open') go(target, { fresh: true, private: Boolean(current?.private) })
+    // A tab opened from a grouped tab joins its group, as in Chrome.
+    if (what === 'open') go(target, { fresh: true, private: Boolean(current?.private), group: current?.group ?? null })
     else if (what === 'private') go(target, { fresh: true, private: true })
     else if (what === 'image') go(c.url, { fresh: true, private: Boolean(current?.private) })
     else if (what === 'copy') say((await copyText(target)) ? 'Link copied' : "The link couldn't be copied")
@@ -596,6 +710,73 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
     'copy-image': [<Copy size={18} />, 'Copy picture address'],
   }
 
+  // The menu's rows (menuRows in browser-phone.js says which, in Chrome's order).
+  const page = (name) => () => {
+    setMenu(false)
+    setSurface(name)
+  }
+  const menuItems = {
+    'new-tab': { icon: <Plus size={18} />, label: 'New tab', run: () => openNewTab(false) },
+    'new-private': { icon: <Detective size={18} />, label: 'New private tab', run: () => openNewTab(true) },
+    group: { icon: <SquaresFour size={18} />, label: 'Add tab to new group', run: groupThisTab },
+    history: { icon: <ClockCounterClockwise size={18} />, label: 'History', run: page('history') },
+    clear: {
+      icon: <Broom size={18} />,
+      label: 'Delete browsing data',
+      run: () => {
+        setMenu(false)
+        setClearing(true)
+      },
+    },
+    downloads: {
+      icon: <DownloadSimple size={18} />,
+      label: 'Downloads',
+      hint: downloads.some((d) => d.state === 'started') ? 'Downloading' : '',
+      run: page('downloads'),
+    },
+    bookmarks: { icon: <BookmarkSimple size={18} />, label: 'Bookmarks', run: page('bookmarks') },
+    recent: { icon: <Devices size={18} />, label: 'Recent tabs', run: page('recent') },
+    share: {
+      icon: <ShareNetwork size={18} />,
+      label: 'Share',
+      run: () => {
+        setMenu(false)
+        if (live) shareSheet({ tab: current.native, title: current.title })
+      },
+    },
+    find: { icon: <MagnifyingGlass size={18} />, label: 'Find in page', run: openFind },
+    desktop: {
+      icon: <Desktop size={18} />,
+      label: 'Desktop site',
+      checked: Boolean(current?.desktop),
+      run: () => {
+        setMenu(false)
+        call('browser_desktop_site', { tab: current.native, on: !current.desktop })
+      },
+    },
+    agents: {
+      icon: <Detective size={18} />,
+      label: 'Let agents use this tab',
+      checked: Boolean(current?.shared),
+      run: () => {
+        setMenu(false)
+        call('browser_share', { tab: current.native, on: !current.shared })
+      },
+    },
+    external: {
+      icon: <ArrowSquareOut size={18} />,
+      label: 'Open in another browser',
+      run: () => {
+        setMenu(false)
+        shell('browser_open_external', { url: current.url }).catch((err) => say(errorCopy(err)))
+      },
+    },
+    settings: { icon: <GearSix size={18} />, label: 'Settings', run: page('settings') },
+    ntp: { icon: <PencilSimple size={18} />, label: 'Customize new tab page', run: page('ntp') },
+  }
+  // The group whose page is open, while it still exists.
+  const openGroup = surface?.startsWith('group:') && groups?.[surface.slice(6)] ? surface.slice(6) : null
+
   // ---- drawing ----
 
   const findState = (current?.native && finds[current.native]) || null
@@ -605,7 +786,7 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
   const loading = live && current?.loading
 
   return (
-    <div className={`bp${current?.private ? ' private' : ''}`}>
+    <div className={`bp${current?.private ? ' private' : ''}${bottom ? ' bottom' : ''}`}>
       <header className="bp-bar" ref={barRef}>
         {finding ? (
           <div className="bp-top bp-find">
@@ -642,11 +823,11 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
             </button>
           </div>
         ) : (
-          <div className="bp-top">
+          <div className="bp-top" onTouchStart={onBarTouchStart} onTouchEnd={onBarTouchEnd}>
             <button type="button" className="bp-icon" aria-label="Home" disabled={!live} onClick={goHome}>
               <House size={22} />
             </button>
-            <button type="button" className="bp-address" onClick={() => setEditing(true)}>
+            <button type="button" className="bp-address" onClick={() => !swiped.current && setEditing(true)}>
               {current?.private && <Detective size={17} className="bp-address-private" />}
               {live &&
                 (lock === 'insecure' ? (
@@ -667,6 +848,8 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
           </div>
         )}
         {loading && <div className="bp-progress" style={{ width: `${Math.max(8, current.progress ?? 10)}%` }} />}
+        {/* How far down the page is: a thin line on the bar's page side. */}
+        {live && !finding && readWidth(read, loading) > 0 && <div className="bp-read" style={{ width: `${readWidth(read, loading)}%` }} />}
         {controller && (
           <div className="bp-agent">
             <span className={`bp-agent-dot${controller.kind === 'paused' ? ' paused' : ''}`} />
@@ -745,17 +928,47 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
       {surface === 'tabs' && (
         <TabGrid
           tabs={tabs}
+          groups={groups}
           active={active}
           thumbs={thumbs}
           onPick={(key) => {
             setState(() => ({ active: key }))
             setSurface(null)
           }}
-          onClose={(key) => close(key)}
+          onClose={(key) => {
+            haptic('tick')
+            close(key)
+          }}
           onNew={openNewTab}
+          onGroup={(id) => setSurface(`group:${id}`)}
           onDone={() => setSurface(null)}
         />
       )}
+      {openGroup && (
+        <GroupPage
+          group={groups[openGroup]}
+          tabs={tabs.filter((t) => t.group === openGroup && !t.private)}
+          active={active}
+          thumbs={thumbs}
+          onPick={(key) => {
+            setState(() => ({ active: key }))
+            setSurface(null)
+          }}
+          onClose={(key) => {
+            haptic('tick')
+            close(key)
+          }}
+          onRename={(name) => renameGroup(openGroup, name)}
+          onNew={() => openNewTab(false, openGroup)}
+          onUngroup={() => ungroup(openGroup)}
+          onCloseGroup={() => closeGroup(openGroup)}
+          onBack={() => setSurface('tabs')}
+        />
+      )}
+      {surface === 'recent' && (
+        <RecentTabsPage closed={closed ?? []} sharing={browserSetting(prefs.settings, 'sync_tabs')} onOpen={reopen} onClose={() => setSurface(null)} />
+      )}
+      {surface === 'ntp' && <ShortcutsPage current={live && !current?.private ? current : null} onSay={say} onClose={() => setSurface(null)} />}
       {surface === 'history' && (
         <HistoryPage history={history} onOpen={(url) => go(url)} onClose={() => setSurface(null)} onClearData={() => setClearing(true)} />
       )}
@@ -764,14 +977,35 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
         <BookmarksPage bookmarks={bookmarks} note={bookmarksNote} onOpen={(url) => go(url)} onClose={() => setSurface(null)} />
       )}
       {surface === 'settings' && (
-        <SettingsPage prefs={prefs} engine={engine} onSay={say} onClearData={() => setClearing(true)} onClose={() => setSurface(null)} />
+        <SettingsPage
+          prefs={prefs}
+          engine={engine}
+          bottom={bottom}
+          sharing={browserSetting(prefs.settings, 'sync_tabs')}
+          onSay={say}
+          onClearData={() => setClearing(true)}
+          onClose={() => setSurface(null)}
+        />
       )}
       {clearing && <BrowserClearData onClose={() => setClearing(false)} onCleared={() => say('Browsing data cleared')} />}
 
       {menu && (
         <div className="bp-menu-backdrop" onClick={() => setMenu(false)}>
           <div className="bp-menu" role="menu" onClick={(e) => e.stopPropagation()}>
+            {/* Chrome's top row: back, forward, star, download, reload. */}
             <div className="bp-menu-top">
+              <button
+                type="button"
+                className="bp-icon"
+                aria-label="Back"
+                disabled={!live || !current.canBack}
+                onClick={() => {
+                  setMenu(false)
+                  call('browser_back', { tab: current.native })
+                }}
+              >
+                <ArrowLeft size={20} />
+              </button>
               <button
                 type="button"
                 className="bp-icon"
@@ -787,6 +1021,9 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
               <button type="button" className="bp-icon" aria-label={bookmark ? 'Remove bookmark' : 'Bookmark this page'} disabled={!live} onClick={toggleBookmark}>
                 <Star size={20} weight={bookmark ? 'fill' : 'regular'} className={bookmark ? 'bp-starred' : ''} />
               </button>
+              <button type="button" className="bp-icon" aria-label="Download this page" disabled={!live || !/^https?:/i.test(current?.url ?? '')} onClick={downloadPage}>
+                <DownloadSimple size={20} />
+              </button>
               <button
                 type="button"
                 className="bp-icon"
@@ -800,85 +1037,17 @@ export default function BrowserPhone({ onClose = null, askToShow = null }) {
                 {loading ? <X size={20} /> : <ArrowClockwise size={20} />}
               </button>
             </div>
-            <MenuItem icon={<Plus size={18} />} label="New tab" onSelect={() => openNewTab(false)} />
-            <MenuItem icon={<Detective size={18} />} label="New private tab" onSelect={() => openNewTab(true)} />
-            <div className="bp-menu-sep" />
-            <MenuItem
-              icon={<ClockCounterClockwise size={18} />}
-              label="History"
-              onSelect={() => {
-                setMenu(false)
-                setSurface('history')
-              }}
-            />
-            <MenuItem
-              icon={<DownloadSimple size={18} />}
-              label="Downloads"
-              hint={downloads.some((d) => d.state === 'started') ? 'Downloading' : ''}
-              onSelect={() => {
-                setMenu(false)
-                setSurface('downloads')
-              }}
-            />
-            <MenuItem
-              icon={<BookmarkSimple size={18} />}
-              label="Bookmarks"
-              onSelect={() => {
-                setMenu(false)
-                setSurface('bookmarks')
-              }}
-            />
-            <div className="bp-menu-sep" />
-            <MenuItem
-              icon={<ShareNetwork size={18} />}
-              label="Share"
-              disabled={!live}
-              onSelect={() => {
-                setMenu(false)
-                if (live) shareSheet({ tab: current.native, title: current.title })
-              }}
-            />
-            <MenuItem icon={<MagnifyingGlass size={18} />} label="Find in page" disabled={!live} onSelect={openFind} />
-            <MenuItem
-              icon={<Desktop size={18} />}
-              label="Desktop site"
-              checked={Boolean(current?.desktop)}
-              disabled={!live}
-              onSelect={() => {
-                setMenu(false)
-                call('browser_desktop_site', { tab: current.native, on: !current.desktop })
-              }}
-            />
-            {current?.private && (
-              <MenuItem
-                icon={<Detective size={18} />}
-                label="Let agents use this tab"
-                checked={Boolean(current.shared)}
-                disabled={!live}
-                onSelect={() => {
-                  setMenu(false)
-                  call('browser_share', { tab: current.native, on: !current.shared })
-                }}
-              />
-            )}
-            <MenuItem
-              icon={<ArrowSquareOut size={18} />}
-              label="Open in another browser"
-              disabled={!live || !/^https?:/.test(current?.url ?? '')}
-              onSelect={() => {
-                setMenu(false)
-                shell('browser_open_external', { url: current.url }).catch((err) => say(errorCopy(err)))
-              }}
-            />
-            <div className="bp-menu-sep" />
-            <MenuItem
-              icon={<GearSix size={18} />}
-              label="Settings"
-              onSelect={() => {
-                setMenu(false)
-                setSurface('settings')
-              }}
-            />
+            {menuRows({
+              live,
+              isPrivate: Boolean(current?.private),
+              web: /^https?:/.test(current?.url ?? ''),
+              grouped: Boolean(current?.group && groups?.[current.group]),
+            }).map((row, i) => {
+              if (row === '-') return <div key={`sep${i}`} className="bp-menu-sep" />
+              const [id, usable] = row
+              const item = menuItems[id]
+              return <MenuItem key={id} icon={item.icon} label={item.label} hint={item.hint} checked={item.checked} disabled={!usable} onSelect={item.run} />
+            })}
           </div>
         </div>
       )}
@@ -1056,48 +1225,40 @@ function Omnibox({ engine, bookmarks, history, current, onGo, onClose, onCopied,
 
 // ---- the tab grid ----
 
-function TabGrid({ tabs, active, thumbs, onPick, onClose, onNew, onDone }) {
+function TabGrid({ tabs, groups, active, thumbs, onPick, onClose, onNew, onGroup, onDone }) {
   const { normal, kept } = gridSections(tabs)
-  const card = (t) => {
-    // A private tab is never pictured: its card shows its letter.
-    const shot = thumbWanted(t) ? thumbs[t.native] : null
-    return (
-      <div
-        key={t.key}
-        role="button"
-        tabIndex={0}
-        className={`bp-card${t.key === active ? ' on' : ''}`}
-        onClick={() => onPick(t.key)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') onPick(t.key)
-        }}
-      >
-        <div className="bp-card-head">
-          {t.favicon ? <img className="bp-card-icon" src={t.favicon} alt="" /> : <Globe size={14} className="bp-card-globe" />}
-          <span className="bp-card-title pv">{tabTitle(t)}</span>
-          <button
-            type="button"
-            className="bp-card-close"
-            aria-label="Close tab"
-            onClick={(e) => {
-              e.stopPropagation()
-              onClose(t.key)
-            }}
-          >
-            <X size={14} weight="bold" />
-          </button>
-        </div>
-        <div className="bp-card-shot">
-          {shot ? (
-            <img src={shot} alt="" />
-          ) : (
-            <span className="bp-card-blank">{t.url ? initial(t.url, t.title) : <MagnifyingGlass size={22} />}</span>
-          )}
-          {t.controller && <span className="bp-card-agent" title={agentLine(t.controller)} />}
-        </div>
+  const entries = gridEntries(tabs, groups)
+  const card = (t) => <TabCard key={t.key} tab={t} active={active} thumbs={thumbs} onPick={onPick} onClose={onClose} />
+  // A group is one card: up to four of its tabs' pictures, its name, its count.
+  const groupCard = (entry) => (
+    <div
+      key={entry.key}
+      role="button"
+      tabIndex={0}
+      className={`bp-card bp-group-card${entry.tabs.some((t) => t.key === active) ? ' on' : ''}`}
+      data-color={entry.group.color}
+      onClick={() => onGroup(entry.group.id)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onGroup(entry.group.id)
+      }}
+    >
+      <div className="bp-card-head">
+        <span className="bp-group-dot" />
+        <span className="bp-card-title pv">{groupLabel(entry.group, entry.tabs.length)}</span>
+        <span className="bp-group-count">{entry.tabs.length}</span>
       </div>
-    )
-  }
+      <div className="bp-group-shots">
+        {entry.tabs.slice(0, 4).map((t) => {
+          const shot = thumbWanted(t) ? thumbs[t.native] : null
+          return (
+            <span key={t.key} className="bp-group-shot">
+              {shot ? <img src={shot} alt="" /> : <span className="bp-card-blank">{t.url ? initial(t.url, t.title) : <MagnifyingGlass size={14} />}</span>}
+            </span>
+          )
+        })}
+      </div>
+    </div>
+  )
   return (
     <div className="bp-surface">
       <header className="bp-surface-head">
@@ -1112,7 +1273,7 @@ function TabGrid({ tabs, active, thumbs, onPick, onClose, onNew, onDone }) {
         </button>
       </header>
       <div className="bp-surface-body">
-        <div className="bp-grid">{normal.map(card)}</div>
+        <div className="bp-grid">{entries.map((e) => (e.kind === 'group' ? groupCard(e) : card(e.tab)))}</div>
         <div className="bp-section">
           <Detective size={16} />
           <span>Private</span>
@@ -1126,6 +1287,83 @@ function TabGrid({ tabs, active, thumbs, onPick, onClose, onNew, onDone }) {
         ) : (
           <p className="bp-quiet">Private tabs keep no history, and agents don't see them.</p>
         )}
+      </div>
+    </div>
+  )
+}
+
+// A group's own page: its name to edit, its tabs, and what Chrome's group
+// sheet offers (a new tab in it, ungroup, close the group).
+function GroupPage({ group, tabs, active, thumbs, onPick, onClose, onRename, onNew, onUngroup, onCloseGroup, onBack }) {
+  return (
+    <div className="bp-surface bp-group-page" data-color={group.color}>
+      <header className="bp-surface-head">
+        <button type="button" className="bp-icon" aria-label="Back" onClick={onBack}>
+          <ArrowLeft size={22} />
+        </button>
+        <span className="bp-group-dot" />
+        <input
+          className="bp-group-name"
+          value={group.name}
+          placeholder={groupLabel({ name: '' }, tabs.length)}
+          aria-label="Group name"
+          maxLength={60}
+          spellCheck={false}
+          autoFocus={!group.name}
+          onChange={(e) => onRename(e.target.value)}
+        />
+        <button type="button" className="bp-icon" aria-label="New tab in group" onClick={onNew}>
+          <Plus size={22} />
+        </button>
+      </header>
+      <div className="bp-surface-body">
+        <div className="bp-grid">
+          {tabs.map((t) => (
+            <TabCard key={t.key} tab={t} active={active} thumbs={thumbs} onPick={onPick} onClose={onClose} />
+          ))}
+        </div>
+        <button type="button" className="bp-link-row" onClick={onUngroup}>
+          Ungroup
+        </button>
+        <button type="button" className="bp-link-row danger" onClick={onCloseGroup}>
+          Close group
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function TabCard({ tab: t, active, thumbs, onPick, onClose }) {
+  // A private tab is never pictured: its card shows its letter.
+  const shot = thumbWanted(t) ? thumbs[t.native] : null
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      className={`bp-card${t.key === active ? ' on' : ''}`}
+      onClick={() => onPick(t.key)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onPick(t.key)
+      }}
+    >
+      <div className="bp-card-head">
+        {t.favicon ? <img className="bp-card-icon" src={t.favicon} alt="" /> : <Globe size={14} className="bp-card-globe" />}
+        <span className="bp-card-title pv">{tabTitle(t)}</span>
+        <button
+          type="button"
+          className="bp-card-close"
+          aria-label="Close tab"
+          onClick={(e) => {
+            e.stopPropagation()
+            onClose(t.key)
+          }}
+        >
+          <X size={14} weight="bold" />
+        </button>
+      </div>
+      <div className="bp-card-shot">
+        {shot ? <img src={shot} alt="" /> : <span className="bp-card-blank">{t.url ? initial(t.url, t.title) : <MagnifyingGlass size={22} />}</span>}
+        {t.controller && <span className="bp-card-agent" title={agentLine(t.controller)} />}
       </div>
     </div>
   )
@@ -1242,7 +1480,7 @@ function BookmarksPage({ bookmarks, note, onOpen, onClose }) {
 // The browser's settings on the phone: the search engine and the sites'
 // remembered answers (browser-prefs.js, shared with Settings > Browser on the
 // desktop), and Clear browsing data (the desktop's dialog).
-function SettingsPage({ prefs, engine, onSay, onClearData, onClose }) {
+function SettingsPage({ prefs, engine, bottom, sharing, onSay, onClearData, onClose }) {
   const remembered = permissionRows(prefs.permissions)
 
   const setEngine = (key) => {
@@ -1251,6 +1489,10 @@ function SettingsPage({ prefs, engine, onSay, onClearData, onClose }) {
 
   const forget = (p) => {
     setSitePermission(browserCall, p.origin, p.kind, null).catch((err) => onSay(errorCopy(err)))
+  }
+
+  const toggle = (key, on) => {
+    setBrowserPref(browserCall, key, on).catch((err) => onSay(errorCopy(err)))
   }
 
   return (
@@ -1264,6 +1506,17 @@ function SettingsPage({ prefs, engine, onSay, onClearData, onClose }) {
           <span className={`bp-radio${engine === key ? ' on' : ''}`} aria-hidden="true" />
         </button>
       ))}
+
+      <h3 className="bp-group">Address bar</h3>
+      <Switch label="Address bar at the bottom" hint="Easier to reach with one hand." on={bottom} onChange={(on) => toggle('bar_bottom', on)} />
+
+      <h3 className="bp-group">Your devices</h3>
+      <Switch
+        label="Share open tabs with your devices"
+        hint="Your other signed-in devices list the tabs open here under Recent tabs. Private tabs are never shared."
+        on={sharing}
+        onChange={(on) => toggle('sync_tabs', on)}
+      />
 
       <h3 className="bp-group">Site permissions</h3>
       {!remembered.length && <p className="bp-quiet">Sites you allow or block (camera, microphone, location) show here.</p>}
@@ -1285,6 +1538,146 @@ function SettingsPage({ prefs, engine, onSay, onClearData, onClose }) {
       <button type="button" className="bp-link-row" onClick={onClearData}>
         Clear browsing data
       </button>
+    </Page>
+  )
+}
+
+function Switch({ label, hint, on, onChange }) {
+  return (
+    <button type="button" role="switch" aria-checked={Boolean(on)} className="bp-row" onClick={() => onChange(!on)}>
+      <span className="bp-row-main">
+        <span className="bp-row-title">{label}</span>
+        {hint && <span className="bp-row-sub">{hint}</span>}
+      </span>
+      <span className={`bp-switch${on ? ' on' : ''}`} aria-hidden="true" />
+    </button>
+  )
+}
+
+// Chrome's Recent tabs: what closed here lately, then each of the user's
+// other devices with the tabs open on it (the daemon's `/browser/devices`,
+// built from those devices' saved sessions, which never hold a private tab).
+function RecentTabsPage({ closed, sharing, onOpen, onClose }) {
+  const [devices, setDevices] = useState(null)
+  const [failed, setFailed] = useState(false)
+  const [folded, setFolded] = useState({})
+
+  useEffect(() => {
+    let stale = false
+    browserCall('GET', '/browser/devices')
+      .then((answer) => {
+        if (!stale) setDevices(devicesFrom(answer))
+      })
+      .catch(() => {
+        if (!stale) setFailed(true)
+      })
+    return () => {
+      stale = true
+    }
+  }, [])
+
+  return (
+    <Page title="Recent tabs" onClose={onClose}>
+      <h3 className="bp-group">Recently closed</h3>
+      {!closed.length && <p className="bp-quiet">Tabs you close show here.</p>}
+      {closed.map((entry) => (
+        <button key={entry.url} type="button" className="bp-row" onClick={() => onOpen(entry)}>
+          <span className="bp-row-letter">
+            <ArrowCounterClockwise size={16} />
+          </span>
+          <span className="bp-row-main">
+            <span className="bp-row-title pv">{entry.title || siteOf(entry.url)}</span>
+            <span className="bp-row-sub pv">{siteOf(entry.url)}</span>
+          </span>
+        </button>
+      ))}
+
+      {failed && <p className="bp-quiet">Your other devices' tabs couldn't be read just now.</p>}
+      {devices && !devices.length && (
+        <p className="bp-quiet">
+          {sharing
+            ? 'Tabs open on your other signed-in devices show here.'
+            : "Sharing open tabs is off. Turn it on in the browser's settings to see your devices' tabs here."}
+        </p>
+      )}
+      {(devices ?? []).map((d) => (
+        <section key={d.device}>
+          <button
+            type="button"
+            className="bp-device"
+            aria-expanded={!folded[d.device]}
+            onClick={() => setFolded((f) => ({ ...f, [d.device]: !f[d.device] }))}
+          >
+            <Devices size={18} />
+            <span className="bp-device-name pv">{d.name}</span>
+            <span className="bp-device-when">{ago(d.at)}</span>
+            {folded[d.device] ? <CaretDown size={16} /> : <CaretUp size={16} />}
+          </button>
+          {!folded[d.device] &&
+            d.tabs.map((t, i) => (
+              <button key={`${t.url}|${i}`} type="button" className="bp-row" onClick={() => onOpen(t)}>
+                <span className="bp-row-letter">{initial(t.url, t.title)}</span>
+                <span className="bp-row-main">
+                  <span className="bp-row-title pv">{t.title || siteOf(t.url)}</span>
+                  <span className="bp-row-sub pv">{siteOf(t.url)}</span>
+                </span>
+              </button>
+            ))}
+        </section>
+      ))}
+    </Page>
+  )
+}
+
+// Customize new tab page: the shortcut tiles the daemon keeps (most visited,
+// and the ones pinned). Each can go; the page on screen can be added.
+function ShortcutsPage({ current, onSay, onClose }) {
+  const [tiles, setTiles] = useState([])
+  const load = () =>
+    browserCall('GET', '/browser/tiles')
+      .then((answer) => setTiles(tilesFrom(answer)))
+      .catch((err) => onSay(errorCopy(err)))
+  useEffect(() => {
+    load()
+  }, [])
+
+  const remove = (t) => {
+    browserCall('POST', '/browser/tiles/remove', { url: t.url })
+      .then(load)
+      .catch((err) => onSay(errorCopy(err)))
+  }
+  const add = () => {
+    if (!current?.url) return
+    browserCall('POST', '/browser/tiles', { url: current.url, title: current.title ?? '' })
+      .then(() => {
+        onSay('Added to the new tab page')
+        return load()
+      })
+      .catch((err) => onSay(errorCopy(err)))
+  }
+  const added = Boolean(current?.url) && tiles.some((t) => t.url === current.url)
+
+  return (
+    <Page title="New tab page" onClose={onClose}>
+      {current && /^https?:/i.test(current.url ?? '') && (
+        <button type="button" className="bp-link-row" disabled={added} onClick={add}>
+          {added ? 'This page is a shortcut' : 'Add this page as a shortcut'}
+        </button>
+      )}
+      <h3 className="bp-group">Shortcuts</h3>
+      {!tiles.length && <p className="bp-quiet">The sites you visit most show here, and on the new tab page.</p>}
+      {tiles.map((t) => (
+        <div key={t.url} className="bp-row">
+          <span className="bp-row-letter">{tileLetter(t)}</span>
+          <span className="bp-row-main">
+            <span className="bp-row-title pv">{tileLabel(t)}</span>
+            <span className="bp-row-sub pv">{t.url}</span>
+          </span>
+          <button type="button" className="bp-icon" aria-label="Remove shortcut" onClick={() => remove(t)}>
+            <Trash size={18} />
+          </button>
+        </div>
+      ))}
     </Page>
   )
 }

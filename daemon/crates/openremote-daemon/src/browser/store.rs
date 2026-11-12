@@ -634,6 +634,24 @@ impl BrowserStore {
             .unwrap_or(Value::Null)
     }
 
+    /// When this device's session was last saved, in milliseconds (0 for
+    /// never): the time the user's other devices show beside its open tabs.
+    pub fn session_at(&self) -> i64 {
+        self.state
+            .get(&("session".to_string(), self.device.clone()))
+            .map_or(0, |(at, _)| at.ms)
+    }
+
+    /// This device's id in the store's stamps.
+    pub fn device(&self) -> &str {
+        &self.device
+    }
+
+    /// The folder this store keeps its files in.
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
     pub fn save_session(&mut self, session: Value) {
         if self.get("session", &self.device) != Some(&session) {
             let device = self.device.clone();

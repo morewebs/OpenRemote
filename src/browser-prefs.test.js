@@ -21,7 +21,13 @@ import { SETTINGS_ENTRIES, searchSettings } from './settings-search.js'
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
 test('a setting reads as saved, else its default; the bar is on unless turned off', () => {
-  assert.deepEqual(BROWSER_DEFAULTS, { search: 'google', bookmarks_bar: true, startup: 'continue' })
+  assert.deepEqual(BROWSER_DEFAULTS, { search: 'google', bookmarks_bar: true, startup: 'continue', bar_bottom: false, sync_tabs: true })
+  // The phone's two: the bar is on top unless asked, open tabs are shared unless turned off.
+  assert.equal(browserSetting({}, 'bar_bottom'), false)
+  assert.equal(browserSetting({ bar_bottom: 'yes' }, 'bar_bottom'), false)
+  assert.equal(browserSetting({ bar_bottom: true }, 'bar_bottom'), true)
+  assert.equal(browserSetting({}, 'sync_tabs'), true)
+  assert.equal(browserSetting({ sync_tabs: false }, 'sync_tabs'), false)
   assert.equal(browserSetting({}, 'search'), 'google')
   assert.equal(browserSetting({ search: 'duckduckgo' }, 'search'), 'duckduckgo')
   // An engine this build does not list reads as the default, never undefined.
