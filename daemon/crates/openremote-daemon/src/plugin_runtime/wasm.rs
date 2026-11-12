@@ -496,7 +496,7 @@ async fn within<T>(
 /// (this machine, the home network, a cloud's metadata service) it is
 /// refused, and the connection goes to the vetted address - never to a
 /// second lookup's.
-async fn public_address(url: &str) -> Result<SocketAddr, String> {
+pub(crate) async fn public_address(url: &str) -> Result<SocketAddr, String> {
     let uri: axum::http::Uri = url
         .parse()
         .map_err(|_| format!("'{url}' is not an address"))?;

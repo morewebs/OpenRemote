@@ -602,6 +602,25 @@ fn check_settings(fields: &[SettingField]) -> Result<(), PluginError> {
             check_value(f, default)
                 .map_err(|why| invalid(format!("the setting '{}''s default {why}", f.key)))?;
         }
+        // A secret's sendTo is the text setting that holds the one address
+        // it may go to: anything else would be a guard that guards nothing.
+        if let Some(to) = &f.send_to {
+            if f.kind != SettingKind::Secret {
+                return Err(invalid(format!(
+                    "the setting '{}' has a sendTo, which only a secret takes",
+                    f.key
+                )));
+            }
+            if !fields
+                .iter()
+                .any(|o| &o.key == to && o.kind == SettingKind::String)
+            {
+                return Err(invalid(format!(
+                    "the setting '{}''s sendTo must name one of the plugin's text settings",
+                    f.key
+                )));
+            }
+        }
     }
     Ok(())
 }
@@ -680,6 +699,45 @@ mod tests {
         );
         assert_eq!(args[0], "--root");
         assert!(!args[1].contains("${"));
+    }
+
+    #[test]
+    fn a_secrets_send_to_names_a_text_setting_and_only_a_secret_has_one() {
+        let dir = folder(&["ui/page.html"]);
+        let read = |settings: Value| {
+            let raw = json!({"entry": "ui/page.html", "contributes": {"settings": settings}});
+            read_section(&raw, dir.path(), "dictation", PluginRuntime::Js)
+        };
+        let address = json!({"key": "address", "type": "string", "label": "Address"});
+        let fine = read(json!([
+            address,
+            {"key": "api_key", "type": "secret", "label": "Key", "sendTo": "address"}
+        ]))
+        .unwrap();
+        assert_eq!(
+            fine.contributes.settings[1].send_to.as_deref(),
+            Some("address")
+        );
+        for (settings, words) in [
+            (
+                json!([{"key": "api_key", "type": "secret", "label": "Key", "sendTo": "nowhere"}]),
+                "sendTo",
+            ),
+            (
+                json!([address, {"key": "flag", "type": "boolean", "label": "F", "sendTo": "address"}]),
+                "only a secret",
+            ),
+            (
+                json!([
+                    {"key": "on", "type": "boolean", "label": "On"},
+                    {"key": "api_key", "type": "secret", "label": "Key", "sendTo": "on"}
+                ]),
+                "sendTo",
+            ),
+        ] {
+            let err = read(settings.clone()).unwrap_err().to_string();
+            assert!(err.contains(words), "{settings}: {err}");
+        }
     }
 
     #[test]

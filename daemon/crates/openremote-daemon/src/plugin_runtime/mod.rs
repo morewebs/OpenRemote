@@ -21,6 +21,7 @@
 
 pub mod global;
 pub mod install;
+pub mod js;
 pub mod manifest;
 pub mod process;
 pub mod routes;
@@ -235,6 +236,20 @@ impl PluginRuntime {
             .and_then(|b| serde_json::from_slice(&b).ok())
             .ok_or_else(|| format!("{}'s openremote.json is unreadable", plugin.name))?;
         manifest::read_section(&raw, root, &plugin.name, plugin.runtime).map_err(|e| e.to_string())
+    }
+
+    /// A JavaScript plugin's own page, the file its entry names: what the
+    /// console's frame for its composer buttons builds. Only the path is
+    /// taken from the folder; what the page may do is the install record's.
+    pub fn page(&self, plugin: &InstalledPlugin) -> Option<String> {
+        if plugin.runtime != Runtime::Js {
+            return None;
+        }
+        let root = self.folder(plugin)?;
+        match Self::section(plugin, &root).ok()?.entry? {
+            manifest::Entry::File(path) => Some(path),
+            manifest::Entry::Command { .. } => None,
+        }
     }
 
     /// What starts a process plugin's program. Refused unless the plugin is
@@ -479,9 +494,43 @@ impl PluginRuntime {
         self.processes.stop_all().await;
     }
 
-    /// A plugin program's own call to OpenRemote. Each method needs a power
-    /// the user approved at install, read from the install record.
-    async fn answer(&self, id: &str, method: &str, params: Value) -> Result<Value, RpcError> {
+    /// Whether a plugin may reach a chat in `workspace`: a Global or
+    /// Machine plugin every chat, a project's plugin only that project's
+    /// (the same rule that decides which chats it rides).
+    fn reaches(&self, plugin: &InstalledPlugin, workspace: Option<&Path>) -> bool {
+        if !plugin.scope.is_project() {
+            return true;
+        }
+        let store = lock_recovering(&self.store);
+        let chat_project = workspace.and_then(|w| scope::project_of(&store, w));
+        scope::rides(plugin.scope, plugin.project, chat_project)
+    }
+
+    /// The chat a call names, refused when the plugin may not reach it.
+    fn reachable_chat(&self, plugin: &InstalledPlugin, id: &SessionId) -> Result<(), RpcError> {
+        let workspace = lock_recovering(&self.store)
+            .session(id)
+            .map(|s| s.workspace.clone())
+            .map_err(|_| RpcError::new(-32602, "there is no such chat"))?;
+        if self.reaches(plugin, workspace.as_deref()) {
+            Ok(())
+        } else {
+            Err(RpcError::new(
+                -32003,
+                format!(
+                    "{} is installed for one project, and that chat is outside it",
+                    plugin.name
+                ),
+            ))
+        }
+    }
+
+    /// A plugin's own call to OpenRemote: a process plugin's program over
+    /// its pipe, a JavaScript plugin's frame through the console. Each
+    /// method needs a power the user approved at install, read from the
+    /// install record, and a project's plugin reaches only that project's
+    /// chats.
+    pub async fn answer(&self, id: &str, method: &str, params: Value) -> Result<Value, RpcError> {
         let plugin = self
             .plugin(id)
             .filter(|p| p.enabled)
@@ -528,6 +577,7 @@ impl PluginRuntime {
                 let chats: Vec<Value> = supervisor
                     .sessions()
                     .into_iter()
+                    .filter(|s| self.reaches(&plugin, s.workspace.as_deref()))
                     .map(|s| {
                         json!({
                             "id": s.id,
@@ -544,6 +594,7 @@ impl PluginRuntime {
             }
             "chats/read" => {
                 let id = chat_id(&params)?;
+                self.reachable_chat(&plugin, &id)?;
                 let text = supervisor.condensed_chat(&id).map_err(failed)?;
                 Ok(json!({"text": text}))
             }
@@ -552,10 +603,16 @@ impl PluginRuntime {
                     .get("harness")
                     .and_then(Value::as_str)
                     .ok_or_else(|| RpcError::new(-32602, "name the harness"))?;
-                let workspace = params
+                let mut workspace = params
                     .get("workspace")
                     .and_then(Value::as_str)
                     .map(PathBuf::from);
+                // A project's plugin starts its chats in its project.
+                if workspace.is_none() && plugin.scope.is_project() {
+                    workspace = plugin
+                        .project
+                        .and_then(|p| scope::project_folder(&lock_recovering(&self.store), p));
+                }
                 if let Some(w) = &workspace {
                     if !w.is_absolute() || !w.is_dir() {
                         return Err(RpcError::new(
@@ -563,6 +620,15 @@ impl PluginRuntime {
                             "the workspace must be a folder on this machine",
                         ));
                     }
+                }
+                if !self.reaches(&plugin, workspace.as_deref()) {
+                    return Err(RpcError::new(
+                        -32003,
+                        format!(
+                            "{} is installed for one project, and starts chats only there",
+                            plugin.name
+                        ),
+                    ));
                 }
                 let text = |key: &str| params.get(key).and_then(Value::as_str).map(String::from);
                 // A chat a plugin starts runs with the harness's own
@@ -591,6 +657,7 @@ impl PluginRuntime {
             }
             "chats/prompt" => {
                 let id = chat_id(&params)?;
+                self.reachable_chat(&plugin, &id)?;
                 let text = params
                     .get("text")
                     .and_then(Value::as_str)
@@ -600,6 +667,7 @@ impl PluginRuntime {
             }
             "chats/stop" => {
                 let id = chat_id(&params)?;
+                self.reachable_chat(&plugin, &id)?;
                 supervisor.stop(&id).await.map_err(failed)?;
                 Ok(json!({"stopped": true}))
             }

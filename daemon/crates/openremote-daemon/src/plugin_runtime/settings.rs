@@ -174,6 +174,7 @@ mod tests {
             min: None,
             max: None,
             required: false,
+            send_to: None,
         }
     }
 

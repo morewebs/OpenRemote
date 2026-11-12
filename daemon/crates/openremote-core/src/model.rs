@@ -831,6 +831,17 @@ pub struct SettingField {
     /// The plugin can't run until this one is set.
     #[serde(default)]
     pub required: bool,
+    /// A secret only: the key of the text setting that holds the one
+    /// address this secret is ever sent to. A JavaScript plugin's request
+    /// that names the secret in a header goes only to that address (or
+    /// under it); with none, the secret goes wherever the plugin sends it.
+    #[serde(
+        default,
+        rename = "sendTo",
+        alias = "send_to",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub send_to: Option<String>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]

@@ -1322,6 +1322,11 @@ fn installed_json(app: &App, plugin: &openremote_core::InstalledPlugin) -> Value
     let mut value = serde_json::to_value(plugin).unwrap_or(Value::Null);
     if let Some(fields) = value.as_object_mut() {
         fields.insert("id".into(), Value::String(plugin.id()));
+        // A JavaScript plugin's page, which the console builds in a frame
+        // for its composer buttons (its views name their own).
+        if let Some(page) = app.plugin_runtime.page(plugin) {
+            fields.insert("entry".into(), Value::String(page));
+        }
         if plugin.runtime == openremote_core::PluginRuntime::Process {
             fields.insert(
                 "process".into(),

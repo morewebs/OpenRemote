@@ -32,6 +32,8 @@ pub fn routes() -> Router<Arc<App>> {
         .route("/plugins/{id}/request", post(view_request))
         .route("/sessions/{id}/plugins/tools", get(chat_tools))
         .route("/sessions/{id}/plugins/call", post(call_tool))
+        // A JavaScript plugin's frame, through the console that hosts it.
+        .merge(super::js::routes())
 }
 
 fn bad(status: StatusCode, message: &str) -> Response {
