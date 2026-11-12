@@ -53,7 +53,7 @@ import { chatTitle } from './shape.js'
 import { RECONNECTING } from './pane-header.js'
 import { canCopyChat, chatMarkdown, copiedLine } from './chat-markdown.js'
 import { errorCopy } from './error-copy.js'
-import { CHATS_PAGE, PROJECT_PAGE, loadPins, planList, storePins, togglePin } from './sidebar-list.js'
+import { CHATS_PAGE, PROJECT_PAGE, loadPins, moreHint, planList, storePins, togglePin } from './sidebar-list.js'
 import { usePrivacyMode } from './privacy.js'
 import { useHint, useShortcut } from './keyboard.jsx'
 import { rolledStatus } from './team.js'
@@ -919,8 +919,39 @@ export default function Sidebar({
   const phones = (devices ?? []).filter(isPhone)
   const phoneOnline = phones.some((d) => d.online)
 
-  // A row, and under it its team when it leads one: the workers indented
-  // behind a 1px line, foldable from the lead's caret.
+  // The line under a list that has more to show. A page control, not a chat
+  // row: the list's one Tab stop stays on the rows, and this line is reachable
+  // like the head's own buttons. It reveals the rest of this list for this
+  // session. After the count, a hint says what the rows it leaves out are up
+  // to, workers included - a failure in red, a running turn quietly - and an
+  // unread row among them lifts the line one text tier, the list heads' quiet
+  // mark (ported from br-sidebar b941184's dot on the line).
+  const moreLine = (key, plan) => {
+    const hint = moreHint(plan.hidden.flatMap(withTeam))
+    return (
+      <button
+        type="button"
+        className="sb-more"
+        data-unread={listHasUnread(plan.hidden, unread) ? 'true' : undefined}
+        onClick={() => showMore(key)}
+      >
+        Show {plan.next} more
+        {hint && (
+          <span className="sb-more-hint">
+            {hint.map((part) => (
+              <span
+                key={part.kind}
+                className={`project-count-part${part.kind === 'failed' ? ' is-failed' : ''}`}
+              >
+                {part.text}
+              </span>
+            ))}
+          </span>
+        )}
+      </button>
+    )
+  }
+
   // A double click on a row's name opens the rename dialog, the same one the
   // menu's Rename opens (ported from br-sidebar 4160f65, which made the name a
   // field in place; main renames in the shell's dialog). Desktop only: a phone
@@ -934,6 +965,8 @@ export default function Sidebar({
         }
       : undefined
 
+  // A row, and under it its team when it leads one: the workers indented
+  // behind a 1px line, foldable from the lead's caret.
   const chatRow = (row) => {
     const workers = nest.kids.get(row.id) ?? []
     if (!workers.length) return chatItem(row, 0, false)
@@ -1425,14 +1458,7 @@ export default function Sidebar({
               )}
               {!isCollapsed && plan.pinned.map((row) => chatRow({ ...row, pinned: true }))}
               {!isCollapsed && plan.shown.map(chatRow)}
-              {!isCollapsed && plan.next > 0 && (
-                // A page control, not a chat row: the list's one Tab stop stays
-                // on the rows, and this line is reachable like the head's own
-                // buttons. It reveals the rest of this list for this session.
-                <button type="button" className="sb-more" onClick={() => showMore(project.id)}>
-                  Show {plan.next} more
-                </button>
-              )}
+              {!isCollapsed && plan.next > 0 && moreLine(project.id, plan)}
             </section>
           )
         })}
@@ -1450,11 +1476,7 @@ export default function Sidebar({
         )}
         {flatPlan.pinned.map((row) => chatRow({ ...row, pinned: true }))}
         {flatPlan.shown.map(chatRow)}
-        {flatPlan.next > 0 && (
-          <button type="button" className="sb-more" onClick={() => showMore('flat')}>
-            Show {flatPlan.next} more
-          </button>
-        )}
+        {flatPlan.next > 0 && moreLine('flat', flatPlan)}
 
         {/* With a project registered and nothing running, the project's own row
             says it has no chats yet; the generic line would say it twice. An

@@ -10,6 +10,8 @@
 // list it is not in and appears in the list it moved to, because each group is
 // planned from its own rows.
 
+import { heldStates } from './projects.js'
+
 const PIN_KEY = 'openremote-pinned-chats'
 
 // Five per project: a head, its chats and the next head within one glance; a
@@ -62,7 +64,8 @@ export function pinnedRows(rows, pins) {
  * The rest show the first `page` of them, or all of them once the person asked
  * for more (`expanded`, for this session); a row `keep` names - the chat that
  * is open - stays visible wherever it sits. `next` is how many rows are left
- * out, so the "Show N more" line never names a number the press will not show.
+ * out, so the "Show N more" line never names a number the press will not show,
+ * and `hidden` are those rows, for the line's hint (`moreHint`).
  */
 export function planList(items, { pins = [], page = PROJECT_PAGE, expanded = false, keep = () => false } = {}) {
   const list = items ?? []
@@ -73,5 +76,21 @@ export function planList(items, { pins = [], page = PROJECT_PAGE, expanded = fal
   const shown = rest.filter((row, i) => i < limit || keep(row))
   const shownIds = new Set(shown.map((row) => row.id))
   const hidden = rest.filter((row) => !shownIds.has(row.id))
-  return { pinned, shown, next: hidden.length }
+  return { pinned, shown, hidden, next: hidden.length }
+}
+
+/**
+ * What the rows a "Show N more" line leaves out are up to, as the parts the
+ * line draws after its count - `{ kind: 'failed' | 'running', text }` - or
+ * null when none of them failed or runs. A long list never hides a failure
+ * behind its page (ported from br-sidebar b941184's dot on the line, in the
+ * words a folded project's head uses). Waiting chats are never paged away:
+ * they sit in the group above.
+ */
+export function moreHint(rows) {
+  const { failed, running } = heldStates(rows)
+  const parts = []
+  if (failed > 0) parts.push({ kind: 'failed', text: `${failed} failed` })
+  if (running > 0) parts.push({ kind: 'running', text: `${running} running` })
+  return parts.length ? parts : null
 }

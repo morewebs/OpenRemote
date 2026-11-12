@@ -17,6 +17,7 @@ const {
   CHATS_PAGE,
   PROJECT_PAGE,
   loadPins,
+  moreHint,
   pinnedRows,
   planList,
   storePins,
@@ -102,9 +103,49 @@ test('the sidebar draws pins, the Show more line and the menu items from these r
   assert.match(sidebar, /planList\(grouped\.flat|planFor\('flat'/)
   // The line is drawn only while something is left out, and names it.
   assert.match(sidebar, /Show \{plan\.next\} more/)
-  assert.match(sidebar, /Show \{flatPlan\.next\} more/)
+  assert.match(sidebar, /moreLine\(project\.id, plan\)/)
+  assert.match(sidebar, /moreLine\('flat', flatPlan\)/)
   // The pin is in the row's own menu, and the row wears a mark.
   assert.match(sidebar, /label: pinned \? 'Unpin' : 'Pin'/)
   assert.match(sidebar, /className="chat-pin"/)
   assert.match(css, /\.chat-pin \{/)
+})
+
+// ---- what "Show N more" leaves out ----
+
+test('the page names the rows it leaves out, so a hint can say what they are up to', () => {
+  const list = rows(8)
+  const plan = planList(list, { pins: ['c1'], keep: (r) => r.id === 'c8' })
+  // c1 is pinned, c2..c6 the page, c8 kept: c7 alone is out of sight.
+  assert.deepEqual(plan.hidden.map((r) => r.id), ['c7'])
+  assert.equal(plan.next, plan.hidden.length)
+  assert.deepEqual(planList(list, { expanded: true }).hidden, [])
+})
+
+test('"Show N more" hints at a failure or a running turn among what it leaves out', () => {
+  // Ported from br-sidebar b941184's dot on the line, in main's words: a long
+  // list never hides a failure behind the page.
+  assert.deepEqual(moreHint([{ status: 'failed' }, { status: 'working' }, { status: 'idle' }, { status: 'running' }]), [
+    { kind: 'failed', text: '1 failed' },
+    { kind: 'running', text: '2 running' },
+  ])
+  assert.deepEqual(moreHint([{ status: 'starting' }]), [{ kind: 'running', text: '1 running' }])
+  // Nothing to say, or an away copy's stale status: no hint at all.
+  assert.equal(moreHint([{ status: 'idle' }, { status: 'stopped' }]), null)
+  assert.equal(moreHint([{ status: 'failed', offline: true }]), null)
+  assert.equal(moreHint([]), null)
+})
+
+test('the sidebar draws the hint, and the quiet unread step, on both Show more lines', () => {
+  const sidebar = readFileSync(new URL('./Sidebar.jsx', import.meta.url), 'utf8')
+  const css = readFileSync(new URL('./sidebar.css', import.meta.url), 'utf8')
+  const at = sidebar.indexOf('const moreLine = (key, plan) => {')
+  assert.ok(at > 0, 'one line, drawn for a project and for the flat list')
+  const line = sidebar.slice(at, at + 1600)
+  assert.match(line, /const hint = moreHint\(plan\.hidden\.flatMap\(withTeam\)\)/)
+  assert.match(line, /data-unread=\{listHasUnread\(plan\.hidden, unread\) \? 'true' : undefined\}/)
+  assert.match(line, /className="sb-more-hint"/)
+  assert.match(line, /part\.kind === 'failed' \? ' is-failed' : ''/)
+  assert.match(css, /\.sb-more\[data-unread='true'\]/)
+  assert.match(css, /\.sb-more-hint \{/)
 })

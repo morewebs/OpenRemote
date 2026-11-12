@@ -1220,8 +1220,18 @@ html[data-reduce-motion] .chat-archive {
    say "there is something in here" without a count, which would be the badge
    this design does not use. */
 .project-head[data-unread='true'],
-.sb-chats-title[data-unread='true'] {
+.sb-chats-title[data-unread='true'],
+.sb-more[data-unread='true'] {
   color: var(--text-1);
+}
+
+/* What "Show N more" leaves out, after its count: the head's own parts,
+   joined by the same separator, a failure in red. */
+.sb-more-hint::before {
+  content: ' · ';
+}
+.sb-more-hint {
+  color: var(--text-3);
 }
 /* The armed project row's promise: what goes (the project), what stays (its
    chats, its folder). The tooltip keeps the same sentence for a hover, but a
