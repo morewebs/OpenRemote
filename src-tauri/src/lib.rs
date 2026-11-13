@@ -33,6 +33,8 @@ mod tray;
 // Updates: a newer signed release, checked every two hours by the console and
 // installed on the user's click. Desktop only; a phone updates from its store.
 #[cfg(desktop)]
+mod delta_codec;
+#[cfg(desktop)]
 mod updates;
 // Whether the window stays in front of other apps. Desktop only, like the
 // window itself.

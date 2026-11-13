@@ -1,0 +1,16 @@
+[package]
+name = "delta-tool"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+publish = false
+
+# The release side of in-app updates: packs an installer, and makes or applies
+# the patch between two of them. The codec is the app's own file, included
+# below, so the release and the app cannot disagree about the format.
+#
+# Its own workspace: it is not a member of the shell's or the daemon's.
+[workspace]
+
+[dependencies]
+zstd = "0.13"

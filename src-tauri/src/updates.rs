@@ -10,16 +10,30 @@
 //! Windows installs in place. The installer is fetched in the background as
 //! soon as a check finds it, and held in memory until the user confirms. The
 //! other systems are sent to the release page instead.
+//!
+//! On Windows the fetch takes the smallest route the feed offers: a patch from
+//! the installed version's uncompressed installer (kept, packed, from the last
+//! update), else the whole uncompressed installer packed, else the release's own
+//! installer. Every route is checked against its signature, the same check the
+//! plugin makes on the installer it downloads, so a route that does not verify
+//! is passed over. The uncompressed installer is what the patches are made from.
 
+use std::fs;
 use std::future::Future;
+use std::io;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use serde::Serialize;
-use tauri::{AppHandle, Url};
-use tauri_plugin_updater::UpdaterExt;
+use serde_json::{json, Value};
+use tauri::{AppHandle, Manager, Url};
+use tauri_plugin_updater::{Update, UpdaterExt};
 
-use crate::{browser, desktop};
+use crate::{browser, delta_codec, desktop};
+
+/// The updater's name for this system, as the feed keys its platforms.
+const TARGET: &str = "windows-x86_64";
 
 /// What a look found, as the console shows it.
 #[derive(Clone, Serialize)]
@@ -46,11 +60,17 @@ pub struct Available {
     pub ready: bool,
 }
 
-/// The Windows installer for one version, held in memory until an install
-/// takes it or the app quits.
+/// The installer for one version, held in memory until an install takes it or
+/// the app quits.
 struct Staged {
     version: String,
+    /// The installer's bytes.
     bytes: Vec<u8>,
+    /// Set when `bytes` is the uncompressed installer a patch was applied to or
+    /// that was unpacked: the feed entry it is checked against, which the install
+    /// restores. None when `bytes` is the release's own installer, which the
+    /// feed's entry (already held by the check) covers.
+    entry: Option<Value>,
 }
 
 /// The installer fetched in the background. One slot: a copy for a newer
@@ -89,6 +109,7 @@ pub async fn update_check(app: AppHandle) -> Result<Check, String> {
             available: None,
         });
     }
+    forget_stale_bases(&app);
     let update = app
         .updater()
         .map_err(|e| e.to_string())?
@@ -115,13 +136,13 @@ pub async fn update_check(app: AppHandle) -> Result<Check, String> {
         ready: can_install && staged_for(&STAGED, &version),
     };
     // Fetched now, so the install is one click away. A failed fetch is dropped
-    // without a word: the next check tries again, and an install downloads on
+    // without a word: the next check tries again, and an install fetches on
     // its own when no copy is held.
     if can_install && !available.ready {
         if let Some(flight) = InFlight::begin(&STAGING) {
+            let app = app.clone();
             tauri::async_runtime::spawn(async move {
-                let download = update.download(|_, _| {}, || {});
-                stage_with(flight, &STAGED, version, download).await;
+                stage_with(flight, &STAGED, fetch(&app, &update)).await;
             });
         }
     }
@@ -155,28 +176,33 @@ pub async fn update_install(app: AppHandle) -> Result<(), String> {
         return Err("this is already the newest version".into());
     };
     // Taken, not copied: a failed install must not leave the same package
-    // behind for the next click to reuse. A retry downloads afresh. A copy for
+    // behind for the next click to reuse. A retry fetches afresh. A copy for
     // another version is dropped here too, since it can never be right for this
     // update.
     //
-    // Both paths are verified against the public key before anything is
-    // stopped. download() checks the signature before it returns, and install()
-    // checks the bytes again before the installer runs, so a staged copy is
-    // checked twice. A bad signature leaves the running app and its chats alone.
-    let bytes = match take_staged(&STAGED, &update.version) {
-        Some(bytes) => bytes,
-        None => update
-            .download(|_, _| {}, || {})
-            .await
-            .map_err(|e| format!("the update didn't download: {e}"))?,
+    // Every route is verified before anything is stopped: a fetched or staged
+    // copy is checked against its signature when it is fetched, and install()
+    // checks the bytes again before the installer runs. A bad signature leaves
+    // the running app and its chats alone.
+    let staged = match take_staged(&STAGED, &update.version) {
+        Some(staged) => staged,
+        None => fetch(&app, &update).await?,
     };
+    let Staged {
+        version,
+        bytes,
+        entry,
+    } = staged;
+    // The uncompressed installer is the base of the next patch, so it is kept
+    // for the version it installs. Kept before the install: the app restarts
+    // into that version, and the copy is what it will patch from. A failure to
+    // keep it only means the next update downloads a full package.
+    if entry.is_some() {
+        let _ = write_base(&app, &version, &bytes);
+    }
     stop_then_install(
         || desktop::stop_daemon(&app),
-        || {
-            update
-                .install(&bytes)
-                .map_err(|e| format!("the update didn't install: {e}"))
-        },
+        || install(&app, &update, entry.as_ref(), &bytes),
         || desktop::start_daemon(&app),
     )
     .await?;
@@ -209,9 +235,205 @@ fn remember_page(page: Option<String>) {
 /// is not usable. The feed is not signed, so only an https address is kept:
 /// the page is handed to the system's browser, and a file path or a script
 /// link must never travel that way.
-fn page_from(raw: &serde_json::Value) -> Option<String> {
+fn page_from(raw: &Value) -> Option<String> {
     let page = Url::parse(raw.get("page")?.as_str()?).ok()?;
     (page.scheme() == "https").then(|| page.to_string())
+}
+
+/// The installer for the newest release, by the smallest route the app has:
+/// a patch from the installed version's base, then the whole uncompressed
+/// installer packed, then the release's own installer. A route that fails is
+/// passed over: the next one is its fallback, so only the last route's failure
+/// is reported.
+async fn fetch(app: &AppHandle, update: &Update) -> Result<Staged, String> {
+    if let Some(staged) = fetch_delta(app, update).await {
+        return Ok(staged);
+    }
+    let bytes = update
+        .download(|_, _| {}, || {})
+        .await
+        .map_err(|e| format!("the update didn't download: {e}"))?;
+    Ok(Staged {
+        version: update.version.clone(),
+        bytes,
+        entry: None,
+    })
+}
+
+/// The patch or the full package, when the feed offers one and it verifies.
+/// None sends the caller to the release's own installer.
+async fn fetch_delta(app: &AppHandle, update: &Update) -> Option<Staged> {
+    let delta = update.raw_json.get("delta")?;
+    let installed = app.package_info().version.to_string();
+    let installer_signature = delta.pointer("/installer/signature")?.as_str()?;
+    let installer = entry(
+        &update.version,
+        update.download_url.as_str(),
+        installer_signature,
+    );
+
+    // A patch only reaches from the version it was made from, and only from the
+    // base this app kept for it. Any other case, or a patch that does not
+    // verify, goes on to the full package.
+    if delta.get("from").and_then(Value::as_str) == Some(installed.as_str()) {
+        if let Some(base) = read_base(app, &installed) {
+            let patch = delta
+                .get("patch")
+                .and_then(|p| file_entry(&update.version, p));
+            if let Some(patch) = patch {
+                if let Some(bytes) = patched(app, &base, &patch, &installer).await {
+                    return Some(uncompressed(update, bytes, installer));
+                }
+            }
+        }
+    }
+    let full = file_entry(&update.version, delta.get("full")?)?;
+    let bytes = unpacked(app, &full, &installer).await?;
+    Some(uncompressed(update, bytes, installer))
+}
+
+fn uncompressed(update: &Update, bytes: Vec<u8>, installer: Value) -> Staged {
+    Staged {
+        version: update.version.clone(),
+        bytes,
+        entry: Some(installer),
+    }
+}
+
+/// The uncompressed installer made by applying a verified patch to the base.
+async fn patched(
+    app: &AppHandle,
+    base: &[u8],
+    patch: &Value,
+    installer: &Value,
+) -> Option<Vec<u8>> {
+    let patch = download(app, patch).await?;
+    let bytes = delta_codec::apply_patch(base, &patch).ok()?;
+    verified(app, installer, &bytes)?;
+    Some(bytes)
+}
+
+/// The uncompressed installer unpacked from a verified full package.
+async fn unpacked(app: &AppHandle, full: &Value, installer: &Value) -> Option<Vec<u8>> {
+    let packed = download(app, full).await?;
+    let bytes = delta_codec::unpack(&packed).ok()?;
+    verified(app, installer, &bytes)?;
+    Some(bytes)
+}
+
+/// Downloads one file of the feed. The plugin checks its signature before it
+/// returns the bytes.
+async fn download(app: &AppHandle, entry: &Value) -> Option<Vec<u8>> {
+    restore(app, entry)
+        .ok()?
+        .download(|_, _| {}, || {})
+        .await
+        .ok()
+}
+
+/// Whether `bytes` is the file `entry` was signed for.
+fn verified(app: &AppHandle, entry: &Value, bytes: &[u8]) -> Option<()> {
+    restore(app, entry).ok()?.verify(bytes).ok()
+}
+
+/// Installs `bytes` as the release's installer: the feed's own update when
+/// there is no entry, else the entry the bytes were verified against.
+fn install(
+    app: &AppHandle,
+    update: &Update,
+    entry: Option<&Value>,
+    bytes: &[u8],
+) -> Result<(), String> {
+    let result = match entry {
+        None => update.install(bytes),
+        Some(entry) => restore(app, entry)?.install(bytes),
+    };
+    result.map_err(|e| format!("the update didn't install: {e}"))
+}
+
+/// An update for one file the feed names, restored from its entry. The plugin's
+/// own download and install take their signature from the entry, which is how
+/// a patch, a full package and the uncompressed installer are each checked
+/// with the same code that checks the release's installer.
+fn restore(app: &AppHandle, entry: &Value) -> Result<Update, String> {
+    app.updater()
+        .map_err(|e| e.to_string())?
+        .restore_update(entry.clone())
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "the update is not newer than this app".to_string())
+}
+
+/// The feed entry for one file of the delta: its URL and signature, under the
+/// version the update announces. The entry is what the plugin verifies against.
+fn entry(version: &str, url: &str, signature: &str) -> Value {
+    json!({
+        "version": version,
+        "platforms": { TARGET: { "url": url, "signature": signature.trim() } },
+    })
+}
+
+/// The entry for a file the delta object names, when it has a URL and a
+/// signature. None when it does not, so a half-written feed is passed over.
+fn file_entry(version: &str, file: &Value) -> Option<Value> {
+    Some(entry(
+        version,
+        file.get("url")?.as_str()?,
+        file.get("signature")?.as_str()?,
+    ))
+}
+
+/// The base file name for an installed version's uncompressed installer.
+fn base_file_name(version: &str) -> String {
+    format!("base-{version}.zst")
+}
+
+/// Whether a file in the updates folder is a base the app no longer needs: any
+/// base but the installed version's, and any half-written one.
+fn is_stale_base(name: &str, installed: &str) -> bool {
+    name.starts_with("base-") && name != base_file_name(installed)
+}
+
+/// The folder the bases are kept in: the app's own data folder, so each channel
+/// (stable, nightly) keeps its own.
+fn bases_dir(app: &AppHandle) -> Option<PathBuf> {
+    Some(app.path().app_data_dir().ok()?.join("updates"))
+}
+
+/// The installed version's base, unpacked. None when the app has none, which is
+/// the case after a fresh install: its first update is a full package.
+fn read_base(app: &AppHandle, installed: &str) -> Option<Vec<u8>> {
+    let packed = fs::read(bases_dir(app)?.join(base_file_name(installed))).ok()?;
+    delta_codec::unpack(&packed).ok()
+}
+
+/// Keeps `raw` as the base for `version`, packed. Written to a part file and
+/// renamed, so a base is never half there.
+fn write_base(app: &AppHandle, version: &str, raw: &[u8]) -> io::Result<()> {
+    let dir = bases_dir(app).ok_or_else(|| io::Error::other("the app has no data folder"))?;
+    fs::create_dir_all(&dir)?;
+    let packed = delta_codec::pack(raw, delta_codec::STORE_LEVEL)?;
+    let part = dir.join(format!("{}.part", base_file_name(version)));
+    fs::write(&part, packed)?;
+    fs::rename(part, dir.join(base_file_name(version)))
+}
+
+/// Removes the bases the installed version does not need. Run on each check,
+/// which is before any install, so the base of a version that was just staged
+/// is never removed: it is written only when its install starts.
+fn forget_stale_bases(app: &AppHandle) {
+    let Some(dir) = bases_dir(app) else {
+        return;
+    };
+    let installed = app.package_info().version.to_string();
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        if is_stale_base(&name.to_string_lossy(), &installed) {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
 }
 
 /// Whether `slot` holds the installer for `version`.
@@ -224,34 +446,31 @@ fn staged_for(slot: &Mutex<Option<Staged>>, version: &str) -> bool {
 
 /// Hands out the installer for `version`, and empties the slot whatever the
 /// version is: the bytes leave the slot once, and only for the version asked.
-fn take_staged(slot: &Mutex<Option<Staged>>, version: &str) -> Option<Vec<u8>> {
+fn take_staged(slot: &Mutex<Option<Staged>>, version: &str) -> Option<Staged> {
     let staged = slot.lock().expect("staged update lock").take()?;
-    (staged.version == version).then_some(staged.bytes)
+    (staged.version == version).then_some(staged)
 }
 
-fn keep_staged(slot: &Mutex<Option<Staged>>, version: String, bytes: Vec<u8>) {
-    *slot.lock().expect("staged update lock") = Some(Staged { version, bytes });
+fn keep_staged(slot: &Mutex<Option<Staged>>, staged: Staged) {
+    *slot.lock().expect("staged update lock") = Some(staged);
 }
 
-/// One background download. Its bytes are kept only when the download
-/// succeeds. The flag is released when this returns, however it ended, so a
-/// failed download never blocks the next check.
-async fn stage_with<E, F>(
+/// One background fetch. Its result is kept only when the fetch succeeds. The
+/// flag is released when this returns, however it ended, so a failed fetch
+/// never blocks the next check.
+async fn stage_with<E>(
     _flight: InFlight<'_>,
     slot: &Mutex<Option<Staged>>,
-    version: String,
-    download: F,
-) where
-    F: Future<Output = Result<Vec<u8>, E>>,
-{
-    if let Ok(bytes) = download.await {
-        keep_staged(slot, version, bytes);
+    fetched: impl Future<Output = Result<Staged, E>>,
+) {
+    if let Ok(staged) = fetched.await {
+        keep_staged(slot, staged);
     }
 }
 
-/// Holds the background download's flag until dropped. It follows the same
-/// rule as `InstallSlot`, but a download ends by itself rather than by
-/// restarting the app, so the flag is given back however the download ends.
+/// Holds the background fetch's flag until dropped. It follows the same rule as
+/// `InstallSlot`, but a fetch ends by itself rather than by restarting the app,
+/// so the flag is given back however the fetch ends.
 struct InFlight<'a>(&'a AtomicBool);
 
 impl<'a> InFlight<'a> {
@@ -318,12 +537,20 @@ impl Drop for InstallSlot<'_> {
 #[cfg(test)]
 mod tests {
     use super::{
-        keep_staged, page_from, stage_with, staged_for, stop_then_install, take_staged, InFlight,
-        InstallSlot,
+        base_file_name, entry, file_entry, is_stale_base, keep_staged, page_from, stage_with,
+        staged_for, stop_then_install, take_staged, InFlight, InstallSlot, Staged, TARGET,
     };
     use serde_json::json;
     use std::sync::atomic::AtomicBool;
     use std::sync::Mutex;
+
+    fn staged(version: &str, bytes: Vec<u8>) -> Staged {
+        Staged {
+            version: version.into(),
+            bytes,
+            entry: None,
+        }
+    }
 
     #[test]
     fn a_second_install_is_refused_while_one_runs() {
@@ -428,28 +655,27 @@ mod tests {
     #[test]
     fn a_staged_installer_is_handed_out_once_and_only_for_its_version() {
         let slot = Mutex::new(None);
-        keep_staged(&slot, "0.5.1".into(), vec![1, 2, 3]);
+        keep_staged(&slot, staged("0.5.1", vec![1, 2, 3]));
         assert!(staged_for(&slot, "0.5.1"));
-        assert_eq!(
-            take_staged(&slot, "0.5.2"),
-            None,
+        assert!(
+            take_staged(&slot, "0.5.2").is_none(),
             "another version's installer is never handed out"
         );
         assert!(!staged_for(&slot, "0.5.1"), "the attempt empties the slot");
 
-        keep_staged(&slot, "0.5.1".into(), vec![1, 2, 3]);
-        assert_eq!(take_staged(&slot, "0.5.1"), Some(vec![1, 2, 3]));
-        assert_eq!(
-            take_staged(&slot, "0.5.1"),
-            None,
+        keep_staged(&slot, staged("0.5.1", vec![1, 2, 3]));
+        let taken = take_staged(&slot, "0.5.1").expect("the version asked for");
+        assert_eq!(taken.bytes, vec![1, 2, 3]);
+        assert!(
+            take_staged(&slot, "0.5.1").is_none(),
             "the bytes are handed out once"
         );
     }
 
     #[test]
-    fn a_second_background_download_is_refused_while_one_is_in_flight() {
+    fn a_second_background_fetch_is_refused_while_one_is_in_flight() {
         let flag = AtomicBool::new(false);
-        let first = InFlight::begin(&flag).expect("the first download starts");
+        let first = InFlight::begin(&flag).expect("the first fetch starts");
         assert!(
             InFlight::begin(&flag).is_none(),
             "a second check does not start another"
@@ -457,34 +683,79 @@ mod tests {
         drop(first);
         assert!(
             InFlight::begin(&flag).is_some(),
-            "a finished download frees the flag"
+            "a finished fetch frees the flag"
         );
     }
 
     #[test]
-    fn a_failed_background_download_clears_the_flag_and_stages_nothing() {
+    fn a_failed_background_fetch_clears_the_flag_and_stages_nothing() {
         let flag = AtomicBool::new(false);
         let slot = Mutex::new(None);
-        let flight = InFlight::begin(&flag).expect("the download starts");
-        tauri::async_runtime::block_on(stage_with(flight, &slot, "0.5.1".into(), async {
-            Err::<Vec<u8>, &str>("the connection dropped")
+        let flight = InFlight::begin(&flag).expect("the fetch starts");
+        tauri::async_runtime::block_on(stage_with(flight, &slot, async {
+            Err::<Staged, &str>("the connection dropped")
         }));
         assert!(
             !staged_for(&slot, "0.5.1"),
-            "nothing is kept from a failed download"
+            "nothing is kept from a failed fetch"
         );
         assert!(InFlight::begin(&flag).is_some(), "the next check may retry");
     }
 
     #[test]
-    fn a_finished_background_download_keeps_its_bytes_and_frees_the_flag() {
+    fn a_finished_background_fetch_keeps_its_bytes_and_frees_the_flag() {
         let flag = AtomicBool::new(false);
         let slot = Mutex::new(None);
-        let flight = InFlight::begin(&flag).expect("the download starts");
-        tauri::async_runtime::block_on(stage_with(flight, &slot, "0.5.1".into(), async {
-            Ok::<Vec<u8>, &str>(vec![7, 7])
+        let flight = InFlight::begin(&flag).expect("the fetch starts");
+        tauri::async_runtime::block_on(stage_with(flight, &slot, async {
+            Ok::<Staged, &str>(staged("0.5.1", vec![7, 7]))
         }));
         assert!(staged_for(&slot, "0.5.1"));
         assert!(InFlight::begin(&flag).is_some());
+    }
+
+    #[test]
+    fn a_file_of_the_delta_is_restored_under_the_update_it_belongs_to() {
+        let e = entry("0.5.1", "https://example.com/p.zst", " sig \n");
+        assert_eq!(e["version"], "0.5.1");
+        assert_eq!(
+            e["platforms"][TARGET],
+            json!({ "url": "https://example.com/p.zst", "signature": "sig" }),
+            "the signature is trimmed, and the entry is keyed for this system"
+        );
+        let file = json!({ "url": "https://example.com/p.zst", "signature": "sig" });
+        assert_eq!(file_entry("0.5.1", &file), Some(e));
+    }
+
+    #[test]
+    fn a_delta_file_without_a_url_or_signature_is_passed_over() {
+        assert_eq!(file_entry("0.5.1", &json!({ "url": "https://x" })), None);
+        assert_eq!(file_entry("0.5.1", &json!({ "signature": "s" })), None);
+        assert_eq!(
+            file_entry("0.5.1", &json!({ "url": 1, "signature": "s" })),
+            None
+        );
+    }
+
+    #[test]
+    fn a_base_is_kept_for_the_installed_version_only() {
+        let installed = "0.5.1-nightly.202611130215";
+        assert_eq!(
+            base_file_name(installed),
+            "base-0.5.1-nightly.202611130215.zst"
+        );
+        assert!(!is_stale_base(&base_file_name(installed), installed));
+        assert!(
+            is_stale_base(&base_file_name("0.5.0"), installed),
+            "an older base goes"
+        );
+        assert!(is_stale_base(
+            &format!("{}.part", base_file_name(installed)),
+            "0.5.0"
+        ));
+        assert!(
+            !is_stale_base("settings.json", installed),
+            "other files are not touched"
+        );
     }
 }

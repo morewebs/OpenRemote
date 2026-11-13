@@ -27,6 +27,9 @@ tauri = { version = "~2.12", features = ["tray-icon", "unstable"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-shell = "2"
 tokio = { version = "1", features = ["sync", "time"] }
+# The update packages: a patch from one release's installer to the next, and
+# the packed installer. The release tool uses the same codec (scripts/delta-tool).
+zstd = "0.13"
 # The browser module is desktop-only, and its pictures travel as data URLs on
 # every desktop: a page's icon on Windows, and the file the console saves into
 # Downloads everywhere. It lives here rather than under Windows because
