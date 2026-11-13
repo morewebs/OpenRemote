@@ -64,8 +64,9 @@ pub fn make_patch(base: &[u8], new: &[u8]) -> io::Result<Vec<u8>> {
 }
 
 /// Applies a patch to `base`, giving the new uncompressed installer. A patch
-/// applied to the wrong base gives other bytes, not an error: the caller checks
-/// the result against the signature, which is what makes it the right one.
+/// applied to the wrong base gives an error or other bytes, never the new
+/// installer; the caller checks the result against its signature, which is
+/// what makes it the right one.
 pub fn apply_patch(base: &[u8], patch: &[u8]) -> io::Result<Vec<u8>> {
     let mut decoder = zstd::stream::Decoder::with_dictionary(BufReader::new(patch), base)?;
     decoder.window_log_max(WINDOW_LOG)?;
