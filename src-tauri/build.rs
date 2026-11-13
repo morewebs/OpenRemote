@@ -47,6 +47,7 @@ const COMMANDS: &[&str] = &[
     "browser_download",
     "update_check",
     "update_install",
+    "update_open_page",
 ];
 
 fn main() {

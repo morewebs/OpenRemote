@@ -30,7 +30,7 @@ mod phone_browser;
 mod signin;
 #[cfg(desktop)]
 mod tray;
-// Updates: a newer signed release, checked once a day by the console and
+// Updates: a newer signed release, checked every two hours by the console and
 // installed on the user's click. Desktop only; a phone updates from its store.
 #[cfg(desktop)]
 mod updates;

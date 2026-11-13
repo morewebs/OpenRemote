@@ -302,7 +302,8 @@ pub fn run() {
             browser::browser_clear_data,
             browser::browser_share,
             crate::updates::update_check,
-            crate::updates::update_install
+            crate::updates::update_install,
+            crate::updates::update_open_page
         ])
         .setup(|app| {
             // Before the first paint: fit the window to the screen it is on
