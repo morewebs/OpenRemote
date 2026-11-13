@@ -43,7 +43,7 @@ the project's own map.
   `npm run tauri:dev` running in another terminal), plus `check-tab-acl.mjs`,
   the capability-scope guard CI runs. Run bare it prints
   `tab acl ok: 2 capability file(s), every non-phone one scoped to the main
-  webview, every declared command (41) granted` and exits 0, or exits 1 and
+  webview, every declared command (42) granted` and exits 0, or exits 1 and
   names the capability that widened; `--self-test` checks the check itself,
   and `--root` points it at another tree. Not build tooling; the one build
   script is `sync-daemon.mjs`.
@@ -221,16 +221,18 @@ an old process is still alive; find it before re-running).
   refuses a tag whose commit is not on the default branch's history, and
   `npm test` runs before the build. Then the sidecar is staged, `npx tauri
   build`, `gh release create` with the notes from `release-notes/<tag>.md`.
-  It also runs nightly (03:17 UTC)
-  to publish the rolling `nightly` prerelease from the default branch,
-  and a manual run stays build-only unless its channel input says
-  `nightly`. Every published release carries the six version-free asset
-  names (`OpenRemote-Setup-x64.exe`, `-Setup-x64.msi`, `-x86_64.AppImage`,
-  `-amd64.deb`, `-universal.dmg`, `-universal.apk`) so
-  `releases/latest/download/<name>` is the stable channel and
-  `releases/download/nightly/<name>` the nightly one; the Android APK is
-  the one that also ships under its versioned name beside them. `docs/release-channels.md`
-  has the details and the nightly's prerelease rule. The Linux job also uploads the
+  Nightly builds are their own workflow, `.github/workflows/nightly.yml`:
+  they run when CI passes on the default branch and publish the dated
+  `nightly-<stamp>` release and the rolling `nightly` pre-release. A manual
+  `release.yml` run stays build-only. Every stable release carries the six
+  version-free asset names (`OpenRemote-Setup-x64.exe`, `-Setup-x64.msi`,
+  `-x86_64.AppImage`, `-amd64.deb`, `-universal.dmg`, `-universal.apk`) so
+  `releases/latest/download/<name>` is the stable channel. The nightly
+  channel uses `OpenRemote-Nightly-Setup-x64.exe` and
+  `OpenRemote-Nightly-x86_64.AppImage` under `releases/download/nightly/`.
+  The Android APK is the one that also ships under its versioned name beside
+  them. `docs/release-channels.md` has the details and the nightly's
+  retention rule. The Linux job also uploads the
   machine installer's download: `openremote-daemon-linux-x86_64` plus
   `SHA256SUMS`, cross-built with zig pinned to glibc 2.28 (a runner
   build links a glibc old servers don't have; install.sh verifies the
@@ -238,13 +240,17 @@ an old process is still alive; find it before re-running).
   tag.
 - Installers are unsigned by decision; the release notes say so
   (SmartScreen, More info > Run anyway).
-- In-app updates are signed separately, with the updater's own key: the app
-  carries its public half (`plugins.updater.pubkey` in `tauri.conf.json`) and
-  looks once a day at `releases/latest/download/latest.json`; the private key
-  lives only in the repo's secrets. The platform jobs stage each `.sig` at the
-  release root and `publish` writes `latest.json`. Until the key exists the
-  app says updates aren't switched on. `docs/releasing-updates.md` is the
-  switch-on, and the path is not yet proven by a test release.
+- In-app updates are signed separately, per channel, each with its own updater
+  key. Each app carries its public half (`plugins.updater.pubkey`: in
+  `tauri.conf.json` for stable, in `tauri.nightly.conf.json` for nightly) and
+  looks at its own feed on launch and every 2 hours:
+  `releases/latest/download/latest.json` for stable,
+  `releases/download/nightly/latest.json` for nightly. The private keys live
+  only in the repo's secrets. Windows downloads the installer in the
+  background and installs it when the user confirms; Linux only links to the
+  release page. Until a channel's key exists, its app says updates aren't
+  switched on. `docs/releasing-updates.md` is the switch-on runbook, and the
+  path is not yet proven by a test release.
 - `npm/` is a second front door: a small launcher published to the registry as
   `@morewebs/openremote`. It holds no build, it reads `releases/latest` at run
   time, fetches the portable Windows pair the Windows job stages beside the six
@@ -277,7 +283,7 @@ Four commands check what this page claims, and a reader can run all of them
 from the repo root: `npm test` (prints a count; 1174 the last time this line
 was checked, and the run is the truth rather than this number), `node
 scripts/check-tab-acl.mjs` (says `tab acl ok: 2 capability file(s), every
-non-phone one scoped to the main webview, every declared command (41)
+non-phone one scoped to the main webview, every declared command (42)
 granted`), `cd daemon && cargo fmt --all --check` and
 `cd daemon && cargo clippy --all-targets --locked -- -D warnings` (both print
 nothing and exit 0 on the committed tree). The route and tier claims in "Cloud's
