@@ -980,6 +980,7 @@ mod tests {
                 "mcp__openremote__agents_read".into(),
                 "mcp__github__list_issues".into(),
             ],
+            state_dir: None,
         };
         let ids = |line: &Value| -> Vec<String> {
             line["mcp_servers"]

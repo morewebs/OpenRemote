@@ -197,6 +197,11 @@ pub struct SpawnOptions {
     /// (OpenRemote's browser tools that only read: claude
     /// `--allowedTools`). A harness that asks for nothing ignores it.
     pub allowed_tools: Vec<String>,
+    /// A folder in OpenRemote's own data, private to this user, where the
+    /// harness keeps state it would otherwise write into the workspace (pi's
+    /// transcripts). Each harness gets its own. None keeps a driver's older
+    /// place, which is how a caller with no data folder still runs.
+    pub state_dir: Option<PathBuf>,
 }
 
 /// One MCP server a session should start, from an enabled plugin on the

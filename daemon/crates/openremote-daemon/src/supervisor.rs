@@ -1075,6 +1075,13 @@ impl Supervisor {
             .map_err(store_error)
     }
 
+    /// Where `harness` keeps the state it would otherwise write into a
+    /// chat's workspace: a folder of its own inside the data folder, which
+    /// is this user's alone. The driver creates what it needs inside.
+    fn harness_state_dir(&self, harness: &str) -> std::path::PathBuf {
+        self.with_store(|s| s.dir().join("harness-state").join(harness))
+    }
+
     /// The folders of the plugins a chat in `workspace` gets that claude
     /// can load - each has Claude's own plugin.json (the install writes one
     /// where Claude parts arrived without it). A chat in a project gets
@@ -1668,6 +1675,7 @@ impl Supervisor {
             mcp_servers: self.mcp_servers_for(&id, &current.harness),
             plugin_dirs: self.plugin_dirs(current.workspace.as_deref()),
             allowed_tools: self.allowed_tools(&current.harness),
+            state_dir: Some(self.harness_state_dir(&current.harness)),
         };
         match backend.spawn(opts).await {
             Ok((driver, rx)) => {
@@ -2541,6 +2549,7 @@ impl Supervisor {
             mcp_servers: self.mcp_servers_for(id, &session.harness),
             plugin_dirs: self.plugin_dirs(session.workspace.as_deref()),
             allowed_tools: self.allowed_tools(&session.harness),
+            state_dir: Some(self.harness_state_dir(&session.harness)),
         };
         let (driver, rx) = match backend.spawn(opts).await {
             Ok(pair) => pair,

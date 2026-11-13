@@ -16,6 +16,12 @@ use std::io::{BufRead, Write};
 use serde_json::{Value, json};
 
 pub fn main_pi() {
+    // Where the driver told pi to keep the transcript, for the e2e to check
+    // it is not the workspace. Written into the cwd, which is the workspace.
+    let argv: Vec<String> = std::env::args().collect();
+    if let Some(pair) = argv.windows(2).find(|pair| pair[0] == "--session-dir") {
+        crate::record("fixture-pi-session-dir", &pair[1]);
+    }
     let mut server = PiFixture::from_env();
     server.run();
 }

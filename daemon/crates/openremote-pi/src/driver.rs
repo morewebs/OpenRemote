@@ -130,7 +130,7 @@ impl Driver {
                 return Err(DriverError::Spawn("pi CLI not found".to_string()));
             }
         };
-        let args = build_args(&opts)?;
+        let args = build_args(&opts, &session_dir(&opts)?)?;
         let mut command = Command::new(program);
         command
             .args(&prefix)
@@ -417,17 +417,123 @@ async fn discard_child(shared: &Arc<Shared>) {
     let _ = tokio::time::timeout(Duration::from_secs(5), child.wait()).await;
 }
 
+/// Where chats used to keep their transcripts: a folder inside the workspace,
+/// relative to the chat's cwd. A chat that already has its transcript there
+/// keeps resuming from it; new chats never write there.
+const WORKSPACE_SESSIONS: &str = ".pi-sessions";
+
+/// The folder pi keeps this chat's transcript in, as `--session-dir`.
+///
+/// New chats get one folder per workspace inside OpenRemote's data, so the
+/// user's repository never gains an untracked folder. One per workspace, not
+/// one for everything, because pi looks a resume id up among the sessions of
+/// the chat's own folder first and, finding it under another folder, asks on
+/// stdin whether to fork it, which in rpc mode reads the next command
+/// instead. A chat whose transcript is already in the workspace folder is
+/// resumed from there, untouched. With no data folder (`state_dir` None) the
+/// workspace folder is still used.
+fn session_dir(opts: &SpawnOptions) -> Result<std::path::PathBuf, DriverError> {
+    let legacy = std::path::PathBuf::from(WORKSPACE_SESSIONS);
+    let Some(state_dir) = &opts.state_dir else {
+        return Ok(legacy);
+    };
+    if let Some(resume) = &opts.resume {
+        if holds_session(&opts.cwd.join(WORKSPACE_SESSIONS), resume) {
+            return Ok(legacy);
+        }
+    }
+    let dir = state_dir.join("sessions").join(workspace_key(&opts.cwd));
+    openremote_core::fsx::create_private_dir(&dir).map_err(|e| {
+        DriverError::Spawn(format!(
+            "pi's transcript folder could not be made at {}: {e}",
+            dir.display()
+        ))
+    })?;
+    Ok(dir)
+}
+
+/// Whether `dir` holds pi's transcript for session `id`. Pi itself matches
+/// by the id in each file's first line (its session header), so this does
+/// too, reading no more of a file than that line.
+fn holds_session(dir: &std::path::Path, id: &str) -> bool {
+    use std::io::{BufRead, Read};
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+            return false;
+        }
+        let Ok(file) = std::fs::File::open(&path) else {
+            return false;
+        };
+        let mut first = String::new();
+        if std::io::BufReader::new(file.take(4096))
+            .read_line(&mut first)
+            .is_err()
+        {
+            return false;
+        }
+        serde_json::from_str::<Value>(&first)
+            .ok()
+            .is_some_and(|header| {
+                header.get("type") == Some(&json!("session"))
+                    && header.get("id").and_then(Value::as_str) == Some(id)
+            })
+    })
+}
+
+/// A folder name for a workspace: its own last name, kept readable, and a
+/// hash of the whole path, so two folders with the same name stay apart.
+/// The hash is FNV-1a, written out here because the name must not change
+/// between builds of the daemon (std's hasher promises no such thing), or a
+/// chat would stop finding its transcript after an update. Two paths that
+/// still met in one folder would be told apart by pi, which reads the
+/// working folder recorded in each transcript.
+fn workspace_key(cwd: &std::path::Path) -> String {
+    let path = cwd.to_string_lossy();
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in path.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    let name: String = cwd
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default()
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .take(40)
+        .collect();
+    let name = name.trim_matches(|c| c == '.' || c == '-');
+    if name.is_empty() {
+        format!("{hash:016x}")
+    } else {
+        format!("{name}-{hash:016x}")
+    }
+}
+
 /// The argv after the executable, in pi's rpc shape.
 ///
 /// Every word a chat chooses arrives as the value of a flag, so a value that is
 /// empty or dash-leading would change what the command means instead of naming
-/// one.
-fn build_args(opts: &SpawnOptions) -> Result<Vec<std::ffi::OsString>, DriverError> {
+/// one. The session folder is OpenRemote's own path, never a chat's word.
+fn build_args(
+    opts: &SpawnOptions,
+    session_dir: &std::path::Path,
+) -> Result<Vec<std::ffi::OsString>, DriverError> {
     let mut args: Vec<std::ffi::OsString> = vec![
         "--mode".into(),
         "rpc".into(),
         "--session-dir".into(),
-        ".pi-sessions".into(),
+        session_dir.as_os_str().to_owned(),
     ];
     if let Some(model) = &opts.model {
         push_word(&mut args, "--model", model)?;
@@ -887,6 +993,11 @@ mod tests {
         assert_eq!(response.pointer("/data/sessionId"), Some(&expected));
     }
 
+    /// A session folder for argv tests, which are about the words.
+    fn dir() -> &'static std::path::Path {
+        std::path::Path::new("/data/harness-state/pi/sessions/w-0")
+    }
+
     #[test]
     fn a_dash_leading_word_is_refused_before_it_reaches_argv() {
         let opts = SpawnOptions {
@@ -895,15 +1006,18 @@ mod tests {
             ..Default::default()
         };
         assert!(
-            build_args(&opts).is_err(),
+            build_args(&opts, dir()).is_err(),
             "a dash-leading model is refused, never passed"
         );
 
-        let argv = build_args(&SpawnOptions {
-            cwd: std::path::PathBuf::from("/w"),
-            model: Some("pi-model-1".into()),
-            ..Default::default()
-        })
+        let argv = build_args(
+            &SpawnOptions {
+                cwd: std::path::PathBuf::from("/w"),
+                model: Some("pi-model-1".into()),
+                ..Default::default()
+            },
+            dir(),
+        )
         .expect("argv builds");
         assert!(!argv.iter().any(|word| {
             word.to_string_lossy()
@@ -928,14 +1042,14 @@ mod tests {
                 resume: Some(bad.to_string()),
                 ..Default::default()
             };
-            assert!(build_args(&opts).is_err(), "{bad:?} must not pass");
+            assert!(build_args(&opts, dir()).is_err(), "{bad:?} must not pass");
         }
         let opts = SpawnOptions {
             cwd: std::path::PathBuf::from("/w"),
             resume: Some("01J8Z6Q4X9R7M2K3".into()),
             ..Default::default()
         };
-        let argv = build_args(&opts).expect("argv builds");
+        let argv = build_args(&opts, dir()).expect("argv builds");
         let at = argv
             .iter()
             .position(|word| *word == std::ffi::OsStr::new("--session"))
@@ -1166,5 +1280,148 @@ mod tests {
             prompt_frame(&with_picture)["images"],
             json!([{"type": "image", "data": "iVBORw0K", "mimeType": "image/png"}])
         );
+    }
+
+    /// A fresh folder under the system temp dir, removed when dropped. This
+    /// crate has no temp-dir dependency, and these tests need nothing more.
+    struct Scratch(std::path::PathBuf);
+
+    impl Scratch {
+        fn new(label: &str) -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static NEXT: AtomicU64 = AtomicU64::new(0);
+            let path = std::env::temp_dir().join(format!(
+                "openremote-pi-{label}-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::SeqCst)
+            ));
+            std::fs::create_dir_all(&path).expect("scratch folder");
+            Self(path)
+        }
+
+        fn path(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// A workspace and a data folder, each its own temp dir.
+    fn folders() -> (Scratch, Scratch) {
+        (Scratch::new("workspace"), Scratch::new("data"))
+    }
+
+    fn write_transcript(dir: &std::path::Path, file: &str, id: &str) {
+        std::fs::create_dir_all(dir).expect("session folder");
+        let header = json!({"type": "session", "version": 3, "id": id,
+                            "timestamp": "2026-11-01T10:00:00.000Z", "cwd": "/w"});
+        std::fs::write(
+            dir.join(file),
+            format!("{header}\n{{\"type\":\"message\"}}\n"),
+        )
+        .expect("transcript");
+    }
+
+    #[test]
+    fn a_new_chat_keeps_its_transcript_in_the_data_folder_not_the_workspace() {
+        let (workspace, data) = folders();
+        let opts = SpawnOptions {
+            cwd: workspace.path().to_path_buf(),
+            state_dir: Some(data.path().join("harness-state").join("pi")),
+            ..Default::default()
+        };
+        let dir = session_dir(&opts).expect("a folder");
+        assert!(dir.is_absolute(), "{dir:?}");
+        assert!(
+            dir.starts_with(data.path()),
+            "{dir:?} is in the data folder"
+        );
+        assert!(dir.is_dir(), "made before pi starts");
+        assert!(
+            !workspace.path().join(WORKSPACE_SESSIONS).exists(),
+            "the workspace gains nothing"
+        );
+        let argv = build_args(&opts, &dir).expect("argv builds");
+        let at = argv
+            .iter()
+            .position(|word| *word == std::ffi::OsStr::new("--session-dir"))
+            .expect("--session-dir rides argv");
+        assert_eq!(std::path::Path::new(&argv[at + 1]), dir);
+    }
+
+    #[test]
+    fn a_chat_whose_transcript_is_in_the_workspace_resumes_from_there() {
+        let (workspace, data) = folders();
+        let legacy = workspace.path().join(WORKSPACE_SESSIONS);
+        write_transcript(&legacy, "2026-11-01T10-00-00_abc123.jsonl", "abc123");
+        let state_dir = Some(data.path().join("pi"));
+        let resumed = SpawnOptions {
+            cwd: workspace.path().to_path_buf(),
+            resume: Some("abc123".into()),
+            state_dir: state_dir.clone(),
+            ..Default::default()
+        };
+        assert_eq!(
+            session_dir(&resumed).expect("a folder"),
+            std::path::PathBuf::from(WORKSPACE_SESSIONS),
+            "the old place, spelled as before, so pi finds the same file"
+        );
+        // Another chat in the same workspace, whose transcript is not there,
+        // moves on to the data folder.
+        let other = SpawnOptions {
+            resume: Some("def456".into()),
+            ..resumed.clone()
+        };
+        assert!(
+            session_dir(&other)
+                .expect("a folder")
+                .starts_with(data.path())
+        );
+        // A file whose name suggests the id but whose header names another
+        // session is not that session: pi matches by the header.
+        write_transcript(&legacy, "2026-11-01T10-00-00_def456.jsonl", "zzz999");
+        assert!(
+            session_dir(&other)
+                .expect("a folder")
+                .starts_with(data.path())
+        );
+    }
+
+    #[test]
+    fn with_no_data_folder_the_workspace_folder_is_still_used() {
+        let (workspace, _data) = folders();
+        let opts = SpawnOptions {
+            cwd: workspace.path().to_path_buf(),
+            ..Default::default()
+        };
+        assert_eq!(
+            session_dir(&opts).expect("a folder"),
+            std::path::PathBuf::from(WORKSPACE_SESSIONS)
+        );
+    }
+
+    #[test]
+    fn a_workspace_key_is_readable_and_never_changes_between_builds() {
+        // Pinned: a different key after an update would lose every chat's
+        // transcript. Change this only with a migration.
+        assert_eq!(
+            workspace_key(std::path::Path::new("/home/me/repo")),
+            "repo-4b7c312454f21bd5"
+        );
+        let a = workspace_key(std::path::Path::new("/work/one/app"));
+        let b = workspace_key(std::path::Path::new("/work/two/app"));
+        assert!(a.starts_with("app-") && b.starts_with("app-"));
+        assert_ne!(a, b, "two folders with one name stay apart");
+        let odd = workspace_key(std::path::Path::new("/w/my repo: v2 (copy)"));
+        assert!(
+            odd.chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')),
+            "{odd}"
+        );
+        assert!(!odd.starts_with('-'), "{odd}");
     }
 }

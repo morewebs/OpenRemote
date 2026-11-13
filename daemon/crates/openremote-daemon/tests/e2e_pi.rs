@@ -449,3 +449,35 @@ async fn a_pi_turn_that_uses_a_tool_ends_once_after_the_tool_and_the_answer() {
         dump(&events)
     );
 }
+
+#[tokio::test]
+async fn a_pi_chat_keeps_its_transcript_out_of_the_workspace() {
+    let (daemon, ws) = pi_daemon(Some("plain")).await;
+    let id = create_pi(&daemon, &ws).await;
+    call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "pi-where", "text": "hi"})),
+    )
+    .await;
+    until_count(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        "turn.completed",
+        1,
+    )
+    .await;
+    let recorded = std::fs::read_to_string(ws.path().join("fixture-pi-session-dir"))
+        .expect("the fixture recorded the folder it was given");
+    let dir = std::path::PathBuf::from(recorded.lines().next().unwrap_or_default());
+    assert!(
+        dir.is_absolute() && dir.starts_with(daemon.data_dir()),
+        "pi keeps the transcript in the daemon's data folder, not {dir:?}"
+    );
+    assert!(dir.is_dir(), "the folder exists before pi starts: {dir:?}");
+    assert!(
+        !ws.path().join(".pi-sessions").exists(),
+        "the workspace gains no folder of OpenRemote's"
+    );
+}
