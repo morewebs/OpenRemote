@@ -11,7 +11,8 @@
 //! Scenarios: `plain` completes the turn; `die` exits after init with no
 //! result (the process died mid-turn - the daemon maps it to a failed
 //! turn with a note); `slow` holds the turn open for a moment (the e2e
-//! fires a second prompt inside the Working window).
+//! fires a second prompt inside the Working window); `mcp-tool` makes one
+//! tool call and reports its result; `compact` marks a compaction first.
 
 use std::io::{BufRead, Write};
 
@@ -28,7 +29,7 @@ pub fn main_grok(argv: &[String]) {
         })
         .unwrap_or_else(|| "plain".to_string());
 
-    // One line per run (harness audit F8): the e2e counts these to prove a
+    // One line per run: the e2e counts these to prove a
     // refused prompt never spawned a second process - the transcript can
     // only show what a process said; this shows whether it existed.
     if let Ok(mut runs) = std::fs::OpenOptions::new()
@@ -107,18 +108,62 @@ pub fn main_grok(argv: &[String]) {
         stdout.flush().ok();
     };
 
+    // Grok's headless guide shows `slash_commands` on every init; the
+    // driver passes the names on so the composer can offer them.
     out(json!({
         "type": "system",
         "subtype": "init",
         "session_id": session_id,
         "model": model,
         "permissionMode": permission_mode,
-        "cwd": "."
+        "cwd": ".",
+        "slash_commands": ["review", "fixture-grok-only"]
     }));
     if scenario == "die" {
         // The process dies mid-turn: no assistant, no result.
         eprintln!("fixture-grok: dying mid-turn");
         return;
+    }
+    if scenario == "compact" {
+        // An automatic compaction, marked the way the guide says.
+        out(json!({
+            "type": "system",
+            "subtype": "compact_boundary",
+            "session_id": session_id
+        }));
+    }
+    if scenario == "mcp-tool" {
+        // One tool call and its result, in the shape of the guide's own
+        // example: a `tool_use` block in an assistant message, then a
+        // `user` message whose `tool_result` carries the same id.
+        out(json!({
+            "type": "assistant",
+            "session_id": session_id,
+            "parent_tool_use_id": null,
+            "message": {
+                "id": "msg_fixture_tool",
+                "role": "assistant",
+                "model": model,
+                "content": [
+                    {"type": "text", "text": "Let me read the file."},
+                    {"type": "tool_use", "id": "call_1", "name": "read_file",
+                     "input": {"path": "src/main.rs"}}
+                ],
+                "stop_reason": "tool_use"
+            }
+        }));
+        out(json!({
+            "type": "user",
+            "session_id": session_id,
+            "parent_tool_use_id": null,
+            "message": {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "call_1",
+                     "content": "fn main() {}", "is_error": false}
+                ]
+            }
+        }));
     }
     out(json!({
         "type": "assistant",

@@ -6,9 +6,12 @@
 //! `tool_execution_start|update|end`, `message_end`, `agent_settled`)
 //! and the dialogs (`extension_ui_request` - answered with
 //! `extension_ui_response` carrying `{value}` or `{cancelled}`). The
-//! turn boundary is `message_end` with the assistant message's
-//! `stopReason` - pi's own words (`stop`/`toolUse` → completed,
-//! `aborted` → interrupted, `error`/`length` → failed).
+//! turn boundary is `agent_settled`, Pi's word for "no more work without
+//! you": a run holds one assistant message per model call, so a
+//! `message_end` is never the end on its own. The last assistant
+//! message's `stopReason` gives the outcome in pi's own words
+//! (`stop`/`toolUse` → completed, `aborted` → interrupted,
+//! `error`/`length` → failed).
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -31,8 +34,7 @@ const CALL_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Host calls in flight: our call id (a string, pi's own shape) →
 /// response waiter. A call that gives up (failed write, timeout) removes
-/// its own entry, or the map pins dead senders for the session's life
-/// (harness audit F15).
+/// its own entry, or the map pins dead senders for the session's life.
 struct PendingCalls {
     map: StdMutex<HashMap<String, oneshot::Sender<Value>>>,
 }
@@ -49,8 +51,7 @@ impl PendingCalls {
     }
 
     /// Give up on a call: no response can arrive for a frame that never
-    /// left or a waiter that timed out, so the entry must not linger
-    /// (harness audit F15).
+    /// left or a waiter that timed out, so the entry must not linger.
     fn abandon(&self, id: &str) {
         self.map.lock().unwrap().remove(id);
     }
@@ -65,7 +66,7 @@ impl PendingCalls {
     }
 
     /// Wait one call out. The timeout abandons the call's entry before
-    /// returning the error, never after (harness audit F15).
+    /// returning the error, never after.
     async fn await_response(
         &self,
         id: &str,
@@ -184,7 +185,7 @@ impl Driver {
         // raced against the death of the CLI process: a CLI that
         // crashes at boot holds its exit status in the first second, and
         // failing there beats burning the 60s call timeout on an answer
-        // that can never come (harness audit F13).
+        // that can never come.
         let boot = async {
             let state = race_child_death(&shared, "get_state", driver.call("get_state", json!({})))
                 .await
@@ -245,10 +246,17 @@ impl Driver {
         Ok((driver, rx))
     }
 
-    /// Fire one prompt; pi's turn boundary arrives as `message_end`.
+    /// Fire one prompt; pi's turn boundary arrives as `agent_settled`.
+    ///
+    /// Every prompt says `streamingBehavior: "steer"`. Pi reads that field
+    /// only while a run is going, where it queues the message into the run
+    /// (delivered after the current tool calls, before the next model
+    /// call); an idle Pi starts a run as usual. Without it, a message
+    /// typed during a run is refused by Pi and never reaches the agent.
+    ///
+    /// Pictures ride as Pi's own `ImageContent` blocks.
     pub async fn send_prompt(&mut self, prompt: &Prompt) -> Result<(), DriverError> {
-        let text = prompt.text_only("Pi Agent")?;
-        self.write(json!({"type": "prompt", "message": text})).await
+        self.write(prompt_frame(prompt)).await
     }
 
     /// Pi's own rpc: `set_model` and `set_thinking_level` apply to the
@@ -299,7 +307,9 @@ impl Driver {
         self.write(frame).await
     }
 
-    /// SIGTERM, wait up to 5s, SIGKILL.
+    /// Kill the harness (its whole process tree on Windows), wait up to 5s
+    /// for it to be reaped, and kill again if it was not. No polite signal
+    /// goes first: nothing here sends one.
     pub async fn shutdown(&mut self) -> Result<Option<i32>, DriverError> {
         let child = self.shared.child.lock().await;
         kill_and_reap(child).await
@@ -322,7 +332,7 @@ impl Driver {
         }
         if let Err(e) = self.write(frame).await {
             // The write failed: no response can ever arrive for this id,
-            // so the waiter must not linger in the map (harness audit F15).
+            // so the waiter must not linger in the map.
             self.shared.pending.abandon(&id);
             return Err(e);
         }
@@ -534,8 +544,9 @@ async fn read_stdout(
     tx: mpsc::Sender<DriverEvent>,
     shared: Arc<Shared>,
 ) {
+    let mut run = Run::default();
     loop {
-        // Bounded, lossy reads (harness audit F11): an over-long line is
+        // Bounded, lossy reads: an over-long line is
         // dropped and invalid UTF-8 decodes lossily, never a fatal break.
         let line = match reader.next_line().await {
             Ok(None) => break,
@@ -555,122 +566,258 @@ async fn read_stdout(
         let Ok(frame) = serde_json::from_str::<Value>(&line) else {
             continue;
         };
-        let frame_type = frame
-            .get("type")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
-        let event = match frame_type {
-            "response" => {
-                if let Some(id) = frame.get("id").and_then(Value::as_str) {
-                    shared.pending.deliver(id, frame.clone());
-                }
-                // A failed prompt response surfaces as a note.
-                if frame.get("command") == Some(&json!("prompt"))
-                    && frame.get("success") != Some(&json!(true))
-                {
-                    Some(DriverEvent::Stderr {
-                        line: format!(
-                            "pi rejected the prompt: {}",
-                            frame
-                                .get("error")
-                                .and_then(Value::as_str)
-                                .unwrap_or("no message")
-                        ),
-                    })
-                } else {
-                    None
-                }
+        if frame.get("type") == Some(&json!("response")) {
+            if let Some(id) = frame.get("id").and_then(Value::as_str) {
+                shared.pending.deliver(id, frame.clone());
             }
-            "message_update" => {
-                let delta_type = frame
-                    .pointer("/assistantMessageEvent/type")
-                    .and_then(Value::as_str);
-                if delta_type == Some("text_delta") {
-                    frame
-                        .pointer("/assistantMessageEvent/delta")
-                        .and_then(Value::as_str)
-                        .map(|text| DriverEvent::TextDelta {
-                            text: text.to_string(),
-                        })
-                } else {
-                    None
-                }
-            }
-            "message_end" => {
-                if frame.pointer("/message/role") == Some(&json!("assistant")) {
-                    let stop_reason = frame
-                        .pointer("/message/stopReason")
-                        .and_then(Value::as_str)
-                        .unwrap_or("error");
-                    let is_error = stop_reason == "error" || stop_reason == "length";
-                    Some(DriverEvent::TurnCompleted {
-                        subtype: stop_reason.to_string(),
-                        coarse: coarse_outcome(stop_reason),
-                        is_error,
-                        error_message: frame
-                            .pointer("/message/errorMessage")
-                            .and_then(Value::as_str)
-                            .map(String::from),
-                    })
-                } else {
-                    None
-                }
-            }
-            "tool_execution_start" => Some(DriverEvent::ToolStarted {
-                tool_use_id: frame
-                    .get("toolCallId")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string(),
-                name: frame
-                    .get("toolName")
-                    .and_then(Value::as_str)
-                    .unwrap_or("tool")
-                    .to_string(),
-                input: frame.clone(),
-            }),
-            "tool_execution_end" => Some(DriverEvent::ToolResult {
-                tool_use_id: frame
-                    .get("toolCallId")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string(),
-                name: frame
-                    .get("toolName")
-                    .and_then(Value::as_str)
-                    .unwrap_or("tool")
-                    .to_string(),
-                text: frame
-                    .get("result")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string(),
-                is_error: false,
-                images: Vec::new(),
-            }),
-            "extension_ui_request" => {
-                let id = frame
-                    .get("id")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string();
-                Some(DriverEvent::ApprovalRequested {
-                    approval: ApprovalRequest {
-                        harness_ref: id,
-                        spec: dialog_spec(&frame),
-                        request: frame.clone(),
-                    },
-                })
-            }
-            _ => None, // agent_settled, thinking deltas, future types
-        };
-        if let Some(event) = event {
+        }
+        for event in run.on_frame(&frame) {
             if tx.send(event).await.is_err() {
                 return;
             }
         }
     }
     let _ = tx.send(DriverEvent::StdoutClosed).await;
+}
+
+/// What one run has said so far, kept until Pi settles. Pi's run can hold
+/// several assistant messages (one per model call, with tool calls between
+/// them), so no single message is the end of the turn: `agent_settled` is,
+/// Pi's own word for "nothing more will happen without you".
+#[derive(Default)]
+struct Run {
+    /// Between `agent_start` and `agent_settled`.
+    running: bool,
+    /// The last assistant message's stop reason and error, in Pi's words.
+    stop_reason: Option<String>,
+    error_message: Option<String>,
+    /// The run's spend, summed over its assistant messages.
+    cost_usd: f64,
+}
+
+impl Run {
+    /// The events one stdout frame means. Responses to our own calls are
+    /// routed to their waiters by the reader; this sees them too, for the
+    /// prompt's, which can decide a turn.
+    fn on_frame(&mut self, frame: &Value) -> Vec<DriverEvent> {
+        let frame_type = frame
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        match frame_type {
+            "response" if frame.get("command") == Some(&json!("prompt")) => {
+                self.on_prompt_response(frame)
+            }
+            "agent_start" => {
+                self.running = true;
+                Vec::new()
+            }
+            "message_update" => {
+                let delta = frame
+                    .pointer("/assistantMessageEvent/delta")
+                    .and_then(Value::as_str)
+                    .map(String::from);
+                match (
+                    frame
+                        .pointer("/assistantMessageEvent/type")
+                        .and_then(Value::as_str),
+                    delta,
+                ) {
+                    (Some("text_delta"), Some(text)) => vec![DriverEvent::TextDelta { text }],
+                    (Some("thinking_delta"), Some(text)) => {
+                        vec![DriverEvent::ReasoningDelta { text }]
+                    }
+                    _ => Vec::new(),
+                }
+            }
+            "message_end" if frame.pointer("/message/role") == Some(&json!("assistant")) => {
+                self.on_assistant_end(frame)
+            }
+            "agent_settled" => self.settle(frame.get("aborted") == Some(&json!(true))),
+            "compaction_end" if frame.get("result").is_some_and(|r| !r.is_null()) => {
+                vec![DriverEvent::Compacted]
+            }
+            "tool_execution_start" => vec![DriverEvent::ToolStarted {
+                tool_use_id: tool_call_id(frame),
+                name: tool_name(frame),
+                // Pi's `args` are the call's input; a frame without them is
+                // passed whole, as it always was.
+                input: frame.get("args").cloned().unwrap_or_else(|| frame.clone()),
+            }],
+            "tool_execution_end" => {
+                let result = frame.get("result");
+                // Pi's result is a tool result body: `content` blocks of
+                // text and pictures. A bare string is read as the text.
+                let blocks = result
+                    .and_then(|r| r.get("content"))
+                    .and_then(Value::as_array)
+                    .map(Vec::as_slice)
+                    .unwrap_or_default();
+                let text = match result.and_then(Value::as_str) {
+                    Some(text) => text.to_string(),
+                    None => openremote_harness::anthropic_wire::content_text(blocks),
+                };
+                vec![DriverEvent::ToolResult {
+                    tool_use_id: tool_call_id(frame),
+                    name: tool_name(frame),
+                    text,
+                    is_error: frame.get("isError") == Some(&json!(true)),
+                    images: openremote_harness::anthropic_wire::content_images(blocks),
+                }]
+            }
+            "extension_ui_request" => {
+                let id = frame
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                vec![DriverEvent::ApprovalRequested {
+                    approval: ApprovalRequest {
+                        harness_ref: id,
+                        spec: dialog_spec(frame),
+                        request: frame.clone(),
+                    },
+                }]
+            }
+            _ => Vec::new(), // turn and queue bookkeeping, future types
+        }
+    }
+
+    /// A prompt that starts no run ends its turn here, since no
+    /// `agent_settled` will follow: one an extension handled outright, and
+    /// one Pi refused while idle (no model, a compaction in progress). A
+    /// refusal during a run is a steer that did not land; the run's turn
+    /// goes on, and the refusal is said as a note.
+    fn on_prompt_response(&mut self, frame: &Value) -> Vec<DriverEvent> {
+        if frame.get("success") == Some(&json!(true)) {
+            if frame.pointer("/data/disposition") == Some(&json!("handled")) && !self.running {
+                return vec![DriverEvent::TurnCompleted {
+                    subtype: "handled".into(),
+                    coarse: TurnOutcome::Completed,
+                    is_error: false,
+                    error_message: None,
+                }];
+            }
+            return Vec::new();
+        }
+        let why = frame
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("no message")
+            .to_string();
+        let note = DriverEvent::Stderr {
+            line: format!("pi rejected the prompt: {why}"),
+        };
+        if self.running {
+            vec![note]
+        } else {
+            vec![
+                note,
+                DriverEvent::TurnCompleted {
+                    subtype: "rejected".into(),
+                    coarse: TurnOutcome::Failed,
+                    is_error: true,
+                    error_message: Some(format!("Pi did not take the message: {why}")),
+                },
+            ]
+        }
+    }
+
+    /// One model call finished. Its usage is the context the model saw on
+    /// that call (Pi's input buckets together), and its cost adds to the
+    /// run's; the turn itself goes on until Pi settles.
+    fn on_assistant_end(&mut self, frame: &Value) -> Vec<DriverEvent> {
+        self.stop_reason = frame
+            .pointer("/message/stopReason")
+            .and_then(Value::as_str)
+            .map(String::from);
+        self.error_message = frame
+            .pointer("/message/errorMessage")
+            .and_then(Value::as_str)
+            .map(String::from);
+        let usage = frame.pointer("/message/usage");
+        if let Some(cost) = usage
+            .and_then(|u| u.pointer("/cost/total"))
+            .and_then(Value::as_f64)
+        {
+            self.cost_usd += cost;
+        }
+        let field = |name: &str| {
+            usage
+                .and_then(|u| u.get(name))
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+        };
+        let used = field("input") + field("cacheRead") + field("cacheWrite");
+        if used > 0 {
+            vec![DriverEvent::ContextUsed { used, window: None }]
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Pi will not continue on its own: the turn ends with the last
+    /// assistant message's outcome, and the run's spend when it had one.
+    fn settle(&mut self, aborted: bool) -> Vec<DriverEvent> {
+        let run = std::mem::take(self);
+        let mut events = Vec::new();
+        // An all-zero spend is a provider that reports none, not a free
+        // turn; it is left unsaid.
+        if run.cost_usd > 0.0 {
+            events.push(DriverEvent::TurnCost {
+                cost_usd: run.cost_usd,
+            });
+        }
+        let stop_reason = if aborted {
+            "aborted".to_string()
+        } else {
+            run.stop_reason.unwrap_or_else(|| "stop".to_string())
+        };
+        let coarse = coarse_outcome(&stop_reason);
+        events.push(DriverEvent::TurnCompleted {
+            is_error: stop_reason == "error" || stop_reason == "length",
+            subtype: stop_reason,
+            coarse,
+            error_message: run.error_message,
+        });
+        events
+    }
+}
+
+/// One message as pi's rpc `prompt`: the words, the steer behavior that
+/// lets it land in a running turn, and the pictures as `ImageContent`.
+fn prompt_frame(prompt: &Prompt) -> Value {
+    let mut frame = json!({
+        "type": "prompt",
+        "message": prompt.text,
+        "streamingBehavior": "steer",
+    });
+    if !prompt.images.is_empty() {
+        frame["images"] = Value::Array(
+            prompt
+                .images
+                .iter()
+                .map(|image| json!({"type": "image", "data": image.data, "mimeType": image.mime}))
+                .collect(),
+        );
+    }
+    frame
+}
+
+fn tool_call_id(frame: &Value) -> String {
+    frame
+        .get("toolCallId")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string()
+}
+
+fn tool_name(frame: &Value) -> String {
+    frame
+        .get("toolName")
+        .and_then(Value::as_str)
+        .unwrap_or("tool")
+        .to_string()
 }
 
 async fn read_stderr(
@@ -794,5 +941,230 @@ mod tests {
             .position(|word| *word == std::ffi::OsStr::new("--session"))
             .expect("--session rides argv for a real id");
         assert_eq!(argv[at + 1].to_string_lossy(), "01J8Z6Q4X9R7M2K3");
+    }
+
+    /// The kinds a list of events names, in order, for compact asserts.
+    fn kinds(events: &[DriverEvent]) -> Vec<&'static str> {
+        events
+            .iter()
+            .map(|event| match event {
+                DriverEvent::TextDelta { .. } => "text_delta",
+                DriverEvent::ReasoningDelta { .. } => "reasoning_delta",
+                DriverEvent::ToolStarted { .. } => "tool_started",
+                DriverEvent::ToolResult { .. } => "tool_result",
+                DriverEvent::ContextUsed { .. } => "context_used",
+                DriverEvent::TurnCost { .. } => "turn_cost",
+                DriverEvent::TurnCompleted { .. } => "turn_completed",
+                DriverEvent::Compacted => "compacted",
+                DriverEvent::Stderr { .. } => "stderr",
+                _ => "other",
+            })
+            .collect()
+    }
+
+    fn assistant_end(stop_reason: &str, input: u64, cost: f64) -> Value {
+        json!({
+            "type": "message_end",
+            "message": {
+                "role": "assistant",
+                "stopReason": stop_reason,
+                "usage": {
+                    "input": input, "output": 20, "cacheRead": 100, "cacheWrite": 0,
+                    "totalTokens": input + 120,
+                    "cost": {"input": 0.0, "output": 0.0, "cacheRead": 0.0,
+                             "cacheWrite": 0.0, "total": cost}
+                }
+            }
+        })
+    }
+
+    #[test]
+    fn a_run_with_tools_ends_when_pi_settles_not_at_the_first_message() {
+        // The documented shape of a run that uses a tool: one assistant
+        // message asks for it (`toolUse`), the tool runs, a second message
+        // answers. The first `message_end` is the middle of the turn.
+        let mut run = Run::default();
+        let mut events = Vec::new();
+        for frame in [
+            json!({"type": "agent_start"}),
+            assistant_end("toolUse", 1000, 0.01),
+            json!({"type": "tool_execution_start", "toolCallId": "call_1",
+                   "toolName": "bash", "args": {"command": "ls"}}),
+            json!({"type": "tool_execution_end", "toolCallId": "call_1",
+                   "toolName": "bash", "isError": false,
+                   "result": {"content": [{"type": "text", "text": "Cargo.toml"}],
+                              "details": {}}}),
+            assistant_end("stop", 1200, 0.02),
+            json!({"type": "agent_end", "messages": [], "willRetry": false}),
+            json!({"type": "agent_settled", "aborted": false}),
+        ] {
+            events.extend(run.on_frame(&frame));
+        }
+        assert_eq!(
+            kinds(&events),
+            [
+                "context_used",
+                "tool_started",
+                "tool_result",
+                "context_used",
+                "turn_cost",
+                "turn_completed"
+            ]
+        );
+        let DriverEvent::ToolStarted { input, name, .. } = &events[1] else {
+            unreachable!()
+        };
+        assert_eq!(name, "bash");
+        assert_eq!(input, &json!({"command": "ls"}), "the call's own args");
+        let DriverEvent::ToolResult {
+            text,
+            is_error,
+            tool_use_id,
+            ..
+        } = &events[2]
+        else {
+            unreachable!()
+        };
+        assert_eq!(text, "Cargo.toml", "the result's content blocks are read");
+        assert!(!is_error);
+        assert_eq!(tool_use_id, "call_1");
+        let DriverEvent::ContextUsed { used, .. } = &events[3] else {
+            unreachable!()
+        };
+        assert_eq!(*used, 1300, "input plus cache, as the model saw it");
+        let DriverEvent::TurnCost { cost_usd } = &events[4] else {
+            unreachable!()
+        };
+        assert!(
+            (cost_usd - 0.03).abs() < 1e-9,
+            "the run's calls summed: {cost_usd}"
+        );
+        let DriverEvent::TurnCompleted {
+            coarse, subtype, ..
+        } = &events[5]
+        else {
+            unreachable!()
+        };
+        assert_eq!(*coarse, TurnOutcome::Completed);
+        assert_eq!(subtype, "stop");
+    }
+
+    #[test]
+    fn a_failed_tool_says_so() {
+        let mut run = Run::default();
+        let events = run.on_frame(&json!({
+            "type": "tool_execution_end", "toolCallId": "c", "toolName": "read",
+            "isError": true,
+            "result": {"content": [{"type": "text", "text": "no such file"}]}
+        }));
+        let [DriverEvent::ToolResult { is_error, text, .. }] = events.as_slice() else {
+            panic!("one tool result: {events:?}")
+        };
+        assert!(*is_error);
+        assert_eq!(text, "no such file");
+    }
+
+    #[test]
+    fn an_aborted_run_is_interrupted_and_an_errored_one_failed() {
+        let mut run = Run::default();
+        run.on_frame(&json!({"type": "agent_start"}));
+        run.on_frame(&assistant_end("toolUse", 10, 0.0));
+        let events = run.on_frame(&json!({"type": "agent_settled", "aborted": true}));
+        let [DriverEvent::TurnCompleted { coarse, .. }] = events.as_slice() else {
+            panic!("a free run states no cost: {events:?}")
+        };
+        assert_eq!(*coarse, TurnOutcome::Interrupted);
+
+        // Settling resets the run: the next one's outcome is its own.
+        run.on_frame(&json!({"type": "agent_start"}));
+        run.on_frame(&json!({"type": "message_end", "message": {
+            "role": "assistant", "stopReason": "error", "errorMessage": "529 overloaded"}}));
+        let events = run.on_frame(&json!({"type": "agent_settled", "aborted": false}));
+        let [
+            DriverEvent::TurnCompleted {
+                coarse,
+                is_error,
+                error_message,
+                ..
+            },
+        ] = events.as_slice()
+        else {
+            panic!("{events:?}")
+        };
+        assert_eq!(*coarse, TurnOutcome::Failed);
+        assert!(*is_error);
+        assert_eq!(error_message.as_deref(), Some("529 overloaded"));
+    }
+
+    #[test]
+    fn a_prompt_that_starts_no_run_ends_its_turn_and_a_refused_steer_does_not() {
+        // Refused while idle: no run will settle, so the turn ends here.
+        let mut run = Run::default();
+        let refused = json!({"type": "response", "command": "prompt", "success": false,
+                             "error": "No model selected"});
+        let events = run.on_frame(&refused);
+        assert_eq!(kinds(&events), ["stderr", "turn_completed"]);
+        let DriverEvent::TurnCompleted { coarse, .. } = &events[1] else {
+            unreachable!()
+        };
+        assert_eq!(*coarse, TurnOutcome::Failed);
+
+        // Handled by an extension while idle: done, nothing failed.
+        let handled = json!({"type": "response", "command": "prompt", "success": true,
+                             "data": {"disposition": "handled"}});
+        let events = run.on_frame(&handled);
+        let [DriverEvent::TurnCompleted { coarse, .. }] = events.as_slice() else {
+            panic!("{events:?}")
+        };
+        assert_eq!(*coarse, TurnOutcome::Completed);
+
+        // During a run, a refusal is a steer that did not land: a note, and
+        // the run's own turn goes on.
+        run.on_frame(&json!({"type": "agent_start"}));
+        assert_eq!(kinds(&run.on_frame(&refused)), ["stderr"]);
+        assert!(run.on_frame(&handled).is_empty());
+        let started = json!({"type": "response", "command": "prompt", "success": true,
+                             "data": {"disposition": "queued"}});
+        assert!(run.on_frame(&started).is_empty());
+    }
+
+    #[test]
+    fn a_finished_compaction_is_marked_and_a_failed_one_is_not() {
+        let mut run = Run::default();
+        let done = json!({"type": "compaction_end", "reason": "threshold",
+                          "result": {"summary": "s", "tokensBefore": 10},
+                          "aborted": false, "willRetry": false});
+        assert_eq!(kinds(&run.on_frame(&done)), ["compacted"]);
+        let failed = json!({"type": "compaction_end", "reason": "threshold",
+                            "aborted": false, "errorMessage": "terminated"});
+        assert!(run.on_frame(&failed).is_empty());
+    }
+
+    #[test]
+    fn thinking_streams_beside_the_reply() {
+        let mut run = Run::default();
+        let events = run.on_frame(&json!({"type": "message_update",
+            "assistantMessageEvent": {"type": "thinking_delta", "contentIndex": 0,
+                                      "delta": "hmm"}}));
+        assert_eq!(kinds(&events), ["reasoning_delta"]);
+    }
+
+    #[test]
+    fn every_prompt_can_steer_and_carries_its_pictures() {
+        let plain = prompt_frame(&Prompt::text("hi"));
+        assert_eq!(
+            plain,
+            json!({"type": "prompt", "message": "hi", "streamingBehavior": "steer"})
+        );
+        let mut with_picture = Prompt::text("what is this");
+        with_picture.images.push(openremote_harness::Image {
+            mime: "image/png".into(),
+            data: "iVBORw0K".into(),
+            path: None,
+        });
+        assert_eq!(
+            prompt_frame(&with_picture)["images"],
+            json!([{"type": "image", "data": "iVBORw0K", "mimeType": "image/png"}])
+        );
     }
 }

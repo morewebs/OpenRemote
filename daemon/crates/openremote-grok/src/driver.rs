@@ -353,8 +353,12 @@ async fn read_prompt(
 ) {
     let _prompt_file = PromptFile(Some(prompt_file));
     let mut saw_result = false;
+    // Tool names by call id, for the results. One process runs one prompt,
+    // so a call and its result always meet in the same reader.
+    let mut tool_names: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
     loop {
-        // Bounded, lossy reads (harness audit F11): an over-long line is
+        // Bounded, lossy reads: an over-long line is
         // dropped and invalid UTF-8 decodes lossily, never a fatal break.
         let line = match reader.next_line().await {
             Ok(None) | Err(_) => break,
@@ -371,7 +375,7 @@ async fn read_prompt(
                 session_id,
                 model,
                 permission_mode,
-                ..
+                slash_commands,
             } => {
                 // The first init names the conversation - that fact rides
                 // to the supervisor. Every init refreshes the resume ref
@@ -388,6 +392,20 @@ async fn read_prompt(
                         })
                         .await;
                 }
+                // Grok lists the commands this session can run on every
+                // init, the same field claude uses. Grok has no way to ask
+                // for that list before a chat runs, so this frame is where
+                // the composer's / menu learns it.
+                if !slash_commands.is_empty()
+                    && tx
+                        .send(DriverEvent::CommandsListed {
+                            names: slash_commands,
+                        })
+                        .await
+                        .is_err()
+                {
+                    return;
+                }
             }
             wire::Frame::Assistant { content, .. } => {
                 for text in wire::block_texts(&content) {
@@ -402,18 +420,54 @@ async fn read_prompt(
                         return;
                     }
                 }
+                // Each call the model made, with Grok's own tool name and
+                // id. The result arrives later in a `user` frame carrying
+                // the same id, which is how the card finds its call.
+                for (tool_use_id, name, input) in wire::tool_use_blocks(&content) {
+                    tool_names.insert(tool_use_id.clone(), name.clone());
+                    if tx
+                        .send(DriverEvent::ToolStarted {
+                            tool_use_id,
+                            name,
+                            input,
+                        })
+                        .await
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
             }
             wire::Frame::UserToolResults { content } => {
                 for block in wire::tool_result_blocks(&content) {
-                    let _ = tx
+                    // A result whose call this process never reported keeps
+                    // an empty name rather than a guessed one: a file edit
+                    // labelled as a shell command misleads more than a card
+                    // with no label.
+                    let name = tool_names
+                        .get(&block.tool_use_id)
+                        .cloned()
+                        .unwrap_or_default();
+                    if tx
                         .send(DriverEvent::ToolResult {
-                            tool_use_id: String::new(),
-                            name: "commandExecution".into(),
+                            tool_use_id: block.tool_use_id,
+                            name,
                             text: block.text,
                             is_error: block.is_error,
                             images: block.images,
                         })
-                        .await;
+                        .await
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
+            }
+            wire::Frame::CompactBoundary => {
+                // Grok marks an automatic compaction with the same system
+                // frame claude uses.
+                if tx.send(DriverEvent::Compacted).await.is_err() {
+                    return;
                 }
             }
             wire::Frame::TextDelta { text } => {

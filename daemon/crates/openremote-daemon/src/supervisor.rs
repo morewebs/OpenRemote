@@ -334,7 +334,7 @@ struct SessionEntry {
     done: Option<oneshot::Sender<Session>>,
 }
 
-// ---- stop's drain window (harness audit F12) ----
+// ---- stop's drain window ----
 //
 // After the kill, the pump may still hold a backlog of the turn's tail -
 // up to 256 buffered events, each an append_batch (a log write plus a
@@ -358,7 +358,7 @@ const STOP_DRAIN_BOUND: Duration = Duration::from_secs(10);
 /// it, and the settle must not wedge behind it.
 const STOP_SETTLE_LOCK: Duration = Duration::from_secs(2);
 
-// ---- the per-session stderr ring (harness audit F14) ----
+// ---- the per-session stderr ring ----
 //
 // A harness that dies with its explanation on stderr ("No conversation
 // found") used to leave that line only in the daemon's own log; the
@@ -412,7 +412,7 @@ pub struct Supervisor {
     /// own idempotency - hook senders bring no request_id, so the body
     /// they post is all the identity a delivery has.
     webhooks: StdMutex<WebhookMemory>,
-    /// Each live session's recent harness stderr (harness audit F14):
+    /// Each live session's recent harness stderr:
     /// the bounded ring a session's death quotes into its Failed reason.
     /// Entries ride with the session map entry - created at spawn, gone
     /// at removal - so the map never outlives the session it explains.
@@ -426,6 +426,10 @@ pub struct Supervisor {
     /// Each harness's command list per workspace, as the composer's /
     /// menu shows it (composer.rs).
     command_cache: StdMutex<HashMap<(String, std::path::PathBuf), composer::CachedCommands>>,
+    /// The command names a running chat last listed, per harness and
+    /// workspace. They stand in when the harness has no way to list its
+    /// commands before a chat runs (grok names them only on a chat's init).
+    listed_commands: StdMutex<HashMap<(String, std::path::PathBuf), Vec<String>>>,
     /// The read-a-chat MCP server (OpenRemote Controls' first tool): this
     /// binary in its `mcp-chat` mode, told the API's port. Unset, chats
     /// run without it (the e2e suites without a daemon binary).
@@ -512,6 +516,7 @@ impl Supervisor {
             steer_next: StdMutex::new(HashMap::new()),
             this_machine,
             command_cache: StdMutex::new(HashMap::new()),
+            listed_commands: StdMutex::new(HashMap::new()),
             controls: std::sync::OnceLock::new(),
             prompt_note: std::sync::OnceLock::new(),
             plugin_changed: std::sync::OnceLock::new(),
@@ -1681,7 +1686,7 @@ impl Supervisor {
             }
             Err(e) => {
                 let reason = e.to_string();
-                // Lazy eviction (harness audit F18): a spawn that failed
+                // Lazy eviction: a spawn that failed
                 // while the resolved files are gone means the harness was
                 // uninstalled since the probe - stop offering it until a
                 // re-probe instead of failing every create with a raw OS
@@ -1826,7 +1831,7 @@ impl Supervisor {
         origin: Option<&Origin>,
         images: &[ImageRef],
     ) -> Result<(), SupervisorError> {
-        // The Working gate (harness audit F8): a driver that runs one
+        // The Working gate: a driver that runs one
         // process per prompt cannot take a second while a turn is open -
         // `send_prompt` would spawn a second process, replace the first
         // Child un-killed, and interleave two turns' frames under the
@@ -2261,7 +2266,7 @@ impl Supervisor {
         // live process at all (print-mode harnesses between prompts) or a
         // drain wedged past all bounds - settle what remains and remove
         // the entry unconditionally (a stale entry keeps a dead session
-        // answerable - harness audit F10).
+        // answerable).
         let drained = self.drain_pump_quiescence(id, rx).await;
         if let Some(session) = drained {
             return Ok(session);
@@ -2319,7 +2324,7 @@ impl Supervisor {
         }
     }
 
-    /// The stop fallback's settle (harness audit F12): append a boundary
+    /// The stop fallback's settle: append a boundary
     /// for the turn the transcript left open, settle the status, retire
     /// the decisions - the same events the pump's own StdoutClosed path
     /// writes, the single-writer rule bent only because the pump just
@@ -2404,7 +2409,7 @@ impl Supervisor {
         boundary.into_iter().collect()
     }
 
-    /// Lazy eviction's gate (harness audit F18): only a spawn whose io
+    /// Lazy eviction's gate: only a spawn whose io
     /// kind is NotFound means the resolved files are gone - every other
     /// failure (a locked file, a permissions blip, a protocol timeout)
     /// keeps the harness offered. The look is cheap (metadata, never a
@@ -2441,7 +2446,7 @@ impl Supervisor {
         }
     }
 
-    /// The daemon is exiting (harness audit F3): sweep every live session
+    /// The daemon is exiting: sweep every live session
     /// through the same bounded drain stop uses, so harness children do
     /// not outlive the daemon (opencode serve children have null stdin
     /// and never see EOF). A few seconds per session, the whole sweep
@@ -2540,7 +2545,7 @@ impl Supervisor {
         let (driver, rx) = match backend.spawn(opts).await {
             Ok(pair) => pair,
             Err(e) => {
-                // Lazy eviction (harness audit F18): a resume that fails
+                // Lazy eviction: a resume that fails
                 // while the resolved files are gone is the same uninstall
                 // a create would see.
                 self.evict_harness_if_gone(&session.harness);
@@ -3115,7 +3120,7 @@ impl Supervisor {
                     tokio::spawn(async move { supervisor.team_turn_ended(&id, end).await });
                 }
             }
-            // The channel ended (harness audit F10): the driver dropped
+            // The channel ended: the driver dropped
             // its senders. With StdoutClosed applied, the pump_one above
             // settled and removed the entry; without it (a driver that
             // ended its channel without reporting - an opencode watcher
@@ -3338,7 +3343,7 @@ impl Supervisor {
                 )?;
             }
             DriverEvent::Stderr { line } => {
-                // The bounded ring (harness audit F14): the harness's last
+                // The bounded ring: the harness's last
                 // words must outlive the eprintln - the session's death
                 // quotes them into its Failed reason.
                 let mut bounded = line.clone();
@@ -3380,7 +3385,7 @@ impl Supervisor {
     /// status itself only lands while the session is still alive: the
     /// failed-write arm of `prompt` can settle the session first, and a
     /// terminal status is a fact, not an opinion to state twice. The
-    /// stderr ring's tail (harness audit F14) splices into the Failed
+    /// stderr ring's tail splices into the Failed
     /// reason and goes with the entry.
     async fn settle_terminal_locked(
         &self,
@@ -3425,8 +3430,8 @@ impl Supervisor {
         Ok(())
     }
 
-    /// A driver that ended its channel without reporting StdoutClosed
-    /// (harness audit F10): the pump's loop above found the channel
+    /// A driver that ended its channel without reporting StdoutClosed:
+    /// the pump's loop above found the channel
     /// closed on entry - the entry is a zombie against a dead driver.
     /// Same settle as StdoutClosed, minus the order lock the loop's
     /// caller may already hold: this path runs outside pump_one.
@@ -3445,7 +3450,7 @@ impl Supervisor {
     }
 
     /// The reason a dying session records: the harness's own last stderr
-    /// words when it has them (harness audit F14), the generic fact
+    /// words when it has them, the generic fact
     /// otherwise. The ring's last few lines, joined - a reason is a
     /// sentence, not a log.
     fn death_reason(&self, id: &SessionId) -> String {
@@ -3749,7 +3754,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    // ---- supervisor lifecycle hardening (harness audit F12, F10, F14, F17) ----
+    // ---- supervisor lifecycle hardening ----
     //
     // The quiet-session stop path is covered end to end by e2e.rs's
     // `stop_retires_pending_decisions_and_the_late_answer_conflicts`; the
@@ -3885,7 +3890,7 @@ mod tests {
 
     /// A stopped session leaves no map entry behind, and a later prompt
     /// on it answers NotFound by name - the supervisor's side of the
-    /// no-zombie contract (harness audit F10). The stand-in driver has
+    /// no-zombie contract. The stand-in driver has
     /// no live process, so stop's fallback settle is the path taken -
     /// the same path a print-mode harness between prompts takes.
     #[tokio::test]
@@ -4001,7 +4006,7 @@ mod tests {
     }
 
     /// The stderr ring keeps a bounded tail and the death reason splices
-    /// its last lines (harness audit F14): a harness that dies
+    /// its last lines: a harness that dies
     /// explaining itself on stderr leaves its own words in the Failed
     /// reason, and a chatty harness cannot grow the ring without bound.
     #[tokio::test]
@@ -4110,7 +4115,7 @@ mod tests {
         );
     }
 
-    /// A slow-draining pump (harness audit F12): stop must wait for the
+    /// A slow-draining pump: stop must wait for the
     /// transcript to stop advancing - not a flat clock - so the tail
     /// lands. A fake pump applies events slower than the old 3s fallback
     /// could tolerate... no: slower than one quiet window, exactly the
@@ -4275,8 +4280,8 @@ mod tests {
         );
     }
 
-    /// A prompt whose write fails after the turn's events are durable
-    /// (harness audit F17): the turn must not dangle - a synthetic
+    /// A prompt whose write fails after the turn's events are durable:
+    /// the turn must not dangle - a synthetic
     /// failed boundary lands for the just-bumped turn, and the session
     /// settles Failed with the write's own reason.
     #[tokio::test]

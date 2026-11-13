@@ -38,7 +38,8 @@ test("picture support is the daemon's honors.attachments, with a fallback for an
   assert.equal(takesPictures({ id: 'grok', honors: { attachments: false } }, 'grok'), false)
   assert.equal(takesPictures({ id: 'x', image_input: true }, 'x'), false, "the branch's image_input is not read")
   assert.equal(takesPictures(null, 'codex'), true)
-  assert.equal(takesPictures(undefined, 'pi'), false)
+  assert.equal(takesPictures(undefined, 'pi'), true)
+  assert.equal(takesPictures(undefined, 'grok'), false)
 })
 
 test('a data URL splits into its type and base64 bytes, and the bytes are counted', () => {

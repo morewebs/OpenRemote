@@ -22,7 +22,7 @@ export const REMOTE_BYTES = 3_800_000
 // The apps that read pictures, for a chat whose app this computer does not
 // list (one running on another machine); the daemon's own
 // `honors.attachments` decides wherever the row is known.
-const PICTURE_APPS = new Set(['claude', 'codex'])
+const PICTURE_APPS = new Set(['claude', 'codex', 'pi'])
 // A picture drawn smaller keeps at most this long side (what Claude reads
 // in full; larger is scaled down on its side anyway).
 const LONG_SIDE = 2576

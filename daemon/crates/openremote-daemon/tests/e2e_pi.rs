@@ -273,7 +273,7 @@ async fn pi_resumes_the_same_conversation() {
 }
 
 /// A CLI that dies at boot must fail create in seconds, not after the
-/// 60s the unraced get_state call used to burn (harness audit F13).
+/// 60s the unraced get_state call used to burn.
 #[tokio::test]
 async fn a_boot_crashed_pi_fails_create_in_seconds_not_a_minute() {
     let started = std::time::Instant::now();
@@ -391,4 +391,61 @@ fn process_is_running(pid: u32) -> bool {
     String::from_utf8_lossy(&out.stdout)
         .split_whitespace()
         .any(|word| word == pid.to_string())
+}
+
+#[tokio::test]
+async fn a_pi_turn_that_uses_a_tool_ends_once_after_the_tool_and_the_answer() {
+    let (daemon, ws) = pi_daemon(Some("mcp-tool")).await;
+    let id = create_pi(&daemon, &ws).await;
+    call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "pi-tool", "text": "list the files"})),
+    )
+    .await;
+    let events = until_kinds(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        &["turn.completed", "session.status_changed"],
+    )
+    .await;
+    let at = |wanted: &str| {
+        events
+            .iter()
+            .position(|(_, p)| kind(p) == wanted)
+            .unwrap_or_else(|| panic!("no {wanted}:\n{}", dump(&events)))
+    };
+    // The tool ran inside the turn, and the turn closed after it: the
+    // first assistant message stopped for the tool, which is not the end.
+    let result = &events[at("tool.result")];
+    assert!(
+        result.1["output"].to_string().contains("Cargo.toml"),
+        "the tool's own output, read from its content blocks:\n{}",
+        dump(&events)
+    );
+    assert_eq!(result.1["is_error"], false);
+    assert!(
+        at("tool.result") < at("turn.completed"),
+        "the tool's result belongs to the turn:\n{}",
+        dump(&events)
+    );
+    let completions = events
+        .iter()
+        .filter(|(_, p)| kind(p) == "turn.completed")
+        .count();
+    assert_eq!(completions, 1, "one run, one turn:\n{}", dump(&events));
+    let completed = &events[at("turn.completed")];
+    assert_eq!(completed.1["outcome"], "stop", "the last message's word");
+    // What the run cost and the context its last call saw.
+    let context = &events[at("context.used")];
+    assert!(context.1["used"].as_u64().is_some_and(|used| used > 0));
+    let cost = &events[at("usage.cost")];
+    assert!(
+        cost.1["cost_usd"]
+            .as_f64()
+            .is_some_and(|usd| (usd - 0.03).abs() < 1e-9),
+        "both calls' cost:\n{}",
+        dump(&events)
+    );
 }

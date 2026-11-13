@@ -6,9 +6,10 @@
 //! `extension_ui_response` (`{value}` or `{cancelled}`).
 //!
 //! Scenarios: `plain` completes without dialogs; `dialog` asks a
-//! select question mid-turn and reflects the answer; `boot-crash`
+//! select question mid-turn and reflects the answer; `mcp-tool` runs one
+//! tool between two assistant messages before settling; `boot-crash`
 //! dies before answering `get_state` - the broken-install shape whose
-//! exit status is available in the first second (harness audit F13).
+//! exit status is available in the first second.
 
 use std::io::{BufRead, Write};
 
@@ -56,7 +57,7 @@ impl PiFixture {
         // get_state. Exiting before the first frame is the observed shape
         // of a missing DLL / expired auth crash - exit now, with the
         // reason on stderr, so the driver's death race has the
-        // first-second truth to fail on (harness audit F13).
+        // first-second truth to fail on.
         if self.scenario == "boot-crash" {
             eprintln!("fixture-pi: crashed at boot: the install is broken");
             return;
@@ -140,7 +141,7 @@ impl PiFixture {
                     "type": "message_end",
                     "message": {"role": "assistant", "stopReason": "aborted", "usage": {}}
                 }));
-                self.notify(json!({"type": "agent_settled"}));
+                self.notify(json!({"type": "agent_settled", "aborted": true}));
             }
             other => {
                 eprintln!("fixture-pi: unknown call {other}");
@@ -150,10 +151,56 @@ impl PiFixture {
     }
 
     fn run_turn(&mut self, message: &str) {
+        self.notify(json!({"type": "agent_start"}));
         self.notify(json!({
             "type": "message_update",
             "assistantMessageEvent": {"type": "text_delta", "delta": "work"}
         }));
+        if self.scenario == "mcp-tool" {
+            // A run that uses a tool, in the shape pi's json event docs
+            // give: the first assistant message stops for the tool, the
+            // tool runs, a second message answers, and only then does the
+            // run settle. A driver that ends the turn at the first
+            // `message_end` files the tool and the answer after the turn.
+            self.notify(json!({
+                "type": "message_end",
+                "message": {
+                    "role": "assistant",
+                    "stopReason": "toolUse",
+                    "usage": {"input": 900, "output": 12, "cacheRead": 100,
+                              "cacheWrite": 0, "totalTokens": 1012,
+                              "cost": {"input": 0.0, "output": 0.0, "cacheRead": 0.0,
+                                       "cacheWrite": 0.0, "total": 0.01}}
+                }
+            }));
+            self.notify(json!({
+                "type": "tool_execution_start", "toolCallId": "call_1",
+                "toolName": "bash", "args": {"command": "ls"}
+            }));
+            self.notify(json!({
+                "type": "tool_execution_end", "toolCallId": "call_1",
+                "toolName": "bash", "isError": false,
+                "result": {"content": [{"type": "text", "text": "Cargo.toml"}], "details": {}}
+            }));
+            self.notify(json!({
+                "type": "message_update",
+                "assistantMessageEvent": {"type": "text_delta", "delta": " and done"}
+            }));
+            self.notify(json!({
+                "type": "message_end",
+                "message": {
+                    "role": "assistant",
+                    "stopReason": "stop",
+                    "usage": {"input": 1100, "output": 20, "cacheRead": 100,
+                              "cacheWrite": 0, "totalTokens": 1220,
+                              "cost": {"input": 0.0, "output": 0.0, "cacheRead": 0.0,
+                                       "cacheWrite": 0.0, "total": 0.02}}
+                }
+            }));
+            self.notify(json!({"type": "agent_end", "messages": [], "willRetry": false}));
+            self.notify(json!({"type": "agent_settled", "aborted": false}));
+            return;
+        }
         if self.scenario == "dialog" && self.pending_dialog.is_none() {
             let dialog_id = format!("dialog-{}", self.prompt_count);
             self.notify(json!({

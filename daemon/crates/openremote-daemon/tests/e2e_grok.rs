@@ -248,7 +248,7 @@ async fn a_grok_process_dying_mid_turn_fails_the_turn_with_a_note() {
     assert_eq!(note.1["message"], "grok exited before the turn finished");
 }
 
-/// A dash-leading prompt is text, never flags (harness audit F6): the
+/// A dash-leading prompt is text, never flags: the
 /// driver writes it to a prompt file the CLI reads, the fixture reads that
 /// file, and the round-trip is the echo. An argv slot would have fed
 /// "--help" to the CLI's own parser and died with the generic
@@ -437,4 +437,134 @@ async fn a_grok_turn_reports_context_and_cost() {
         .find(|(_, payload)| kind(payload) == "usage.cost")
         .expect("grok reports the turn's cost");
     assert_eq!(cost.1["cost_usd"], 0.02, "events:\n{}", dump(&events));
+}
+
+#[tokio::test]
+async fn a_grok_tool_call_shows_the_call_and_its_result_by_name() {
+    let (daemon, ws) = grok_daemon(Some("mcp-tool")).await;
+    let id = create_grok(&daemon, &ws).await;
+    call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "g-tool", "text": "read main"})),
+    )
+    .await;
+    let events = until_count(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        "turn.completed",
+        1,
+    )
+    .await;
+    // The call is its own card, named the way grok named the tool.
+    let started = events
+        .iter()
+        .find(|(_, p)| kind(p) == "tool.started")
+        .unwrap_or_else(|| panic!("no tool.started:\n{}", dump(&events)));
+    assert_eq!(started.1["name"], "read_file", "events:\n{}", dump(&events));
+    assert_eq!(started.1["input"], json!({"path": "src/main.rs"}));
+    // The result finds its call by id and carries the same name, not a
+    // label guessed for every tool.
+    let result = events
+        .iter()
+        .find(|(_, p)| kind(p) == "tool.result")
+        .unwrap_or_else(|| panic!("no tool.result:\n{}", dump(&events)));
+    assert_eq!(result.1["name"], "read_file", "events:\n{}", dump(&events));
+    assert_eq!(result.1["is_error"], false);
+}
+
+#[tokio::test]
+async fn a_grok_compaction_is_marked_in_the_transcript() {
+    let (daemon, ws) = grok_daemon(Some("compact")).await;
+    let id = create_grok(&daemon, &ws).await;
+    call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "g-compact", "text": "go on"})),
+    )
+    .await;
+    let events = until_count(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        "turn.completed",
+        1,
+    )
+    .await;
+    let note = events
+        .iter()
+        .find(|(_, p)| kind(p) == "note.added")
+        .unwrap_or_else(|| panic!("no compaction note:\n{}", dump(&events)));
+    assert_eq!(
+        note.1["text"],
+        json!("This session was compacted before this message."),
+        "events:\n{}",
+        dump(&events)
+    );
+}
+
+#[tokio::test]
+async fn grok_commands_reach_the_composer_once_a_chat_lists_them() {
+    let (daemon, ws) = grok_daemon(Some("plain")).await;
+    let workspace = ws.path().to_string_lossy().into_owned();
+    let query = format!("/commands?harness=grok&workspace={}", encode(&workspace));
+    // Before any chat runs, grok has nothing to list through us.
+    let before = call(&daemon, "GET", &query, None).await;
+    assert_eq!(before.status, 200, "{}", before.raw);
+    assert!(
+        command_names(&before.body).is_empty(),
+        "no list before a chat runs: {}",
+        before.raw
+    );
+
+    let id = create_grok(&daemon, &ws).await;
+    call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "g-cmds", "text": "hi"})),
+    )
+    .await;
+    until_count(
+        &daemon,
+        &format!("/sessions/{id}/events"),
+        "turn.completed",
+        1,
+    )
+    .await;
+
+    // The chat's init named its commands; the next ask in this folder
+    // offers them.
+    let after = call(&daemon, "GET", &query, None).await;
+    assert_eq!(after.status, 200, "{}", after.raw);
+    let names = command_names(&after.body);
+    assert!(
+        names.iter().any(|n| n == "review") && names.iter().any(|n| n == "fixture-grok-only"),
+        "grok's own list reaches /: {}",
+        after.raw
+    );
+}
+
+fn command_names(view: &serde_json::Value) -> Vec<String> {
+    view["commands"]
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .filter_map(|c| c["name"].as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn encode(text: &str) -> String {
+    text.bytes()
+        .map(|b| {
+            if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.') {
+                (b as char).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
+        .collect()
 }

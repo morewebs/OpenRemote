@@ -253,6 +253,7 @@ impl Supervisor {
                 .join(",")
         );
         let key = (harness.to_string(), cwd.clone());
+        let listed = lock_recovering(&self.listed_commands).get(&key).cloned();
         let hit = lock_recovering(&self.command_cache)
             .get(&key)
             .filter(|c| c.stamp == stamp && !c.stale)
@@ -283,6 +284,11 @@ impl Supervisor {
                 (catalog, error)
             }
         };
+        // A harness with no list of its own still names its commands when a
+        // chat starts (grok's init). The names a chat in this folder listed
+        // last stand in, without descriptions, so / offers what the harness
+        // said it runs instead of nothing.
+        let catalog = catalog.or_else(|| listed.map(|names| listed_catalog(&names)));
         let settings_servers: Vec<String> = self.mcp_servers().into_iter().map(|s| s.id).collect();
         Ok(build_view(
             harness,
@@ -297,7 +303,8 @@ impl Supervisor {
 
     /// A running chat listed its commands as it started: a name the cached
     /// list doesn't have means the list is behind, so the next ask asks
-    /// the harness again.
+    /// the harness again. The names are also kept, for a harness that has
+    /// no list of its own to ask.
     pub(super) fn note_command_names(&self, id: &SessionId, names: &[String]) {
         let Ok(session) = self.session(id) else {
             return;
@@ -306,6 +313,7 @@ impl Supervisor {
             session.harness.clone(),
             session.workspace.clone().unwrap_or_else(Self::home_dir),
         );
+        lock_recovering(&self.listed_commands).insert(key.clone(), names.to_vec());
         let mut cache = lock_recovering(&self.command_cache);
         let Some(entry) = cache.get_mut(&key) else {
             return;
@@ -447,6 +455,23 @@ fn local_skills(cwd: &std::path::Path) -> BTreeSet<String> {
 /// carries an installed plugin's prefix), then each enabled plugin's own
 /// parts the harness didn't list - dimmed where the harness runs no
 /// plugins - and the MCP servers that ride.
+/// A catalog of names alone, from the list a running chat reported. The
+/// harness said nothing more about them, so nothing more is claimed.
+fn listed_catalog(names: &[String]) -> CommandCatalog {
+    CommandCatalog {
+        commands: names
+            .iter()
+            .map(|name| openremote_harness::CommandDescriptor {
+                name: name.clone(),
+                description: None,
+                argument_hint: None,
+                aliases: Vec::new(),
+            })
+            .collect(),
+        agents: Vec::new(),
+    }
+}
+
 fn build_view(
     harness: &str,
     runs_plugins: bool,

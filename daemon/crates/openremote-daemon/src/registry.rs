@@ -202,9 +202,9 @@ impl SessionDriver {
     /// mode) instead of steering one long-lived process: a second prompt
     /// while the turn is open would spawn a second process, replace the
     /// first Child un-killed, and interleave two turns' frames under the
-    /// newest turn number. The supervisor gates prompts on this flag
-    /// (harness audit F8) - the driver advertises its own semantics, so no
-    /// call site matches harness ids.
+    /// newest turn number. The supervisor gates prompts on this flag - the
+    /// driver advertises its own semantics, so no call site matches
+    /// harness ids.
     pub fn per_prompt_process(&self) -> bool {
         match self {
             SessionDriver::Grok(_) | SessionDriver::Agy(_) => true,
@@ -218,13 +218,16 @@ impl SessionDriver {
     /// Whether a message sent while a turn is working lands inside that
     /// turn: the harness folds it into the run in progress and closes the
     /// whole thing with one result. Claude does (seen live on 2.1.300);
-    /// codex does by design (`turn/steer`). The supervisor files such a
-    /// message under the running turn instead of opening a new one that
-    /// would never complete. Pi and opencode stay out until their own
-    /// mid-turn behavior is verified on a real install.
+    /// codex does by design (`turn/steer`); pi does with the
+    /// `streamingBehavior: "steer"` its driver puts on every prompt, which
+    /// queues the message into the run, and the run settles once (read in
+    /// pi 1.4.0's rpc docs and its own prompt code, not yet on a live run).
+    /// The supervisor files such a message under the running turn instead
+    /// of opening a new one that would never complete. Opencode stays out
+    /// until its own mid-turn behavior is verified on a real install.
     pub fn steers_mid_turn(&self) -> bool {
         match self {
-            SessionDriver::Claude(_) | SessionDriver::Codex(_) => true,
+            SessionDriver::Claude(_) | SessionDriver::Codex(_) | SessionDriver::Pi(_) => true,
             SessionDriver::Plugin(driver) => driver.steers_mid_turn(),
             _ => false,
         }
@@ -290,9 +293,9 @@ impl Backend {
     /// What this harness offers a composer in `cwd`: its commands and its
     /// agents, in its own words, with the installed plugins loaded where
     /// it loads them. `Ok(None)` = the harness lists nothing through us
-    /// before a chat runs (grok and Antigravity, until their lists are
-    /// verified on signed-in installs); their own commands still run when
-    /// typed.
+    /// before a chat runs (grok and Antigravity); their own commands still
+    /// run when typed, and grok names them on each chat's init, which the
+    /// composer keeps for the next ask in that folder.
     pub async fn commands(
         &self,
         cwd: &std::path::Path,
@@ -440,8 +443,9 @@ pub struct HarnessRegistry {
 /// the rest are the driver's own code paths, not a guess from the console.
 /// Attachments are pictures sent with a message: claude takes base64 image
 /// blocks in its stream-json user message, codex local image files as turn
-/// input. The others' wires carry words alone, so the daemon refuses a
-/// message with pictures for them before anything is written.
+/// input, pi base64 `images` on its rpc prompt. The others' wires carry
+/// words alone, so the daemon refuses a message with pictures for them
+/// before anything is written.
 fn honors(id: &str, version: Option<&str>) -> openremote_core::HarnessHonors {
     let fast = fast_supported(id, version);
     match id {
@@ -461,7 +465,7 @@ fn honors(id: &str, version: Option<&str>) -> openremote_core::HarnessHonors {
             tools: false,
             attachments: true,
         },
-        "grok" | "pi" => openremote_core::HarnessHonors {
+        "grok" => openremote_core::HarnessHonors {
             effort: true,
             fast,
             mcp: false,
@@ -469,8 +473,17 @@ fn honors(id: &str, version: Option<&str>) -> openremote_core::HarnessHonors {
             tools: false,
             attachments: false,
         },
-        // OpenCode's permission word is still dropped, Antigravity's effort
-        // rides in the model id: neither driver honors an OpenRemote control.
+        "pi" => openremote_core::HarnessHonors {
+            effort: true,
+            fast,
+            mcp: false,
+            plugins: false,
+            tools: false,
+            attachments: true,
+        },
+        // OpenCode has no wire for any of these (its permission word rides
+        // its own config, which is not a row here), and Antigravity's effort
+        // rides in the model id: neither driver honors one of these controls.
         _ => openremote_core::HarnessHonors::default(),
     }
 }
@@ -688,7 +701,7 @@ impl HarnessRegistry {
         &self.overrides
     }
 
-    /// Lazy eviction (harness audit F18): a spawn failed while the files
+    /// Lazy eviction: a spawn failed while the files
     /// this registry resolved are gone - the harness was uninstalled or
     /// moved under us since the probe. The entry keeps its slot and its
     /// facts but stops being offered (no backend) until a re-probe; an
@@ -1141,7 +1154,11 @@ mod tests {
         assert!(grok.effort);
         assert!(!grok.fast && !grok.mcp && !grok.plugins && !grok.tools && !grok.attachments);
         let pi = honors("pi", None);
-        assert!(pi.effort && !pi.mcp && !pi.plugins && !pi.tools && !pi.attachments);
+        assert!(pi.effort && !pi.mcp && !pi.plugins && !pi.tools);
+        assert!(
+            pi.attachments,
+            "pi reads pictures on its rpc prompt: {pi:?}"
+        );
         for id in ["opencode", "agy"] {
             let row = honors(id, None);
             assert!(
