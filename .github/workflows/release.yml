@@ -9,10 +9,8 @@ name: Release
 # Nothing is published until every platform has succeeded. Each platform
 # job builds and uploads its own artifacts to the run; the `publish` job
 # runs only after all four and is the only step that touches a release.
-# A failing platform therefore leaves no new release behind - on a tag,
-# `releases/latest` does not move; on the nightly, the previous night's
-# complete build stays in place rather than being replaced by a partial
-# one. The desktop jobs stage the daemon sidecar first -
+# A failing platform therefore leaves no new release behind: `releases/latest`
+# does not move. The desktop jobs stage the daemon sidecar first -
 # src-tauri/binaries/ is gitignored, `npm run daemon` regenerates it -
 # then tauri build produces the msi, nsis and Linux bundles. The desktop
 # bundles are unsigned on purpose; the release notes say so. The Android
@@ -21,24 +19,11 @@ name: Release
 # the Android versionCode floor, the tag on the default branch) still runs
 # first, in the Windows job, before any toolchain is fetched.
 #
-# Two channels share this one pipeline:
-#
-# - Stable: a `v*` tag. Its release is the newest release, so
-#   `releases/latest/download/<name>` follows it. The desktop app looks
-#   there once a day for `latest.json` (the endpoint in tauri.conf.json)
-#   and offers a newer version, installed only on the user's click.
-# - Nightly: the scheduled run. It builds whatever is on the default
-#   branch and replaces the rolling `nightly` release, which is marked
-#   prerelease on purpose - a nightly must never become `latest`, or the
-#   stable download URLs would move to a test build. The publish job
-#   deletes and recreates it once every platform has built, so its
-#   download URLs stay fixed
-#   (.../releases/download/nightly/OpenRemote-Setup-x64.exe) while the
-#   binaries follow main. The previous nightly's commit is written into
-#   the new notes, so the channel still reads as a history. A night that
-#   fails leaves the previous night's release up, complete, rather than
-#   serving a partial build; re-running its failed jobs publishes the new
-#   one. Nothing in this path touches the stable channel.
+# This workflow is the stable channel: a `v*` tag. Its release is the newest
+# release, so `releases/latest/download/<name>` follows it, and the desktop
+# app reads `latest.json` from there (the endpoint in tauri.conf.json). The
+# nightly channel is .github/workflows/nightly.yml, with its own identity,
+# feed and rolling release. Nothing here publishes to it.
 #
 # Every published release carries version-free names beside the versioned
 # assets (OpenRemote-Setup-x64.exe, -x64.msi, -x86_64.AppImage,
@@ -86,18 +71,9 @@ name: Release
 on:
   push:
     tags: ['v*']
-  # The nightly channel. GitHub disables a schedule after 60 days without
-  # repository activity, and a re-enabled one needs a manual run first;
-  # re-running a past scheduled run republishes that night.
-  schedule:
-    - cron: '17 3 * * *'
+  # A manual run builds everything the same way and publishes nothing; the
+  # files stay on the run, which is how a build is checked before a tag.
   workflow_dispatch:
-    inputs:
-      channel:
-        description: 'a manual run builds and leaves the files on the run; only a tag or the schedule publishes'
-        type: choice
-        options: [build-only, nightly]
-        default: build-only
 
 permissions:
   # Read for every job, and the write the publisher needs granted on that
@@ -120,26 +96,32 @@ jobs:
           # job needs the tags and their history, not just this tag's
           # single commit.
           fetch-depth: 0
-      # One name for the release everywhere below: the pushed tag, or
-      # `nightly` for the nightly channel (a scheduled run has no tag -
-      # GITHUB_REF_NAME would be the branch name). Publishing is decided
-      # by the `publish` job's own condition: a manual run never reaches
-      # it, and a tag or a night does once every platform has built.
+      # The release's name is the pushed tag. Publishing is decided by the
+      # `publish` job's own condition: a manual run never reaches it, and a
+      # tag does once every platform has built.
       - name: channel
-        id: ch
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.channel }}" = "nightly" ]; then
-            echo "tag=nightly" >> "$GITHUB_OUTPUT"
-            echo "TAG=nightly" >> "$GITHUB_ENV"
-          else
-            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
-            echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
-          fi
+          echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: lts/*
           cache: npm
+      # The tag is v followed by the version in tauri.conf.json, exactly. The
+      # installers' names, the updater's version and the release title all
+      # come from that file, so a tag that disagrees would publish files that
+      # name another version. Only the tag's own version passes: a pre-release
+      # tag needs a pre-release version in the config too.
+      - name: preflight (tag is the tauri.conf.json version)
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          version="$(node -p 'JSON.parse(require("fs").readFileSync("src-tauri/tauri.conf.json", "utf8")).version')"
+          if [ "$GITHUB_REF_NAME" != "v${version}" ]; then
+            echo "preflight: the tag is ${GITHUB_REF_NAME}, but src-tauri/tauri.conf.json says ${version}; the tag must be v${version}" >&2
+            exit 1
+          fi
+          echo "preflight: ${GITHUB_REF_NAME} is the version in src-tauri/tauri.conf.json"
       # Fail fast on paperwork that does not add up, before any build
       # toolchain or dependency is fetched: the tag must equal the
       # version in every manifest that carries it (a mismatch ships
@@ -150,10 +132,7 @@ jobs:
       # update install otherwise, and the only way on is uninstalling
       # the app, which wipes its private data.
       #
-      # This step runs for tags only. A nightly carries no version of its
-      # own and its APK reuses the stable versionCode, so there is nothing
-      # here to check for it: its notes are generated in the publish job
-      # when the release is made. The notices file it ships is the same
+      # This step runs for tags only. The notices file it ships is the same
       # one every build embeds, and the platform jobs fail on it if it is
       # missing (the Linux job hashes it, the bundle resources name it).
       - name: preflight (versions, notes, versionCode)
@@ -281,12 +260,10 @@ jobs:
       # does nothing. The gate matches the exact asset names this tag's
       # version implies, not an asset count: any other mix runs the build,
       # so a re-pushed tag never leaves a release missing the msi or the
-      # nsis. The nightly always builds: last night's release is still up
-      # (the publish job replaces it only after every platform succeeds),
-      # so the gate must not mistake it for this night's.
+      # nsis.
       - name: a rebuild, or a re-run
         id: build
-        if: github.event_name != 'workflow_dispatch' && steps.ch.outputs.tag != 'nightly'
+        if: github.event_name != 'workflow_dispatch'
         run: |
           set -euo pipefail
           ver="${TAG#v}"
@@ -334,11 +311,10 @@ jobs:
       # Tauri embeds the version in the artifact names
       # (OpenRemote_0.1.0_x64_en-US.msi, OpenRemote_0.1.0_x64-setup.exe),
       # so the globs stay version-proof. Each bundle is staged twice: under
-      # its versioned name and under the channel's version-free one, so
-      # `/releases/latest/download/OpenRemote-Setup-x64.exe` (stable) and
-      # `/releases/download/nightly/OpenRemote-Setup-x64.exe` (nightly)
-      # never change with a version bump. They ride to the publish job as
-      # this run's artifacts, and only that job creates a release.
+      # its versioned name and under the version-free one, so
+      # `/releases/latest/download/OpenRemote-Setup-x64.exe` never changes
+      # with a version bump. They ride to the publish job as this run's
+      # artifacts, and only that job creates a release.
       - name: stage the Windows installers
         if: steps.build.outputs.skip != '1'
         run: |
@@ -397,16 +373,9 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: channel
-        id: ch
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.channel }}" = "nightly" ]; then
-            echo "tag=nightly" >> "$GITHUB_OUTPUT"
-            echo "TAG=nightly" >> "$GITHUB_ENV"
-          else
-            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
-            echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
-          fi
+          echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: lts/*
@@ -515,16 +484,9 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: channel
-        id: ch
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.channel }}" = "nightly" ]; then
-            echo "tag=nightly" >> "$GITHUB_OUTPUT"
-            echo "TAG=nightly" >> "$GITHUB_ENV"
-          else
-            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
-            echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
-          fi
+          echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: lts/*
@@ -572,11 +534,10 @@ jobs:
       # skips the rebuild - the same gate the other jobs use. The gate
       # matches the exact name this tag's version implies (the staging
       # step below names the file the same way), not just any APK - a
-      # re-pushed tag must not keep a previous commit's build. The nightly
-      # always builds, for the same reason the Windows job does.
+      # re-pushed tag must not keep a previous commit's build.
       - name: a rebuild, or a re-run
         id: build
-        if: github.event_name != 'workflow_dispatch' && steps.ch.outputs.tag != 'nightly'
+        if: github.event_name != 'workflow_dispatch'
         run: |
           set -euo pipefail
           assets="$(gh release view "$TAG" --json assets --jq '.assets[].name' 2>/dev/null || true)"
@@ -638,16 +599,9 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: channel
-        id: ch
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.channel }}" = "nightly" ]; then
-            echo "tag=nightly" >> "$GITHUB_OUTPUT"
-            echo "TAG=nightly" >> "$GITHUB_ENV"
-          else
-            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
-            echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
-          fi
+          echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: lts/*
@@ -661,11 +615,10 @@ jobs:
             daemon
             src-tauri
       # A re-pushed tag whose release already carries this version's dmg
-      # skips the rebuild - the same gate the other jobs use. The nightly
-      # never skips.
+      # skips the rebuild - the same gate the other jobs use.
       - name: a rebuild, or a re-run
         id: build
-        if: github.event_name != 'workflow_dispatch' && steps.ch.outputs.tag != 'nightly'
+        if: github.event_name != 'workflow_dispatch'
         run: |
           set -euo pipefail
           assets="$(gh release view "$TAG" --json assets --jq '.assets[].name' 2>/dev/null || true)"
@@ -748,12 +701,11 @@ jobs:
             OpenRemote-universal.app.tar.gz.sig
 
   # The only job that touches a release. It runs after every platform has
-  # succeeded, so a failure anywhere above leaves no new release behind: a
-  # stable tag does not move `releases/latest`, and a nightly keeps last
-  # night's complete release instead of replacing it with a partial one.
-  # A manual run never reaches it (build-only). Re-running the failed
-  # platform in the same run finishes the release, because the successful
-  # platforms' artifacts are still on that run.
+  # succeeded, so a failure anywhere above leaves no new release behind:
+  # `releases/latest` does not move. A manual run never reaches it
+  # (build-only). Re-running the failed platform in the same run finishes
+  # the release, because the successful platforms' artifacts are still on
+  # that run.
   publish:
     needs: [release, linux, android, macos]
     if: github.event_name != 'workflow_dispatch'
@@ -767,20 +719,12 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          # The notes file, and for the nightly the previous nightly tag's
-          # commit for the "since" section.
+          # The notes file is read from the checkout.
           fetch-depth: 0
       - name: channel
-        id: ch
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.channel }}" = "nightly" ]; then
-            echo "tag=nightly" >> "$GITHUB_OUTPUT"
-            echo "TAG=nightly" >> "$GITHUB_ENV"
-          else
-            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
-            echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
-          fi
+          echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
       - name: fetch this run's artifacts
         run: |
           set -euo pipefail
@@ -794,36 +738,6 @@ jobs:
           ls -la assets
         env:
           GH_TOKEN: ${{ github.token }}
-      - name: nightly notes
-        if: steps.ch.outputs.tag == 'nightly'
-        run: |
-          set -euo pipefail
-          SHA="$(git rev-parse --short HEAD)"
-          {
-            echo "# OpenRemote nightly - $(date -u +%Y-%m-%d)"
-            echo
-            echo "Built from \`${GITHUB_REF_NAME}\` at \`${SHA}\` on $(date -u +'%Y-%m-%d %H:%M UTC')."
-            echo
-            echo "This is the automated nightly channel: unsigned test builds, replaced every night,"
-            echo "at URLs that never change - \`https://github.com/${GITHUB_REPOSITORY}/releases/download/nightly/OpenRemote-Setup-x64.exe\`,"
-            echo "and the same name for the msi, the AppImage, the deb, the dmg and the apk."
-            echo "The stable channel is \`releases/latest\`. Nightlies report the stable version in-app"
-            echo "(the build is not version-stamped yet) - this page's commit is the identity."
-            echo
-            if git rev-parse -q --verify "nightly^{commit}" > /dev/null; then
-              PREVIOUS_NIGHTLY="$(git rev-parse --short "nightly^{commit}")"
-              echo "## Since the last nightly (\`${PREVIOUS_NIGHTLY}\`)"
-            else
-              echo "## Recent commits"
-            fi
-            echo
-            if [ -n "${PREVIOUS_NIGHTLY:-}" ] && git cat-file -e "${PREVIOUS_NIGHTLY}^{commit}" 2>/dev/null; then
-              git log --oneline --no-decorate -n 60 "${PREVIOUS_NIGHTLY}..HEAD"
-            else
-              git log --oneline --no-decorate -n 25 HEAD
-            fi
-          } > nightly-notes.md
-          cat nightly-notes.md
       - name: publish the release
         run: |
           set -euo pipefail
@@ -853,7 +767,7 @@ jobs:
           # release is only ever added to, so its names count toward the check
           # even when this run built nothing.
           existing=""
-          if [ "$TAG" != "nightly" ] && gh release view "$TAG" > /dev/null 2>&1; then
+          if gh release view "$TAG" > /dev/null 2>&1; then
             existing="$(gh release view "$TAG" --json assets --jq '.assets[].name' || true)"
           fi
 
@@ -876,7 +790,7 @@ jobs:
           # left exactly as it is. A release left short by an interrupted
           # upload is the case this must not wave through: it fails here with
           # the names it lacks, instead of exiting 0 over a dead download link.
-          if [ "${#assets[@]}" -eq 0 ] && [ "$TAG" != "nightly" ] && [ -n "$existing" ]; then
+          if [ "${#assets[@]}" -eq 0 ] && [ -n "$existing" ]; then
             if [ "${#missing[@]}" -gt 0 ]; then
               echo "publish: ${TAG} already exists, no artifacts were built, and it is missing ${missing[*]}; nothing was published" >&2
               exit 1
@@ -909,8 +823,8 @@ jobs:
           done
 
           # The in-app updater's latest.json, for a stable version tag only
-          # (vX.Y.Z): the app reads `releases/latest`, which neither a nightly
-          # nor a pre-release may steer. It is
+          # (vX.Y.Z): the app reads `releases/latest`, which a pre-release
+          # must not steer. It is
           # written from the signatures the platform jobs staged at the
           # release root (with any a partial release of this tag already
           # carries), for the installers this release really has, and it goes
@@ -944,18 +858,7 @@ jobs:
             fi
           fi
 
-          # A nightly replaces the rolling release only now, with every
-          # platform built. Its tag moves to this run's commit.
-          if [ "$TAG" = "nightly" ]; then
-            if gh release view nightly > /dev/null 2>&1; then
-              gh release delete nightly --yes --cleanup-tag
-            fi
-            gh release create nightly "${assets[@]}" \
-              --target "$GITHUB_SHA" \
-              --prerelease \
-              --title "OpenRemote nightly - $(date -u +%Y-%m-%d)" \
-              --notes-file nightly-notes.md
-          elif [ -n "$existing" ]; then
+          if [ -n "$existing" ]; then
             # A re-pushed tag with a partial release: the platforms whose
             # asset was missing rebuilt, and their files join the release.
             # The check above has already proved the union is complete.

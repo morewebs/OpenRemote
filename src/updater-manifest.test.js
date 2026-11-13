@@ -95,7 +95,9 @@ test('publish writes latest.json in the same release, and there is no separate j
   assert.match(publish, /node scripts\/updater-manifest\.mjs "\$TAG" "\$GITHUB_REPOSITORY" sigs > latest\.json/)
   assert.match(publish, /assets\+=\(latest\.json\)/)
   // Written before the release goes out, so latest.json is never a step behind.
-  assert.ok(publish.indexOf('> latest.json') < publish.indexOf('gh release create nightly'))
+  // The nightly channel publishes from its own workflow (nightly.yml), so this
+  // file has no nightly release to order against.
+  assert.equal(publish.indexOf('gh release create nightly'), -1, 'nightly publishing lives in nightly.yml')
   assert.ok(publish.indexOf('> latest.json') < publish.indexOf('gh release create "$TAG"'))
   // Only for a stable version tag: the app reads releases/latest, never the
   // nightly and never a pre-release. The gate's own pattern is run here.

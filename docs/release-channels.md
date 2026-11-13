@@ -1,6 +1,8 @@
 # The release channels
 
-Two channels, one pipeline (`.github/workflows/release.yml`).
+Two channels, two workflows. Stable is `.github/workflows/release.yml`. Nightly
+is `.github/workflows/nightly.yml`. Their feeds, keys and in-app update behaviour
+are in `docs/releasing-updates.md`.
 
 ## Stable
 
@@ -82,68 +84,46 @@ produces a package directory with no launcher in it (verified on npm 10 and
 11 on Windows), while an install from a published tarball works. That is
 why the channel is the registry.
 
-## An installed app updates on the user's click
+## A tag must match the config and be on the default branch
 
-The desktop app looks once a day for `latest.json` in the newest stable
-release and offers a newer version, which installs only when the user clicks
-Update and restart (`docs/releasing-updates.md`). Updates are signed, and the
-switch-on is a one-time step: until the signing key exists, the app says
-updates aren't switched on, and moving to a newer release means downloading
-the installer from the URLs above and running it over the copy already there.
-The nightly is never offered in-app: the app reads `releases/latest` only.
-
-## A tag must be on the default branch
-
-The release job's preflight refuses a `v*` tag whose commit is not on the
-default branch's history (GitHub's compare API must report `identical` or
-`behind`). A tag pushed at a local commit, or at work on a branch that was
-never merged, would otherwise publish installers built from code the
+The release job's preflight refuses a `v*` tag unless it is `v` followed by the
+`version` in `src-tauri/tauri.conf.json`, exactly. It also refuses a tag whose
+commit is not on the default branch's history (GitHub's compare API must report
+`identical` or `behind`). A tag pushed at a local commit, or at work on a branch
+that was never merged, would otherwise publish installers built from code the
 project never accepted, and move `releases/latest` and the site's download
-buttons for every user. Merge first, then tag the commit that is on the
-default branch.
+buttons for every user. Merge first, then tag the commit that is on the default
+branch.
 
 ## Nightly
 
-The scheduled run, 03:17 UTC daily:
+Built by `.github/workflows/nightly.yml` after CI passes on a push to `main`.
+Windows (an NSIS installer) and Linux (an AppImage) only; there is no MSI, deb,
+macOS or APK nightly.
 
 ```
-https://github.com/morewebs/OpenRemote/releases/download/nightly/OpenRemote-Setup-x64.exe
+https://github.com/morewebs/OpenRemote/releases/download/nightly/OpenRemote-Nightly-Setup-x64.exe
+https://github.com/morewebs/OpenRemote/releases/download/nightly/OpenRemote-Nightly-x86_64.AppImage
 ```
 
-(the same names as the stable column, with `releases/download/nightly`
-instead of `releases/latest/download`)
-
-- Builds whatever is on the default branch, with no tag of its own. The
-  release body names the commit, the build time, and the commits since the
-  previous nightly.
-- One rolling release at the tag `nightly`, deleted and recreated each
-  night, so the URLs never change while the binaries follow `main`.
-- **Always a prerelease.** That is what keeps `releases/latest` - and with
-  it the site's download buttons - on the stable channel. Never publish a
-  nightly as a full release.
-- A failed night leaves the channel empty until the next run (last night's
-  release is deleted before tonight's is built, rather than serving a
-  half-updated build). Re-running the failed scheduled run publishes it.
-- Nightlies are not version-stamped: the app reports the stable version,
-  so the release page's commit is the build's identity. Stamping a
-  per-night version would have to survive MSI's numeric-only prerelease
-  and macOS's numeric `CFBundleVersion`, which needs a real build on both
-  to prove; until then the commit is the label.
-- The APK keeps the stable `applicationId` and `versionCode`, so a nightly
-  installs over a stable one and a stable one installs over a nightly
-  (same signature, same code) - no uninstall, no wiped data.
+- The version is `<base>-nightly.<stamp>`, described in `docs/releasing-updates.md`.
+  The app reports that version, so each build names itself.
+- One rolling release at the tag `nightly`. Its tag moves to the built commit and
+  its installers and `latest.json` are replaced, so its URLs never change while
+  the binaries follow `main`.
+- Every build is also a dated release, `nightly-<stamp>`. The newest 20 are kept,
+  and older ones are deleted with their tags.
+- **Always a prerelease.** That keeps `releases/latest`, and with it the site's
+  download buttons, on the stable channel.
+- A failed build publishes nothing, so the last nightly stays up.
 
 ### Firing it by hand
 
-Actions > Release > Run workflow, channel `nightly`. With `build-only` the
-run builds everything and publishes nothing, exactly as before.
-
-Note that GitHub disables a scheduled workflow after 60 days of repository
-inactivity; re-enable it in the Actions tab, then run it once by hand.
+Actions > Nightly > Run workflow. It builds `main` as it stands and publishes,
+the same as a run after CI. Nightly runs are never scheduled; they follow CI.
 
 ## Android versionCode
 
-Unchanged rule, checked in the preflight for stable tags: each release's
-`bundle.android.versionCode` must strictly exceed the previous tag's, or
-Android refuses the update install. The nightly is exempt because it is
-not a stable tag - and because it reuses the stable code on purpose.
+Each stable release's `bundle.android.versionCode` must strictly exceed the
+previous tag's, or Android refuses the update install. The release preflight
+checks it for stable tags. The nightly builds no APK.

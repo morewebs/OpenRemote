@@ -1,0 +1,358 @@
+name: Nightly
+
+# The nightly channel. A build of main that passed CI is published as the
+# rolling `nightly` release, which the nightly app reads, and as a dated
+# `nightly-<stamp>` release; the newest 20 dated releases are kept. Windows
+# (NSIS) and Linux (AppImage) only.
+#
+# It runs after CI, not beside it. workflow_run starts it when the CI run for
+# a push to main completes, and it builds only when that run succeeded, so the
+# commit built is the commit CI tested. A manual run builds main as it stands.
+#
+# The nightly is a separate app from stable, with its own product name,
+# identifier, feed and updater key (src-tauri/tauri.nightly.conf.json). Its
+# signing key comes from NIGHTLY_TAURI_SIGNING_PRIVATE_KEY and its password from
+# NIGHTLY_TAURI_SIGNING_PRIVATE_KEY_PASSWORD. The build is refused without the
+# key: an unsigned build would publish a feed the app cannot verify.
+#
+# Nothing is published until both platforms have built. Their files travel to
+# the publish job as this run's artifacts, and only that job writes a release,
+# so a failed build leaves the last nightly in place. The rolling release keeps
+# its page and its URLs; its tag and its files move to the new build.
+#
+# The build steps follow release.yml: the sidecar staged with the release
+# profile, the pinned Rust toolchain and cache, and the Linux webkit packages.
+# The glibc-pinned daemon download and the Android and macOS jobs are stable
+# only. A reusable workflow shared with release.yml would have changed stable's
+# job layout, so these steps are repeated here instead.
+#
+# Every action is pinned to the commit SHA release.yml pins. Bump a pin in both
+# files together.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # One nightly at a time. A build already running is never cancelled.
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    # A push to main whose CI run passed, or a manual run on main. A CI run
+    # for a pull request, or for any other branch, ends here.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.plan.outputs.sha }}
+      version: ${{ steps.plan.outputs.version }}
+      stamp: ${{ steps.plan.outputs.stamp }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: lts/*
+      # The version and the stamp are read once, here, so every job names the
+      # same build even if a build runs across a minute boundary.
+      - name: the version and stamp
+        id: plan
+        run: |
+          set -euo pipefail
+          node scripts/channel.mjs plan | tee -a "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" | tee -a "$GITHUB_OUTPUT"
+
+  windows:
+    needs: plan
+    runs-on: windows-latest
+    defaults:
+      run:
+        # bash, as release.yml uses: the artifact globs are bash-isms.
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: lts/*
+          cache: npm
+      # Fixed at 1.99.1, as release.yml and ci.yml pin it.
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            daemon
+            src-tauri
+      - run: npm ci
+      - run: OR_RELEASE=1 node scripts/sync-daemon.mjs
+      # The one config this build is given: the stable config with the nightly
+      # overlay and the nightly version on top. It lives under target/, which
+      # is never committed.
+      - name: the nightly config
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: node scripts/channel.mjs config "$VERSION" src-tauri/target/nightly-tauri.conf.json
+      - name: tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.NIGHTLY_TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.NIGHTLY_TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "::error::NIGHTLY_TAURI_SIGNING_PRIVATE_KEY is not set; the nightly is not built unsigned"
+            exit 1
+          fi
+          # A bundle directory restored from the cache must not hold an earlier
+          # build's installer for this one to be taken for.
+          rm -rf src-tauri/target/release/bundle
+          npx tauri build --bundles nsis --config src-tauri/target/nightly-tauri.conf.json
+          if ! compgen -G 'src-tauri/target/release/bundle/nsis/*.exe.sig' > /dev/null; then
+            echo "::error::the build made no update signature (src-tauri/target/release/bundle/nsis/*.exe.sig)"
+            exit 1
+          fi
+      # The app must carry the nightly feed and not the stable one. Tauri
+      # writes the endpoints into the binary as text, so a plain search is the
+      # check. If the console ever names the stable feed itself, this fails;
+      # the string then belongs outside the console.
+      - name: the app carries the nightly feed
+        run: |
+          set -euo pipefail
+          app=src-tauri/target/release/openremote-ui-desktop.exe
+          if ! grep -a -q 'releases/download/nightly/latest.json' "$app"; then
+            echo "::error::the app does not carry the nightly feed"
+            exit 1
+          fi
+          if grep -a -q 'releases/latest/download/latest.json' "$app"; then
+            echo "::error::the nightly app carries the stable feed"
+            exit 1
+          fi
+      - name: stage the installer
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          installers=(src-tauri/target/release/bundle/nsis/*.exe)
+          sigs=(src-tauri/target/release/bundle/nsis/*.exe.sig)
+          if [ "${#installers[@]}" -ne 1 ] || [ "${#sigs[@]}" -ne 1 ]; then
+            echo "::error::expected one installer and one signature, found ${#installers[@]} and ${#sigs[@]}"
+            exit 1
+          fi
+          mkdir -p staged
+          cp "${installers[0]}" staged/OpenRemote-Nightly-Setup-x64.exe
+          cp "${sigs[0]}" staged/OpenRemote-Nightly-Setup-x64.exe.sig
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nightly-windows
+          path: staged/*
+          if-no-files-found: error
+
+  linux:
+    needs: plan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: lts/*
+          cache: npm
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            daemon
+            src-tauri
+      # Tauri's Linux build dependencies (webkit2gtk 4.1 era), as release.yml installs them.
+      - run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+      - run: npm ci
+      - run: OR_RELEASE=1 node scripts/sync-daemon.mjs
+      - name: the nightly config
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: node scripts/channel.mjs config "$VERSION" src-tauri/target/nightly-tauri.conf.json
+      - name: tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.NIGHTLY_TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.NIGHTLY_TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "::error::NIGHTLY_TAURI_SIGNING_PRIVATE_KEY is not set; the nightly is not built unsigned"
+            exit 1
+          fi
+          rm -rf src-tauri/target/release/bundle
+          npx tauri build --bundles appimage --config src-tauri/target/nightly-tauri.conf.json
+          if ! compgen -G 'src-tauri/target/release/bundle/appimage/*.AppImage.sig' > /dev/null; then
+            echo "::error::the build made no update signature (src-tauri/target/release/bundle/appimage/*.AppImage.sig)"
+            exit 1
+          fi
+      # The AppImage packs its binary compressed, so the check reads the
+      # binary the bundle is made from. See the Windows job for the reasoning.
+      - name: the app carries the nightly feed
+        run: |
+          set -euo pipefail
+          app=src-tauri/target/release/openremote-ui-desktop
+          if ! grep -a -q 'releases/download/nightly/latest.json' "$app"; then
+            echo "::error::the app does not carry the nightly feed"
+            exit 1
+          fi
+          if grep -a -q 'releases/latest/download/latest.json' "$app"; then
+            echo "::error::the nightly app carries the stable feed"
+            exit 1
+          fi
+      - name: stage the AppImage
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          images=(src-tauri/target/release/bundle/appimage/*.AppImage)
+          sigs=(src-tauri/target/release/bundle/appimage/*.AppImage.sig)
+          if [ "${#images[@]}" -ne 1 ] || [ "${#sigs[@]}" -ne 1 ]; then
+            echo "::error::expected one AppImage and one signature, found ${#images[@]} and ${#sigs[@]}"
+            exit 1
+          fi
+          mkdir -p staged
+          cp "${images[0]}" staged/OpenRemote-Nightly-x86_64.AppImage
+          cp "${sigs[0]}" staged/OpenRemote-Nightly-x86_64.AppImage.sig
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nightly-linux
+          path: staged/*
+          if-no-files-found: error
+
+  publish:
+    needs: [plan, windows, linux]
+    runs-on: ubuntu-latest
+    # `actions: read` lets `gh run download` pull this run's own artifacts.
+    # The write is the publisher's alone; the builds above stay read-only.
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.plan.outputs.version }}
+      STAMP: ${{ needs.plan.outputs.stamp }}
+      SHA: ${{ needs.plan.outputs.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          # Full history and every tag: the previous nightly's commit is read
+          # from its tag for the notes.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: lts/*
+      - name: this run's installers
+        run: |
+          set -euo pipefail
+          mkdir -p assets
+          gh run download "$GITHUB_RUN_ID" -n nightly-windows -D assets
+          gh run download "$GITHUB_RUN_ID" -n nightly-linux -D assets
+          ls -la assets
+      # The feed. It is written from the signatures the builds made, and names
+      # only the installers this run carries.
+      - name: latest.json
+        run: |
+          set -euo pipefail
+          node scripts/updater-manifest.mjs --nightly "$VERSION" "$GITHUB_REPOSITORY" assets > latest.json
+          cat latest.json
+      - name: the release notes
+        run: |
+          set -euo pipefail
+          previous="$(git tag --list 'nightly-[0-9]*' --sort=-refname | sed -n '1p')"
+          {
+            echo "# OpenRemote nightly ${VERSION}"
+            echo
+            echo "Built from \`main\` at \`${SHA:0:7}\` on $(date -u +'%Y-%m-%d %H:%M UTC')."
+            echo
+            echo "A test build from main, replaced by the next one. The installers are not"
+            echo "code-signed, the same as the stable ones: SmartScreen shows More info, then"
+            echo "Run anyway. The nightly app updates from the rolling \`nightly\` release."
+            echo
+            if [ -n "$previous" ]; then
+              echo "## Since ${previous}"
+              echo
+              git log --oneline --no-decorate -n 60 "${previous}..HEAD"
+            else
+              echo "## Recent commits"
+              echo
+              git log --oneline --no-decorate -n 25 HEAD
+            fi
+          } > nightly-notes.md
+          cat nightly-notes.md
+      - name: the dated release
+        run: |
+          set -euo pipefail
+          gh release create "nightly-${STAMP}" \
+            assets/OpenRemote-Nightly-Setup-x64.exe assets/OpenRemote-Nightly-Setup-x64.exe.sig \
+            assets/OpenRemote-Nightly-x86_64.AppImage assets/OpenRemote-Nightly-x86_64.AppImage.sig \
+            --target "$SHA" --prerelease \
+            --title "OpenRemote nightly ${VERSION}" \
+            --notes-file nightly-notes.md
+      - name: the rolling nightly release
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          # The tag moves through the refs API. The release that holds it keeps
+          # its page, and its download URLs keep their names; the feed and the
+          # files follow the commit.
+          if gh api "repos/${repo}/git/ref/tags/nightly" > /dev/null 2>&1; then
+            gh api -X PATCH "repos/${repo}/git/refs/tags/nightly" -f sha="$SHA" -F force=true > /dev/null
+          else
+            gh api -X POST "repos/${repo}/git/refs" -f ref=refs/tags/nightly -f sha="$SHA" > /dev/null
+          fi
+          if gh release view nightly > /dev/null 2>&1; then
+            gh release edit nightly --title "OpenRemote nightly ${VERSION}" --notes-file nightly-notes.md --prerelease
+          else
+            gh release create nightly --verify-tag --prerelease \
+              --title "OpenRemote nightly ${VERSION}" --notes-file nightly-notes.md
+          fi
+          gh release upload nightly --clobber \
+            assets/OpenRemote-Nightly-Setup-x64.exe assets/OpenRemote-Nightly-Setup-x64.exe.sig \
+            assets/OpenRemote-Nightly-x86_64.AppImage assets/OpenRemote-Nightly-x86_64.AppImage.sig
+          # The feed goes last, so it never names a file that is not yet there.
+          gh release upload nightly --clobber latest.json
+          # What an older build left on the rolling release goes. The list is
+          # exactly what this build carries.
+          keep=" OpenRemote-Nightly-Setup-x64.exe OpenRemote-Nightly-Setup-x64.exe.sig OpenRemote-Nightly-x86_64.AppImage OpenRemote-Nightly-x86_64.AppImage.sig latest.json "
+          gh release view nightly --json assets --jq '.assets[].name' > rolling-assets.txt
+          while IFS= read -r name; do
+            if [ -n "$name" ] && [[ "$keep" != *" $name "* ]]; then
+              gh release delete-asset nightly "$name" --yes
+            fi
+          done < rolling-assets.txt
+      # The dated releases are kept to the newest 20 by stamp. The stamp is
+      # fixed-width, so a reverse string sort is newest first. Only names of
+      # the stamped form are touched.
+      - name: prune the dated releases
+        run: |
+          set -euo pipefail
+          keep=20
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq '.[].tag_name' > release-tags.txt
+          grep -E '^nightly-[0-9]{12}$' release-tags.txt | sort -r > dated-tags.txt || true
+          count=0
+          while IFS= read -r tag; do
+            count=$((count + 1))
+            if [ "$count" -gt "$keep" ]; then
+              echo "pruning ${tag}"
+              gh release delete "$tag" --yes --cleanup-tag
+            fi
+          done < dated-tags.txt

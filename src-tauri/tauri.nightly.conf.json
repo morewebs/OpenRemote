@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OpenRemote Nightly",
+  "identifier": "space.moreweb.openremote.nightly",
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/morewebs/OpenRemote/releases/download/nightly/latest.json"
+      ]
+    }
+  }
+}
