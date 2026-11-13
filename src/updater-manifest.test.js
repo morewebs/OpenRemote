@@ -59,7 +59,7 @@ test('the platform jobs stage each signature at the release root beside its inst
   // and never reaches a manual run: a workflow_dispatch can build any branch,
   // and a signed build of unreviewed code is an update the app would accept.
   const keyLines = wf.split('\n').filter((l) => /^\s+TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)?:/.test(l))
-  assert.equal(keyLines.length, 6, 'three builds, two secrets each')
+  assert.equal(keyLines.length, 8, 'three builds and the update delta, two secrets each')
   for (const line of keyLines) {
     assert.match(
       line,

@@ -8,6 +8,8 @@
 *.toml text
 *.yml text
 *.lock text
+# A shell script must reach bash with LF endings, even on a Windows runner.
+*.sh text eol=lf
 # windows shell helpers stay CRLF-free where git decides, keep binaries binary
 *.png binary
 *.ico binary

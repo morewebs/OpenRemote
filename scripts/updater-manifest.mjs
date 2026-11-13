@@ -45,8 +45,10 @@ const OWNER_REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 /// The manifest for one release, from `sigs` ({ asset name: signature text }).
 /// Stable: `tag` is vX.Y.Z. Nightly: `channel: 'nightly'` and `version` is the
 /// nightly version string, and the release is the rolling `nightly` one.
-/// Throws on anything that would make a manifest point somewhere else.
-export function updaterManifest({ channel = 'stable', tag, version, repo, sigs, notes = '', date = new Date() }) {
+/// `delta` is the delta.json the release's build wrote (see scripts/delta.mjs),
+/// when it made one. Throws on anything that would make a manifest point
+/// somewhere else.
+export function updaterManifest({ channel = 'stable', tag, version, repo, sigs, notes = '', date = new Date(), delta = null }) {
   let release // the release tag the manifest's files live under
   let shownVersion
   if (channel === 'stable') {
@@ -75,13 +77,39 @@ export function updaterManifest({ channel = 'stable', tag, version, repo, sigs, 
     const url = `https://github.com/${repo}/releases/download/${release}/${encodeURIComponent(name)}`
     for (const key of assets[name]) platforms[key] = { signature: text, url }
   }
-  return {
+  const manifest = {
     version: shownVersion,
     notes: String(notes).slice(0, 4000),
     pub_date: date.toISOString(),
     platforms,
     page: `https://github.com/${repo}/releases/tag/${release}`,
   }
+  if (delta) manifest.delta = deltaEntries({ delta, repo, release, sigs, version: shownVersion })
+  return manifest
+}
+
+/// The `delta` key of a manifest: the files an app can update with, each with
+/// its URL and signature, and the signature of the uncompressed installer they
+/// reproduce. The app takes the patch when it has the base it was made from,
+/// the full package otherwise, and the platform entry above when neither works.
+/// Its own check is the signature: the URLs here, like the rest of the feed,
+/// are not trusted for anything but where to fetch.
+export function deltaEntries({ delta, repo, release, sigs, version }) {
+  if (delta.version !== version) throw new Error(`delta.json is for ${delta.version}, not ${version}`)
+  const file = (name) => {
+    const signature = String(sigs[name] ?? '').trim()
+    if (!signature) throw new Error(`${name} has no signature`)
+    return { url: `https://github.com/${repo}/releases/download/${release}/${encodeURIComponent(name)}`, signature }
+  }
+  const installerSignature = String(delta.installer_signature ?? '').trim()
+  if (!installerSignature) throw new Error('delta.json has no installer signature')
+  const out = { installer: { signature: installerSignature }, full: file(delta.full) }
+  if (delta.patch) {
+    if (!/^\d+\.\d+\.\d+(?:-nightly\.\d{12})?$/.test(delta.from ?? '')) throw new Error('a patch needs the version it is made from')
+    out.from = delta.from
+    out.patch = file(delta.patch)
+  }
+  return out
 }
 
 function main(argv) {
@@ -96,13 +124,16 @@ function main(argv) {
   for (const file of readdirSync(dir).filter((f) => f.endsWith('.sig'))) {
     sigs[file.slice(0, -'.sig'.length)] = readFileSync(join(dir, file), 'utf8')
   }
+  // Only a build that made a delta has the file; the feed is the same without it.
+  const deltaFile = join(dir, 'delta.json')
+  const delta = existsSync(deltaFile) ? JSON.parse(readFileSync(deltaFile, 'utf8')) : null
   let manifest
   if (nightly) {
-    manifest = updaterManifest({ channel: 'nightly', version: first, repo, sigs })
+    manifest = updaterManifest({ channel: 'nightly', version: first, repo, sigs, delta })
   } else {
     const notesFile = join('release-notes', `${first}.md`)
     const notes = existsSync(notesFile) ? readFileSync(notesFile, 'utf8') : ''
-    manifest = updaterManifest({ tag: first, repo, sigs, notes })
+    manifest = updaterManifest({ tag: first, repo, sigs, notes, delta })
   }
   if (Object.keys(manifest.platforms).length === 0) {
     console.error(`no signed update in ${dir}`)
