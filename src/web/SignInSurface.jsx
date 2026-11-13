@@ -7,9 +7,10 @@
 // job is to establish that link and nothing else.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowRight, Desktop, LockKey, WarningCircle } from '@phosphor-icons/react'
+import { Desktop, WarningCircle } from '@phosphor-icons/react'
 import { SplashMark } from '../Splash.jsx'
 import { openExternal } from '../platform.js'
+import { platformLabel } from '../cloud.js'
 import {
   authorizeUrl,
   challengeFor,
@@ -245,23 +246,13 @@ export default function SignInSurface({ onLinked }) {
       </header>
 
       <main className="web-signin-main">
-        <section className="web-signin-intro">
-          <span className="web-signin-context">OpenRemote for the web</span>
-          <h1>Your workspace,<br />within reach.</h1>
-          <p>Connect to your own computer and pick up where you left off.</p>
-          <div className="web-signin-privacy">
-            <LockKey size={19} aria-hidden="true" />
-            <span>Your chats, files and apps stay on your computer.</span>
-          </div>
-        </section>
-
         <section className="web-signin-panel" aria-live="polite" aria-labelledby="web-signin-heading">
           {step === 'devices' ? (
             <>
               <div className="web-signin-panel-heading">
                 <div>
-                  <h2 id="web-signin-heading">Your computers</h2>
-                  <p>Choose a computer to open your workspace.</p>
+                  <h1 id="web-signin-heading">Computers</h1>
+                  <p>Open a computer to continue.</p>
                 </div>
               </div>
               {!linking && <p className="web-signin-notice">{LINKS_MISSING}</p>}
@@ -277,16 +268,15 @@ export default function SignInSurface({ onLinked }) {
                     const refusalFor = pickRefusal(machine)
                     return (
                       <li key={machine.id} className="web-signin-machine">
-                        <span className="web-signin-machine-icon" aria-hidden="true"><Desktop size={22} /></span>
+                        <span className="web-signin-machine-icon" aria-hidden="true"><Desktop size={23} /></span>
                         <div className="web-signin-machine-body">
                           <span className="web-signin-machine-name">{machine.name}</span>
-                          <span className={`web-signin-machine-status${machine.online ? ' is-online' : ''}`}>
-                            <span aria-hidden="true" />{machineLine(machine)}
-                          </span>
+                          {machine.platform && <span className="web-signin-machine-platform">{platformLabel(machine.platform)}</span>}
                           {!machine.online && <p>Turn on this computer and make sure OpenRemote is running to connect.</p>}
                         </div>
-                        <button type="button" className="web-signin-open" disabled={Boolean(connecting)} onClick={() => pick(machine)} title={refusalFor ?? undefined}>
-                          {connecting === machine.id ? 'Connecting...' : 'Open'} <ArrowRight size={15} aria-hidden="true" />
+                        <span className={`web-signin-machine-status${machine.online ? ' is-online' : ''}`}><span aria-hidden="true" />{machineLine(machine)}</span>
+                        <button type="button" className="web-signin-open" disabled={Boolean(connecting) || !machine.online || !linking} onClick={() => pick(machine)} title={refusalFor ?? undefined}>
+                          {connecting === machine.id ? 'Connecting...' : 'Open'}
                         </button>
                       </li>
                     )
@@ -296,14 +286,14 @@ export default function SignInSurface({ onLinked }) {
             </>
           ) : (
             <div className="web-signin-door">
-              <h2 id="web-signin-heading">Welcome to OpenRemote</h2>
+              <h1 id="web-signin-heading">Sign in</h1>
               {step === 'checking' ? (
                 <LoadingStatus>Checking your sign-in...</LoadingStatus>
               ) : step === 'intro' ? (
                 <>
-                  <p>Sign in to see the computers connected to your account.</p>
+                  <p>Use your moreweb account to access your computers.</p>
                   <button type="button" className="web-signin-primary" onClick={signIn} disabled={starting}>
-                    {starting ? 'Opening sign-in...' : 'Sign in with moreweb'} <ArrowRight size={16} aria-hidden="true" />
+                    {starting ? 'Opening sign-in...' : 'Continue with moreweb'}
                   </button>
                 </>
               ) : (
@@ -326,7 +316,7 @@ export default function SignInSurface({ onLinked }) {
       </main>
 
       <footer className="web-signin-footer">
-        <span>A quieter way to work, from wherever you are.</span>
+        <span>Your chats and files stay on your computers.</span>
         <button type="button" className="web-signin-link" onClick={() => openExternal('https://moreweb.space').catch(() => {})}>moreweb.space</button>
       </footer>
     </div>

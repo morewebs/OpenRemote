@@ -1,85 +1,86 @@
-/* The browser front door uses the console's dark palette, with space for the
-   machine list and its state to be read without treating offline as an alarm. */
+/* A computer picker in the same neutral palette as the console. */
 .web-signin {
-  --door-bg: #111316;
-  --door-panel: #1a1d21;
-  --door-line: #343a40;
-  --door-text: #f1f3f4;
-  --door-muted: #a6adb4;
+  --door-text: #e8e8e8;
+  --door-muted: #999;
+  --door-line: #2c2c2c;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  background: var(--door-bg);
+  background: #151515;
   color: var(--door-text);
   font-family: Inter, sans-serif;
 }
 
-.web-signin-header, .web-signin-footer {
+.web-signin-header,
+.web-signin-main,
+.web-signin-footer {
+  width: min(880px, calc(100% - 64px));
+  margin: 0 auto;
+}
+
+.web-signin-header {
+  min-height: 76px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  width: min(1200px, calc(100% - 96px));
-  margin: 0 auto;
+  border-bottom: 1px solid var(--door-line);
 }
-.web-signin-header { min-height: 92px; border-bottom: 1px solid #292d32; }
-.web-signin-brand { display: flex; align-items: center; gap: 12px; font-size: 16px; font-weight: 600; letter-spacing: -.02em; }
-.web-signin-mark { display: block; width: 35px; height: 35px; }
-.web-signin-link { padding: 8px 0; border: 0; background: none; color: var(--door-muted); font: inherit; font-size: 13px; cursor: pointer; }
-.web-signin-link:hover { color: var(--door-text); }
-.web-signin-main {
-  width: min(1080px, calc(100% - 96px));
-  margin: auto;
-  padding: 88px 0;
-  display: grid;
-  grid-template-columns: minmax(0, .9fr) minmax(0, 1fr);
-  gap: clamp(64px, 9vw, 130px);
+
+.web-signin-brand {
+  display: flex;
   align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
 }
-.web-signin-context { color: #a7b8ce; font-size: 13px; font-weight: 500; }
-.web-signin-intro h1 { margin: 24px 0 20px; color: var(--door-text); font-size: clamp(36px, 4vw, 54px); line-height: 1.12; font-weight: 500; letter-spacing: -.045em; }
-.web-signin-intro > p { max-width: 34ch; margin: 0; color: var(--door-muted); font-size: 16px; line-height: 1.7; }
-.web-signin-privacy { display: flex; align-items: flex-start; gap: 12px; max-width: 35ch; margin-top: 52px; color: #a6adb4; font-size: 13px; line-height: 1.55; }
-.web-signin-privacy svg { flex: none; color: #8198b3; }
-.web-signin-panel { min-width: 0; padding: 32px; border: 1px solid var(--door-line); border-radius: 16px; background: var(--door-panel); }
-.web-signin-panel h2 { margin: 0; color: var(--door-text); font-size: 20px; font-weight: 600; letter-spacing: -.025em; }
-.web-signin-panel-heading p, .web-signin-door > p { margin: 9px 0 0; color: var(--door-muted); font-size: 13.5px; line-height: 1.6; }
-.web-signin-machines { display: grid; gap: 12px; list-style: none; margin: 28px 0 0; padding: 0; }
-.web-signin-machine { display: flex; align-items: flex-start; gap: 14px; padding: 18px; border: 1px solid #383d43; border-radius: 10px; background: #202429; }
-.web-signin-machine-icon { display: grid; flex: none; place-items: center; width: 40px; height: 40px; border-radius: 9px; background: #2c3239; color: #b5c4d5; }
-.web-signin-machine-body { display: grid; min-width: 0; flex: 1; gap: 7px; padding-top: 2px; }
-.web-signin-machine-name { overflow-wrap: anywhere; color: var(--door-text); font-size: 14px; font-weight: 600; line-height: 1.4; }
-.web-signin-machine-status { display: flex; align-items: center; gap: 7px; color: #afb5bb; font-size: 12px; }
-.web-signin-machine-status > span { width: 7px; height: 7px; border-radius: 50%; background: #7f8993; }
-.web-signin-machine-status.is-online { color: #8bd5af; }
-.web-signin-machine-status.is-online > span { background: #64c892; }
-.web-signin-machine-body p { max-width: 30ch; margin: 7px 0 0; color: var(--door-muted); font-size: 12.5px; line-height: 1.55; }
-.web-signin-open, .web-signin-primary { display: inline-flex; align-items: center; justify-content: center; gap: 9px; border: 1px solid #555f69; border-radius: 8px; background: transparent; color: #e4e9ed; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
-.web-signin-open { flex: none; min-height: 38px; padding: 0 12px; }
-.web-signin-open:hover { background: #30363d; }
-.web-signin-primary { min-height: 44px; margin-top: 25px; padding: 0 17px; border-color: #dbe5f0; background: #dbe5f0; color: #18212a; }
+
+.web-signin-mark { display: block; width: 27px; height: 27px; }
+.web-signin-main { flex: 1; padding: 72px 0; }
+.web-signin-panel { min-width: 0; }
+.web-signin-panel h1 { margin: 0; font-size: 24px; line-height: 1.3; font-weight: 500; letter-spacing: -.025em; }
+.web-signin-panel-heading p,
+.web-signin-door > p { margin: 10px 0 0; color: var(--door-muted); font-size: 14px; line-height: 1.6; }
+
+.web-signin-machines { list-style: none; margin: 32px 0 0; padding: 0; border-top: 1px solid var(--door-line); }
+.web-signin-machine { display: grid; grid-template-columns: 24px minmax(0, 1fr) 88px auto; align-items: start; gap: 20px; padding: 24px 0; border-bottom: 1px solid var(--door-line); }
+.web-signin-machine-icon { color: #888; padding-top: 3px; }
+.web-signin-machine-body { display: grid; gap: 5px; min-width: 0; }
+.web-signin-machine-name { overflow-wrap: anywhere; color: var(--door-text); font-size: 14px; font-weight: 500; line-height: 1.6; }
+.web-signin-machine-platform { color: var(--door-muted); font-size: 12px; line-height: 1.5; }
+.web-signin-machine-body p { max-width: 52ch; margin: 6px 0 0; color: var(--door-muted); font-size: 13px; line-height: 1.6; }
+.web-signin-machine-status { display: flex; align-items: center; gap: 7px; min-height: 34px; color: var(--door-muted); font-size: 12px; }
+.web-signin-machine-status > span { width: 6px; height: 6px; border-radius: 50%; background: #777; }
+.web-signin-machine-status.is-online { color: #96bba7; }
+.web-signin-machine-status.is-online > span { background: #78af92; }
+
+.web-signin-link { padding: 8px 0; border: 0; background: none; color: var(--door-muted); font: inherit; font-size: 12px; cursor: pointer; }
+.web-signin-link:hover { color: var(--door-text); }
+.web-signin-open,
+.web-signin-primary { min-height: 34px; padding: 0 15px; border: 1px solid #454545; border-radius: 5px; background: #222; color: var(--door-text); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+.web-signin-open:hover { background: #2d2d2d; border-color: #666; }
+.web-signin-primary { margin-top: 26px; min-height: 38px; border-color: #ddd; background: #ddd; color: #191919; }
 .web-signin-primary:hover { background: #fff; }
-.web-signin-primary:disabled { opacity: .55; cursor: default; }
-.web-signin button:focus-visible { outline: 2px solid #a6c9f4; outline-offset: 3px; }
-.web-signin-notice, .web-signin-problem { margin: 22px 0 0; padding: 13px 15px; border: 1px solid #494840; border-radius: 8px; background: #292821; color: #dbd2b8; font-size: 13px; line-height: 1.55; }
+.web-signin button:disabled { opacity: .55; cursor: default; }
+.web-signin button:focus-visible { outline: 2px solid #a6c9f4; outline-offset: 4px; }
+.web-signin-door { max-width: 440px; }
+.web-signin-panel .web-loading { justify-content: flex-start; padding: 24px 0; }
+
+.web-signin-notice,
+.web-signin-problem { margin: 24px 0 0; padding: 12px 0; color: #c5bda9; font-size: 13px; line-height: 1.6; }
 .web-signin-problem { display: flex; align-items: flex-start; gap: 9px; }
 .web-signin-problem svg { flex: none; margin-top: 2px; }
-.web-signin-empty { margin-top: 28px; padding: 25px; border: 1px dashed #424950; border-radius: 10px; color: var(--door-muted); }
-.web-signin-empty svg { color: #9aabbc; }
-.web-signin-empty h3 { margin: 15px 0 8px; color: var(--door-text); font-size: 14px; }
-.web-signin-empty p { margin: 0; font-size: 13px; line-height: 1.65; }
-.web-signin-footer { min-height: 76px; border-top: 1px solid #292d32; color: #858d95; font-size: 12px; }
-@media (max-width: 760px) {
-  .web-signin-header, .web-signin-footer, .web-signin-main { width: calc(100% - 40px); }
-  .web-signin-header { min-height: 72px; }
-  .web-signin-main { grid-template-columns: 1fr; gap: 40px; margin: 0 auto; padding: 56px 0; }
-  .web-signin-intro h1 { margin-top: 16px; font-size: 38px; }
-  .web-signin-privacy { margin-top: 28px; }
-  .web-signin-panel { padding: 24px; }
-  .web-signin-footer { margin-top: auto; }
-}
-@media (max-width: 420px) {
-  .web-signin-machine { flex-wrap: wrap; }
-  .web-signin-open { margin-left: 54px; }
-  .web-signin-footer { align-items: flex-start; flex-direction: column; justify-content: center; gap: 3px; padding: 16px 0; }
+.web-signin-empty { margin-top: 32px; padding: 24px 0; border-top: 1px solid var(--door-line); color: var(--door-muted); }
+.web-signin-empty > svg { display: none; }
+.web-signin-empty h3 { margin: 0 0 8px; color: var(--door-text); font-size: 14px; font-weight: 500; }
+.web-signin-empty p { max-width: 60ch; margin: 0; font-size: 13px; line-height: 1.7; }
+.web-signin-footer { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 64px; border-top: 1px solid var(--door-line); color: #888; font-size: 12px; line-height: 1.6; }
+
+@media (max-width: 600px) {
+  .web-signin-header, .web-signin-main, .web-signin-footer { width: calc(100% - 40px); }
+  .web-signin-header { min-height: 64px; }
+  .web-signin-main { padding: 44px 0; }
+  .web-signin-machine { grid-template-columns: 24px minmax(0, 1fr) auto; column-gap: 14px; row-gap: 8px; padding: 20px 0; }
+  .web-signin-machine-status { grid-column: 2; min-height: auto; }
+  .web-signin-open { grid-column: 3; grid-row: 1 / span 2; }
+  .web-signin-footer { align-items: flex-start; flex-direction: column; justify-content: center; gap: 2px; padding: 16px 0; }
 }
