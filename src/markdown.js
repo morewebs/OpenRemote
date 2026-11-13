@@ -172,7 +172,13 @@ function parseListItem(line) {
 /// blocks; a fence left open at the end still shows its code (a streaming
 /// reply may be mid-fence).
 export function renderMarkdown(text) {
-  const src = String(text ?? '')
+  // A harness that echoes a file hands us whatever the editor wrote, and
+  // an editor may open with a UTF-8 byte order mark. Left in place the
+  // mark rides on the first line, where the heading, fence and table
+  // patterns are anchored to column zero, so an echoed "# Title" prints as
+  // literal text with its hash. Strip it once, at the input, rather than
+  // teaching every pattern to expect it.
+  const src = String(text ?? '').replace(/^\uFEFF/, '')
   const lines = src.split('\n')
   const out = []
   let fence = null

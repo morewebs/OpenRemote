@@ -41,6 +41,17 @@ test('headings and bullets render in the paragraph family', () => {
   assert.ok(html.includes('Done.'))
 })
 
+test('a UTF-8 BOM on the first line does not swallow the heading it opens', () => {
+  // A harness echoing a file passes along whatever the editor wrote, and
+  // Obsidian and Windows editors open a file with a byte order mark. The
+  // mark, not the hash, then sits at column zero.
+  const html = renderMarkdown('\uFEFF# White Coffee Shop Website Design\n\n## Intent\n\nCopy.')
+  assert.match(html, /<p class="md-h1">White Coffee Shop Website Design<\/p>/)
+  assert.match(html, /<p class="md-h2">Intent<\/p>/)
+  assert.ok(!html.includes('\uFEFF'), 'the mark does not survive into the text')
+  assert.ok(!html.includes('# White Coffee'), 'no literal hash is left on the title')
+})
+
 test('tables render with alignment and escaped pipes survive', () => {
   const html = renderMarkdown(
     '| Syntax | Notes | Priority |\n' +
