@@ -7,7 +7,7 @@
 // job is to establish that link and nothing else.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Desktop, WarningCircle } from '@phosphor-icons/react'
+import { Desktop, UserCircle, WarningCircle } from '@phosphor-icons/react'
 import { SplashMark } from '../Splash.jsx'
 import { openExternal } from '../platform.js'
 import { platformLabel } from '../cloud.js'
@@ -43,6 +43,8 @@ function refusal(payload, fallback) {
 export default function SignInSurface({ onLinked }) {
   const [step, setStep] = useState('checking')
   const [machines, setMachines] = useState([])
+  const [account, setAccount] = useState(null)
+  const [view, setView] = useState('machines')
   const [problem, setProblem] = useState(null)
   const [linking, setLinking] = useState(true)
   // One sign-in at a time: a second press while the first is navigating would
@@ -75,6 +77,7 @@ export default function SignInSurface({ onLinked }) {
       }
       const payload = await response.json().catch(() => null)
       setMachines(machinesOf(payload))
+      setAccount(payload?.account ?? null)
       setLinking(Boolean(peer))
       setStep('devices')
     },
@@ -211,6 +214,8 @@ export default function SignInSurface({ onLinked }) {
   const signOut = () => {
     clearTokens()
     setMachines([])
+    setAccount(null)
+    setView('machines')
     setProblem(null)
     setStep('intro')
   }
@@ -235,23 +240,37 @@ export default function SignInSurface({ onLinked }) {
 
   return (
     <div className="web-signin">
-      <header className="web-signin-header">
+      <aside className="web-signin-sidebar">
         <div className="web-signin-brand">
           <SplashMark className="web-signin-mark" />
           <span>OpenRemote</span>
         </div>
-        {step === 'devices' && (
-          <button type="button" className="web-signin-link" onClick={signOut}>Sign out</button>
-        )}
-      </header>
+        <nav className="web-signin-nav" aria-label="Main navigation">
+          <button type="button" aria-current={view === 'machines' ? 'page' : undefined} onClick={() => setView('machines')}>
+            <Desktop size={18} aria-hidden="true" />Machines
+          </button>
+          <button type="button" aria-current={view === 'account' ? 'page' : undefined} onClick={() => setView('account')}>
+            <UserCircle size={18} aria-hidden="true" />Account
+          </button>
+        </nav>
+        <button type="button" className="web-signin-link web-signin-site" onClick={() => openExternal('https://moreweb.space').catch(() => {})}>moreweb.space</button>
+      </aside>
 
+      <div className="web-signin-content">
       <main className="web-signin-main">
         <section className="web-signin-panel" aria-live="polite" aria-labelledby="web-signin-heading">
-          {step === 'devices' ? (
+          {step === 'devices' && view === 'account' ? (
+            <div className="web-signin-account">
+              <h1 id="web-signin-heading">Account</h1>
+              <p>Signed in with moreweb.</p>
+              {account?.email && <p className="web-signin-account-email">{account.email}</p>}
+              <button type="button" className="web-signin-open" onClick={signOut}>Sign out</button>
+            </div>
+          ) : step === 'devices' ? (
             <>
               <div className="web-signin-panel-heading">
                 <div>
-                  <h1 id="web-signin-heading">Computers</h1>
+                  <h1 id="web-signin-heading">Machines</h1>
                   <p>Open a computer to continue.</p>
                 </div>
               </div>
@@ -317,8 +336,8 @@ export default function SignInSurface({ onLinked }) {
 
       <footer className="web-signin-footer">
         <span>Your chats and files stay on your computers.</span>
-        <button type="button" className="web-signin-link" onClick={() => openExternal('https://moreweb.space').catch(() => {})}>moreweb.space</button>
       </footer>
+      </div>
     </div>
   )
 }

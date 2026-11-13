@@ -5,31 +5,38 @@
   --door-line: #2c2c2c;
   min-height: 100dvh;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   background: #151515;
   color: var(--door-text);
   font-family: Inter, sans-serif;
 }
 
-.web-signin-header,
-.web-signin-main,
-.web-signin-footer {
-  width: min(880px, calc(100% - 64px));
-  margin: 0 auto;
+.web-signin-sidebar {
+  display: flex;
+  flex: 0 0 208px;
+  flex-direction: column;
+  padding: 26px 16px 18px;
+  border-right: 1px solid var(--door-line);
+  background: #191919;
 }
 
-.web-signin-header {
-  min-height: 76px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--door-line);
-}
+.web-signin-content { display: flex; flex: 1; min-width: 0; flex-direction: column; }
+.web-signin-main,
+.web-signin-footer { width: min(880px, calc(100% - 80px)); margin: 0 auto; }
+.web-signin-nav { display: grid; gap: 4px; margin-top: 34px; }
+.web-signin-nav button { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 0 12px; border: 0; border-radius: 5px; background: transparent; color: #aaa; font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.web-signin-nav button:hover { background: #242424; color: var(--door-text); }
+.web-signin-nav button[aria-current="page"] { background: #2b2b2b; color: var(--door-text); }
+.web-signin-sidebar .web-signin-site { align-self: flex-start; margin-top: auto; padding: 32px 12px 0; }
+.web-signin-account > p { margin: 12px 0 0; color: var(--door-muted); font-size: 14px; line-height: 1.6; }
+.web-signin-account .web-signin-account-email { color: var(--door-text); overflow-wrap: anywhere; }
+.web-signin-account > button { margin-top: 28px; }
 
 .web-signin-brand {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 0 10px;
   font-size: 14px;
   font-weight: 600;
 }
@@ -76,8 +83,13 @@
 .web-signin-footer { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 64px; border-top: 1px solid var(--door-line); color: #888; font-size: 12px; line-height: 1.6; }
 
 @media (max-width: 600px) {
-  .web-signin-header, .web-signin-main, .web-signin-footer { width: calc(100% - 40px); }
-  .web-signin-header { min-height: 64px; }
+  .web-signin { flex-direction: column; }
+  .web-signin-sidebar { flex: none; padding: 18px 20px 12px; border-right: 0; border-bottom: 1px solid var(--door-line); }
+  .web-signin-brand { padding: 0; }
+  .web-signin-nav { display: flex; gap: 8px; margin-top: 18px; }
+  .web-signin-nav button { flex: 1; }
+  .web-signin-sidebar .web-signin-site { display: none; }
+  .web-signin-main, .web-signin-footer { width: calc(100% - 40px); }
   .web-signin-main { padding: 44px 0; }
   .web-signin-machine { grid-template-columns: 24px minmax(0, 1fr) auto; column-gap: 14px; row-gap: 8px; padding: 20px 0; }
   .web-signin-machine-status { grid-column: 2; min-height: auto; }
