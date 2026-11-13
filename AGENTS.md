@@ -246,8 +246,9 @@ an old process is still alive; find it before re-running).
   looks at its own feed on launch and every 2 hours:
   `releases/latest/download/latest.json` for stable,
   `releases/download/nightly/latest.json` for nightly. The private keys live
-  only in the repo's secrets. Windows downloads the installer in the
-  background and installs it when the user confirms; Linux only links to the
+  only in the repo's secrets. Windows fetches the update in the background (a
+  signed patch when the app has its base, else a packed full installer, else the
+  release's own installer) and installs it when the user confirms; Linux only links to the
   release page. Until a channel's key exists, its app says updates aren't
   switched on. `docs/releasing-updates.md` is the switch-on runbook, and the
   path is not yet proven by a test release.

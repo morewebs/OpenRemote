@@ -155,6 +155,22 @@ jobs:
           mkdir -p staged
           cp "${installers[0]}" staged/OpenRemote-Nightly-Setup-x64.exe
           cp "${sigs[0]}" staged/OpenRemote-Nightly-Setup-x64.exe.sig
+      # The update delta: a patch from the previous nightly and the packed
+      # installer, both made from an uncompressed build of this same app (see
+      # scripts/make-update-delta.sh). The installer staged above is still what
+      # a fresh download gets. The signing key is the one the build above
+      # checked for, so the delta is always signed.
+      - name: the update delta
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.NIGHTLY_TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.NIGHTLY_TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          node scripts/delta.mjs uncompressed src-tauri/target/nightly-tauri.conf.json src-tauri/target/nightly-raw-tauri.conf.json
+          scripts/make-update-delta.sh OpenRemote-Nightly-Setup-x64 "$VERSION" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/nightly" \
+            src-tauri/target/nightly-raw-tauri.conf.json staged
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: nightly-windows
@@ -268,10 +284,14 @@ jobs:
           gh run download "$GITHUB_RUN_ID" -n nightly-linux -D assets
           ls -la assets
       # The feed. It is written from the signatures the builds made, and names
-      # only the installers this run carries.
+      # only the installers this run carries. The delta's record is read from
+      # the same folder as the signatures, under the name the manifest expects.
       - name: latest.json
         run: |
           set -euo pipefail
+          if [ -f assets/OpenRemote-Nightly-Setup-x64.delta.json ]; then
+            cp assets/OpenRemote-Nightly-Setup-x64.delta.json assets/delta.json
+          fi
           node scripts/updater-manifest.mjs --nightly "$VERSION" "$GITHUB_REPOSITORY" assets > latest.json
           cat latest.json
       - name: the release notes
@@ -301,9 +321,16 @@ jobs:
       - name: the dated release
         run: |
           set -euo pipefail
+          # The delta files this run carries: none when the build made no delta.
+          delta=()
+          for name in OpenRemote-Nightly-Setup-x64.update.zst OpenRemote-Nightly-Setup-x64.update.zst.sig \
+                      OpenRemote-Nightly-Setup-x64.patch.zst OpenRemote-Nightly-Setup-x64.patch.zst.sig; do
+            if [ -f "assets/${name}" ]; then delta+=("assets/${name}"); fi
+          done
           gh release create "nightly-${STAMP}" \
             assets/OpenRemote-Nightly-Setup-x64.exe assets/OpenRemote-Nightly-Setup-x64.exe.sig \
             assets/OpenRemote-Nightly-x86_64.AppImage assets/OpenRemote-Nightly-x86_64.AppImage.sig \
+            "${delta[@]}" \
             --target "$SHA" --prerelease \
             --title "OpenRemote nightly ${VERSION}" \
             --notes-file nightly-notes.md
@@ -325,14 +352,24 @@ jobs:
             gh release create nightly --verify-tag --prerelease \
               --title "OpenRemote nightly ${VERSION}" --notes-file nightly-notes.md
           fi
+          # The delta files this run carries, as in the dated release.
+          delta=()
+          for name in OpenRemote-Nightly-Setup-x64.update.zst OpenRemote-Nightly-Setup-x64.update.zst.sig \
+                      OpenRemote-Nightly-Setup-x64.patch.zst OpenRemote-Nightly-Setup-x64.patch.zst.sig; do
+            if [ -f "assets/${name}" ]; then delta+=("assets/${name}"); fi
+          done
           gh release upload nightly --clobber \
             assets/OpenRemote-Nightly-Setup-x64.exe assets/OpenRemote-Nightly-Setup-x64.exe.sig \
-            assets/OpenRemote-Nightly-x86_64.AppImage assets/OpenRemote-Nightly-x86_64.AppImage.sig
+            assets/OpenRemote-Nightly-x86_64.AppImage assets/OpenRemote-Nightly-x86_64.AppImage.sig \
+            "${delta[@]}"
           # The feed goes last, so it never names a file that is not yet there.
           gh release upload nightly --clobber latest.json
           # What an older build left on the rolling release goes. The list is
           # exactly what this build carries.
           keep=" OpenRemote-Nightly-Setup-x64.exe OpenRemote-Nightly-Setup-x64.exe.sig OpenRemote-Nightly-x86_64.AppImage OpenRemote-Nightly-x86_64.AppImage.sig latest.json "
+          for file in "${delta[@]}"; do
+            keep="${keep}$(basename "$file") "
+          done
           gh release view nightly --json assets --jq '.assets[].name' > rolling-assets.txt
           while IFS= read -r name; do
             if [ -n "$name" ] && [[ "$keep" != *" $name "* ]]; then

@@ -1,6 +1,6 @@
 # In-app updates: channels, feeds, and the badge (v1)
 
-Status: being built on `main`. Nothing is pushed, tagged or published. Delta patches are deferred (see below).
+Status: being built on `main`. Nothing is pushed, tagged or published. Delta patches are built (see below).
 
 ## Decided
 
@@ -29,25 +29,27 @@ Status: being built on `main`. Nothing is pushed, tagged or published. Delta pat
 - **Checks.** On launch (30 s after start, so it never competes with startup),
   then every 2 hours while the app runs. Automatic checks can still be turned
   off in the console.
-- **Windows** downloads the new installer in the background as soon as a check
-  finds it, keeps the bytes in memory, verifies the Tauri signature, and installs
-  from memory when the user confirms. The daemon is stopped first, as today.
+- **Windows** fetches the new installer in the background as soon as a check
+  finds it (a signed patch when the app has its base), keeps the bytes in memory,
+  verifies each file's signature, and installs from memory when the user
+  confirms. The daemon is stopped first, as today.
 - **Linux is link-only.** The badge opens the release page. The app never
   replaces an AppImage or a deb.
-- **The feed format is Tauri's `latest.json`**, plus one extra top-level field,
-  `page`: the release page the badge opens. Tauri's plugin ignores unknown
-  fields, so the plugin still reads the file.
+- **The feed format is Tauri's `latest.json`**, plus two extra top-level fields:
+  `page`, the release page the badge opens, and `delta`, the signed patch and
+  packed installer the Windows app takes when it can. Tauri's plugin ignores
+  unknown fields, so the plugin still reads the file.
 
-## Deferred: delta patches
+## Delta patches
 
-The plan was a binary patch between consecutive builds. Measured on a 23 MB
-Windows daemon binary with a 2 KiB change: the patch carries 2 KiB when the
-file is raw, but 66% of the file when it is LZMA-compressed. Installers and
-AppImages are compressed, so patching the installer would save little. The
-patch path is not built. Choosing how deltas should work is a decision for the
-user before that path is written. The options are: patch uncompressed
-application files in place, ship uncompressed installers for updates only, or
-keep full installers.
+The first measurement still holds: on a 23 MB Windows daemon binary, a 2 KiB
+change is a 2 KiB patch when the file is raw, but 66% of the file when it is
+LZMA-compressed. So the delta is made from an uncompressed build of the
+installer, and the release also ships that installer packed, for an app with
+no base. The app takes the patch when it kept the base for the installed
+version, else the packed installer, else the release's own installer. The
+runbook, `docs/releasing-updates.md` under "Smaller Windows updates", has the
+files and the sizes.
 
 ## Signing
 

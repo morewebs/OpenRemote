@@ -7,11 +7,49 @@ the reverse.
 
 Each app checks its own feed thirty seconds after it starts, then every two
 hours while it runs. Automatic checks can be turned off in the console. On
-Windows the app downloads a newer installer in the background as soon as a
-check finds it, keeps the bytes in memory, and verifies the signature. It
-installs from memory when the user confirms, and the daemon is stopped first.
-An update whose signature does not verify is refused. On Linux the badge only
-opens the release page; the app never replaces an AppImage.
+Windows the app fetches a newer installer in the background as soon as a check
+finds it, keeps the bytes in memory, and verifies each file it takes against its
+signature. It installs from memory when the user confirms, and the daemon is
+stopped first. An update whose signature does not verify is refused. On Linux
+the badge only opens the release page; the app never replaces an AppImage.
+
+## Smaller Windows updates
+
+Besides its own installer, a Windows release ships up to three signed files for
+the app to choose from, and the app takes the smallest route it can use:
+
+- **a patch** from the previous release's uncompressed installer
+  (`OpenRemote-Setup-x64.patch.zst`, or the nightly's own name). It only exists
+  when the previous release stored its installer, and the app only uses it when
+  it kept that exact installer;
+- **the whole new installer, packed** (`OpenRemote-Setup-x64.update.zst`, about
+  11 MB);
+- **the release's own installer**, the LZMA one a fresh download gets (about
+  10 MB). An app with nothing else still updates from it.
+
+The patch and the packed installer come from an uncompressed build of the same
+app (NSIS `compression: none`, 43.6 MB). An LZMA installer changes almost
+everywhere when the app changes, so two of them cannot be patched small; the
+uncompressed one changes where the app did. The release builds it second, from
+the same source, and `scripts/make-update-delta.sh` makes the files and signs
+them. A build without the signing key makes none of them.
+
+After an update lands, the app keeps its uncompressed installer packed at zstd
+level 3 (about 14 MB) in its data folder, under `updates/`, as the base for the
+next patch. A fresh install has no base, so its first update is the packed
+installer; every later update is a patch. Only the installed version's base is
+kept. The level is a trade: level 19 gives 11.2 MB but takes about 13 seconds,
+on the install path.
+
+Measured on this machine: a 2 KiB change to the uncompressed installer gives a
+6 KB patch. Making a patch takes about 10 seconds and under a gigabyte of
+memory on the release machine. Each Windows build now also runs a second NSIS
+build and builds `scripts/delta-tool`, so a release takes longer.
+
+**Not yet proven.** The codec is tested in Rust (`src-tauri/src/delta_codec.rs`),
+the release side in Node (`scripts/delta.test.mjs`), and the signatures were
+checked with a throwaway key on a scratch build. No CI run has made a delta, and
+no update has gone through the app's patch path on a real install.
 
 An app built with an empty public key says updates aren't switched on, and never
 asks the network. That is the state of a channel until its key is set.

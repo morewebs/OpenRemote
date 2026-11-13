@@ -353,6 +353,24 @@ jobs:
             # output must cost this release its npm entry, not its installers.
             echo "::warning::the portable pair could not be staged, so this release has no npm entry"
           fi
+      # In-app updates also ship a patch and a packed installer, both made from
+      # an UNCOMPRESSED build of this same app. An LZMA installer changes almost
+      # everywhere when the app changes, so a patch between two of them would be
+      # nearly the whole file; the uncompressed ones change only where the app
+      # did. The installer staged above is still what a fresh download gets.
+      # Only a build with the signing key makes these (scripts/make-update-delta.sh
+      # says how): without it there is no update to sign.
+      - name: the update delta
+        if: steps.build.outputs.skip != '1'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ github.event_name != 'workflow_dispatch' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.event_name != 'workflow_dispatch' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+        run: |
+          set -euo pipefail
+          node scripts/delta.mjs uncompressed src-tauri/tauri.conf.json src-tauri/target/stable-raw-tauri.conf.json
+          scripts/make-update-delta.sh OpenRemote-Setup-x64 "${TAG#v}" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/latest/download" \
+            src-tauri/target/stable-raw-tauri.conf.json .
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: steps.build.outputs.skip != '1'
         with:
@@ -366,6 +384,11 @@ jobs:
             OpenRemote-windows-x64.exe
             openremote-daemon-windows-x64.exe
             SHA256SUMS-portable-windows-x64
+            OpenRemote-Setup-x64.update.zst
+            OpenRemote-Setup-x64.update.zst.sig
+            OpenRemote-Setup-x64.patch.zst
+            OpenRemote-Setup-x64.patch.zst.sig
+            OpenRemote-Setup-x64.delta.json
 
   linux:
     needs: release
@@ -757,7 +780,7 @@ jobs:
                -o -name '*.dmg' -o -name '*.apk' -o -name 'openremote-daemon-linux-x86_64' \
                -o -name 'THIRD-PARTY_NOTICES.md' -o -name 'SHA256SUMS' \
                -o -name 'SHA256SUMS-portable-windows-x64' \
-               -o -name '*.app.tar.gz' -o -name '*.sig' \) | sort)
+               -o -name '*.app.tar.gz' -o -name '*.sig' -o -name '*.update.zst' -o -name '*.patch.zst' \) | sort)
           have=()
           for file in "${assets[@]}"; do
             have+=("$(basename "$file")")
@@ -842,6 +865,17 @@ jobs:
                 gh release download "$TAG" --pattern "${name}.sig" --dir sigs
               fi
             done
+            # The update delta, when this run made one: the record that names
+            # its files, and their signatures beside the installer's. The feed
+            # takes the files' URLs from the release they are published in.
+            if [ -f assets/OpenRemote-Setup-x64.delta.json ]; then
+              cp assets/OpenRemote-Setup-x64.delta.json sigs/delta.json
+              for name in OpenRemote-Setup-x64.update.zst OpenRemote-Setup-x64.patch.zst; do
+                if [ -f "assets/${name}.sig" ]; then
+                  cp "assets/${name}.sig" "sigs/${name}.sig"
+                fi
+              done
+            fi
             if compgen -G 'sigs/*.sig' > /dev/null; then
               node scripts/updater-manifest.mjs "$TAG" "$GITHUB_REPOSITORY" sigs > latest.json
               cat latest.json
