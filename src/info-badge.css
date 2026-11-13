@@ -1,0 +1,66 @@
+/* The top bar's update badge and its confirmation (InfoBadge.jsx). The badge
+   takes the info button's place inside the title, so it is a small pill sized
+   to that line, not a banner. Blue is the console's cool accent (--accent),
+   because the palette has no separate blue. Red is the danger token (--red),
+   used while chats are running that a restart would stop. */
+
+.ib-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 8px;
+  border: 1px solid;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  animation: ib-in 0.18s ease-out both;
+}
+
+.ib-badge--red {
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 50%, transparent);
+  background: color-mix(in srgb, var(--red) 14%, transparent);
+}
+
+.ib-badge:hover {
+  background: color-mix(in srgb, currentColor 22%, transparent);
+}
+
+.ib-badge:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 2px;
+}
+
+@keyframes ib-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+}
+
+/* Reduced motion, both ways: the system setting and the in-app switch. */
+@media (prefers-reduced-motion: reduce) {
+  .ib-badge {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion] .ib-badge {
+  animation: none;
+}
+
+.ib-warning {
+  margin: 0 0 14px;
+  color: var(--red);
+  font-size: 12.5px;
+  line-height: 1.5;
+}

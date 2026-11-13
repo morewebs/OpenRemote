@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft, ArrowRight, Info, SidebarSimple } from '@phosphor-icons/react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import AboutModal from './AboutModal.jsx'
+import InfoBadge from './InfoBadge.jsx'
 import SplitGlyph from './SplitGlyph.jsx'
 import { useConsole } from './state/console.jsx'
 import { isMobile } from './platform.js'
@@ -137,14 +138,7 @@ export default function TitleBar({
       </div>
       <div className="tb-title" data-tauri-drag-region>
         OpenRemote
-        <button
-          className="tb-info"
-          onClick={() => setAbout(true)}
-          title="About OpenRemote"
-          aria-label="About OpenRemote"
-        >
-          <Info size={14} weight="duotone" />
-        </button>
+        <InfoBadge onAbout={() => setAbout(true)} />
       </div>
       {/* The split sits at the bar's right end, where VS Code keeps its own
           split-editor button: next to the caption buttons on Windows, at the

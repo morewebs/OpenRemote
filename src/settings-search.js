@@ -99,7 +99,7 @@ const ROWS = [
   // order the section draws them.
   row('install-version', 'this-install', 'OpenRemote version', 'The build and the background service it talks to.', ['about', 'build', 'release', 'update', 'daemon']),
   row('install-updates', 'this-install', 'Updates', 'Looks for a newer signed release, and installs it when you say so.', ['update', 'updates', 'upgrade', 'new version', 'release', 'check']),
-  row('install-updates-auto', 'this-install', 'Look for updates automatically', 'Once a day. Installing still waits for you.', ['update', 'updates', 'automatic', 'daily', 'check']),
+  row('install-updates-auto', 'this-install', 'Look for updates automatically', 'On launch and every 2 hours. Installing still waits for you.', ['update', 'updates', 'automatic', 'launch', 'check']),
   row('daemon-connection', 'this-install', 'Connection', 'The background service the chats run through.', ['connect', 'connection', 'token', 'local']),
   row('daemon-connect', 'this-install', 'Connect by address', 'An OpenRemote service you run yourself, by its address and access key.', ['connect', 'address', 'token', 'manual', 'elsewhere']),
   row('daemon-chats', 'this-install', 'Chats on record', 'Chats survive a restart of the background service; stopped ones can resume.', ['sessions', 'record', 'history', 'resume']),

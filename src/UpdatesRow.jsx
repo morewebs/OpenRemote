@@ -35,7 +35,7 @@ export default function UpdatesRow() {
             : s.checkedAt
               ? 'This is the newest version.'
               : auto
-                ? 'Looks once a day while the app runs.'
+                ? 'Looks on launch and every 2 hours while the app runs.'
                 : 'Not checked yet. Press Check now.'
   return (
     <>
@@ -67,7 +67,7 @@ export default function UpdatesRow() {
       <div className="pn-row" data-stg="install-updates-auto">
         <div>
           <div className="pn-name">Look for updates automatically</div>
-          <div className="pn-detail">Once a day. Installing still waits for you.</div>
+          <div className="pn-detail">On launch and every 2 hours. Installing still waits for you.</div>
         </div>
         <Toggle
           checked={auto}
