@@ -1,0 +1,10 @@
+.web-loading { display: flex; align-items: center; justify-content: center; gap: 11px; padding: 24px; color: var(--text-2, #a6adb4); font: 13px/1.5 Inter, sans-serif; }
+.web-loading--full { min-height: 100dvh; background: var(--bg-app, #111316); }
+.web-loading-spinner { flex: none; width: 16px; height: 16px; border: 2px solid rgba(150, 173, 201, .22); border-top-color: #9eb6d4; border-radius: 50%; animation: web-loading-turn 1.2s linear infinite; }
+@keyframes web-loading-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .web-loading-spinner { animation: none; } }
+html[data-reduce-motion] .web-loading-spinner { animation: none; }
+.web-loading-error { display: grid; justify-items: center; gap: 16px; padding: 48px 24px; color: var(--text-2); font-size: 13px; text-align: center; }
+.web-loading-error p { max-width: 48ch; margin: 0; line-height: 1.6; }
+.web-loading-error button { min-height: 38px; padding: 0 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-hover); color: var(--text-1); font: inherit; cursor: pointer; }
+.web-loading-error button:focus-visible { outline: 2px solid #9eb6d4; outline-offset: 3px; }

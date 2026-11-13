@@ -27,3 +27,36 @@ test('failures back off to a ceiling and success returns to the normal pace', ()
   assert.equal(pollDelay(99), POLL_MAX_MS)
   assert.ok(POLL_MAX_MS > 0)
 })
+
+test('the running poller waits for completion, backs off, pauses and cleans up', async () => {
+  const { startPolling } = await import('./poll.js')
+  let visibility
+  const page = { visibilityState: 'visible', addEventListener: (_event, fn) => { visibility = fn }, removeEventListener: () => { visibility = null } }
+  let scheduled = null
+  let delay
+  let finish
+  let calls = 0
+  const stop = startPolling(() => { calls++; return new Promise((resolve, reject) => { finish = { resolve, reject } }) }, {
+    document: page, interval: 1000, maxDelay: 8000,
+    setTimeout: (fn, ms) => { scheduled = fn; delay = ms; return 1 }, clearTimeout: () => { scheduled = null },
+  })
+  assert.equal(calls, 1)
+  visibility()
+  assert.equal(calls, 1, 'returning while in flight cannot overlap a request')
+  assert.equal(scheduled, null)
+  finish.reject(new Error('offline'))
+  await Promise.resolve()
+  assert.equal(delay, 2000)
+  page.visibilityState = 'hidden'
+  visibility()
+  assert.equal(scheduled, null)
+  page.visibilityState = 'visible'
+  visibility()
+  assert.equal(calls, 2, 'returning catches up immediately')
+  finish.resolve()
+  await Promise.resolve()
+  assert.equal(delay, 1000, 'success resets backoff')
+  stop()
+  assert.equal(scheduled, null)
+  assert.equal(visibility, null)
+})

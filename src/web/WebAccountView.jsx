@@ -1,12 +1,13 @@
 // Account: the moreweb account this browser is a device of, and its machines.
 
+import LoadingStatus from './LoadingStatus.jsx'
 import { useConsole } from '../state/console.jsx'
 import { kindLabel, platformLabel } from '../cloud.js'
 import '../devices.css'
 import '../panels.css'
 
 export default function WebAccountView({ onSignOut }) {
-  const { cloud, devices, thisDevice } = useConsole()
+  const { cloud, devices, thisDevice, devicesAnswered } = useConsole()
   const list = Array.isArray(devices) ? devices : []
   const me = list.find((device) => device.id === thisDevice) ?? cloud?.device ?? null
   const machines = list.filter((device) => device.kind === 'machine')
@@ -19,6 +20,7 @@ export default function WebAccountView({ onSignOut }) {
           <p className="dv-meta">{cloud?.account?.email ?? 'Signed in'}</p>
         </div>
       </header>
+      {!devicesAnswered && <LoadingStatus>Loading your account...</LoadingStatus>}
       <h2 className="pn-section">This browser</h2>
       <p className="pn-lead">
         This browser is one of your account's devices. Your chats stay on your machines; this page shows them and sends what you type.

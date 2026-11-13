@@ -20,10 +20,12 @@ import 'katex/dist/katex.min.css'
 import './base.css'
 import './privacy.css'
 import Splash from './Splash.jsx'
+import LoadingStatus from './web/LoadingStatus.jsx'
 import { restoreBootPrefs } from './settings.js'
 import { openLinksOutside } from './platform.js'
 import { loadPeer, browserDeviceName } from './web/peer.js'
 import { cloudTarget } from './web/cloud.js'
+import { accountTokens } from './web/account-session.js'
 import { clearDevice, clearTokens, loadDevice, loadTokens, saveDevice } from './web/session.js'
 import WebShell from './web/WebShell.jsx'
 import SignInSurface from './web/SignInSurface.jsx'
@@ -52,12 +54,13 @@ function WebRoot() {
       if (cancelled) return
       setPeer(link)
       const saved = loadDevice()
-      const savedTokens = loadTokens()
+      let savedTokens = loadTokens()
       if (!link || !saved || !savedTokens) {
         setRoute({ step: 'signin' })
         return
       }
       try {
+        savedTokens = await accountTokens(target)
         await link.ensureDevice({
           api: target.api,
           accessToken: savedTokens.access,
@@ -75,17 +78,18 @@ function WebRoot() {
     return () => {
       cancelled = true
     }
-  }, [target.api])
+  }, [target.api, target.issuer])
 
   const linked = async (machine) => {
     const link = peer ?? (await loadPeer())
-    const savedTokens = loadTokens()
+    let savedTokens = loadTokens()
     if (!link || !savedTokens) {
       setRoute({ step: 'signin' })
       return
     }
     setPeer(link)
     try {
+      savedTokens = await accountTokens(target)
       await link.ensureDevice({
         api: target.api,
         accessToken: savedTokens.access,
@@ -123,6 +127,7 @@ function WebRoot() {
   }
   return (
     <StrictMode>
+      {route.step === 'booting' && <LoadingStatus full>Restoring your workspace...</LoadingStatus>}
       {route.step === 'signin' && <SignInSurface onLinked={linked} />}
       <Splash />
     </StrictMode>

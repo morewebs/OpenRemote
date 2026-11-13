@@ -7,7 +7,7 @@
 // job is to establish that link and nothing else.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowRight, Globe, WarningCircle } from '@phosphor-icons/react'
+import { ArrowRight, Desktop, LockKey, WarningCircle } from '@phosphor-icons/react'
 import { SplashMark } from '../Splash.jsx'
 import { openExternal } from '../platform.js'
 import {
@@ -22,10 +22,9 @@ import {
 } from './cloud.js'
 import { machineLine, machinesOf, pickRefusal } from './devices.js'
 import { browserDeviceName, loadPeer } from './peer.js'
+import LoadingStatus from './LoadingStatus.jsx'
+import { accountFetch } from './account-session.js'
 import { clearPending, clearTokens, loadPending, loadTokens, savePending, saveTokens } from './session.js'
-// The Cloud surface's own sky, which this page and the device view both sit
-// in. It lives beside the Cloud views, not here.
-import '../cloudmode.css'
 import './web-signin.css'
 
 const LINKS_MISSING =
@@ -48,25 +47,23 @@ export default function SignInSurface({ onLinked }) {
   // One sign-in at a time: a second press while the first is navigating would
   // save a second verifier and strand the callback that comes back.
   const [starting, setStarting] = useState(false)
+  const [connecting, setConnecting] = useState(null)
   const started = useRef(false)
   const target = useRef(cloudTarget({ search: window.location.search, env: window.__OPENREMOTE_CLOUD__ }))
   const redirect = redirectFor(window.location)
 
   const listMachines = useCallback(
-    async (tokens, peer) => {
+    async (_tokens, peer) => {
       let response
       try {
-        response = await fetch(`${target.current.api}/devices`, {
-          headers: { Authorization: `Bearer ${tokens.access}` },
-        })
-      } catch {
-        setProblem('OpenRemote Cloud could not be reached. Check this computer is online, then try again.')
-        setStep('error')
+        response = await accountFetch(target.current, '/devices')
+      } catch (error) {
+        setProblem(error?.code === 'session_expired' ? error.message : 'OpenRemote Cloud could not be reached. Your sign-in is saved. Check your connection and try again.')
+        setStep(error?.code === 'session_expired' ? 'intro' : 'error')
         return
       }
       if (response.status === 401) {
-        clearTokens()
-        setProblem('Your sign-in expired. Sign in with moreweb again.')
+        setProblem('Your sign-in could not be verified after renewal. Try signing in with moreweb again.')
         setStep('intro')
         return
       }
@@ -217,7 +214,8 @@ export default function SignInSurface({ onLinked }) {
     setStep('intro')
   }
 
-  const pick = (machine) => {
+  const pick = async (machine) => {
+    if (connecting) return
     // The link first, then the machine: a build without the link cannot reach
     // any machine, and saying which of the two is missing is the difference
     // between a build to update and a machine to wake.
@@ -227,94 +225,110 @@ export default function SignInSurface({ onLinked }) {
     }
     const refusalFor = pickRefusal(machine)
     if (refusalFor) setProblem(refusalFor)
-    else onLinked(machine)
+    else {
+      setProblem(null)
+      setConnecting(machine.id)
+      try { await onLinked(machine) } finally { setConnecting(null) }
+    }
   }
 
   return (
-    <div className="cloudmode web-signin">
-      <div className="cm-horizon" aria-hidden="true" />
-      <main className="cm-panel web-signin-panel" aria-live="polite">
-        <SplashMark className="web-signin-mark" />
-        <h1 className="cm-title">OpenRemote</h1>
-        <p className="cm-body">
-          This is OpenRemote in the browser. The chats stay on your own computers; this page is a window
-          onto them.
-        </p>
-
-        {step === 'checking' && <p className="cm-body web-signin-quiet">Checking this browser's sign-in.</p>}
-
-        {step === 'intro' && (
-          <div className="cm-actions">
-            <button type="button" className="cm-back primary" onClick={signIn} disabled={starting}>
-              Sign in with moreweb
-              <ArrowRight size={13} weight="bold" />
-            </button>
-          </div>
-        )}
-
+    <div className="web-signin">
+      <header className="web-signin-header">
+        <div className="web-signin-brand">
+          <SplashMark className="web-signin-mark" />
+          <span>OpenRemote</span>
+        </div>
         {step === 'devices' && (
-          <>
-            <p className="cm-body web-signin-sub">
-              Choose the computer to reach. Its chats, its files and its apps stay there.
-            </p>
-            {!linking && <p className="cm-error web-signin-honest">{LINKS_MISSING}</p>}
-            {machines.length === 0 ? (
-              <p className="cm-body">
-                No machines in this account yet. Open OpenRemote on one of your computers and choose
-                Machines, then Make this computer a machine. A Linux server can be added from
-                dash.moreweb.space instead.
-              </p>
-            ) : (
-              <ul className="web-signin-machines">
-                {machines.map((machine) => {
-                  const refusalFor = pickRefusal(machine)
-                  return (
-                    <li key={machine.id} className="web-signin-machine">
-                      <span className="web-signin-machine-mark" aria-hidden="true">
-                        <Globe size={16} />
-                      </span>
-                      <span className="web-signin-machine-body">
-                        <span className="web-signin-machine-name">{machine.name}</span>
-                        <span
-                          className={`web-signin-machine-line${machine.online ? ' is-online' : ''}`}
-                        >
-                          {machineLine(machine)}
-                        </span>
-                      </span>
-                      <button
-                        type="button"
-                        className="cm-back"
-                        onClick={() => pick(machine)}
-                        title={refusalFor ?? undefined}
-                      >
-                        Open
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-            <div className="cm-actions">
-              <button type="button" className="cm-back" onClick={signOut}>
-                Sign out
-              </button>
-              <button
-                type="button"
-                className="cm-back"
-                onClick={() => openExternal('https://moreweb.space').catch(() => {})}
-              >
-                moreweb.space
-              </button>
-            </div>
-          </>
+          <button type="button" className="web-signin-link" onClick={signOut}>Sign out</button>
         )}
+      </header>
 
-        {problem && (
-          <p className="cm-error web-signin-problem">
-            <WarningCircle size={14} /> {problem}
-          </p>
-        )}
+      <main className="web-signin-main">
+        <section className="web-signin-intro">
+          <span className="web-signin-context">OpenRemote for the web</span>
+          <h1>Your workspace,<br />within reach.</h1>
+          <p>Connect to your own computer and pick up where you left off.</p>
+          <div className="web-signin-privacy">
+            <LockKey size={19} aria-hidden="true" />
+            <span>Your chats, files and apps stay on your computer.</span>
+          </div>
+        </section>
+
+        <section className="web-signin-panel" aria-live="polite" aria-labelledby="web-signin-heading">
+          {step === 'devices' ? (
+            <>
+              <div className="web-signin-panel-heading">
+                <div>
+                  <h2 id="web-signin-heading">Your computers</h2>
+                  <p>Choose a computer to open your workspace.</p>
+                </div>
+              </div>
+              {!linking && <p className="web-signin-notice">{LINKS_MISSING}</p>}
+              {machines.length === 0 ? (
+                <div className="web-signin-empty">
+                  <Desktop size={24} aria-hidden="true" />
+                  <h3>No computers yet</h3>
+                  <p>Open OpenRemote on your computer and choose Machines, then Make this computer a machine. A Linux server can be added from dash.moreweb.space instead.</p>
+                </div>
+              ) : (
+                <ul className="web-signin-machines">
+                  {machines.map((machine) => {
+                    const refusalFor = pickRefusal(machine)
+                    return (
+                      <li key={machine.id} className="web-signin-machine">
+                        <span className="web-signin-machine-icon" aria-hidden="true"><Desktop size={22} /></span>
+                        <div className="web-signin-machine-body">
+                          <span className="web-signin-machine-name">{machine.name}</span>
+                          <span className={`web-signin-machine-status${machine.online ? ' is-online' : ''}`}>
+                            <span aria-hidden="true" />{machineLine(machine)}
+                          </span>
+                          {!machine.online && <p>Turn on this computer and make sure OpenRemote is running to connect.</p>}
+                        </div>
+                        <button type="button" className="web-signin-open" disabled={Boolean(connecting)} onClick={() => pick(machine)} title={refusalFor ?? undefined}>
+                          {connecting === machine.id ? 'Connecting...' : 'Open'} <ArrowRight size={15} aria-hidden="true" />
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </>
+          ) : (
+            <div className="web-signin-door">
+              <h2 id="web-signin-heading">Welcome to OpenRemote</h2>
+              {step === 'checking' ? (
+                <LoadingStatus>Checking your sign-in...</LoadingStatus>
+              ) : step === 'intro' ? (
+                <>
+                  <p>Sign in to see the computers connected to your account.</p>
+                  <button type="button" className="web-signin-primary" onClick={signIn} disabled={starting}>
+                    {starting ? 'Opening sign-in...' : 'Sign in with moreweb'} <ArrowRight size={16} aria-hidden="true" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p>Your computers could not be loaded. You can try again without signing out.</p>
+                  <button type="button" className="web-signin-primary" onClick={async () => {
+                    setProblem(null)
+                    setStep('checking')
+                    await listMachines(loadTokens(), await loadPeer())
+                  }}>Try again</button>
+                </>
+              )}
+            </div>
+          )}
+          {connecting && <LoadingStatus>Connecting to your computer...</LoadingStatus>}
+          {problem && (
+            <p className="web-signin-problem"><WarningCircle size={17} aria-hidden="true" /> <span>{problem}</span></p>
+          )}
+        </section>
       </main>
+
+      <footer className="web-signin-footer">
+        <span>A quieter way to work, from wherever you are.</span>
+        <button type="button" className="web-signin-link" onClick={() => openExternal('https://moreweb.space').catch(() => {})}>moreweb.space</button>
+      </footer>
     </div>
   )
 }

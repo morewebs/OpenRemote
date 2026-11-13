@@ -13,6 +13,8 @@ import { chatFromSession, foldEvents } from '../state/reducer.js'
 import { advanceCursor, mergeSyncedSummaries, syncedSession } from './sync-view.js'
 import { webApi } from './webapi.js'
 import { browserDeviceName } from './peer.js'
+import { accountFetch, accountTokens } from './account-session.js'
+import { startPolling } from './poll.js'
 
 const NO_PLUGINS = { installed: [] }
 const EMPTY = new Set()
@@ -33,6 +35,7 @@ export function WebConsoleProvider({
   children,
 }) {
   const apiBase = target?.api
+  const issuer = target?.issuer
   const access = tokens?.access
   const [connection, setConnection] = useState({ state: 'connected' })
   const [devices, setDevices] = useState([])
@@ -50,6 +53,12 @@ export function WebConsoleProvider({
   const [projectsAnswered, setProjectsAnswered] = useState(false)
   const [machineId, setMachineId] = useState(initialMachineId)
   const [watched, setWatched] = useState([])
+  const [machineLoading, setMachineLoading] = useState(Boolean(initialMachineId))
+  const [machineError, setMachineError] = useState(null)
+  const [machineAttempt, setMachineAttempt] = useState(0)
+  const retryMachine = useCallback(() => setMachineAttempt((value) => value + 1), [])
+  const [chatLoads, setChatLoads] = useState({})
+  const capsInFlight = useRef(new Map())
 
   const alive = useRef(true)
   const hydrated = useRef(new Map())
@@ -82,9 +91,10 @@ export function WebConsoleProvider({
     let cancelled = false
     ;(async () => {
       try {
+        const account = await accountTokens({ api: apiBase, issuer })
         const me = await peer.ensureDevice({
           api: apiBase,
-          accessToken: access,
+          accessToken: account.access,
           name: browserDeviceName(),
         })
         if (cancelled || !alive.current) return
@@ -105,7 +115,7 @@ export function WebConsoleProvider({
     return () => {
       cancelled = true
     }
-  }, [peer, apiBase, access])
+  }, [peer, apiBase, issuer, access])
 
   // The account's devices come from the gateway, with the account tokens.
   // This is the one route the browser calls directly rather than through a
@@ -113,15 +123,14 @@ export function WebConsoleProvider({
   const refreshDevices = useCallback(async () => {
     if (!apiBase || !access) return
     try {
-      const response = await fetch(`${apiBase}/devices`, {
-        headers: { Authorization: `Bearer ${access}` },
-      })
+      const response = await accountFetch({ api: apiBase, issuer }, '/devices')
       if (!response.ok) throw new Error(`Your account answered ${response.status}.`)
       const payload = await response.json().catch(() => null)
       if (!alive.current) return
       const rows = Array.isArray(payload?.devices) ? payload.devices : []
       setDevices(rows)
       setDevicesAnswered(true)
+      setConnection({ state: 'connected' })
       setCloud((current) => ({
         ...current,
         state: 'online',
@@ -137,8 +146,9 @@ export function WebConsoleProvider({
         state: 'error',
         error: err?.message ?? 'Your account could not be reached.',
       })
+      throw err
     }
-  }, [apiBase, access])
+  }, [apiBase, issuer, access])
 
   // The chat list: every online machine's summary, merged, with the first
   // rows' own logs read to recover the Session facts the summary omits.
@@ -160,8 +170,15 @@ export function WebConsoleProvider({
         }),
       )
       if (!alive.current) return
+      if (machines.length && payloads.every((payload) => !payload)) {
+        throw new Error('Your computers could not be reached.')
+      }
       const rows = mergeSyncedSummaries(payloads.filter(Boolean))
+      // List the chats before fetching their larger logs.
+      setSessions(rows.map((row) => hydrated.current.get(row.id) ?? syncedSession(row, [])))
+      setSessionsAnswered(true)
       const missing = rows.filter((row) => !hydrated.current.has(row.id)).slice(0, 12)
+      if (!missing.length) return
       let next = 0
       const worker = async () => {
         while (next < missing.length) {
@@ -190,21 +207,20 @@ export function WebConsoleProvider({
   }, [devices, apiFor])
 
   useEffect(() => {
-    void refreshDevices()
+    return startPolling(refreshDevices, { interval: 30000, maxDelay: 120000 })
   }, [refreshDevices])
 
   useEffect(() => {
     if (!devicesAnswered) return
-    void refreshSummaries()
-    const timer = setInterval(() => void refreshSummaries(), 5000)
-    return () => clearInterval(timer)
+    return startPolling(refreshSummaries, { interval: 5000, maxDelay: 30000 })
   }, [devicesAnswered, refreshSummaries])
 
   // The open chat's transcript, folded from the range route on a short
   // timer. A peer cannot be handed the daemon's live SSE; this is the same
   // reducer over a polled page, which is what the chat view already reads.
   useEffect(() => {
-    const timers = new Map()
+    let cancelled = false
+    const stops = []
     const tick = async (id) => {
       const chat = chatsRef.current[id]
       if (!chat?.executor) return
@@ -215,11 +231,13 @@ export function WebConsoleProvider({
           null,
           { timeoutMs: 20000 },
         )
-        if (!alive.current) return
+        if (cancelled || !alive.current) return
+        setChatLoads((current) => current[id] === 'ready' ? current : { ...current, [id]: 'ready' })
         const events = Array.isArray(page?.events) ? page.events : []
         if (!events.length) return
+        const latest = chatsRef.current[id] ?? chat
         const folded = foldEvents(
-          { ...chat, timeline: [...chat.timeline] },
+          { ...latest, timeline: [...latest.timeline] },
           events,
         )
         cursors.current.set(id, advanceCursor(cursors.current.get(id) ?? 0, page))
@@ -231,16 +249,17 @@ export function WebConsoleProvider({
             ),
           )
         }
-      } catch {
-        // The next tick retries; a deleted chat is removed by the summary.
+      } catch (error) {
+        if (!cancelled && alive.current) setChatLoads((current) => current[id] === 'ready' ? current : { ...current, [id]: 'error' })
+        throw error
       }
     }
     for (const id of watched) {
-      void tick(id)
-      timers.set(id, setInterval(() => void tick(id), 1000))
+      stops.push(startPolling(() => tick(id)))
     }
     return () => {
-      for (const timer of timers.values()) clearInterval(timer)
+      cancelled = true
+      for (const stop of stops) stop()
     }
   }, [watched, apiFor])
 
@@ -251,15 +270,16 @@ export function WebConsoleProvider({
     async (deviceId) => {
       const machine = deviceId ?? machineRef.current
       if (!machine) return null
-      try {
-        const caps = await apiFor(machine).capabilities()
-        if (alive.current) {
-          setCapabilitiesByDevice((current) => ({ ...current, [machine]: caps }))
-        }
-        return caps
-      } catch {
-        return capsRef.current[machine] ?? null
-      }
+      if (capsInFlight.current.has(machine)) return capsInFlight.current.get(machine)
+      const request = apiFor(machine).capabilities()
+        .then((caps) => {
+          if (alive.current) setCapabilitiesByDevice((current) => ({ ...current, [machine]: caps }))
+          return caps
+        })
+        .catch(() => capsRef.current[machine] ?? null)
+        .finally(() => capsInFlight.current.delete(machine))
+      capsInFlight.current.set(machine, request)
+      return request
     },
     [apiFor],
   )
@@ -267,15 +287,20 @@ export function WebConsoleProvider({
   useEffect(() => {
     if (!machineId) return
     let cancelled = false
+    setMachineLoading(true)
+    setMachineError(null)
     capabilitiesFor(machineId)
       .then((caps) => {
-        if (!cancelled && alive.current && caps) setCapabilities(caps)
+        if (cancelled || !alive.current) return
+        setMachineLoading(false)
+        if (caps) setCapabilities(caps)
+        else setMachineError('This computer could not be reached. Check that it is online, then try again.')
       })
       .catch(() => {})
     return () => {
       cancelled = true
     }
-  }, [machineId, capabilitiesFor])
+  }, [machineId, capabilitiesFor, machineAttempt])
 
   useEffect(() => {
     if (!machineId) return
@@ -578,6 +603,10 @@ export function WebConsoleProvider({
       automationsAnswered: true,
       projectsAnswered,
       devicesAnswered,
+      machineLoading,
+      machineError,
+      retryMachine,
+      chatLoads,
       chats,
       reconnecting: false,
       watchChats,
@@ -650,6 +679,10 @@ export function WebConsoleProvider({
       sessionsAnswered,
       projectsAnswered,
       devicesAnswered,
+      machineLoading,
+      machineError,
+      retryMachine,
+      chatLoads,
       chats,
       cloud,
       devices,

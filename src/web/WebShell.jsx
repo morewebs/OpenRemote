@@ -9,6 +9,7 @@ import ChatView from '../ChatView.jsx'
 import { KeyboardProvider } from '../keyboard.jsx'
 import { useConsole } from '../state/console.jsx'
 import { WebConsoleProvider } from './console.jsx'
+import LoadingStatus from './LoadingStatus.jsx'
 import WebTitleBar from './WebTitleBar.jsx'
 import WebMachinesView from './WebMachinesView.jsx'
 import WebAccountView from './WebAccountView.jsx'
@@ -25,7 +26,11 @@ function Shell({ onSignOut }) {
     watchChats,
     machineId,
     setMachineId,
-    capabilitiesFor,
+    machineLoading,
+    machineError,
+    retryMachine,
+    chatLoads,
+    sessionsAnswered,
   } = useConsole()
   const [view, setView] = useState('new')
   const [history, setHistory] = useState(['new'])
@@ -63,7 +68,6 @@ function Shell({ onSignOut }) {
       ensureChat(session)
       if (session.executor) {
         setMachineId(session.executor)
-        void capabilitiesFor(session.executor)
       }
     }
     go(id)
@@ -119,7 +123,12 @@ function Shell({ onSignOut }) {
           <div className="sb-backdrop" onClick={() => setSidebarOpen(false)} />
         )}
         <main className="main">
-          {view === 'new' && (
+          {!sessionsAnswered && <LoadingStatus>Connecting to your chats...</LoadingStatus>}
+          {view === 'new' && machineLoading && <LoadingStatus>Loading your computer's apps...</LoadingStatus>}
+          {view === 'new' && !machineLoading && machineError && (
+            <div className="web-loading-error"><p>{machineError}</p><button type="button" onClick={retryMachine}>Try again</button></div>
+          )}
+          {view === 'new' && !machineLoading && !machineError && (
             <NewChat
               mode="cloud"
               web
@@ -140,10 +149,10 @@ function Shell({ onSignOut }) {
           {view === 'account' && <WebAccountView onSignOut={onSignOut} />}
           {view === 'settings' && <WebSettingsView />}
           {!STATIC.has(view) &&
-            (chats[view] ? (
+            (chats[view] && chatLoads[view] === 'ready' ? (
               <ChatView chat={chats[view]} web onBack={() => go('new')} />
             ) : (
-              <div className="cv-none">Reading the chat…</div>
+              <LoadingStatus>{chatLoads[view] === 'error' ? 'The chat could not be reached. Retrying...' : 'Loading the chat...'}</LoadingStatus>
             ))}
         </main>
       </div>

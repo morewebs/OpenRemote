@@ -1,118 +1,85 @@
-/* The web console's front door. It borrows the Cloud sign-in surface's sky
-   (cloudmode.css) and adds only the panel's own rows: the mark, the machine
-   list, and one honest line when the link is not in this build. Every colour
-   is a token or a white alpha already in the app; no new palette, no
-   gradients the console does not already draw. */
-
-.web-signin-panel {
-  width: min(460px, calc(100vw - 48px));
-  text-align: left;
-}
-
-/* In the desktop this surface is a flex child of the app's column, and `flex:
-   1` is what fills the window with its sky. A browser tab has no such column,
-   so the page states its own height: without this the sky stops where the
-   panel does and the front door floats at the top of an empty page. */
+/* The browser front door uses the console's dark palette, with space for the
+   machine list and its state to be read without treating offline as an alarm. */
 .web-signin {
+  --door-bg: #111316;
+  --door-panel: #1a1d21;
+  --door-line: #343a40;
+  --door-text: #f1f3f4;
+  --door-muted: #a6adb4;
   min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--door-bg);
+  color: var(--door-text);
+  font-family: Inter, sans-serif;
 }
 
-.web-signin-mark {
-  width: 84px;
-  height: 84px;
-  margin: 0 auto 18px;
-  display: block;
-}
-
-.web-signin .cm-title,
-.web-signin .cm-body {
-  text-align: center;
-}
-
-.web-signin-quiet {
-  color: var(--text-3);
-}
-
-.web-signin-sub {
-  margin-top: 14px;
-}
-
-/* The link sentence: a warning, not an error state, because a signed-in page
-   without the link is a working build with one part missing. */
-.web-signin-honest {
-  margin: 12px 0 0;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text-2);
-  font-size: 12.5px;
-  line-height: 1.5;
-  text-align: left;
-}
-
-.web-signin-machines {
-  list-style: none;
-  margin: 16px 0 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-}
-
-.web-signin-machine {
+.web-signin-header, .web-signin-footer {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.02);
+  justify-content: space-between;
+  gap: 24px;
+  width: min(1200px, calc(100% - 96px));
+  margin: 0 auto;
 }
-
-.web-signin-machine-mark {
-  color: var(--text-3);
+.web-signin-header { min-height: 92px; border-bottom: 1px solid #292d32; }
+.web-signin-brand { display: flex; align-items: center; gap: 12px; font-size: 16px; font-weight: 600; letter-spacing: -.02em; }
+.web-signin-mark { display: block; width: 35px; height: 35px; }
+.web-signin-link { padding: 8px 0; border: 0; background: none; color: var(--door-muted); font: inherit; font-size: 13px; cursor: pointer; }
+.web-signin-link:hover { color: var(--door-text); }
+.web-signin-main {
+  width: min(1080px, calc(100% - 96px));
+  margin: auto;
+  padding: 88px 0;
   display: grid;
-  place-items: center;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1fr);
+  gap: clamp(64px, 9vw, 130px);
+  align-items: center;
 }
-
-.web-signin-machine-body {
-  display: grid;
-  min-width: 0;
-  flex: 1;
+.web-signin-context { color: #a7b8ce; font-size: 13px; font-weight: 500; }
+.web-signin-intro h1 { margin: 24px 0 20px; color: var(--door-text); font-size: clamp(36px, 4vw, 54px); line-height: 1.12; font-weight: 500; letter-spacing: -.045em; }
+.web-signin-intro > p { max-width: 34ch; margin: 0; color: var(--door-muted); font-size: 16px; line-height: 1.7; }
+.web-signin-privacy { display: flex; align-items: flex-start; gap: 12px; max-width: 35ch; margin-top: 52px; color: #a6adb4; font-size: 13px; line-height: 1.55; }
+.web-signin-privacy svg { flex: none; color: #8198b3; }
+.web-signin-panel { min-width: 0; padding: 32px; border: 1px solid var(--door-line); border-radius: 16px; background: var(--door-panel); }
+.web-signin-panel h2 { margin: 0; color: var(--door-text); font-size: 20px; font-weight: 600; letter-spacing: -.025em; }
+.web-signin-panel-heading p, .web-signin-door > p { margin: 9px 0 0; color: var(--door-muted); font-size: 13.5px; line-height: 1.6; }
+.web-signin-machines { display: grid; gap: 12px; list-style: none; margin: 28px 0 0; padding: 0; }
+.web-signin-machine { display: flex; align-items: flex-start; gap: 14px; padding: 18px; border: 1px solid #383d43; border-radius: 10px; background: #202429; }
+.web-signin-machine-icon { display: grid; flex: none; place-items: center; width: 40px; height: 40px; border-radius: 9px; background: #2c3239; color: #b5c4d5; }
+.web-signin-machine-body { display: grid; min-width: 0; flex: 1; gap: 7px; padding-top: 2px; }
+.web-signin-machine-name { overflow-wrap: anywhere; color: var(--door-text); font-size: 14px; font-weight: 600; line-height: 1.4; }
+.web-signin-machine-status { display: flex; align-items: center; gap: 7px; color: #afb5bb; font-size: 12px; }
+.web-signin-machine-status > span { width: 7px; height: 7px; border-radius: 50%; background: #7f8993; }
+.web-signin-machine-status.is-online { color: #8bd5af; }
+.web-signin-machine-status.is-online > span { background: #64c892; }
+.web-signin-machine-body p { max-width: 30ch; margin: 7px 0 0; color: var(--door-muted); font-size: 12.5px; line-height: 1.55; }
+.web-signin-open, .web-signin-primary { display: inline-flex; align-items: center; justify-content: center; gap: 9px; border: 1px solid #555f69; border-radius: 8px; background: transparent; color: #e4e9ed; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+.web-signin-open { flex: none; min-height: 38px; padding: 0 12px; }
+.web-signin-open:hover { background: #30363d; }
+.web-signin-primary { min-height: 44px; margin-top: 25px; padding: 0 17px; border-color: #dbe5f0; background: #dbe5f0; color: #18212a; }
+.web-signin-primary:hover { background: #fff; }
+.web-signin-primary:disabled { opacity: .55; cursor: default; }
+.web-signin button:focus-visible { outline: 2px solid #a6c9f4; outline-offset: 3px; }
+.web-signin-notice, .web-signin-problem { margin: 22px 0 0; padding: 13px 15px; border: 1px solid #494840; border-radius: 8px; background: #292821; color: #dbd2b8; font-size: 13px; line-height: 1.55; }
+.web-signin-problem { display: flex; align-items: flex-start; gap: 9px; }
+.web-signin-problem svg { flex: none; margin-top: 2px; }
+.web-signin-empty { margin-top: 28px; padding: 25px; border: 1px dashed #424950; border-radius: 10px; color: var(--door-muted); }
+.web-signin-empty svg { color: #9aabbc; }
+.web-signin-empty h3 { margin: 15px 0 8px; color: var(--door-text); font-size: 14px; }
+.web-signin-empty p { margin: 0; font-size: 13px; line-height: 1.65; }
+.web-signin-footer { min-height: 76px; border-top: 1px solid #292d32; color: #858d95; font-size: 12px; }
+@media (max-width: 760px) {
+  .web-signin-header, .web-signin-footer, .web-signin-main { width: calc(100% - 40px); }
+  .web-signin-header { min-height: 72px; }
+  .web-signin-main { grid-template-columns: 1fr; gap: 40px; margin: 0 auto; padding: 56px 0; }
+  .web-signin-intro h1 { margin-top: 16px; font-size: 38px; }
+  .web-signin-privacy { margin-top: 28px; }
+  .web-signin-panel { padding: 24px; }
+  .web-signin-footer { margin-top: auto; }
 }
-
-.web-signin-machine-name {
-  color: var(--text-1);
-  font-size: 13px;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+@media (max-width: 420px) {
+  .web-signin-machine { flex-wrap: wrap; }
+  .web-signin-open { margin-left: 54px; }
+  .web-signin-footer { align-items: flex-start; flex-direction: column; justify-content: center; gap: 3px; padding: 16px 0; }
 }
-
-.web-signin-machine-line {
-  color: var(--text-3);
-  font-size: 12px;
-}
-
-.web-signin-machine-line.is-online {
-  color: var(--green);
-}
-
-.web-signin-problem {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 16px;
-  text-align: left;
-}
-
-.web-signin-problem svg {
-  flex: none;
-  margin-top: 2px;
-}
-
-/* The surface's own motion is the sky's slow drift; the panel itself does not
-   animate, so there is nothing here to switch off beyond that. The drift is
-   covered in cloudmode.css under both switches, which is why this sheet adds
-   no keyframes of its own. */

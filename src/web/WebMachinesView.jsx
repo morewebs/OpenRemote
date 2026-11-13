@@ -2,6 +2,7 @@
 // makes it the target for New chat and the chat list it copies.
 
 import { HardDrives } from '@phosphor-icons/react'
+import LoadingStatus from './LoadingStatus.jsx'
 import { useConsole } from '../state/console.jsx'
 import { platformLabel } from '../cloud.js'
 import '../devices.css'
@@ -23,6 +24,7 @@ export default function WebMachinesView({ onPick }) {
       <p className="dv-meta">
         Your chats run here, on your own computers. Pick one to start or continue a chat.
       </p>
+      {!devicesAnswered && <LoadingStatus>Loading your computers...</LoadingStatus>}
       <div className="dv-grid">
         {machines.map((device) => (
           <button

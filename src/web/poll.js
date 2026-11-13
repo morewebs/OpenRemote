@@ -35,3 +35,35 @@ export function mayPoll({ open = false, stopped = false, visible = true, inFligh
 export function visibilityAction(state) {
   return state === 'hidden' ? 'pause' : 'catch-up'
 }
+
+// Completion-based scheduling prevents slow links from accumulating requests.
+export function startPolling(task, {
+  interval = POLL_MS, maxDelay = POLL_MAX_MS,
+  document: page = globalThis.document,
+  setTimeout: later = globalThis.setTimeout, clearTimeout: cancel = globalThis.clearTimeout,
+} = {}) {
+  let stopped = false
+  let inFlight = false
+  let timer = null
+  let failures = 0
+  const visible = () => page?.visibilityState !== 'hidden'
+  const tick = async () => {
+    if (stopped || inFlight || !visible()) return
+    inFlight = true
+    try { await task(); failures = 0 } catch { failures++ } finally {
+      inFlight = false
+      if (!stopped && visible()) timer = later(tick, Math.min(interval * 2 ** Math.min(failures, 8), maxDelay))
+    }
+  }
+  const visibility = () => {
+    cancel(timer)
+    if (visible()) void tick()
+  }
+  page?.addEventListener('visibilitychange', visibility)
+  void tick()
+  return () => {
+    stopped = true
+    cancel(timer)
+    page?.removeEventListener('visibilitychange', visibility)
+  }
+}
