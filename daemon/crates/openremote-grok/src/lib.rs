@@ -1,14 +1,17 @@
 //! Grok Build harness driver.
 //!
-//! Grok's headless surface (verified live against grok 1.0.67):
-//! `grok --output-format streaming-messages-json --single <prompt>` -
-//! NDJSON in the Anthropic Messages wire
-//! (`system/init` with the session id and model, `assistant` content
-//! blocks, `result` as the turn boundary) - the same wire family Claude
-//! Code speaks. Print mode: **one process per prompt**; continuation
-//! respawns with `--resume <session id>`.
+//! Grok's headless surface, as its own headless guide documents it
+//! (`~/.grok/docs/user-guide/14-headless-mode.md`, checked against grok
+//! 1.0.77): `grok --output-format streaming-messages-json --prompt-file
+//! <path>` - NDJSON in the Anthropic Messages wire (`system/init` with the
+//! session id, model and slash commands; `assistant` content blocks of
+//! text, thinking and `tool_use`; `user` frames of `tool_result`; a
+//! `compact_boundary` system frame; `result` as the turn boundary) - the
+//! same wire family Claude Code speaks. The prompt rides a file so chat
+//! text never stands in an argv slot. Print mode: **one process per
+//! prompt**; continuation respawns with `--resume <session id>`.
 //!
-//! Honest limitation (recorded in the map): grok print mode has no remote
+//! Honest limitation: grok print mode has no remote
 //! approval channel - approvals are governed by its own
 //! `--permission-mode` words (`default acceptEdits auto dontAsk
 //! bypassPermissions plan`), passed through verbatim.

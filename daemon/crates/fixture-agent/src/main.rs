@@ -626,7 +626,7 @@ impl FixtureAgent {
                               "cache_creation_input_tokens": 260, "output_tokens": 60}
                 }));
             }
-            // A runaway prelude (harness audit F11): an 8 MiB blob of
+            // A runaway prelude: an 8 MiB blob of
             // junk on one line, then a line with invalid UTF-8 mid-line,
             // then the well-formed frames and the turn's result. The
             // bounded reader drops the blob without buffering it and

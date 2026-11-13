@@ -569,7 +569,7 @@ async fn a_live_model_change_lands_on_the_running_thread() {
 }
 
 /// An approval answer carrying a server request id in the old host-id
-/// range must still route to the approval (harness audit F9): the old
+/// range must still route to the approval: the old
 /// driver numbered its own calls from 1, so its first turn/start held
 /// id 3 - and an approval answered with server id 3 could resolve a
 /// host call waiter instead of the parked turn. The fixture pins its
@@ -664,7 +664,7 @@ async fn an_approval_answer_routes_correctly_at_the_old_host_id_range() {
 }
 
 /// A CLI that dies at boot must fail create in seconds, not after the
-/// 60-120s the unraced handshake calls used to burn (harness audit F13):
+/// 60-120s the unraced handshake calls used to burn:
 /// the exit status was available in the first second.
 #[tokio::test]
 async fn a_boot_crashed_codex_fails_create_in_seconds_not_minutes() {

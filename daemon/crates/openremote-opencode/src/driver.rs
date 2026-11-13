@@ -32,7 +32,7 @@ const START_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// A transport error on the event stream is retried while the serve
 /// child stays alive: a momentary loopback hiccup must not end a healthy
-/// session's stream (harness audit F2). Five attempts with doubling
+/// session's stream. Five attempts with doubling
 /// backoff starting at 250ms stays well inside the supervisor's stop
 /// drain (3s) when the stream dies during a stop, and the child liveness
 /// gate means a dead serve never pays the full ladder.
@@ -418,7 +418,7 @@ async fn spawn_serve(
     // forever behind a live serve child; a transport error is retried a
     // few times while the serve child stays alive (a momentary loopback
     // hiccup must not fail a healthy session) before the same boundary
-    // is reported (harness audit F2).
+    // is reported.
     let watch_client = crate::http::HttpClient::new(port, &password);
     let watch_child = child;
     let event_tx = tx.clone();

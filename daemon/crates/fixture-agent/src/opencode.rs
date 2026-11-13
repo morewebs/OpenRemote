@@ -8,8 +8,7 @@
 //! (`permission.v2.asked`) and reflects the reply (once/always → run,
 //! reject → denied); `question` asks a structured question; `drop`
 //! closes the event connection cleanly mid-turn and never finishes the
-//! turn (the idle keep-alive / internal-restart shape, harness audit
-//! F2).
+//! turn (the idle keep-alive / internal-restart shape).
 
 use std::io::{BufRead, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -268,7 +267,7 @@ impl Server {
 
     /// Close every subscriber stream cleanly: the dropped senders end
     /// their writer loops, the sockets close, and the client sees a
-    /// real EOF on the event stream (harness audit F2's drop knob).
+    /// real EOF on the event stream (the fixture's `drop` knob).
     fn close_streams(&self) {
         self.subscribers.lock().unwrap().clear();
     }

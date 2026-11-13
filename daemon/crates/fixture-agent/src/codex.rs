@@ -23,7 +23,7 @@ const THREAD_ID: &str = "thread-fixture-1";
 /// turn/start's id under the old numbering (initialize 1, thread/start
 /// 2, turn/start 3), so an approval answer carrying this id is exactly
 /// the collision the real app-server could produce against the old
-/// driver (harness audit F9).
+/// driver.
 const APPROVAL_REQUEST_ID: u64 = 3;
 
 pub fn main_codex() {
@@ -96,7 +96,7 @@ impl CodexFixture {
         // handshake. EOF on the first frame is the observed shape of a
         // missing DLL / expired auth crash - exit now, with the reason
         // on stderr, so the driver's death race has the first-second
-        // truth to fail on (harness audit F13).
+        // truth to fail on.
         if self.scenario == "boot-crash" {
             eprintln!("fixture-codex: crashed at boot: the install is broken");
             return true;

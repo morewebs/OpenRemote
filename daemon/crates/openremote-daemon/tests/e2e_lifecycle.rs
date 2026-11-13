@@ -33,8 +33,8 @@ async fn grok_session(scenario: &str) -> (TestDaemon, tempfile::TempDir, String)
     (daemon, ws, id)
 }
 
-/// Stop after the harness died on its own (harness audit F12's fallback
-/// and F10's removal): a grok `die` turn kills the prompt process with
+/// Stop after the harness died on its own (the stop fallback's settle
+/// and the entry's removal): a grok `die` turn kills the prompt process with
 /// no result and no StdoutClosed - the pump will never answer the stop.
 /// Stop must still settle the session (not leave it answerable), retire
 /// its pending decisions, and remove the map entry: a later answer
@@ -111,7 +111,7 @@ async fn stop_after_the_harness_died_still_settles_and_retires() {
     let _ = ws;
 }
 
-/// A harness uninstalled mid-run (harness audit F18): the registry's
+/// A harness uninstalled mid-run: the registry's
 /// probe facts are stale the moment the binary vanishes. The create
 /// succeeds (grok spawns no process until the first prompt), the prompt
 /// fails with a raw OS error, the supervisor looks, the files are gone,
@@ -221,7 +221,7 @@ async fn a_harness_uninstalled_mid_run_disappears_from_the_offers() {
     );
 }
 
-/// The daemon's exit sweep (harness audit F3): the stdin watchdog path
+/// The daemon's exit sweep: the stdin watchdog path
 /// runs a bounded shutdown of every live session before exit(0). The
 /// opencode fixture is a real serve child with null stdin that would
 /// otherwise outlive the daemon - exactly the orphan. The daemon's

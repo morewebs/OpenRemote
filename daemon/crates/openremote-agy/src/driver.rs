@@ -254,7 +254,7 @@ async fn read_prompt(
 ) {
     let mut saw_result = false;
     loop {
-        // Bounded, lossy reads (harness audit F11): an over-long line is
+        // Bounded, lossy reads: an over-long line is
         // dropped and invalid UTF-8 decodes lossily, never a fatal break.
         let line = match reader.next_line().await {
             Ok(None) | Err(_) => break,

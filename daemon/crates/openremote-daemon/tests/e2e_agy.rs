@@ -192,7 +192,7 @@ async fn a_dead_agy_process_fails_the_turn_with_a_note() {
     );
 }
 
-/// A dash-leading prompt is text, never flags (harness audit F6): the
+/// A dash-leading prompt is text, never flags: the
 /// driver sends it as one stream-json message on stdin, the fixture reads
 /// that message, and the round-trip is the echo. An argv value slot would
 /// have fed "-v" to the CLI's own parser and died with the generic

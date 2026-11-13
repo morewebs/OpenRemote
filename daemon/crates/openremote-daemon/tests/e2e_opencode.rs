@@ -364,7 +364,7 @@ async fn a_failed_step_ends_the_turn_with_opencodes_own_error() {
 }
 
 /// A server-side close of the event stream mid-turn is terminal for the
-/// session, not silence (harness audit F2): the fixture's `drop`
+/// session, not silence: the fixture's `drop`
 /// scenario closes the SSE connection after the first delta and never
 /// finishes the turn. The watcher reports the boundary (StdoutClosed),
 /// so the supervisor fails the session instead of leaving it Working

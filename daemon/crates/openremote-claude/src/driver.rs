@@ -213,7 +213,9 @@ impl Driver {
         }
     }
 
-    /// SIGTERM, wait up to 5s, SIGKILL. Returns the exit code if reaped.
+    /// Kill the harness (its whole process tree on Windows), wait up to 5s
+    /// for it to be reaped, and kill again if it was not. Returns the exit
+    /// code if reaped. No polite signal goes first: nothing here sends one.
     pub async fn shutdown(&mut self) -> Result<Option<i32>, DriverError> {
         let child = self.child.lock().await;
         kill_and_reap(child).await
@@ -561,7 +563,7 @@ async fn handshake(
         drop(stdin);
 
         // The probe's line reads carry the same bound as the session
-        // reader (harness audit F11): a runaway catalog line is dropped,
+        // reader: a runaway catalog line is dropped,
         // not buffered.
         let mut lines = openremote_harness::LineReader::new(BufReader::new(stdout));
         while let Some(line) = lines.next_line().await? {
@@ -797,7 +799,7 @@ async fn read_stdout(
     // tool_result frames can be named.
     let mut names: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     loop {
-        // Bounded, lossy reads (harness audit F11): an over-long line is
+        // Bounded, lossy reads: an over-long line is
         // dropped and invalid UTF-8 decodes lossily, never a fatal break.
         let line = match reader.next_line().await {
             Ok(None) => break,

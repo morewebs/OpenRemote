@@ -44,12 +44,12 @@ const CALL_TIMEOUT: Duration = Duration::from_secs(60);
 /// small integers (1, 2, 3, ...), and our approval answers carry those
 /// ids back; a method-less frame holding a server id must never match a
 /// host call's waiter. Host ids therefore start far above any id a real
-/// app-server plausibly mints (harness audit F9).
+/// app-server plausibly mints.
 const HOST_CALL_ID_BASE: u64 = 1 << 32;
 
 /// Host calls in flight: our call id → response waiter. A call that
 /// gives up (failed write, timeout) removes its own entry, or the map
-/// pins dead senders for the session's life (harness audit F15).
+/// pins dead senders for the session's life.
 struct PendingCalls {
     map: StdMutex<HashMap<u64, oneshot::Sender<Value>>>,
 }
@@ -68,7 +68,7 @@ impl PendingCalls {
 
     /// Give up on a call. No response can arrive for an id whose frame
     /// never left or whose waiter timed out, so the entry must not
-    /// linger (harness audit F15).
+    /// linger.
     fn abandon(&self, id: u64) {
         self.map.lock().unwrap().remove(&id);
     }
@@ -77,7 +77,7 @@ impl PendingCalls {
     /// id, if any. False means the frame matched no call: host ids live
     /// far above the server's, so a frame carrying a server request id
     /// (an approval answer echo, a late reply) drops instead of waking
-    /// the wrong waiter (harness audit F9).
+    /// the wrong waiter.
     fn deliver(&self, id: u64, frame: Value) -> bool {
         match self.map.lock().unwrap().remove(&id) {
             Some(waiter) => waiter.send(frame).is_ok(),
@@ -86,7 +86,7 @@ impl PendingCalls {
     }
 
     /// Wait one call out. The timeout abandons the call's entry before
-    /// returning the error, never after (harness audit F15).
+    /// returning the error, never after.
     async fn await_response(
         &self,
         id: u64,
@@ -227,7 +227,7 @@ impl Driver {
         // raced against the death of the CLI process: a CLI that crashes
         // at boot holds its exit status in the first second, and failing
         // there beats burning the 60s call timeout on an answer that can
-        // never come (harness audit F13).
+        // never come.
         let boot = async {
             race_child_death(
                 &shared,
@@ -274,8 +274,8 @@ impl Driver {
         };
         if let Err(e) = boot.await {
             // The CLI's dying words ride stderr; splice the tail into the
-            // failure so a broken install explains itself (harness audit
-            // F13), and a child that survived a rejected handshake must
+            // failure so a broken install explains itself, and a child
+            // that survived a rejected handshake must
             // not outlive the session that never was.
             let tail = stderr_tail(&mut rx).await;
             discard_child(&shared).await;
@@ -381,7 +381,9 @@ impl Driver {
             .await
     }
 
-    /// SIGTERM, wait up to 5s, SIGKILL.
+    /// Kill the harness (its whole process tree on Windows), wait up to 5s
+    /// for it to be reaped, and kill again if it was not. No polite signal
+    /// goes first: nothing here sends one.
     pub async fn shutdown(&mut self) -> Result<Option<i32>, DriverError> {
         let child = self.shared.child.lock().await;
         kill_and_reap(child).await
@@ -399,7 +401,7 @@ impl Driver {
             .await
         {
             // The write failed: no response can ever arrive for this id,
-            // so the waiter must not linger in the map (harness audit F15).
+            // so the waiter must not linger in the map.
             self.shared.pending.abandon(id);
             return Err(e);
         }
@@ -761,7 +763,7 @@ async fn stderr_tail(rx: &mut mpsc::Receiver<DriverEvent>) -> String {
 }
 
 /// Splice the CLI's dying words onto a handshake failure so a broken
-/// install explains itself (harness audit F13).
+/// install explains itself.
 fn splice_tail(error: DriverError, tail: &str) -> DriverError {
     if tail.is_empty() {
         return error;
@@ -907,7 +909,7 @@ async fn read_stdout(
     shared: Arc<Shared>,
 ) {
     loop {
-        // Bounded, lossy reads (harness audit F11): an over-long line is
+        // Bounded, lossy reads: an over-long line is
         // dropped and invalid UTF-8 decodes lossily, never a fatal break.
         let line = match reader.next_line().await {
             Ok(None) => break,
@@ -969,8 +971,7 @@ async fn read_stdout(
         } else if let Some(id) = id {
             // A response to one of our calls. Host ids live far above the
             // server's own request ids, so a frame carrying a server id
-            // finds no waiter and drops instead of waking the wrong call
-            // (harness audit F9).
+            // finds no waiter and drops instead of waking the wrong call.
             shared.pending.deliver(id, frame);
         }
     }

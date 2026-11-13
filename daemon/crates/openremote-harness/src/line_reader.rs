@@ -152,7 +152,7 @@ fn decode(bytes: Vec<u8>) -> String {
 /// the session's event wire.
 fn note_overlong(cap: usize, total: u64) {
     eprintln!(
-        "harness stream: dropped a {total}-byte line over the {cap}-byte cap instead of buffering it (harness audit F11)"
+        "harness stream: dropped a {total}-byte line over the {cap}-byte cap instead of buffering it"
     );
 }
 

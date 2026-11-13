@@ -1202,7 +1202,7 @@ async fn an_effort_default_rides_the_session_record_verbatim() {
 #[tokio::test]
 async fn a_giant_line_is_dropped_and_the_turn_still_completes() {
     // The fixture answers one prompt with an 8 MiB junk line and then a
-    // line with invalid UTF-8 before the real frames (harness audit F11):
+    // line with invalid UTF-8 before the real frames:
     // the bounded reader drops the giant line and decodes the corrupt one
     // lossily, so the turn still completes. On the old read_line reader
     // the corrupt line was Err(InvalidData) - a fatal break with the

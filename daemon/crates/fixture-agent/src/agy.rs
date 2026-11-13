@@ -39,7 +39,7 @@ pub fn main_agy(argv: &[String]) {
         })
         .unwrap_or_else(|| "plain".to_string());
 
-    // One line per run (harness audit F8): the e2e counts these to prove a
+    // One line per run: the e2e counts these to prove a
     // refused prompt never spawned a second process - the transcript can
     // only show what a process said; this shows whether it existed.
     if let Ok(mut runs) = std::fs::OpenOptions::new()
