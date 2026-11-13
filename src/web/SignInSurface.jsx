@@ -7,7 +7,7 @@
 // job is to establish that link and nothing else.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Desktop, UserCircle, WarningCircle } from '@phosphor-icons/react'
+import { Desktop, Info, LockKey, UserCircle, WarningCircle } from '@phosphor-icons/react'
 import { SplashMark } from '../Splash.jsx'
 import { openExternal } from '../platform.js'
 import { platformLabel } from '../cloud.js'
@@ -38,6 +38,20 @@ function refusal(payload, fallback) {
   if (!payload || typeof payload !== 'object') return fallback
   const said = payload.error_description ?? payload.message ?? payload.error
   return typeof said === 'string' && said.trim() ? said.trim() : fallback
+}
+
+// This thumbnail identifies a computer without fetching any desktop content.
+function MachineDisplay() {
+  return (
+    <span className="web-machine-display" aria-hidden="true">
+      <svg viewBox="0 0 80 64" fill="none">
+        <rect x="4" y="4" width="72" height="46" rx="5" stroke="currentColor" strokeWidth="1.5" />
+        <rect x="9" y="9" width="62" height="36" rx="2" className="web-machine-screen" />
+        <path d="M40 50v10m-14 0h28" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+      <SplashMark className="web-machine-mark" />
+    </span>
+  )
 }
 
 export default function SignInSurface({ onLinked }) {
@@ -262,23 +276,34 @@ export default function SignInSurface({ onLinked }) {
           {step === 'devices' && view === 'account' ? (
             <div className="web-signin-account">
               <h1 id="web-signin-heading">Account</h1>
-              <p>Signed in with moreweb.</p>
-              {account?.email && <p className="web-signin-account-email">{account.email}</p>}
-              <button type="button" className="web-signin-open" onClick={signOut}>Sign out</button>
+              <p>Manage your sign-in on this browser.</p>
+              <div className="web-signin-account-surface">
+                <div className="web-signin-identity">
+                  <span className="web-signin-avatar" aria-hidden="true"><UserCircle size={30} weight="light" /></span>
+                  <div>
+                    <h2>{typeof account?.email === 'string' ? account.email : 'moreweb account'}</h2>
+                    <p>Signed in with moreweb</p>
+                  </div>
+                </div>
+                <div className="web-signin-account-action">
+                  <div><h3>Sign out</h3><p>Disconnect this browser from your account.</p></div>
+                  <button type="button" className="web-signin-secondary" onClick={signOut}>Sign out</button>
+                </div>
+              </div>
             </div>
           ) : step === 'devices' ? (
             <>
               <div className="web-signin-panel-heading">
                 <div>
                   <h1 id="web-signin-heading">Machines</h1>
-                  <p>Open a computer to continue.</p>
+                  <p>Computers linked to your account.</p>
                 </div>
               </div>
               {!linking && <p className="web-signin-notice">{LINKS_MISSING}</p>}
               {machines.length === 0 ? (
                 <div className="web-signin-empty">
-                  <Desktop size={24} aria-hidden="true" />
-                  <h3>No computers yet</h3>
+                  <MachineDisplay />
+                  <h3>Add your first machine</h3>
                   <p>Open OpenRemote on your computer and choose Machines, then Make this computer a machine. A Linux server can be added from dash.moreweb.space instead.</p>
                 </div>
               ) : (
@@ -286,17 +311,19 @@ export default function SignInSurface({ onLinked }) {
                   {machines.map((machine) => {
                     const refusalFor = pickRefusal(machine)
                     return (
-                      <li key={machine.id} className="web-signin-machine">
-                        <span className="web-signin-machine-icon" aria-hidden="true"><Desktop size={23} /></span>
-                        <div className="web-signin-machine-body">
-                          <span className="web-signin-machine-name">{machine.name}</span>
-                          {machine.platform && <span className="web-signin-machine-platform">{platformLabel(machine.platform)}</span>}
-                          {!machine.online && <p>Turn on this computer and make sure OpenRemote is running to connect.</p>}
+                      <li key={machine.id} className={`web-signin-machine${machine.online ? '' : ' is-offline'}`}>
+                        <div className="web-signin-machine-row">
+                          <MachineDisplay />
+                          <div className="web-signin-machine-body">
+                            <span className="web-signin-machine-name">{machine.name}</span>
+                            {machine.platform && <span className="web-signin-machine-platform">{platformLabel(machine.platform)}</span>}
+                          </div>
+                          <span className={`web-signin-machine-status${machine.online ? ' is-online' : ''}`}><span aria-hidden="true" />{machineLine(machine)}</span>
+                          <button type="button" className="web-signin-open" disabled={Boolean(connecting) || !machine.online || !linking} onClick={() => pick(machine)} title={refusalFor ?? undefined}>
+                            {connecting === machine.id ? 'Connecting...' : 'Open'}
+                          </button>
                         </div>
-                        <span className={`web-signin-machine-status${machine.online ? ' is-online' : ''}`}><span aria-hidden="true" />{machineLine(machine)}</span>
-                        <button type="button" className="web-signin-open" disabled={Boolean(connecting) || !machine.online || !linking} onClick={() => pick(machine)} title={refusalFor ?? undefined}>
-                          {connecting === machine.id ? 'Connecting...' : 'Open'}
-                        </button>
+                        {!machine.online && <div className="web-signin-machine-note"><Info size={16} aria-hidden="true" /><p>Turn on this computer and start OpenRemote to connect.</p></div>}
                       </li>
                     )
                   })}
@@ -305,15 +332,17 @@ export default function SignInSurface({ onLinked }) {
             </>
           ) : (
             <div className="web-signin-door">
-              <h1 id="web-signin-heading">Sign in</h1>
+              <MachineDisplay />
+              <h1 id="web-signin-heading">Sign in to OpenRemote</h1>
               {step === 'checking' ? (
                 <LoadingStatus>Checking your sign-in...</LoadingStatus>
               ) : step === 'intro' ? (
                 <>
-                  <p>Use your moreweb account to access your computers.</p>
+                  <p>Connect to your computers with your moreweb account.</p>
                   <button type="button" className="web-signin-primary" onClick={signIn} disabled={starting}>
                     {starting ? 'Opening sign-in...' : 'Continue with moreweb'}
                   </button>
+                  <p className="web-signin-door-note">Your chats and files stay on your computers.</p>
                 </>
               ) : (
                 <>
@@ -332,11 +361,8 @@ export default function SignInSurface({ onLinked }) {
             <p className="web-signin-problem"><WarningCircle size={17} aria-hidden="true" /> <span>{problem}</span></p>
           )}
         </section>
+        {step === 'devices' && view === 'machines' && <p className="web-signin-ownership"><LockKey size={15} aria-hidden="true" />Your chats and files stay on your computers.</p>}
       </main>
-
-      <footer className="web-signin-footer">
-        <span>Your chats and files stay on your computers.</span>
-      </footer>
       </div>
     </div>
   )

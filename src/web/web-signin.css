@@ -1,98 +1,116 @@
-/* A computer picker in the same neutral palette as the console. */
+/* Navigation and device inventory share the console's neutral surfaces. */
 .web-signin {
-  --door-text: #e8e8e8;
-  --door-muted: #999;
-  --door-line: #2c2c2c;
-  min-height: 100dvh;
+  --door-frame: #101010;
+  --door-nav: #181818;
+  --door-surface: #1c1c1c;
+  --door-control: #2a2a2a;
+  --door-text: #f0f0f2;
+  --door-muted: #a8a8af;
+  --door-line: #323234;
   display: flex;
-  flex-direction: row;
-  background: #151515;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--door-frame);
   color: var(--door-text);
-  font-family: Inter, sans-serif;
+  font: 14px/1.5 Inter, sans-serif;
 }
-
-.web-signin-sidebar {
-  display: flex;
-  flex: 0 0 208px;
-  flex-direction: column;
-  padding: 26px 16px 18px;
-  border-right: 1px solid var(--door-line);
-  background: #191919;
-}
-
-.web-signin-content { display: flex; flex: 1; min-width: 0; flex-direction: column; }
-.web-signin-main,
-.web-signin-footer { width: min(880px, calc(100% - 80px)); margin: 0 auto; }
-.web-signin-nav { display: grid; gap: 4px; margin-top: 34px; }
-.web-signin-nav button { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 0 12px; border: 0; border-radius: 5px; background: transparent; color: #aaa; font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
-.web-signin-nav button:hover { background: #242424; color: var(--door-text); }
-.web-signin-nav button[aria-current="page"] { background: #2b2b2b; color: var(--door-text); }
-.web-signin-sidebar .web-signin-site { align-self: flex-start; margin-top: auto; padding: 32px 12px 0; }
-.web-signin-account > p { margin: 12px 0 0; color: var(--door-muted); font-size: 14px; line-height: 1.6; }
-.web-signin-account .web-signin-account-email { color: var(--door-text); overflow-wrap: anywhere; }
-.web-signin-account > button { margin-top: 28px; }
-
-.web-signin-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 10px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.web-signin-mark { display: block; width: 27px; height: 27px; }
-.web-signin-main { flex: 1; padding: 72px 0; }
+.web-signin-sidebar { display: flex; flex: 0 0 224px; flex-direction: column; gap: 32px; padding: 28px 16px 22px; background: var(--door-nav); border-right: 1px solid #292929; }
+.web-signin-brand { display: flex; align-items: center; gap: 11px; padding: 0 12px; font-size: 16px; font-weight: 600; letter-spacing: -.025em; }
+.web-signin-mark { display: block; width: 31px; height: 31px; flex: none; }
+.web-signin-nav { display: grid; align-content: start; gap: 6px; }
+.web-signin-nav button { display: flex; align-items: center; gap: 12px; min-height: 42px; padding: 0 14px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--door-muted); font: inherit; text-align: left; cursor: pointer; }
+.web-signin-nav button svg { flex: none; color: #93939c; }
+.web-signin-nav button:hover { background: #222; color: var(--door-text); }
+.web-signin-nav button[aria-current="page"] { border-color: #363638; background: #2a2a2c; color: var(--door-text); font-weight: 500; }
+.web-signin-nav button[aria-current="page"] svg { color: #e0e0e5; }
+.web-signin-site { align-self: flex-start; margin-top: auto; padding: 8px 14px; border: 0; background: none; color: #95959e; font: inherit; font-size: 12px; cursor: pointer; }
+.web-signin-site:hover { color: var(--door-text); }
+.web-signin-content { flex: 1; min-width: 0; overflow: auto; overscroll-behavior: contain; }
+.web-signin-main { width: min(976px, 100%); padding: 58px 48px 48px; }
 .web-signin-panel { min-width: 0; }
-.web-signin-panel h1 { margin: 0; font-size: 24px; line-height: 1.3; font-weight: 500; letter-spacing: -.025em; }
-.web-signin-panel-heading p,
-.web-signin-door > p { margin: 10px 0 0; color: var(--door-muted); font-size: 14px; line-height: 1.6; }
-
-.web-signin-machines { list-style: none; margin: 32px 0 0; padding: 0; border-top: 1px solid var(--door-line); }
-.web-signin-machine { display: grid; grid-template-columns: 24px minmax(0, 1fr) 88px auto; align-items: start; gap: 20px; padding: 24px 0; border-bottom: 1px solid var(--door-line); }
-.web-signin-machine-icon { color: #888; padding-top: 3px; }
-.web-signin-machine-body { display: grid; gap: 5px; min-width: 0; }
-.web-signin-machine-name { overflow-wrap: anywhere; color: var(--door-text); font-size: 14px; font-weight: 500; line-height: 1.6; }
-.web-signin-machine-platform { color: var(--door-muted); font-size: 12px; line-height: 1.5; }
-.web-signin-machine-body p { max-width: 52ch; margin: 6px 0 0; color: var(--door-muted); font-size: 13px; line-height: 1.6; }
-.web-signin-machine-status { display: flex; align-items: center; gap: 7px; min-height: 34px; color: var(--door-muted); font-size: 12px; }
-.web-signin-machine-status > span { width: 6px; height: 6px; border-radius: 50%; background: #777; }
-.web-signin-machine-status.is-online { color: #96bba7; }
-.web-signin-machine-status.is-online > span { background: #78af92; }
-
-.web-signin-link { padding: 8px 0; border: 0; background: none; color: var(--door-muted); font: inherit; font-size: 12px; cursor: pointer; }
-.web-signin-link:hover { color: var(--door-text); }
-.web-signin-open,
-.web-signin-primary { min-height: 34px; padding: 0 15px; border: 1px solid #454545; border-radius: 5px; background: #222; color: var(--door-text); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
-.web-signin-open:hover { background: #2d2d2d; border-color: #666; }
-.web-signin-primary { margin-top: 26px; min-height: 38px; border-color: #ddd; background: #ddd; color: #191919; }
-.web-signin-primary:hover { background: #fff; }
-.web-signin button:disabled { opacity: .55; cursor: default; }
-.web-signin button:focus-visible { outline: 2px solid #a6c9f4; outline-offset: 4px; }
-.web-signin-door { max-width: 440px; }
-.web-signin-panel .web-loading { justify-content: flex-start; padding: 24px 0; }
-
-.web-signin-notice,
-.web-signin-problem { margin: 24px 0 0; padding: 12px 0; color: #c5bda9; font-size: 13px; line-height: 1.6; }
-.web-signin-problem { display: flex; align-items: flex-start; gap: 9px; }
+.web-signin-panel h1 { margin: 0; font-size: 28px; line-height: 1.3; font-weight: 600; letter-spacing: -.035em; }
+.web-signin-panel-heading { margin-bottom: 28px; }
+.web-signin-panel-heading p, .web-signin-account > p { margin: 8px 0 0; color: var(--door-muted); font-size: 14px; line-height: 1.6; }
+.web-signin-machines { list-style: none; margin: 0; padding: 0; border: 1px solid var(--door-line); border-radius: 12px; overflow: hidden; background: var(--door-surface); }
+.web-signin-machine + .web-signin-machine { border-top: 1px solid var(--door-line); }
+.web-signin-machine-row { display: grid; grid-template-columns: 80px minmax(0, 1fr) auto 80px; gap: 24px; align-items: center; min-height: 124px; padding: 24px; }
+.web-signin-machine-body { min-width: 0; }
+.web-signin-machine-name { display: block; color: var(--door-text); font-size: 15px; font-weight: 500; line-height: 1.5; letter-spacing: -.015em; overflow-wrap: anywhere; }
+.web-signin-machine-platform { display: block; margin-top: 5px; color: var(--door-muted); font-size: 13px; }
+.web-machine-display { position: relative; display: block; width: 80px; height: 64px; flex: none; color: #82828a; }
+.web-machine-display > svg:first-child { display: block; width: 100%; height: 100%; }
+.web-machine-screen { fill: #29292c; }
+.web-machine-mark { position: absolute; top: 17px; left: 30px; width: 20px; height: 20px; }
+.is-offline .web-machine-display { opacity: .7; }
+.is-offline .web-machine-mark { filter: grayscale(1); opacity: .65; }
+.web-signin-machine-status { display: inline-flex; align-items: center; gap: 7px; justify-self: start; padding: 4px 9px; border: 1px solid #3b3b40; border-radius: 6px; color: #b1b1ba; font-size: 12px; line-height: 18px; white-space: nowrap; }
+.web-signin-machine-status > span { width: 6px; height: 6px; border-radius: 50%; background: #85858c; }
+.web-signin-machine-status.is-online { border-color: #334b3e; background: #202d26; color: #a8d6bc; }
+.web-signin-machine-status.is-online > span { background: #74b58f; }
+.web-signin-machine-note { display: flex; align-items: flex-start; gap: 9px; padding: 13px 24px; border-top: 1px solid #2c2c2e; background: #191919; color: var(--door-muted); font-size: 12px; line-height: 1.6; }
+.web-signin-machine-note svg { flex: none; margin-top: 2px; color: #8f8f98; }
+.web-signin-machine-note p { margin: 0; }
+.web-signin-ownership { display: flex; align-items: center; gap: 8px; margin: 20px 2px 0; color: #9999a2; font-size: 12px; line-height: 1.5; }
+.web-signin-ownership svg { flex: none; }
+.web-signin-open, .web-signin-secondary, .web-signin-primary { min-height: 36px; padding: 0 16px; border: 1px solid #dedee2; border-radius: 6px; background: #e6e6ea; color: #19191c; font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+.web-signin-open:hover:not(:disabled), .web-signin-primary:hover:not(:disabled) { background: #fff; border-color: #fff; }
+.web-signin-open:disabled { border-color: #404044; background: #29292c; color: #86868f; cursor: default; }
+.web-signin-secondary { border-color: #48484d; background: var(--door-control); color: var(--door-text); }
+.web-signin-secondary:hover { border-color: #66666c; background: #333336; }
+.web-signin-primary:disabled { opacity: .6; cursor: default; }
+.web-signin button:focus-visible { outline: 2px solid #a6c9f4; outline-offset: 3px; }
+.web-signin-account-surface { margin-top: 28px; border: 1px solid var(--door-line); border-radius: 12px; background: var(--door-surface); overflow: hidden; }
+.web-signin-identity { display: flex; align-items: center; gap: 18px; padding: 28px; }
+.web-signin-avatar { display: grid; place-items: center; width: 54px; height: 54px; border: 1px solid #444448; border-radius: 50%; background: #28282a; color: #c8c8ce; flex: none; }
+.web-signin-identity h2 { margin: 0; font-size: 15px; line-height: 1.5; font-weight: 500; overflow-wrap: anywhere; }
+.web-signin-identity p { margin: 4px 0 0; color: var(--door-muted); font-size: 13px; }
+.web-signin-account-action { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 22px 28px; border-top: 1px solid var(--door-line); }
+.web-signin-account-action h3 { margin: 0; font-size: 14px; font-weight: 500; }
+.web-signin-account-action p { margin: 4px 0 0; color: var(--door-muted); font-size: 13px; }
+.web-signin-account-action button { flex: none; }
+.web-signin-door { max-width: 448px; margin: 36px auto 48px; padding: 36px; border: 1px solid var(--door-line); border-radius: 12px; background: var(--door-surface); }
+.web-signin-door > .web-machine-display { margin-bottom: 28px; }
+.web-signin-door h1 { font-size: 24px; }
+.web-signin-door > p { margin: 12px 0 0; color: var(--door-muted); font-size: 14px; line-height: 1.7; }
+.web-signin-door > .web-signin-primary { width: 100%; min-height: 42px; margin-top: 28px; }
+.web-signin-door > .web-signin-door-note { margin-top: 20px; font-size: 12px; }
+.web-signin-door .web-loading { justify-content: flex-start; padding: 24px 0 0; }
+.web-signin-empty { display: flex; flex-direction: column; align-items: center; padding: 42px 28px; border: 1px solid var(--door-line); border-radius: 12px; background: var(--door-surface); text-align: center; }
+.web-signin-empty h3 { margin: 26px 0 0; font-size: 18px; line-height: 1.5; font-weight: 500; }
+.web-signin-empty p { max-width: 48ch; margin: 10px 0 0; color: var(--door-muted); font-size: 13px; line-height: 1.7; }
+.web-signin-problem, .web-signin-notice { display: flex; align-items: flex-start; gap: 9px; margin: 20px 0; padding: 14px 16px; border: 1px solid #4b4539; border-radius: 8px; background: #25221d; color: #d6cdbb; font-size: 13px; line-height: 1.6; }
 .web-signin-problem svg { flex: none; margin-top: 2px; }
-.web-signin-empty { margin-top: 32px; padding: 24px 0; border-top: 1px solid var(--door-line); color: var(--door-muted); }
-.web-signin-empty > svg { display: none; }
-.web-signin-empty h3 { margin: 0 0 8px; color: var(--door-text); font-size: 14px; font-weight: 500; }
-.web-signin-empty p { max-width: 60ch; margin: 0; font-size: 13px; line-height: 1.7; }
-.web-signin-footer { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 64px; border-top: 1px solid var(--door-line); color: #888; font-size: 12px; line-height: 1.6; }
-
-@media (max-width: 600px) {
-  .web-signin { flex-direction: column; }
-  .web-signin-sidebar { flex: none; padding: 18px 20px 12px; border-right: 0; border-bottom: 1px solid var(--door-line); }
-  .web-signin-brand { padding: 0; }
-  .web-signin-nav { display: flex; gap: 8px; margin-top: 18px; }
-  .web-signin-nav button { flex: 1; }
-  .web-signin-sidebar .web-signin-site { display: none; }
-  .web-signin-main, .web-signin-footer { width: calc(100% - 40px); }
-  .web-signin-main { padding: 44px 0; }
-  .web-signin-machine { grid-template-columns: 24px minmax(0, 1fr) auto; column-gap: 14px; row-gap: 8px; padding: 20px 0; }
-  .web-signin-machine-status { grid-column: 2; min-height: auto; }
+@media (max-width: 1000px) {
+  .web-signin-main { padding: 44px 32px 48px; }
+  .web-signin-machine-row { grid-template-columns: 64px minmax(0, 1fr) 80px; gap: 16px; padding: 22px; }
+  .web-signin-machine-row > .web-machine-display { grid-row: 1 / span 2; width: 64px; height: 52px; }
+  .web-signin-machine-row .web-machine-mark { top: 14px; left: 24px; width: 16px; height: 16px; }
+  .web-signin-machine-status { grid-column: 2; }
   .web-signin-open { grid-column: 3; grid-row: 1 / span 2; }
-  .web-signin-footer { align-items: flex-start; flex-direction: column; justify-content: center; gap: 2px; padding: 16px 0; }
+}
+@media (max-width: 680px) {
+  .web-signin { flex-direction: column; }
+  .web-signin-sidebar { flex: none; padding: 18px 20px 12px; gap: 20px; border-right: 0; border-bottom: 1px solid #303032; }
+  .web-signin-brand { padding: 0; font-size: 15px; }
+  .web-signin-mark { width: 28px; height: 28px; }
+  .web-signin-nav { display: flex; gap: 8px; }
+  .web-signin-nav button { flex: 1; }
+  .web-signin-site { display: none; }
+  .web-signin-main { padding: 30px 20px 36px; }
+  .web-signin-panel-heading { margin-bottom: 24px; }
+  .web-signin-panel-heading h1 { font-size: 26px; }
+  .web-signin-machine-row { grid-template-columns: 52px minmax(0, 1fr); gap: 10px 16px; padding: 20px; }
+  .web-signin-machine-row > .web-machine-display { grid-row: 1 / span 2; width: 52px; height: 43px; }
+  .web-signin-machine-row .web-machine-mark { top: 12px; left: 20px; width: 12px; height: 12px; }
+  .web-signin-machine-name { font-size: 14px; }
+  .web-signin-machine-status { grid-column: 2; }
+  .web-signin-open { grid-column: 1 / -1; grid-row: auto; width: 100%; margin-top: 8px; min-height: 40px; }
+  .web-signin-machine-note { padding: 13px 20px; }
+  .web-signin-ownership { align-items: flex-start; margin: 20px 2px 0; line-height: 1.7; }
+  .web-signin-ownership svg { margin-top: 3px; }
+  .web-signin-door { max-width: 448px; margin: 12px auto 36px; padding: 28px 24px; }
+  .web-signin-door h1 { font-size: 22px; }
+  .web-signin-identity { align-items: flex-start; padding: 24px; }
+  .web-signin-account-action { align-items: flex-start; flex-direction: column; gap: 18px; padding: 22px 24px; }
+  .web-signin-account-action button { width: 100%; min-height: 40px; }
 }
