@@ -37,13 +37,15 @@ if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
 fi
 
 root="$(pwd)"
-work="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/update-delta-${stem}"
-rm -rf "$work"
-mkdir -p "$work" "$stage"
+# A fresh folder from mktemp, not RUNNER_TEMP: on a Windows runner that variable
+# holds backslashes, which bash does not read as a path.
+work="$(mktemp -d)"
+mkdir -p "$stage"
 
 # The delta tool is the codec the app itself runs (src-tauri/src/delta_codec.rs),
-# built from its own crate.
-cargo build --release --manifest-path "$root/scripts/delta-tool/Cargo.toml"
+# built from its own crate. The manifest path is relative, so cargo gets no
+# POSIX-style path to translate.
+cargo build --release --manifest-path scripts/delta-tool/Cargo.toml
 tool="$root/scripts/delta-tool/target/release/delta-tool"
 if [ -f "$tool.exe" ]; then
   tool="$tool.exe"
