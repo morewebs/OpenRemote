@@ -1042,7 +1042,7 @@ function Shell() {
       {view === 'machines' && <MachinesView onOpenChat={openSession} openDevice={openDevice} />}
       {!STATIC_VIEWS.includes(view) &&
         (chat ? (
-          <ChatView key={chat.id} chat={chat} focused={primaryFocused} />
+          <ChatView key={chat.id} chat={chat} focused={primaryFocused} onOpenPlugins={() => goView('plugins')} />
         ) : (
           <div className="cv-none">That chat is no longer in this workspace.</div>
         ))}
@@ -1075,7 +1075,7 @@ function Shell() {
     }
     const paneChat = chats[leaf.view]
     return paneChat ? (
-      <ChatView key={paneChat.id} chat={paneChat} focused={leaf.id === layout.focus} />
+      <ChatView key={paneChat.id} chat={paneChat} focused={leaf.id === layout.focus} onOpenPlugins={() => goView('plugins')} />
     ) : (
       <div className="cv-none">That chat is no longer in this workspace.</div>
     )

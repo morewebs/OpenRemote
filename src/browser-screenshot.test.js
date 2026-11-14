@@ -50,13 +50,14 @@ test('the region picker is a floating surface, so the page steps aside for it', 
 
 test('the view sends pictures to the focused composer and says when there is none', () => {
   const view = read('./BrowserView.jsx')
-  assert.match(view, /const \{ key \} = addToFocused\(item\)/)
+  assert.match(view, /if \(!target\?\.isLive\(\)\) throw consoleError\(NO_COMPOSER\)/)
+  assert.match(view, /addAttachment\(item, key\)/)
   assert.match(view, /notify\(errorCopy\(err\)\)/)
   assert.match(view, /notify\(errorCopy\(consoleError\(NO_COMPOSER\)\)\)/)
   // Checked before anything is taken.
   const shot = view.slice(view.indexOf('const screenshot = async'), view.indexOf('const startRegion'))
   assert.ok(shot.indexOf('composerReady()') < shot.indexOf("call('browser_capture'"))
-  assert.match(shot, /attachPicture\(screenshotAttachment\(dataUrl, tab\.url\), 'Screenshot'\)/)
+  assert.match(shot, /attachPicture\(screenshotAttachment\(dataUrl, tab\.url\), 'Screenshot', target\)/)
   const region = view.slice(view.indexOf('const finishRegion'), view.indexOf('const toggleDevice'))
   assert.match(region, /call\('browser_capture', \{ tab: reg\.tab, clip \}\)/)
   assert.match(region, /if \(region && region\.tab !== current\?\.native\) setRegion\(null\)/)

@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { zipSync, strToU8 } from 'fflate'
 import { parseDocumentBytes, documentType } from './document-parse.js'
-import { takeFiles, cancelImports } from './document-input.js'
+import { takeFiles, takeContext, cancelImports, readDocument } from './document-input.js'
 import { attachments, clearAttachments, removeAttachment } from './attachments.js'
 import { outgoing } from './composer-attachments.js'
 
@@ -111,4 +111,47 @@ test('the assembled escaped prompt and images are bounded before delivery', () =
   const image = { kind: 'image', dataUrl: `data:image/png;base64,${'A'.repeat(3_700_000)}` }
   assert.equal(outgoing('Hi', [image]).error, null, 'local image uploads use the daemon image route limit')
   assert.match(outgoing('"'.repeat(100_000), [image], { remote: true }).error, /large|limit|MB/i)
+})
+
+test('PDF worker internal messages cannot finish the document import early', async () => {
+  const original = globalThis.Worker
+  let terminated = 0
+  // PDF.js initializes its own message channel in a worker. Exercise the
+  // browser adapter with that extra traffic before our extraction result.
+  globalThis.Worker = class {
+    postMessage() {
+      queueMicrotask(() => {
+        this.onmessage({ data: { sourceName: 'worker', action: 'ready' } })
+        this.onmessage({ data: { type: 'document.result', result: { text: 'PDF reference', format: 'PDF' } } })
+      })
+    }
+    terminate() { terminated++ }
+  }
+  try {
+    assert.deepEqual(await readDocument(file('pdf', 'test.pdf')), { text: 'PDF reference', format: 'PDF' })
+    assert.equal(terminated, 1)
+  } finally { if (original) globalThis.Worker = original; else delete globalThis.Worker }
+})
+
+test('browser collection reserves a pending chip and cancellation discards its late result', async () => {
+  const key = 'context-cancel'
+  clearAttachments(key)
+  let finish
+  const result = takeContext(key, { name: 'Example page', kind: 'document' }, () => new Promise(r => { finish = r }))
+  assert.equal(attachments(key)[0].status, 'pending')
+  assert.match(outgoing('Read this', attachments(key)).error, /prepar/i)
+  cancelImports(key)
+  finish({ kind: 'document', text: 'Late text', format: 'Web page' })
+  await result
+  assert.deepEqual(attachments(key), [])
+})
+
+test('failed browser collection remains removable and retryable without losing the draft', async () => {
+  const key = 'context-error'
+  clearAttachments(key)
+  const id = await takeContext(key, { name: 'Example page', kind: 'document' }, async () => { throw new Error('Reload the page and retry.') })
+  assert.equal(attachments(key)[0].id, id)
+  assert.equal(attachments(key)[0].status, 'error')
+  assert.match(attachments(key)[0].error, /Reload/)
+  clearAttachments(key)
 })

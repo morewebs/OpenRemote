@@ -44,7 +44,7 @@ import { mentionedChats, ownCommands, takeCommands } from './composer-menus.js'
 import { claimInserter } from './composer-insert.js'
 import { addAttachment, removeAttachment, setFocusedComposer } from './attachments.js'
 import { AttachmentChips, useAttachInput, useAttachments } from './ComposerAttachments.jsx'
-import { outgoingOrThrow, takesNoPictures, takesPictures } from './composer-attachments.js'
+import { outgoing, outgoingOrThrow, takesNoPictures, takesPictures } from './composer-attachments.js'
 import { ChatImages, chatImageDataUrl } from './chat-images.jsx'
 import { errorCopy } from './error-copy.js'
 import { isTeamTool, teamTool } from './team.js'
@@ -523,7 +523,7 @@ const LIVE_SETTINGS = {
   opencode: { model: true, effort: false, fast: false },
 }
 
-export default function ChatView({ chat, onBack, focused = true, web = false }) {
+export default function ChatView({ chat, onBack, focused = true, web = false, onOpenPlugins = null }) {
   const privacy = usePrivacyMode()
   const {
     capabilities,
@@ -616,7 +616,6 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
   // picked in the browser (attachments.js keeps them per composer).
   const composerKey = chat.id
   const attached = useAttachments(composerKey)
-  const canSend = (text.trim().length > 0 || attached.length > 0) && alive && !busy && reachable
   const harness = (capabilities?.harnesses ?? []).find((h) => h.id === chat.harness)
   // The daemon's honors.attachments for the chat's app; a chat whose app
   // this computer does not list (it runs elsewhere) falls back to the apps
@@ -626,6 +625,8 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
   // harness list has a row for it (a plugin harness is only named there),
   // else the id the chat carries.
   const harnessText = harnessLabel(harness ?? chat.harness)
+  const bound = outgoing(text, attached, { images: takesImages, app: harnessText ?? 'This App', remote: Boolean(elsewhere) }).error
+  const canSend = (text.trim().length > 0 || attached.length > 0) && alive && !busy && reachable && !bound
   // A harness that takes a setting while a turn works: the built-ins whose
   // drivers do, and any installed plugin whose own row says its settings are
   // live. The row's word is the fact; this map is not the list of harnesses
@@ -721,7 +722,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
   const claims = useRef({ text: null, pictures: null })
   const claimText = () => {
     claims.current.text?.()
-    claims.current.text = claimInserter(attach, composerKey)
+    claims.current.text = claimInserter(attach, composerKey, inputRef)
   }
   // The browser's pictures go to the composer the user is in, like its text
   // (claimInserter): this one while it is the focused pane's, or the moment
@@ -742,9 +743,16 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
     if (focused) claimPictures()
   }, [focused, composerKey])
   const attachInput = useAttachInput(composerKey, {
-    enabled: takesImages && alive && reachable,
+    enabled: takesImages,
+    disabled: !alive || !reachable || busy,
     onError: setError,
     refuse: takesImages ? null : takesNoPictures(harnessText ?? 'This app'),
+    inputRef, setText, workspace: chat.workspace ?? null,
+    onReference: () => menus.begin('@'),
+    onCommands: () => menus.begin('/'),
+    onPlugins: onOpenPlugins,
+    onEffort: canChange.effort && efforts.length ? () => toggleEffort() : undefined,
+    effort: chat.effort,
   })
 
   // An OpenRemote command from the composer, run here before the rest of
@@ -1122,7 +1130,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
   // Steer (Ctrl+Enter): into the running turn now; with nothing running
   // it is an ordinary send.
   const steerNow = async () => {
-    if ((!text.trim() && !attached.length) || !alive || !reachable || busy) return false
+      if ((!text.trim() && !attached.length) || !alive || !reachable || busy || bound) return false
     if (!turnOpen) {
       send()
       return
@@ -1717,6 +1725,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
                 setText={setText}
                 composer={chat.id}
                 workspace={chat.workspace ?? null}
+                actions={attachInput.pluginActions}
                 disabled={!alive || !reachable}
               />
               {/* The harness's own permission word for this chat, by the
@@ -1790,13 +1799,14 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
                 className="nc-send"
                 onClick={send}
                 disabled={!canSend}
-                title={turnOpen ? `Queue (Enter) - ${hintSteer(steerLabel)}` : 'Send'}
+                title={bound || (turnOpen ? `Queue (Enter) - ${hintSteer(steerLabel)}` : 'Send')}
               >
                 <ArrowUp size={15} weight="bold" />
               </button>
             </div>
           </div>
         </div>
+        {bound && <p className="nc-bound" role="status">{bound}</p>}
         {(error || connection.state === 'error') && (
           <p className="cv-error-line">{error ?? connection.error}</p>
         )}

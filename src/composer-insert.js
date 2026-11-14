@@ -4,6 +4,7 @@
 // last - where the user is typing. Plain module, no DOM: tested.
 
 let current = null
+const composers = new Map()
 
 // Claim the bus for an inserter, and hand back the release that ends the
 // claim. The claim belongs to the composer that made it: releasing it is what
@@ -11,13 +12,15 @@ let current = null
 // into and the browser pane never reports a delivery that went nowhere.
 // `key` names the composer (a chat's id, or 'new'), so the pane can say
 // which chat it shared with.
-export function claimInserter(fn, key = null) {
-  const mine = { fn, key }
+export function claimInserter(fn, key = null, owner = null) {
+  const mine = { fn, key, owner: owner || {} }
   current = mine
+  if (key) composers.set(key, mine)
   return function release() {
     // A later claim is not this one's to clear: the composer that took the bus
     // after this one still owns it, and only its own unmount ends that.
     if (current === mine) current = null
+    if (key && composers.get(key) === mine) composers.delete(key)
   }
 }
 
@@ -38,4 +41,18 @@ export function inserterKey() {
 // Test-only: forget the claim.
 export function resetInserter() {
   current = null
+  composers.clear()
+}
+
+// Capture an ownership claim before async work starts. A later focus or a
+// newly mounted composer with the same chat id cannot receive its result.
+export function composerTarget(key) {
+  const mine = composers.get(key)
+  if (!mine) return null
+  const isLive = () => composers.get(key)?.owner === mine.owner
+  return { key, isLive, insert: text => {
+    if (!isLive()) return false
+    mine.fn(text)
+    return true
+  } }
 }

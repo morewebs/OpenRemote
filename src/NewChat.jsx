@@ -47,12 +47,11 @@ import { chatMade, tellDaemon } from './browser-share.js'
 import { isMobile } from './platform.js'
 import { moveAttachments, removeAttachment, setFocusedComposer } from './attachments.js'
 import { AttachmentChips, useAttachInput, useAttachments } from './ComposerAttachments.jsx'
-import { outgoingOrThrow, takesNoPictures, takesPictures } from './composer-attachments.js'
+import { outgoing, outgoingOrThrow, takesNoPictures, takesPictures } from './composer-attachments.js'
 import PluginComposerButtons from './PluginComposerButtons.jsx'
 import './newchat.css'
 import './composer.css'
 import { errorCopy } from './error-copy.js'
-import { messageBound } from './send-bound.js'
 import { mobileHomeState } from './mobile-home.js'
 
 
@@ -693,13 +692,13 @@ export default function NewChat({
   // by: null while the message fits, the sentence when it does not. It counts
   // the body (the escaped text plus the request's reserve), so a newline-heavy
   // message is stopped here rather than by the daemon.
-  const bound = messageBound(text)
   // What rides the first message besides its words: pictures, and elements
   // picked in the browser - kept under 'new' until the chat exists
   // (attachments.js). Whether the app reads pictures is the daemon's
   // honors.attachments for the machine the chat will run on.
   const attached = useAttachments('new')
   const takesImages = takesPictures(currentHarness, currentHarness?.id)
+  const bound = outgoing(text, attached, { images: takesImages, app: harnessLabel(currentHarness) ?? 'This App', remote: Boolean(target) && target !== thisDevice }).error
   const canSend =
     (text.trim().length > 0 || attached.length > 0) && !busy && currentHarness && connection.state === 'connected'
     && !needsSignIn && !targetOffline && !bound && (!isMobile || Boolean(targetItem))
@@ -1168,7 +1167,7 @@ export default function NewChat({
   const releasePictures = useRef(null)
   const takeInserter = () => {
     releaseInserter.current?.()
-    releaseInserter.current = claimInserter(attach, 'new')
+    releaseInserter.current = claimInserter(attach, 'new', inputRef)
     releasePictures.current?.()
     releasePictures.current = setFocusedComposer('new')
   }
@@ -1177,6 +1176,13 @@ export default function NewChat({
     enabled: takesImages,
     onError: setError,
     refuse: currentHarness && !takesImages ? takesNoPictures(harnessLabel(currentHarness)) : null,
+    disabled: busy || !currentHarness || connection.state !== 'connected' || needsSignIn || targetOffline,
+    inputRef, setText, workspace,
+    onReference: () => menus.begin('@'),
+    onCommands: () => menus.begin('/'),
+    onPlugins: onOpenPlugins,
+    onEffort: model && effortTiers.length ? () => toggleEffort() : undefined,
+    effort: chosenEffort,
   })
   useEffect(() => {
     takeInserter()
@@ -1867,6 +1873,7 @@ export default function NewChat({
               setText={setText}
               composer="new"
               workspace={workspace}
+              actions={attachInput.pluginActions}
               disabled={busy}
             />
             {/* What the agent may do without asking sits by the send button:

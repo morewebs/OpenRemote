@@ -8,6 +8,7 @@
 // over the page's picture).
 export const FLOATING = [
   '.nc-menu',
+  '.ca-add-backdrop',
   '.cm-menu',
   '.dv-modal-backdrop',
   '.kb-backdrop',

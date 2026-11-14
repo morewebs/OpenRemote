@@ -3,9 +3,8 @@
 import { unzipSync, strFromU8 } from 'fflate'
 import { XMLParser, XMLValidator } from 'fast-xml-parser'
 
-export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
-export const MAX_DOCUMENT_CHARS = 200_000
-export const MAX_DRAFT_CHARS = 500_000
+import { MAX_DOCUMENT_BYTES, MAX_DOCUMENT_CHARS, checkedText } from './document-limits.js'
+export { MAX_DOCUMENT_BYTES, MAX_DOCUMENT_CHARS, MAX_DRAFT_CHARS, checkedText } from './document-limits.js'
 const TEXT_EXT = new Set('txt md markdown csv tsv json jsonl log yaml yml xml html htm css scss js jsx mjs cjs ts tsx py rs go c h cpp hpp cs java kt swift rb php sh bash ps1 sql toml ini cfg conf env tex rst diff patch ipynb svelte vue graphql'.split(' '))
 
 export function documentType(name = '', type = '') {
@@ -13,12 +12,6 @@ export function documentType(name = '', type = '') {
   if (['pdf', 'docx', 'xlsx'].includes(ext)) return ext
   if (['doc', 'xls', 'ppt', 'pptx', 'exe', 'dll', 'zip', 'bin'].includes(ext)) return null
   return TEXT_EXT.has(ext) || /^text\//.test(type) || ['application/json', 'application/xml'].includes(type) ? 'text' : null
-}
-
-export function checkedText(text) {
-  if (text.length > MAX_DOCUMENT_CHARS) throw new Error('This document exceeds 200,000 extracted characters. Split it into smaller files.')
-  if (!text.trim()) throw new Error('No readable text was found. For a scanned PDF, add photos of its pages instead.')
-  return text.trim()
 }
 
 const xmlParser = new XMLParser({ preserveOrder: true, ignoreAttributes: false, removeNSPrefix: true, parseTagValue: false, trimValues: false, processEntities: false })

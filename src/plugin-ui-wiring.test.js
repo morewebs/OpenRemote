@@ -135,7 +135,8 @@ test('a write needs a click: the grant is made in the click handler and nowhere 
   assert.match(read('PluginComposerButtons.jsx'), /\}, \[registerComposer, handle, composer\]\)/)
   const buttons = read('PluginComposerButtons.jsx')
   assert.equal((buttons.match(/clickInput\(/g) ?? []).length, 1)
-  assert.match(buttons, /onClick=\{\(\) => host\.clickInput\(pluginId, input\.id, handle\)\}/)
+  assert.match(buttons, /onChoose: \(\) => host\.clickInput\(pluginId, input\.id, handle\)/)
+  assert.match(buttons, /onClick=\{onChoose\}/, 'quick controls share the same dispatch as the Add menu')
   // No other file grants anything.
   for (const file of readdirSync(new URL('./', import.meta.url))) {
     if (!/\.jsx?$/.test(file) || file.endsWith('.test.js') || file === 'plugin-calls.js' || file === 'plugins-host.jsx') continue

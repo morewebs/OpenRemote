@@ -1,6 +1,6 @@
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/build/pdf.mjs'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import { checkedText } from './document-parse.js'
+import { checkedText } from './document-limits.js'
 
 GlobalWorkerOptions.workerSrc = workerUrl
 

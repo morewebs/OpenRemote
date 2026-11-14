@@ -4,11 +4,16 @@
 // and each chat's use it. The items live in attachments.js, where the
 // browser can add its own; the paths themselves are composer-attachments.js.
 
-import { useRef, useSyncExternalStore } from 'react'
-import { CursorClick, ImageSquare, Plus, X } from '@phosphor-icons/react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { CursorClick, ImageSquare, FileText, Hourglass, WarningCircle, X } from '@phosphor-icons/react'
 import { attachments, removeAttachment, subscribe } from './attachments.js'
 import { dragsFiles, droppedPictures, pastePlan, takePictures } from './composer-attachments.js'
 import { consoleError, errorCopy } from './error-copy.js'
+import { takeFiles, cancelImports, retryImport, FILE_ACCEPT } from './document-input.js'
+import { usePluginComposerActions } from './PluginComposerButtons.jsx'
+import ComposerAddMenu from './ComposerAddMenu.jsx'
+import DocumentPreview from './DocumentPreview.jsx'
+import { composerTarget } from './composer-insert.js'
 
 const NONE = []
 
@@ -74,11 +79,24 @@ function Chip({ item, off, why, onRemove }) {
  */
 export function AttachmentChips({ composerKey, takesImages = true, app = 'This app' }) {
   const items = useAttachments(composerKey)
+  const [preview, setPreview] = useState(null)
   if (!items.length) return null
   return (
-    <div className="ca-row">
+    <><div className="ca-row" aria-live="polite">
       {items.map((item) => {
         const off = !takesImages && item.kind === 'image'
+        if (item.kind === 'document' || item.status === 'pending' || item.status === 'error') {
+          const ready = item.status === 'ready'
+          const Icon = item.status === 'pending' ? Hourglass : item.status === 'error' ? WarningCircle : FileText
+          return <div className="ca-chip ca-document" data-status={item.status} key={item.id}>
+            <button type="button" className="ca-document-open" disabled={!ready} onClick={() => setPreview(item.id)} aria-label={`Preview ${item.name}`} title={item.error || (ready ? 'Preview the text included with your message' : 'Preparing attachment')}>
+              <span className="ca-thumb ca-thumb--none"><Icon size={20} /></span>
+              <span className="ca-label pv"><span className="ca-name">{item.name}</span><span className="ca-where">{item.status === 'pending' ? 'Preparing…' : item.status === 'error' ? item.error : `${item.format} · ${item.text?.length.toLocaleString()} characters`}</span></span>
+            </button>
+            {item.status === 'error' && <button type="button" className="ca-retry" onClick={() => retryImport(composerKey, item.id)}>Retry</button>}
+            <button type="button" className="ca-remove" onClick={() => removeAttachment(composerKey, item.id)} aria-label={`Remove ${item.name}`} title="Remove"><X size={12} /></button>
+          </div>
+        }
         return (
           <Chip
             key={item.id}
@@ -89,7 +107,7 @@ export function AttachmentChips({ composerKey, takesImages = true, app = 'This a
           />
         )
       })}
-    </div>
+    </div>{preview && items.find(i => i.id === preview && i.status === 'ready') && <DocumentPreview item={items.find(i => i.id === preview)} onClose={() => setPreview(null)} />}</>
   )
 }
 
@@ -100,63 +118,73 @@ export function AttachmentChips({ composerKey, takesImages = true, app = 'This a
  * pasted or dropped there gets `refuse` (the sentence naming the app) when
  * one is given. `onError` gets errorCopy's sentence.
  */
-export function useAttachInput(composerKey, { enabled, onError, refuse = null }) {
+export function useAttachInput(composerKey, { enabled, onError, refuse = null, disabled = false, inputRef, setText, workspace = null, onReference, onCommands, onBrowser, onPlugins, onEffort, effort }) {
   const fileRef = useRef(null)
-  const take = (files) => takePictures(composerKey, files, { onError })
-  const refused = (e, files) => {
-    if (!refuse || !files.length) return false
-    e.preventDefault()
-    onError?.(errorCopy(consoleError(refuse)))
-    return true
-  }
+  const photoRef = useRef(null)
+  const cameraRef = useRef(null)
+  const pluginActions = usePluginComposerActions({ inputRef, setText, composer: composerKey, workspace, disabled })
+  const take = (files) => takeFiles(composerKey, files, { images: enabled, onError })
+  useEffect(() => () => cancelImports(composerKey), [composerKey])
   // Words pasted with a picture go in as typed; only the picture is taken,
   // or refused, on its own.
   const onPaste = (e) => {
+    if (disabled) return
     const plan = pastePlan(e, { enabled, refuse })
     if (!plan.keepDefault) e.preventDefault()
     if (plan.refuse) onError?.(errorCopy(consoleError(refuse)))
     if (plan.take.length) take(plan.take)
   }
   const onDragOver = (e) => {
-    if (!enabled || !dragsFiles(e)) return
+    if (disabled || !dragsFiles(e)) return
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
   }
   const onDrop = (e) => {
-    const files = droppedPictures(e)
-    if (!enabled) {
-      refused(e, files)
-      return
-    }
+    if (disabled) return
+    const files = [...(e.dataTransfer?.files ?? [])]
     if (!files.length) return
     e.preventDefault()
     take(files)
   }
   // The picker takes any picture: kinds the apps don't read are drawn
   // again as one they do.
-  const button = enabled ? (
+  const pasteClipboard = async () => {
+    const target = composerTarget(composerKey)
+    try {
+      const files = []
+      if (navigator.clipboard?.read) {
+        const items = await navigator.clipboard.read()
+        for (const item of items) {
+          const type = item.types.find(t => t.startsWith('image/')) || item.types.find(t => t === 'text/plain')
+          if (type) files.push(new File([await item.getType(type)], type.startsWith('image/') ? 'Clipboard photo.png' : 'Clipboard.txt', { type }))
+        }
+      } else {
+        const text = await navigator.clipboard.readText()
+        if (text) files.push(new File([text], 'Clipboard.txt', { type: 'text/plain' }))
+      }
+      if (!target?.isLive()) return
+      if (!files.length) onError?.('The clipboard has no readable text or photos. Copy something, then try again.')
+      else await take(files)
+    } catch { if (target?.isLive()) onError?.('Clipboard access was not available. Paste directly into the message with your keyboard instead.') }
+  }
+  const picked = (e) => {
+    if (!disabled) take([...e.target.files])
+    e.target.value = ''
+  }
+  const button = (
     <>
       <input
         ref={fileRef}
         type="file"
-        accept="image/*"
+        accept={FILE_ACCEPT}
         multiple
         hidden
-        onChange={(e) => {
-          take([...e.target.files])
-          e.target.value = ''
-        }}
+        onChange={picked}
       />
-      <button
-        type="button"
-        className="nc-meta ca-attach"
-        onClick={() => fileRef.current?.click()}
-        title="Attach pictures - or paste or drop them"
-        aria-label="Attach pictures"
-      >
-        <Plus size={20} />
-      </button>
+      <input ref={photoRef} type="file" accept="image/*" multiple hidden onChange={picked} />
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={picked} />
+      <ComposerAddMenu composerKey={composerKey} takesImages={enabled} disabled={disabled} pickPhoto={() => photoRef.current?.click()} pickFile={() => fileRef.current?.click()} pickCamera={() => cameraRef.current?.click()} pasteClipboard={pasteClipboard} onReference={onReference} onCommands={onCommands} onPlugins={onPlugins} onEffort={onEffort} effort={effort} pluginActions={pluginActions} onError={onError} />
     </>
-  ) : null
-  return { onPaste, onDragOver, onDrop, button }
+  )
+  return { onPaste, onDragOver, onDrop, button, pluginActions }
 }

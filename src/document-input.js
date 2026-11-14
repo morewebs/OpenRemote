@@ -1,5 +1,5 @@
 import { addAttachment, attachments, removeAttachment, updateAttachment, onAttachmentRemoved } from './attachments.js'
-import { MAX_DOCUMENT_BYTES, MAX_DRAFT_CHARS, checkedText } from './document-parse.js'
+import { MAX_DOCUMENT_BYTES, MAX_DRAFT_CHARS, checkedText } from './document-limits.js'
 import { imageAttachment } from './composer-attachments.js'
 
 const jobs = new Map()
@@ -26,20 +26,26 @@ export async function readDocument(file, { signal } = {}) {
     const abort = () => done(new DOMException('Cancelled', 'AbortError'))
     const timer = setTimeout(() => done(new Error('This document took too long to read. Split it into smaller files and retry.')), 25_000)
     signal?.addEventListener('abort', abort, { once: true })
-    worker.onmessage = ({ data }) => done(data.error ? new Error(data.error) : null, data.result)
+    worker.onmessage = ({ data }) => {
+      if (data?.type !== 'document.result') return
+      done(data.error ? new Error(data.error) : null, data.result)
+    }
     worker.onerror = () => done(new Error('This document could not be read. Export it again and retry.'))
     worker.postMessage({ name: file.name, type: file.type, bytes }, [bytes.buffer])
   })
 }
 
 async function prepare(key, id, file, { parse = readDocument, convert = imageAttachment } = {}) {
+  return prepareItem(key, id, async (signal) => file.type?.startsWith('image/') ? convert(file) : { kind: 'document', ...await parse(file, { signal }) })
+}
+
+async function prepareItem(key, id, collect) {
   const controller = new AbortController()
   jobs.set(id, { key, controller })
   try {
-    const image = file.type?.startsWith('image/')
-    const item = image ? await convert(file) : { kind: 'document', ...await parse(file, { signal: controller.signal }) }
+    const item = await collect(controller.signal)
     if (controller.signal.aborted || !attachments(key).some(a => a.id === id)) return
-    if (!image) {
+    if (item.kind === 'document') {
       item.text = checkedText(item.text)
       const total = attachments(key).reduce((n, a) => n + (a.id !== id && a.kind === 'document' && a.status === 'ready' ? a.text.length : 0), 0)
       if (total + item.text.length > MAX_DRAFT_CHARS) throw new Error('These documents exceed 500,000 characters together. Remove a file and retry.')
@@ -68,7 +74,17 @@ export async function takeFiles(key, files, { images = true, onError = () => {},
 export function retryImport(key, id) {
   const source = sources.get(id)
   if (!source || jobs.has(id) || !updateAttachment(key, id, { status: 'pending', error: null })) return
-  return prepare(key, id, source)
+  return typeof source === 'function' ? prepareItem(key, id, source) : prepare(key, id, source)
+}
+
+// Context collection participates in the same pending, removal and unmount
+// lifecycle as a selected file, so sending never silently outruns the fetch.
+export async function takeContext(key, pending, collect) {
+  if (attachments(key).length >= 10) throw new Error('A message can carry 10 attachments at most.')
+  const id = addAttachment({ ...pending, status: 'pending' }, key)
+  sources.set(id, collect)
+  await prepareItem(key, id, collect)
+  return id
 }
 
 export function forgetImport(id) {
