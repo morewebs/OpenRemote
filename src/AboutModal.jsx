@@ -10,6 +10,7 @@ import { SplashMark } from './Splash.jsx'
 import { useBack } from './use-back.js'
 import { useDialog } from './dialog-focus.js'
 import { githubAndroidUpdates } from './android-updates.js'
+import DesktopUpdateBadge from './DesktopUpdateBadge.jsx'
 
 // This dynamic chunk is omitted entirely unless the APK pipeline opts in.
 // A future Play build uses its own distribution value and has no checker.
@@ -90,7 +91,10 @@ export default function AboutModal({ onClose, daemonVersion, api }) {
         </div>
         {view === 'about' ? (
           <>
-            <div className="ab-version">Version {version} · slice 1</div>
+            <div className="ab-version ab-version-line">
+              <span>Version {version}</span>
+              {hasTauri && /Windows/.test(navigator.userAgent) && <DesktopUpdateBadge />}
+            </div>
             {daemonVersion && <div className="ab-version">Background service {daemonVersion}</div>}
             <div className="ab-sep" />
             <button type="button" className="ab-btn ab-btn--block" onClick={() => setView('licenses')}>

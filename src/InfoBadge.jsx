@@ -75,7 +75,7 @@ export default function InfoBadge({ onAbout }) {
 // pointer-events: none, and that would pass through to the dialog's text and
 // backdrop. The dialog plumbing (focus in, Tab kept inside, the app inert
 // behind, focus back to the badge) is shared; see dialog-focus.js.
-function UpdateConfirm({ available, runningChats, installing, onClose }) {
+export function UpdateConfirm({ available, runningChats, installing, onClose }) {
   useBack(true, onClose)
   const panelRef = useRef(null)
   useDialog(panelRef, onClose)

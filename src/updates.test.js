@@ -17,12 +17,28 @@ import {
   isDue,
   startUpdateChecks,
   updateBadge,
+  aboutUpdateStatus,
 } from './updates.js'
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
 const HOUR = 3600 * 1000
 const DAY = 24 * HOUR
+
+test('About only reports up to date after a successful enabled check', () => {
+  assert.equal(aboutUpdateStatus({}), 'checking')
+  assert.equal(aboutUpdateStatus({ enabled: true, checkedAt: 100 }), 'current')
+  assert.equal(aboutUpdateStatus({ enabled: false, checkedAt: 100 }), 'unavailable')
+  assert.equal(aboutUpdateStatus({ enabled: true, checkedAt: 100, error: 'offline' }), 'error')
+})
+
+test('About reflects live checking, offers and installation ahead of an older result', () => {
+  const available = { version: '0.7.0', can_install: true }
+  assert.equal(aboutUpdateStatus({ enabled: true, available, checkedAt: 100 }), 'available')
+  assert.equal(aboutUpdateStatus({ enabled: true, available, checking: true, checkedAt: 100 }), 'checking')
+  assert.equal(aboutUpdateStatus({ enabled: true, available, installing: true }), 'installing')
+  assert.equal(aboutUpdateStatus({ enabled: false, available, checkedAt: 100 }), 'unavailable')
+})
 const LAST_KEY = 'openremote-last-update-check'
 const AUTO_KEY = 'openremote-check-updates'
 

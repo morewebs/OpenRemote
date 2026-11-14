@@ -41,6 +41,17 @@ export function subscribeUpdates(fn) {
   return () => listeners.delete(fn)
 }
 
+// About must distinguish a successful check from a build with no signing
+// key, a failed request, and a result that has not arrived yet.
+export function aboutUpdateStatus(state) {
+  if (state.installing) return 'installing'
+  if (state.checking) return 'checking'
+  if (state.error) return 'error'
+  if (state.enabled === false) return 'unavailable'
+  if (state.available) return 'available'
+  return state.checkedAt ? 'current' : 'checking'
+}
+
 function readAuto(storage) {
   try {
     return storage.getItem(AUTO_KEY) !== 'off'
