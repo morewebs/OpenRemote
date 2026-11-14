@@ -17,7 +17,16 @@ export function createBackStack(history, { enabled = true } = {}) {
   // webview delivers popstate asynchronously, so a second press arriving
   // mid-unwind must not be read as a second unwind.
   let pendingPops = 0
+  // history.back() finishes asynchronously. A new overlay must wait for
+  // that pop before it pushes, or the old pop consumes its fresh entry.
+  let waiting = []
   const depthOf = (state) => (state && typeof state.backDepth === 'number' ? state.backDepth : 0)
+
+  function register(entry) {
+    entry.depth = depthOf(history.state) + 1
+    history.pushState({ ...(history.state ?? {}), backDepth: entry.depth }, '')
+    handlers.set(entry.depth, entry.handler)
+  }
 
   function popEntry() {
     pendingPops += 1
@@ -32,10 +41,15 @@ export function createBackStack(history, { enabled = true } = {}) {
    */
   function push(handler) {
     if (!enabled) return () => {}
-    const depth = depthOf(history.state) + 1
-    history.pushState({ ...(history.state ?? {}), backDepth: depth }, '')
-    handlers.set(depth, handler)
+    const entry = { handler, depth: null }
+    if (pendingPops > 0) waiting.push(entry)
+    else register(entry)
     return () => {
+      if (entry.depth == null) {
+        waiting = waiting.filter((item) => item !== entry)
+        return
+      }
+      const depth = entry.depth
       if (handlers.get(depth) !== handler) return
       handlers.delete(depth)
       // Only the newest entry can be popped safely; one with something
@@ -53,6 +67,11 @@ export function createBackStack(history, { enabled = true } = {}) {
       pendingPops -= 1
       for (const depth of [...handlers.keys()]) {
         if (depth > landed) handlers.delete(depth)
+      }
+      if (pendingPops === 0) {
+        const ready = waiting
+        waiting = []
+        for (const entry of ready) register(entry)
       }
       return
     }

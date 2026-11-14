@@ -1,5 +1,7 @@
 import { useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from '@phosphor-icons/react'
+import { isMobile } from './platform.js'
 import { useBack } from './use-back.js'
 import { useDialog } from './dialog-focus.js'
 import './view-popup.css'
@@ -16,9 +18,11 @@ export default function ViewPopup({ label, onClose, children, bare = false }) {
   // its own Esc and leaves the window behind it open. A view's own use of
   // Esc, a shortcut being recorded, comes first.
   useDialog(panelRef, onClose)
-  return (
+  // The phone's page moves aside to reveal the drawer. A fixed dialog
+  // inside that transformed page would move and clip with it too.
+  const popup = (
     <div
-      className="vp-backdrop"
+      className={`vp-backdrop${isMobile ? ' is-phone' : ''}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
@@ -33,4 +37,5 @@ export default function ViewPopup({ label, onClose, children, bare = false }) {
       </div>
     </div>
   )
+  return isMobile ? createPortal(popup, document.body) : popup
 }

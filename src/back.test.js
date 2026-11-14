@@ -2,11 +2,12 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createBackStack } from './back.js'
 
-// A history that pops synchronously, like the browser's once popstate fires.
-function fakeHistory() {
+// A history with immediate pops or queued browser-style traversals.
+function fakeHistory({ async = false } = {}) {
   const entries = [null]
   let index = 0
   let stack
+  const pops = []
   const h = {
     get state() {
       return entries[index]
@@ -16,12 +17,19 @@ function fakeHistory() {
       index += 1
     },
     back() {
-      if (index === 0) {
-        h.left = true
-        return
+      const pop = () => {
+        if (index === 0) {
+          h.left = true
+          return
+        }
+        index -= 1
+        stack.onPop(entries[index])
       }
-      index -= 1
-      stack.onPop(entries[index])
+      if (async) pops.push(pop)
+      else pop()
+    },
+    flush() {
+      while (pops.length) pops.shift()()
     },
     left: false,
     get length() {
@@ -35,6 +43,39 @@ function fakeHistory() {
     },
   }
 }
+
+test('opening Settings while the drawer is closing keeps its own Back entry', () => {
+  const { history, bind } = fakeHistory({ async: true })
+  const stack = createBackStack(history)
+  bind(stack)
+  const closed = []
+  const closeDrawer = stack.push(() => closed.push('drawer'))
+  closeDrawer()
+  stack.push(() => closed.push('settings'))
+  history.flush()
+  assert.deepEqual(closed, [], 'the pending drawer pop must not close Settings')
+  history.back()
+  history.flush()
+  assert.deepEqual(closed, ['settings'], 'one Back must close Settings')
+  assert.equal(history.left, false, 'Back must stay on the original home')
+})
+
+test('a popup closed before the drawer finishes closing leaves no Back entry', () => {
+  const { history, bind } = fakeHistory({ async: true })
+  const stack = createBackStack(history)
+  bind(stack)
+  const closed = []
+  const closeDrawer = stack.push(() => closed.push('drawer'))
+  closeDrawer()
+  const closeSettings = stack.push(() => closed.push('settings'))
+  closeSettings()
+  history.flush()
+  assert.equal(history.length, 1)
+  history.back()
+  history.flush()
+  assert.deepEqual(closed, [])
+  assert.equal(history.left, true)
+})
 
 test('back closes the newest open thing first', () => {
   const { history, bind } = fakeHistory()

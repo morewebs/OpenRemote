@@ -1548,9 +1548,8 @@ export default function Sidebar({
       </nav>
 
       <footer className="sb-foot">
-        {/* The footer's views, as icons: account, mobile, metrics, then
-            settings. Each opens its view in the primary pane. The browser
-            lives in the homepage's floating bar instead. */}
+        {/* Account opens in the main pane. Mobile, Metrics and Settings
+            open over it, keeping the current chat in place. */}
         <div className="sb-foot-row" role="group" aria-label="Account, mobile, metrics, settings">
           <button
             type="button"

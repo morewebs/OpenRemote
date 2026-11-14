@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Sidebar from './Sidebar.jsx'
 import TitleBar from './TitleBar.jsx'
 import NewChat from './NewChat.jsx'
@@ -224,7 +224,6 @@ function Shell() {
       return true
     }
   })
-  // Settings is a view like the others - the gear navigates to it.
   // Local vs Cloud: Local is this computer's chats; Cloud is the synced
   // chats of every device, behind a moreweb sign-in the first time.
   const [mode, setMode] = useState(loadMode)
@@ -797,7 +796,11 @@ function Shell() {
   const [pendingRestore, setPendingRestore] = useState(null)
   // The view open over the app, if any: settings, metrics or mobile.
   const [popup, setPopup] = useState(null)
-  useEffect(() => onPopup((name) => setPopup(name)), [])
+  const showPopup = useCallback((name) => {
+    if (isMobile) setSidebarOpen(false)
+    setPopup(name)
+  }, [])
+  useEffect(() => onPopup(showPopup), [showPopup])
   const [sheet, setSheet] = useState(false)
   const [presetProject, setPresetProject] = useState(null)
   // A New chat opened from "New chat with this setup": the fields chat-setup.js
@@ -807,7 +810,7 @@ function Shell() {
   const [openDevice, setOpenDevice] = useState(null)
   const goView = (id) => {
     if (POPUP_VIEWS.includes(id)) {
-      setPopup(id)
+      showPopup(id)
       return
     }
     // Machines is Cloud's; plugins and automations live in both modes.
@@ -1183,7 +1186,7 @@ function Shell() {
       active={sidebarActive}
       mode={mode}
       onMode={switchMode}
-      onSelect={(id) => (POPUP_VIEWS.includes(id) ? setPopup(id) : openInFocus(id))}
+      onSelect={(id) => (POPUP_VIEWS.includes(id) ? showPopup(id) : openInFocus(id))}
       onSplit={openBeside}
       onAddProject={addProject}
       onNewChatIn={newChatIn}
@@ -1210,7 +1213,7 @@ function Shell() {
       <div
         className="app-sheet"
         ref={sheetRef}
-        onPointerDown={isMobile && onboarded ? beginDrawerDrag : undefined}
+        onPointerDown={isMobile && onboarded && !popup ? beginDrawerDrag : undefined}
       >
       {isMobile && sidebarOpen && (
         <div
