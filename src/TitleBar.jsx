@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, ArrowRight, Info, SidebarSimple } from '@phosphor-icons/react'
+import { ArrowLeft, ArrowRight, Globe, Info, SidebarSimple } from '@phosphor-icons/react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import AboutModal from './AboutModal.jsx'
 import InfoBadge from './InfoBadge.jsx'
@@ -56,6 +56,8 @@ export default function TitleBar({
   canBack,
   canForward,
   onSplit,
+  onBrowser,
+  browserOn = false,
 }) {
   const { capabilities } = useConsole()
   const hintSidebar = useHint('toggle-sidebar')
@@ -104,6 +106,17 @@ export default function TitleBar({
           </button>
         )}
         <div className="tb-title">OpenRemote</div>
+        {onBrowser && (
+          <button
+            className="tb-toggle"
+            onClick={onBrowser}
+            title="Browser"
+            aria-label="Browser"
+            aria-pressed={browserOn}
+          >
+            <Globe size={22} />
+          </button>
+        )}
         <button
           className="tb-toggle"
           onClick={() => setAbout(true)}

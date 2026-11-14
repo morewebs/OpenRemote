@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowRight, ArrowUp, House, FolderOpen, Lightning, Plus, Star, X } from '@phosphor-icons/react'
+import { ArrowRight, ArrowUp, House, FolderOpen, Lightning, Plus, SlidersHorizontal, Star, X } from '@phosphor-icons/react'
 import PickerMenu from './PickerMenu.jsx'
 import { usePrivacyMode } from './privacy.js'
 import { useHint, useModelSwitches, usePaletteSource, useShortcut } from './keyboard.jsx'
@@ -53,6 +53,7 @@ import './newchat.css'
 import './composer.css'
 import { errorCopy } from './error-copy.js'
 import { messageBound } from './send-bound.js'
+import { mobileHomeState } from './mobile-home.js'
 
 
 // The harness's own effort word, exactly as the harness spells it: `xhigh`
@@ -104,10 +105,27 @@ export function EffortSlider({
   const last = Math.max(1, tiers.length - 1)
   const snapped = tiers.length < 2 ? 0 : (index / last) * 100
   const trackRef = useRef(null)
+  const panelRef = useRef(null)
   const draggingRef = useRef(false)
   const [dragging, setDragging] = useState(false)
   const [live, setLive] = useState(snapped)
   const [specks, setSpecks] = useState([])
+  useLayoutEffect(() => {
+    if (!isMobile || !panelRef.current) return
+    const panel = panelRef.current
+    const fit = () => {
+      panel.style.maxHeight = `${Math.max(0, window.innerHeight - 16)}px`
+      const { width, height } = panel.getBoundingClientRect()
+      const left = Math.max(8, Math.min(spot?.left ?? 8, window.innerWidth - width - 8))
+      const intended = (spot?.top ?? 8) - (place === 'above' ? height + 8 : 0)
+      const top = Math.max(8, Math.min(intended, window.innerHeight - height - 8))
+      panel.style.left = `${left}px`
+      panel.style.top = `${top + (place === 'above' ? height + 8 : 0)}px`
+    }
+    fit()
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
+  }, [spot?.left, spot?.top, place])
   useEffect(() => {
     if (!draggingRef.current) setLive(snapped)
   }, [snapped])
@@ -154,7 +172,8 @@ export function EffortSlider({
   }
   const panel = (
     <div
-      className={`nc-effort${fast ? ' is-fast' : ''}${leaving ? ' is-out' : ''}${place === 'above' ? ' is-above' : ''}`}
+      className={`nc-effort${isMobile ? ' is-phone' : ''}${fast ? ' is-fast' : ''}${leaving ? ' is-out' : ''}${place === 'above' ? ' is-above' : ''}`}
+      ref={panelRef}
       // A labelled group, not a dialog: this panel is not modal and traps
       // nothing. It hangs off the chip that opened it and the composer behind
       // it stays live, so the shared dialog plumbing would put the whole
@@ -247,7 +266,7 @@ export default function NewChat({
   const {
     connection, capabilities, chats, createChat, modelsFor, endpointsFor, refreshEndpoints,
     refreshModels, endpointModelsFor, devices, thisDevice,
-    capabilitiesFor, apiFor, projects, addProject, plugins, cloud, renameChat,
+    capabilitiesFor, apiFor, projects, addProject, plugins, cloud, renameChat, devicesAnswered,
   } = useConsole()
   // Plugins of one name both on: said here too, where chats start.
   const clashing = mode === 'local' ? clashes(plugins?.installed) : []
@@ -291,6 +310,7 @@ export default function NewChat({
   const [armedPreset, setArmedPreset] = useState(null)
   const presetArmWatch = useArmedRow(armedPreset, setArmedPreset)
   const [text, setText] = useState('')
+  const [optionsOpen, setOptionsOpen] = useState(false)
   // A new chat opens on the next sentence. While the box stays empty the
   // line keeps moving, so a page left sitting does not freeze on one greeting.
   const [greetingIndex, setGreetingIndex] = useState(() => greetingForNewChat())
@@ -346,12 +366,6 @@ export default function NewChat({
   // On a phone a chat always runs on a machine: the first online one until
   // the user picks another.
   const firstMachine = machineOptions.find((m) => m.online)?.id ?? machineOptions[0]?.id ?? null
-  useEffect(() => {
-    if (isMobile && cloudMode && !machineOptions.some((m) => m.id === target) && firstMachine) {
-      setTarget(firstMachine)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [firstMachine])
 
   // A browser has no computer of its own in Cloud: the chosen machine is the
   // target from the first frame, and the picker lists machines only.
@@ -455,6 +469,15 @@ export default function NewChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode])
 
+  // Run after the mode's selection carry. On a home reopened with devices
+  // already loaded, that carry must settle before the phone chooses a machine.
+  useEffect(() => {
+    if (isMobile && cloudMode && !machineOptions.some((m) => m.id === target) && firstMachine) {
+      setTarget(firstMachine)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstMachine, target, cloudMode, devices])
+
   // A machine's own harnesses, fetched when a chat aims at it. The first
   // answer can be empty or fail - the relay link is still coming up, or
   // the machine is still scanning for its harnesses - so the fetch keeps
@@ -492,10 +515,15 @@ export default function NewChat({
   // Every harness the daemon reports, installed or not: a preset or a saved
   // default still names its harness, and a plugin's harness has a name that
   // only the daemon knows.
-  const harnessList = (target ? targetCaps : capabilities)?.harnesses ?? null
+  const harnessList = (target ? targetCaps : isMobile ? null : capabilities)?.harnesses ?? null
   // Only what the machine reports installed - no dead UI.
   const available = (harnessList ?? []).filter(pickable)
   const currentHarness = available.find((h) => h.id === harness) ?? available[0] ?? null
+  const mobileStatus = isMobile ? mobileHomeState({
+    machine: targetItem,
+    apps: targetCaps?.harnesses ?? null,
+    devicesAnswered,
+  }) : null
   // The picked harness's own sign-in fact: a harness that isn't signed in
   // says so right here - the task is about to run on it.
   const usingApiKey = currentHarness?.using_api_key === true && currentHarness.signed_in !== true
@@ -674,7 +702,7 @@ export default function NewChat({
   const takesImages = takesPictures(currentHarness, currentHarness?.id)
   const canSend =
     (text.trim().length > 0 || attached.length > 0) && !busy && currentHarness && connection.state === 'connected'
-    && !needsSignIn && !targetOffline && !bound
+    && !needsSignIn && !targetOffline && !bound && (!isMobile || Boolean(targetItem))
   // A disabled send says why, the way the rule composer's does; the enabled one
   // names the key.
   const sendWhy = !currentHarness
@@ -1079,6 +1107,17 @@ export default function NewChat({
   // its key fall through.
   const boxRef = useRef(null)
   const inputRef = useRef(null)
+  useEffect(() => {
+    if (!isMobile || !inputRef.current) return
+    const field = inputRef.current
+    const fit = () => {
+      field.style.height = 'auto'
+      field.style.height = `${Math.min(field.scrollHeight, 144)}px`
+    }
+    fit()
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
+  }, [text])
   // The / and @ menus for the chat this screen will start: its harness,
   // its folder, the machine it will run on.
   const cloudReady = signedIn(cloud)
@@ -1394,15 +1433,34 @@ export default function NewChat({
   )
 
   return (
-    <div className="newchat">
+    <div className={`newchat${isMobile ? ' is-phone' : ''}`} data-options-open={optionsOpen || undefined} data-home-state={mobileStatus?.kind}>
       {/* The top of the page, not the composer: the saved setups sit on the left
           and the floating bar on the right, so the row above the greeting has room
           instead of squeezing into the box with the pickers. */}
-      <div className="nc-page-head">
+      {!isMobile && <div className="nc-page-head">
         {presetsRow}
         {topRight}
+      </div>}
+      <div className="nc-welcome">
+        <h1 className={`nc-greeting${greetingOn || mobileStatus ? '' : ' is-out'}`}>
+          {mobileStatus?.title ?? greetingAt(greetingIndex)}
+        </h1>
+        {mobileStatus && (
+          <div className="nc-mobile-guidance" role="status">
+            <p>{mobileStatus.detail}</p>
+            {mobileStatus.action && (
+              <button
+                type="button"
+                onClick={mobileStatus.action === 'machine' ? openPicker('machine') : () => onOpen('machines')}
+                data-picker={mobileStatus.action === 'machine' ? 'machine' : undefined}
+              >
+                {mobileStatus.action === 'machine' ? 'Choose a computer' : mobileStatus.kind === 'no-apps' ? 'Manage Apps' : mobileStatus.kind === 'disabled-apps' ? 'View computer' : 'Connect a computer'}
+                <ArrowRight size={16} />
+              </button>
+            )}
+          </div>
+        )}
       </div>
-      <h1 className={`nc-greeting${greetingOn ? '' : ' is-out'}`}>{greetingAt(greetingIndex)}</h1>
       {clashing.map((c) => (
         <div className="nc-signin" key={c.name}>
           <div className="nc-signin-note">
@@ -1422,7 +1480,7 @@ export default function NewChat({
           under the box is the one control that starts this, and a second
           "Install" that opened something else would be the dead control
           the console does not ship. */}
-      {connection.state === 'connected' && !available.length && (
+      {!isMobile && connection.state === 'connected' && !available.length && (
         <p className="nc-first-run" key="no-agent">
           No App is installed on this computer yet, so a chat has nowhere to run. Install one from
           the App picker under the box.
@@ -1466,6 +1524,8 @@ export default function NewChat({
           }}
           ref={inputRef}
           placeholder="Describe the task"
+          aria-label="Describe the task"
+          rows={isMobile ? 1 : undefined}
           autoFocus={!isMobile}
           spellCheck={false}
         />
@@ -1609,11 +1669,14 @@ export default function NewChat({
               aria-haspopup="listbox"
               aria-expanded={picker?.kind === 'harness'}
               data-picker="harness"
+              disabled={isMobile && !available.length}
               title={hintHarness('App')}
             >
               <span className="nc-provider" key={currentHarness?.id ?? 'none'}>
                 <HarnessMark harness={currentHarness?.id} size={16} />
-                {currentHarness?.name ?? 'No app installed'}
+                <span className="nc-provider-name">
+                  {currentHarness?.name ?? (isMobile ? mobileStatus?.kind === 'loading' ? 'Loading Apps…' : 'Apps unavailable' : 'No app installed')}
+                </span>
               </span>
             </button>
             {(picker?.kind === 'harness' || harnessLeaving) && (
@@ -1667,7 +1730,13 @@ export default function NewChat({
                     tiers={effortTiers}
                     value={chosenEffort}
                     leaving={effortLeaving}
-                    spot={spotAtBox(boxRef.current?.getBoundingClientRect(), { gap: 8 })}
+                    place={isMobile ? 'above' : 'below'}
+                    spot={(() => {
+                      const box = boxRef.current?.getBoundingClientRect()
+                      return isMobile && box
+                        ? { left: box.left, top: box.top }
+                        : spotAtBox(box, { gap: 8 })
+                    })()}
                     fast={fast}
                     fastSupported={currentHarness?.fast_supported === true}
                     onEffort={setEffort}
@@ -1679,6 +1748,26 @@ export default function NewChat({
             )}
 
           </div>
+          {isMobile && (
+            <button
+              type="button"
+              className="nc-mobile-options"
+              aria-label="Chat options"
+              aria-expanded={optionsOpen}
+              onClick={() => {
+                // Keep an exiting menu's anchor until its animation retires it.
+                if (picker?.kind === 'model') leaveModel()
+                else if (picker?.kind === 'harness') leaveHarness('close')
+                else if (picker?.kind === 'permission') leavePermission()
+                else if (picker?.kind === 'effort') leaveEffort()
+                else setPicker(null)
+                setOptionsOpen((open) => !open)
+              }}
+              title="Model, effort, permissions and saved setups"
+            >
+              <SlidersHorizontal size={20} />
+            </button>
+          )}
           <div className="nc-send-group">
             {/* The buttons plugins add to the composer (dictation's
                 microphone, say), beside the send button; a project's plugin
@@ -1730,11 +1819,12 @@ export default function NewChat({
               />
             )}
             {attachInput.button}
-            <button className="nc-send" onClick={start} disabled={!canSend} title={sendWhy ?? 'Start chat (Enter)'}>
+            <button className="nc-send" onClick={start} disabled={!canSend} aria-label="Start chat" title={sendWhy ?? (isMobile ? 'Start chat' : 'Start chat (Enter)')}>
               <ArrowUp size={16} weight="bold" />
             </button>
           </div>
         </div>
+        {isMobile && optionsOpen && <div className="nc-mobile-presets">{presetsRow}</div>}
       </div>
       <div className="nc-under">
         {/* The picked harness isn't signed in: one quiet row under the
@@ -1870,17 +1960,7 @@ export default function NewChat({
           ) : null}
         </div>
         {addProjectError && <p className="nc-error">{addProjectError}</p>}
-        {targetOffline && <p className="nc-error"><span className="pv">{targetItem.name}</span> is offline.</p>}
-        {isMobile && cloudMode && machineOptions.length === 0 && (
-          <div className="nc-auth nc-auth--solo">
-            <p className="nc-auth-note">
-              Chats run on your machines - add one and start chats on it from here.
-            </p>
-            <button type="button" className="nc-auth-btn" onClick={() => onOpen('machines')}>
-              Machines <ArrowRight size={13} />
-            </button>
-          </div>
-        )}
+        {!isMobile && targetOffline && <p className="nc-error"><span className="pv">{targetItem.name}</span> is offline.</p>}
         {picking && (
           <FolderPickerModal
             api={apiFor(target)}

@@ -1228,6 +1228,8 @@ function Shell() {
           minimize, maximize, close) renders on every screen, onboarding
           included. */}
       <TitleBar
+        onBrowser={onboarded && canBrowse ? toggleBrowser : undefined}
+        browserOn={browserOpen}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={onboarded ? () => setSidebarOpen((v) => !v) : undefined}
         onBack={goBack}

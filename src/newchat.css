@@ -105,6 +105,12 @@ html[data-reduce-motion] .nc-label-out {
   pointer-events: auto;
 }
 
+.nc-welcome {
+  grid-row: 1;
+  align-self: end;
+  text-align: center;
+}
+
 .nc-greeting {
   grid-row: 1;
   align-self: end;
@@ -1006,4 +1012,353 @@ html[data-reduce-motion] .nc-effort.is-above.is-out,
 html[data-reduce-motion] .nc-effort-fast.on .nc-effort-bolt,
 html[data-reduce-motion] .nc-effort-speck {
   animation: none;
+}
+
+/* The phone's composer follows the available viewport. Android already
+   reserves the keyboard in MainActivity, so no second keyboard offset is used. */
+.newchat.is-phone {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0 16px 12px;
+  overflow-y: auto;
+}
+
+.newchat.is-phone::before {
+  display: none;
+}
+
+.is-phone .nc-welcome {
+  order: 0;
+  flex: 1 0 auto;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  padding: 32px 4px;
+}
+
+.is-phone .nc-greeting {
+  align-self: center;
+  margin: 0;
+  max-width: 300px;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -0.035em;
+  color: var(--text-1);
+  text-wrap: balance;
+}
+
+.nc-mobile-guidance {
+  max-width: 290px;
+}
+
+.nc-mobile-guidance p {
+  margin: 12px 0 0;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.nc-mobile-guidance button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  margin-top: 14px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-1);
+  font-size: 14px;
+}
+
+.is-phone .nc-under {
+  order: 1;
+  flex: none;
+  align-self: center;
+  width: 100%;
+  max-width: 620px;
+  padding-bottom: 6px;
+}
+
+.is-phone .nc-below {
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+  min-width: 0;
+  gap: 4px;
+  margin: 0;
+}
+
+.is-phone .nc-device {
+  min-width: 0;
+  max-width: 58%;
+}
+
+.is-phone .nc-device:first-child {
+  max-width: 42%;
+}
+
+.is-phone .nc-below .nc-meta {
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.is-phone .nc-below .nc-meta > span:not(.nc-dev-dot) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.is-phone .nc-below svg,
+.is-phone .nc-dev-dot {
+  flex: none;
+}
+
+.is-phone[data-home-state='no-machine'] .nc-below,
+.is-phone[data-home-state='loading-machines'] .nc-below,
+.is-phone[data-home-state='offline'] .nc-device:first-child,
+.is-phone[data-home-state='loading'] .nc-device:first-child {
+  display: none;
+}
+
+.is-phone[data-home-state='offline'] .nc-device,
+.is-phone[data-home-state='loading'] .nc-device {
+  max-width: 100%;
+}
+
+.is-phone .nc-box {
+  order: 2;
+  flex: none;
+  align-self: center;
+  width: 100%;
+  padding: 14px 12px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 26px;
+  background: #232323;
+}
+
+.is-phone .nc-box textarea {
+  min-height: 24px;
+  max-height: min(144px, 28dvh);
+  padding: 0 4px;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.is-phone .nc-box textarea::placeholder {
+  color: var(--text-2);
+}
+
+.is-phone .nc-foot {
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.is-phone .nc-pickers {
+  min-width: 0;
+  gap: 2px;
+}
+
+.is-phone .nc-foot .nc-meta {
+  min-height: 44px;
+  min-width: 44px;
+  max-width: 100%;
+  padding: 0 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.is-phone .ca-attach {
+  width: 44px;
+  justify-content: center;
+}
+
+.is-phone .nc-menu .nc-item,
+.is-phone .nc-menu .nc-footer button,
+.is-phone .nc-menu .nc-search {
+  min-height: 44px;
+}
+
+.is-phone .nc-effort-head {
+  grid-template-columns: 44px 1fr 44px;
+}
+
+.is-phone .nc-effort-fast,
+.is-phone .nc-effort-cycle {
+  width: 44px;
+  height: 44px;
+}
+
+.nc-effort.is-phone {
+  overflow-y: auto;
+}
+
+.is-phone .nc-provider {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.is-phone .nc-provider-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.is-phone .nc-via {
+  display: none;
+}
+
+.is-phone .nc-foot .nc-meta:disabled {
+  color: var(--text-3);
+}
+
+.is-phone:not([data-options-open]) .nc-pickers > .nc-meta:not([data-picker='harness']),
+.is-phone:not([data-options-open]) .nc-via,
+.is-phone:not([data-options-open]) .nc-effort-wrap,
+.is-phone:not([data-options-open]) .nc-skeleton,
+.is-phone:not([data-options-open]) .nc-send-group > [data-picker='permission'] {
+  display: none;
+}
+
+.nc-mobile-options {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-2);
+}
+
+.nc-mobile-options[aria-expanded='true'] {
+  background: var(--bg-active);
+  color: var(--text-1);
+}
+
+.is-phone .nc-send-group {
+  min-width: 0;
+  gap: 4px;
+}
+
+.is-phone .nc-send {
+  flex: none;
+  width: 44px;
+  height: 44px;
+}
+
+.is-phone .nc-send:disabled {
+  background: var(--bg-active);
+}
+
+.is-phone .nc-send svg {
+  width: 20px;
+  height: 20px;
+}
+
+.is-phone[data-options-open] .nc-foot {
+  flex-wrap: wrap;
+}
+
+.is-phone[data-options-open] .nc-pickers {
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+}
+
+.is-phone[data-options-open] .nc-send-group {
+  flex-wrap: wrap;
+  max-width: calc(100% - 48px);
+  justify-content: flex-end;
+}
+
+.nc-mobile-presets {
+  max-height: 120px;
+  overflow-y: auto;
+  margin-top: 8px;
+  padding: 12px 4px 4px;
+  border-top: 1px solid var(--line);
+}
+
+.is-phone .nc-presets {
+  padding-right: 0;
+}
+
+.is-phone .nc-preset,
+.is-phone .nc-preset-wrap {
+  min-height: 44px;
+}
+
+.is-phone .nc-preset-hover {
+  width: 44px;
+  height: 44px;
+  opacity: 1;
+}
+
+.is-phone .nc-preset-wrap {
+  max-width: 100%;
+}
+
+.is-phone .nc-preset {
+  min-width: 0;
+}
+
+.is-phone .nc-auth {
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 8px 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.is-phone .nc-auth-note {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.is-phone .nc-auth-btn {
+  min-height: 44px;
+}
+
+.is-phone .nc-error {
+  margin: 4px 8px 8px;
+}
+
+.is-phone button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-height: 560px) {
+  .is-phone .nc-welcome {
+    min-height: 100px;
+    padding: 16px 4px;
+  }
+
+  .is-phone[data-options-open] .nc-welcome {
+    display: none;
+  }
+
+  .is-phone[data-options-open] .nc-under {
+    margin-top: auto;
+  }
 }
