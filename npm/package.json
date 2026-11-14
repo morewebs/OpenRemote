@@ -1,6 +1,6 @@
 {
   "name": "@morewebs/openremote",
-  "version": "0.6.6",
+  "version": "0.6.7",
   "description": "The terminal door into OpenRemote: one window for the agent harnesses on this computer. Installs a launcher that fetches the prebuilt desktop app.",
   "license": "AGPL-3.0-only",
   "bin": {
