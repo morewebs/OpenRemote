@@ -12,7 +12,7 @@ export default function DocumentPreview({ item, onClose }) {
   useBack(true, onClose)
   return createPortal(<div className="dv-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
     <div className="dv-modal ca-document-preview" ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`Preview ${item.name}`}>
-      <div className="dv-modal-head"><h2 className="pv">{item.name}</h2><button type="button" className="dv-modal-x" onClick={onClose} aria-label="Close preview"><X size={18} /></button></div>
+      <div className="dv-modal-head"><h2 className="dv-modal-title pv">{item.name}</h2><button type="button" className="dv-modal-close" onClick={onClose} aria-label="Close preview"><X size={18} /></button></div>
       <p>{item.format || 'Text'} · {item.text.length.toLocaleString()} characters. This text will be included with your message. Images, formatting and charts are not included.</p>
       <pre className="pv">{item.text}</pre>
     </div>

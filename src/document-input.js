@@ -4,6 +4,7 @@ import { imageAttachment } from './composer-attachments.js'
 
 const jobs = new Map()
 const sources = new Map()
+const completions = new Map()
 export const FILE_ACCEPT = '.pdf,.docx,.xlsx,.txt,.md,.markdown,.csv,.tsv,.json,.jsonl,.log,.yaml,.yml,.xml,.html,.css,.js,.jsx,.ts,.tsx,.py,.rs,.go,.java,.kt,.swift,.sh,.ps1,.sql,.toml,.ini,.ipynb,text/*'
 
 export async function readDocument(file, { signal } = {}) {
@@ -51,6 +52,7 @@ async function prepareItem(key, id, collect) {
       if (total + item.text.length > MAX_DRAFT_CHARS) throw new Error('These documents exceed 500,000 characters together. Remove a file and retry.')
     }
     updateAttachment(key, id, { ...item, status: 'ready', error: null })
+    completions.get(id)?.()
   } catch (err) {
     if (err.name !== 'AbortError') updateAttachment(key, id, { status: 'error', error: err.message || 'This file could not be read. Retry or remove it.' })
   } finally { jobs.delete(id) }
@@ -79,10 +81,11 @@ export function retryImport(key, id) {
 
 // Context collection participates in the same pending, removal and unmount
 // lifecycle as a selected file, so sending never silently outruns the fetch.
-export async function takeContext(key, pending, collect) {
+export async function takeContext(key, pending, collect, { onReady } = {}) {
   if (attachments(key).length >= 10) throw new Error('A message can carry 10 attachments at most.')
   const id = addAttachment({ ...pending, status: 'pending' }, key)
   sources.set(id, collect)
+  if (onReady) completions.set(id, onReady)
   await prepareItem(key, id, collect)
   return id
 }
@@ -91,6 +94,7 @@ export function forgetImport(id) {
   jobs.get(id)?.controller.abort()
   jobs.delete(id)
   sources.delete(id)
+  completions.delete(id)
 }
 
 export function cancelImports(key) {

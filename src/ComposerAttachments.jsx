@@ -7,13 +7,14 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { CursorClick, ImageSquare, FileText, Hourglass, WarningCircle, X } from '@phosphor-icons/react'
 import { attachments, removeAttachment, subscribe } from './attachments.js'
-import { dragsFiles, droppedPictures, pastePlan, takePictures } from './composer-attachments.js'
+import { dragsFiles, pastePlan } from './composer-attachments.js'
 import { consoleError, errorCopy } from './error-copy.js'
 import { takeFiles, cancelImports, retryImport, FILE_ACCEPT } from './document-input.js'
 import { usePluginComposerActions } from './PluginComposerButtons.jsx'
 import ComposerAddMenu from './ComposerAddMenu.jsx'
 import DocumentPreview from './DocumentPreview.jsx'
 import { composerTarget } from './composer-insert.js'
+import { consumeRecoveredDraft, onRecoveredDraft } from './composer-recovery.js'
 
 const NONE = []
 
@@ -113,18 +114,26 @@ export function AttachmentChips({ composerKey, takesImages = true, app = 'This a
 
 /**
  * Paste, drop and the attach button for a composer: the handlers go on its
- * box, the button in its foot. Off (`enabled` false) where the app reads
- * no pictures: nothing is taken in and there is no button, and a picture
- * pasted or dropped there gets `refuse` (the sentence naming the app) when
- * one is given. `onError` gets errorCopy's sentence.
+ * box, the Add menu in its foot. `enabled` controls image input; documents
+ * and text actions remain available to text-only Apps. `disabled` follows
+ * whether this composer can currently be edited.
  */
-export function useAttachInput(composerKey, { enabled, onError, refuse = null, disabled = false, inputRef, setText, workspace = null, onReference, onCommands, onBrowser, onPlugins, onEffort, effort }) {
+export function useAttachInput(composerKey, { enabled, onError, refuse = null, disabled = false, inputRef, setText, workspace = null, projectId, deviceId, onReference, onCommands, onPlugins, onEffort, effort }) {
   const fileRef = useRef(null)
   const photoRef = useRef(null)
   const cameraRef = useRef(null)
-  const pluginActions = usePluginComposerActions({ inputRef, setText, composer: composerKey, workspace, disabled })
+  const pluginActions = usePluginComposerActions({ inputRef, setText, composer: composerKey, workspace, projectId, deviceId, disabled })
   const take = (files) => takeFiles(composerKey, files, { images: enabled, onError })
   useEffect(() => () => cancelImports(composerKey), [composerKey])
+  useEffect(() => {
+    const restore = (key) => {
+      if (key !== composerKey) return
+      const recovered = consumeRecoveredDraft(key)
+      if (recovered) setText(current => current.trim() ? `${recovered}\n\n${current}` : recovered)
+    }
+    restore(composerKey)
+    return onRecoveredDraft(restore)
+  }, [composerKey, setText])
   // Words pasted with a picture go in as typed; only the picture is taken,
   // or refused, on its own.
   const onPaste = (e) => {

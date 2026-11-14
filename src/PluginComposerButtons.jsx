@@ -10,17 +10,18 @@
 // plugin sets the button's state: active (it breathes), busy, or at rest,
 // with a short label beside it. With no such plugin nothing renders.
 
-import { useEffect, useId, useRef } from 'react'
+import { useLayoutEffect, useId, useRef } from 'react'
 import { useConsole } from './state/console.jsx'
 import { usePlugins } from './plugins-host.jsx'
 import { PluginGlyph } from './plugin-icons.jsx'
 import { buttonWords, insertAt, pluginInitial } from './plugin-runtime.js'
 import { projectFor } from './projects.js'
 
-export function usePluginComposerActions({ inputRef, setText, composer, workspace = null, disabled = false }) {
+export function usePluginComposerActions({ inputRef, setText, composer, workspace = null, disabled = false, projectId = undefined, deviceId = null }) {
   const host = usePlugins()
   const { projects } = useConsole()
-  const handle = useId()
+  const project = projectId === undefined ? projectFor(projects, workspace)?.id ?? null : projectId
+  const handle = `${useId()}|${composer}|${deviceId ?? ''}|${project ?? ''}`
   // The plugin's text goes in at the cursor, or over the selection; the
   // cursor ends after it, in the field, ready for more typing.
   const insertRef = useRef(null)
@@ -41,13 +42,12 @@ export function usePluginComposerActions({ inputRef, setText, composer, workspac
     })
   }
   const registerComposer = host?.registerComposer
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!registerComposer) return undefined
     return registerComposer(handle, { insert: (piece) => insertRef.current(piece), attachKey: composer })
-  }, [registerComposer, handle, composer])
+  }, [registerComposer, handle, composer, project, deviceId])
 
   if (!host) return []
-  const project = projectFor(projects, workspace)?.id ?? null
   const shown = host.inputsFor(project)
   return shown.map(({ pluginId, pluginName, input }) => {
     const state = host.inputState(pluginId, input.id, handle)

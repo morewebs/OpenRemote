@@ -91,6 +91,7 @@ export function PluginProvider({ children }) {
   }, [])
 
   const framesRef = useRef(new Map())
+  const frameCacheRef = useRef(new WeakMap())
   const grantsRef = useRef(composerGrants())
   const clicksRef = useRef([])
   const navRef = useRef({ openView: null, openSettings: null })
@@ -210,7 +211,14 @@ export function PluginProvider({ children }) {
   const registerFrame = useCallback((iframe, { pluginId, place }) => {
     const win = iframe.contentWindow
     if (!win) return undefined
-    const frame = { win, el: iframe, pluginId, place, booted: false, queue: [] }
+    // React can replay the layout effect before a new iframe has booted.
+    // Its first click is already queued in this frame, so reuse that queue
+    // rather than consuming the click into a record that is then discarded.
+    const cached = frameCacheRef.current.get(win)
+    const frame = cached?.pluginId === pluginId && cached.place.kind === place.kind && cached.place.view === place.view
+      ? cached
+      : { win, el: iframe, pluginId, place, booted: false, queue: [] }
+    frameCacheRef.current.set(win, frame)
     framesRef.current.set(win, frame)
     if (place.kind === 'background') deliverClicks()
     return () => {

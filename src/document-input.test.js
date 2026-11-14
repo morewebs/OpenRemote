@@ -155,3 +155,28 @@ test('failed browser collection remains removable and retryable without losing t
   assert.match(attachments(key)[0].error, /Reload/)
   clearAttachments(key)
 })
+
+test('invalid Word roots and missing spreadsheet shared strings cannot silently succeed', async () => {
+  await assert.rejects(parseDocumentBytes({ name: 'fake.docx', bytes: office({ 'word/document.xml': '<html><p>Not a Word document</p></html>' }) }), /Word|document|invalid/i)
+  const entries = {
+    'xl/workbook.xml': '<workbook><sheets><sheet name="Data" r:id="r1"/></sheets></workbook>',
+    'xl/_rels/workbook.xml.rels': '<Relationships><Relationship Id="r1" Target="worksheets/sheet1.xml"/></Relationships>',
+    'xl/worksheets/sheet1.xml': '<worksheet><sheetData><row><c r="A1" t="s"><v>99</v></c><c r="B1"><v>42</v></c></row></sheetData></worksheet>',
+  }
+  await assert.rejects(parseDocumentBytes({ name: 'broken.xlsx', bytes: office(entries) }), /shared|string|cell|read/i)
+})
+
+test('successful context retry runs its completion effect exactly once', async () => {
+  const { retryImport } = await import('./document-input.js')
+  const key = 'context-retry-notify'
+  clearAttachments(key)
+  let attempts = 0, completed = 0
+  const id = await takeContext(key, { name: 'Page', kind: 'document' }, async () => {
+    if (attempts++ === 0) throw new Error('Retry')
+    return { kind: 'document', text: 'Page text', format: 'Web page' }
+  }, { onReady: () => completed++ })
+  assert.equal(completed, 0)
+  await retryImport(key, id)
+  assert.equal(completed, 1)
+  clearAttachments(key)
+})

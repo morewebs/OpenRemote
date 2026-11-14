@@ -76,12 +76,14 @@ function spreadsheet(entries) {
   const rels = nodes(xml(entries['xl/_rels/workbook.xml.rels']), 'Relationship')
   const strings = entries['xl/sharedStrings.xml'] ? nodes(xml(entries['xl/sharedStrings.xml']), 'si').map(n => words(nodes(n.si, 't').flatMap(t => t.t))) : []
   const blocks = []
+  let totalLength = 0
   for (const sheet of sheets) {
     const attr = sheet[':@'] ?? {}
     const rel = rels.find(n => n[':@']?.['@_Id'] === attr['@_id'])?.[':@']
     const path = rel?.['@_Target']?.replace(/^\/?xl\//, '').replace(/^\//, '')
     if (!path || path.includes('..') || rel?.['@_TargetMode'] === 'External' || !entries[`xl/${path}`]) throw new Error('A spreadsheet sheet could not be read. Export it again and retry.')
     const lines = []
+    let sheetLength = 0
     for (const row of nodes(xml(entries[`xl/${path}`]), 'row')) {
       const cells = []
       for (const cell of nodes(row.row, 'c')) {
@@ -91,20 +93,20 @@ function spreadsheet(entries) {
         if (index > 16383) throw new Error('This spreadsheet has an invalid column.')
         while (cells.length <= index) cells.push('')
         const value = words(nodes(cell.c, a['@_t'] === 'inlineStr' ? 't' : 'v').flatMap(n => n.t ?? n.v))
-        cells[index] = a['@_t'] === 's' ? strings[Number(value)] ?? '' : a['@_t'] === 'b' ? (value === '1' ? 'TRUE' : 'FALSE') : value
+        if (a['@_t'] === 's' && (!/^\d+$/.test(value) || strings[Number(value)] === undefined)) throw new Error('A spreadsheet cell has a missing shared string. Export it again and retry.')
+        cells[index] = a['@_t'] === 's' ? strings[Number(value)] : a['@_t'] === 'b' ? (value === '1' ? 'TRUE' : 'FALSE') : value
       }
-      lines.push(cells.join('\t'))
-      checkedLength(lines.join('\n'))
+      const line = cells.join('\t')
+      sheetLength += line.length + (lines.length ? 1 : 0)
+      if (sheetLength + totalLength > MAX_DOCUMENT_CHARS) throw new Error('This document exceeds 200,000 extracted characters. Split it into smaller files.')
+      lines.push(line)
     }
     blocks.push(`Sheet: ${decode(attr['@_name'] ?? 'Sheet')}\n${lines.join('\n')}`)
-    checkedLength(blocks.join('\n\n'))
+    totalLength += blocks[blocks.length - 1].length + (blocks.length > 1 ? 2 : 0)
+    if (totalLength > MAX_DOCUMENT_CHARS) throw new Error('This document exceeds 200,000 extracted characters. Split it into smaller files.')
   }
   if (!blocks.length || !blocks.some(b => b.slice(b.indexOf('\n') + 1).trim())) throw new Error('No readable text was found in this spreadsheet.')
   return blocks.join('\n\n')
-}
-
-function checkedLength(text) {
-  if (text.length > MAX_DOCUMENT_CHARS) checkedText(text)
 }
 
 export async function parseDocumentBytes({ name, type = '', bytes }) {
@@ -122,7 +124,10 @@ export async function parseDocumentBytes({ name, type = '', bytes }) {
     const entries = officeEntries(bytes)
     if (kind === 'docx') {
       if (!entries['word/document.xml']) throw new Error('This Word document could not be read. Export it again and retry.')
-      text = words(xml(entries['word/document.xml']), true)
+      const tree = xml(entries['word/document.xml'])
+      const document = tree.find(n => n.document)?.document
+      if (!document?.some(n => n.body)) throw new Error('This Word document has an invalid document structure. Export it again and retry.')
+      text = words(document, true)
     } else text = spreadsheet(entries)
   }
   return { text: checkedText(text), format: { text: 'Text', pdf: 'PDF', docx: 'Word', xlsx: 'Spreadsheet' }[kind] }

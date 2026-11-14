@@ -8,10 +8,10 @@ import { getState, subscribe, call } from './browser-store.js'
 import { browserContextActions, collectBrowserContext } from './browser-composer-actions.js'
 import { requestBrowser } from './browser-placement.js'
 import { composerTarget } from './composer-insert.js'
-import { attachments } from './attachments.js'
 import { takeContext } from './document-input.js'
 import { sharedWith, tellDaemon } from './browser-share.js'
 import { errorCopy } from './error-copy.js'
+import { composerChatId } from './composer-scope.js'
 import './composer-add.css'
 
 const ICONS = { camera: Camera, photos: ImageSquare, files: Paperclip, clipboard: ClipboardText, reference: At, browser: Globe, commands: Command, effort: Brain, plugin: PlugsConnected, region: Selection, element: CursorClick }
@@ -26,7 +26,12 @@ export default function ComposerAddMenu({ composerKey, takesImages, disabled, pi
   const trigger = useRef(null)
   const close = useCallback(() => { setOpen(false); setScreen('root') }, [])
   useEffect(() => { if (disabled) close() }, [disabled, close])
-  const items = screen === 'pages' ? pages.map(t => ({ id: t.key, name: t.title || t.url, detail: new URL(t.url).host, icon: 'browser', veiled: true })) : screen === 'browser' && tab ? browserContextActions({ features: browser.features, images: takesImages, mobile: isMobile }).map(i => ({ ...i, detail: tab.title || new URL(tab.url).host })) : composerActions({ images: takesImages, mobile: isMobile, clipboard: Boolean(navigator.clipboard?.read || navigator.clipboard?.readText), browser: hasTauri, pluginActions, effort: onEffort ? effort || 'Choose effort' : null, plugins: !isMobile && Boolean(onPlugins) })
+  const items = screen === 'pages'
+    ? pages.map(t => ({ id: t.key, name: t.title || t.url, detail: new URL(t.url).host, icon: 'browser', veiled: true }))
+    : screen === 'browser' && tab
+      ? browserContextActions({ features: browser.features, images: takesImages, mobile: isMobile }).map(i => ({ ...i, detail: tab.title || new URL(tab.url).host }))
+      : composerActions({ images: takesImages, mobile: isMobile, clipboard: Boolean(navigator.clipboard?.read || navigator.clipboard?.readText), browser: hasTauri, pluginActions, effort: onEffort ? effort || 'Choose effort' : null, plugins: !isMobile && Boolean(onPlugins) })
+        .map(i => i.id === 'browser' && !pages.length ? { ...i, name: 'Open browser' } : i)
   const choose = async (id) => {
     if (disabled) return
     const selected = items.find(i => i.id === id)
@@ -37,17 +42,16 @@ export default function ComposerAddMenu({ composerKey, takesImages, disabled, pi
       close()
       if (!target) return
       if (id === 'region' || id === 'element') {
-        requestBrowser({ chatId: composerKey, tab: tab.key, action: id, target })
+        requestBrowser({ chatId: composerChatId(composerKey), tab: tab.key, action: id, target })
         return
       }
       try {
-        const itemId = await takeContext(composerKey, { name: tab.title || 'Web page', kind: id === 'screenshot' ? 'image' : 'document' }, () => collectBrowserContext(id, tab, call))
-        if (target.isLive() && attachments(composerKey).some(i => i.id === itemId && i.status === 'ready')) sharedWith(composerKey, tellDaemon)
+        await takeContext(composerKey, { name: tab.title || 'Web page', kind: id === 'screenshot' ? 'image' : 'document' }, () => collectBrowserContext(id, tab, call), { onReady: () => { if (target.isLive()) sharedWith(composerKey, tellDaemon) } })
       } catch (err) { if (target.isLive()) onError?.(errorCopy(err)) }
       return
     }
     if (id === 'browser') {
-      if (!pages.length) { close(); requestBrowser({ chatId: composerKey }); return }
+      if (!pages.length) { close(); requestBrowser({ chatId: composerChatId(composerKey) }); return }
       if (pages.length === 1) { setTabKey(pages[0].key); setScreen('browser') }
       else setScreen('pages')
       return

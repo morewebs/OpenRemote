@@ -111,7 +111,7 @@ test('a message is answered only after the gate names its frame', () => {
 
 test("a project's plugin shows only in its project's composers and sidebar", () => {
   const buttons = read('PluginComposerButtons.jsx')
-  assert.match(buttons, /const project = projectFor\(projects, workspace\)\?\.id \?\? null/)
+  assert.match(buttons, /const project = projectId === undefined \? projectFor\(projects, workspace\)\?\.id \?\? null : projectId/)
   assert.match(buttons, /const shown = host\.inputsFor\(project\)/)
   const sidebar = read('Sidebar.jsx')
   assert.match(sidebar, /const pluginViews = pluginHost\?\.viewsFor\(contextProject\) \?\? \[\]/)
@@ -132,7 +132,7 @@ test('a write needs a click: the grant is made in the click handler and nowhere 
     host,
     /if \(composers\.get\(handle\) === entry\) composers\.delete\(handle\)\s*\n\s*forgetComposer\(grantsRef\.current, handle\)/,
   )
-  assert.match(read('PluginComposerButtons.jsx'), /\}, \[registerComposer, handle, composer\]\)/)
+  assert.match(read('PluginComposerButtons.jsx'), /\}, \[registerComposer, handle, composer, project, deviceId\]\)/)
   const buttons = read('PluginComposerButtons.jsx')
   assert.equal((buttons.match(/clickInput\(/g) ?? []).length, 1)
   assert.match(buttons, /onChoose: \(\) => host\.clickInput\(pluginId, input\.id, handle\)/)

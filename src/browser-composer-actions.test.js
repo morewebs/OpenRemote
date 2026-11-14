@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { claimInserter, composerTarget, resetInserter } from './composer-insert.js'
+import { claimInserter, composerTarget, resetInserter, advanceComposerDraft } from './composer-insert.js'
 import { browserContextActions, collectBrowserContext } from './browser-composer-actions.js'
 
 test('browser context is offered from reported capabilities, not optimism', () => {
@@ -36,4 +36,13 @@ test('browser collection returns real page text with provenance and refuses miss
   assert.equal(seen[0].command, 'browser_cdp')
   await assert.rejects(collectBrowserContext('text', tab, async () => null), /read|reach/i)
   await assert.rejects(collectBrowserContext('screenshot', tab, async () => null), /picture|screenshot/i)
+})
+
+test('sending invalidates old clipboard or browser picks while the composer stays mounted', () => {
+  resetInserter()
+  claimInserter(() => {}, 'same-chat')
+  const target = composerTarget('same-chat')
+  advanceComposerDraft('same-chat')
+  assert.equal(target.isLive(), false)
+  assert.equal(composerTarget('same-chat').isLive(), true)
 })

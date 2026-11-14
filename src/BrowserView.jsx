@@ -39,7 +39,7 @@ import {
 } from '@phosphor-icons/react'
 import { hasTauri, isMobile } from './platform.js'
 import { PICKER_CANCEL, PICKER_SOURCE, formatPicked } from './browser-pick.js'
-import { insertToComposer, inserterKey, composerTarget } from './composer-insert.js'
+import { inserterKey, composerTarget } from './composer-insert.js'
 import { sharedWith, tellDaemon } from './browser-share.js'
 import { SEARCH_ENGINES, inlineFor, omnibox, security, shownAddress, suggest } from './browser-omnibox.js'
 import { browserSetting, setSitePermission, useBrowserPrefs } from './browser-prefs.js'

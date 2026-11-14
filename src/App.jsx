@@ -1070,12 +1070,14 @@ function Shell() {
           onOpen={(id) => setLayout((l) => setLeafView(l, leaf.id, id))}
           mode={mode}
           focused={leaf.id === layout.focus}
+          composerScope={leaf.id}
+          onOpenPlugins={() => goView('plugins')}
         />
       )
     }
     const paneChat = chats[leaf.view]
     return paneChat ? (
-      <ChatView key={paneChat.id} chat={paneChat} focused={leaf.id === layout.focus} onOpenPlugins={() => goView('plugins')} />
+      <ChatView key={paneChat.id} chat={paneChat} focused={leaf.id === layout.focus} onOpenPlugins={() => goView('plugins')} composerScope={leaf.id} />
     ) : (
       <div className="cv-none">That chat is no longer in this workspace.</div>
     )

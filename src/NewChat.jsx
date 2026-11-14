@@ -42,7 +42,9 @@ import { spotAtBox } from './picker-anchor.js'
 import { greetingAt, greetingForNewChat, nextGreetingIndex } from './greetings.js'
 import { useComposerMenus } from './useComposerMenus.jsx'
 import { mentionedChats, ownCommands, takeCommands } from './composer-menus.js'
-import { claimInserter } from './composer-insert.js'
+import { claimInserter, advanceComposerDraft } from './composer-insert.js'
+import { scopedComposerKey } from './composer-scope.js'
+import { recoverDraft } from './composer-recovery.js'
 import { chatMade, tellDaemon } from './browser-share.js'
 import { isMobile } from './platform.js'
 import { moveAttachments, removeAttachment, setFocusedComposer } from './attachments.js'
@@ -260,7 +262,9 @@ export default function NewChat({
   focused = true,
   onOpenPlugins = null,
   topRight = null,
+  composerScope = null,
 }) {
+  const composerKey = scopedComposerKey('new', composerScope)
   const privacy = usePrivacyMode()
   const {
     connection, capabilities, chats, createChat, modelsFor, endpointsFor, refreshEndpoints,
@@ -696,7 +700,7 @@ export default function NewChat({
   // picked in the browser - kept under 'new' until the chat exists
   // (attachments.js). Whether the app reads pictures is the daemon's
   // honors.attachments for the machine the chat will run on.
-  const attached = useAttachments('new')
+  const attached = useAttachments(composerKey)
   const takesImages = takesPictures(currentHarness, currentHarness?.id)
   const bound = outgoing(text, attached, { images: takesImages, app: harnessLabel(currentHarness) ?? 'This App', remote: Boolean(target) && target !== thisDevice }).error
   const canSend =
@@ -1167,17 +1171,18 @@ export default function NewChat({
   const releasePictures = useRef(null)
   const takeInserter = () => {
     releaseInserter.current?.()
-    releaseInserter.current = claimInserter(attach, 'new', inputRef)
+    releaseInserter.current = claimInserter(attach, composerKey, inputRef)
     releasePictures.current?.()
-    releasePictures.current = setFocusedComposer('new')
+    releasePictures.current = setFocusedComposer(composerKey)
   }
   // Paste, drop and the attach button; off where the app reads no pictures.
-  const attachInput = useAttachInput('new', {
+  const attachInput = useAttachInput(composerKey, {
     enabled: takesImages,
     onError: setError,
     refuse: currentHarness && !takesImages ? takesNoPictures(harnessLabel(currentHarness)) : null,
     disabled: busy || !currentHarness || connection.state !== 'connected' || needsSignIn || targetOffline,
     inputRef, setText, workspace,
+    projectId: chosenProject?.id ?? null, deviceId: target || thisDevice,
     onReference: () => menus.begin('@'),
     onCommands: () => menus.begin('/'),
     onPlugins: onOpenPlugins,
@@ -1293,6 +1298,7 @@ export default function NewChat({
 
   const start = async () => {
     if (!canSend) return
+    advanceComposerDraft(composerKey)
     setBusy(true)
     setError(null)
     try {
@@ -1319,7 +1325,7 @@ export default function NewChat({
         setText('')
         return
       }
-      const id = await createChat(
+      const created = await createChat(
         payload.text,
         workspace,
         currentHarness.id,
@@ -1333,14 +1339,17 @@ export default function NewChat({
           mentionedChats: mentionedChats(message, chats),
           endpointId: endpointId ?? undefined,
           attachments: payload.attachments,
+          returnDelivery: true,
         },
       )
+      const id = typeof created === 'string' ? created : created.id
+      created.delivery?.catch(() => recoverDraft(scopedComposerKey(id, composerScope), message, sent))
       // A page or element shared from the browser before the chat existed.
-      chatMade(id, tellDaemon)
+      chatMade(id, tellDaemon, composerKey)
       // What was sent leaves; anything added meanwhile follows the message
       // into its chat's composer.
-      for (const item of sent) removeAttachment('new', item.id)
-      moveAttachments('new', id)
+      for (const item of sent) removeAttachment(composerKey, item.id)
+      moveAttachments(composerKey, scopedComposerKey(id, composerScope))
       if (picked.rename) await renameChat(id, picked.rename)
       setText('')
       onOpen(id)
@@ -1630,7 +1639,7 @@ export default function NewChat({
           </p>
         )}
         {menus.element}
-        <AttachmentChips composerKey="new" takesImages={takesImages} app={harnessLabel(currentHarness) ?? 'This app'} />
+        <AttachmentChips composerKey={composerKey} takesImages={takesImages} app={harnessLabel(currentHarness) ?? 'This app'} />
         <textarea
           value={text}
           onFocus={takeInserter}
@@ -1871,7 +1880,7 @@ export default function NewChat({
             <PluginComposerButtons
               inputRef={inputRef}
               setText={setText}
-              composer="new"
+              composer={composerKey}
               workspace={workspace}
               actions={attachInput.pluginActions}
               disabled={busy}

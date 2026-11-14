@@ -14,14 +14,26 @@ export async function pdfText(bytes) {
     let readable = false
     for (let i = 1; i <= doc.numPages; i++) {
       const page = await doc.getPage(i)
-      const content = await page.getTextContent()
-      const text = content.items.map(item => `${item.str ?? ''}${item.hasEOL ? '\n' : ' '}`).join('').trim()
-      if (text) readable = true
-      const block = `Page ${i}\n${text}`
-      length += block.length
-      if (length > 200_000) checkedText('x'.repeat(200_001))
-      blocks.push(block)
-      page.cleanup()
+      const reader = page.streamTextContent().getReader()
+      const pieces = []
+      length += `Page ${i}\n`.length + 2
+      try {
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          for (const item of value.items) {
+            const text = `${item.str ?? ''}${item.hasEOL ? '\n' : ' '}`
+            length += text.length
+            if (length > 200_000) throw new Error('This document exceeds 200,000 extracted characters. Split it into smaller files.')
+            if (text.trim()) readable = true
+            pieces.push(text)
+          }
+        }
+        blocks.push(`Page ${i}\n${pieces.join('').trim()}`)
+      } finally {
+        await reader.cancel().catch(() => {})
+        page.cleanup()
+      }
     }
     if (!readable) checkedText('')
     return blocks.join('\n\n')

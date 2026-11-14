@@ -41,7 +41,8 @@ import { usePrivacyMode } from './privacy.js'
 import { useHint, useModelSwitches, usePaletteSource, useShortcut } from './keyboard.jsx'
 import { useComposerMenus } from './useComposerMenus.jsx'
 import { mentionedChats, ownCommands, takeCommands } from './composer-menus.js'
-import { claimInserter } from './composer-insert.js'
+import { claimInserter, advanceComposerDraft } from './composer-insert.js'
+import { scopedComposerKey } from './composer-scope.js'
 import { addAttachment, removeAttachment, setFocusedComposer } from './attachments.js'
 import { AttachmentChips, useAttachInput, useAttachments } from './ComposerAttachments.jsx'
 import { outgoing, outgoingOrThrow, takesNoPictures, takesPictures } from './composer-attachments.js'
@@ -523,7 +524,7 @@ const LIVE_SETTINGS = {
   opencode: { model: true, effort: false, fast: false },
 }
 
-export default function ChatView({ chat, onBack, focused = true, web = false, onOpenPlugins = null }) {
+export default function ChatView({ chat, onBack, focused = true, web = false, onOpenPlugins = null, composerScope = null }) {
   const privacy = usePrivacyMode()
   const {
     capabilities,
@@ -614,7 +615,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
   const queue = chat.queue ?? []
   // What rides the next message besides its words: pictures, and elements
   // picked in the browser (attachments.js keeps them per composer).
-  const composerKey = chat.id
+  const composerKey = scopedComposerKey(chat.id, composerScope)
   const attached = useAttachments(composerKey)
   const harness = (capabilities?.harnesses ?? []).find((h) => h.id === chat.harness)
   // The daemon's honors.attachments for the chat's app; a chat whose app
@@ -748,6 +749,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
     onError: setError,
     refuse: takesImages ? null : takesNoPictures(harnessText ?? 'This app'),
     inputRef, setText, workspace: chat.workspace ?? null,
+    deviceId: chat.executor || thisDevice, projectId: elsewhere ? null : undefined,
     onReference: () => menus.begin('@'),
     onCommands: () => menus.begin('/'),
     onPlugins: onOpenPlugins,
@@ -978,6 +980,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
 
   const send = async () => {
     if (!canSend) return
+    advanceComposerDraft(composerKey)
     setBusy(true)
     setError(null)
     try {
@@ -1131,6 +1134,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
   // it is an ordinary send.
   const steerNow = async () => {
       if ((!text.trim() && !attached.length) || !alive || !reachable || busy || bound) return false
+      advanceComposerDraft(composerKey)
     if (!turnOpen) {
       send()
       return
@@ -1152,6 +1156,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
   // Edit: a queued message comes back to the composer (in front of
   // anything already typed) and leaves the queue; Enter queues it again.
   const pullBack = (message) => {
+    advanceComposerDraft(composerKey)
     setText((typed) => (typed.trim() ? `${message.text}\n${typed}` : message.text))
     // Its pictures come back as attachments, read from where they were kept.
     for (const image of message.images ?? []) {
