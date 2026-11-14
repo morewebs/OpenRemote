@@ -1,7 +1,14 @@
 /* The folder browser: the current path, its subfolders, one choice. */
 
 .fb-modal {
+  display: flex;
+  flex-direction: column;
   width: 440px;
+  max-height: min(760px, calc(100dvh - 32px));
+}
+
+.fb-modal > :not(.fb-list) {
+  flex-shrink: 0;
 }
 
 .fb-path {
@@ -18,6 +25,8 @@
   display: flex;
   flex-direction: column;
   height: 280px;
+  min-height: 80px;
+  flex: 1 1 280px;
   margin-top: 8px;
   overflow-y: auto;
   border: 1px solid var(--line);
@@ -69,7 +78,15 @@
   margin: 0;
   padding: 10px 12px;
   font-size: 12px;
-  color: var(--text-3);
+  color: var(--text-2);
+}
+
+.fb-failure {
+  padding: 12px;
+}
+
+.fb-failure .dv-error {
+  margin: 0 0 12px;
 }
 
 .fb-foot {
@@ -108,10 +125,19 @@
 
 @media (max-width: 639px) {
   .fb-modal {
-    width: auto;
+    width: 100%;
   }
 
   .fb-list {
-    height: 50vh;
+    flex-basis: min(280px, 45dvh);
+  }
+
+  .fb-row {
+    min-height: 44px;
+  }
+
+  .fb-row span {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 }

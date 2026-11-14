@@ -1,7 +1,44 @@
 .ctx-menu {
   width: 224px;
-  max-height: none;
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
   outline: none;
+}
+
+.ctx-menu .nc-item,
+.ctx-menu .nc-group-label,
+.ctx-sep {
+  flex-shrink: 0;
+}
+
+.ctx-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 119;
+  background: rgba(0, 0, 0, 0.18);
+  touch-action: none;
+}
+
+.ctx-menu.is-phone {
+  width: 280px;
+  /* A translated entrance would briefly push a clamped list off screen. */
+  animation: none;
+}
+
+.ctx-menu.is-phone .nc-item {
+  font-size: 14px;
+  padding: 8px 12px;
+}
+
+.ctx-menu.is-phone .ctx-icon {
+  width: 18px;
+}
+
+.ctx-menu.is-phone .ctx-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
 .ctx-menu .nc-item:disabled {
@@ -53,11 +90,11 @@
   overflow-y: auto;
 }
 
-.ctx-sub .nc-item-main {
+.ctx-menu .nc-item-main {
   min-width: 0;
 }
 
-.ctx-sub .nc-item-name {
+.ctx-menu .nc-item-name {
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;

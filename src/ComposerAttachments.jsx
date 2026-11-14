@@ -5,7 +5,7 @@
 // browser can add its own; the paths themselves are composer-attachments.js.
 
 import { useRef, useSyncExternalStore } from 'react'
-import { CursorClick, ImageSquare, Paperclip, X } from '@phosphor-icons/react'
+import { CursorClick, ImageSquare, Plus, X } from '@phosphor-icons/react'
 import { attachments, removeAttachment, subscribe } from './attachments.js'
 import { dragsFiles, droppedPictures, pastePlan, takePictures } from './composer-attachments.js'
 import { consoleError, errorCopy } from './error-copy.js'
@@ -154,7 +154,7 @@ export function useAttachInput(composerKey, { enabled, onError, refuse = null })
         title="Attach pictures - or paste or drop them"
         aria-label="Attach pictures"
       >
-        <Paperclip size={14} />
+        <Plus size={20} />
       </button>
     </>
   ) : null

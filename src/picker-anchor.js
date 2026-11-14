@@ -37,3 +37,19 @@ export function resolvePickerSpot(anchor, triggerRect) {
   if (isRealPoint(anchor)) return anchor
   return spotBelow(triggerRect) ?? { left: 8, top: 8 }
 }
+
+// Measure the untransformed box and start from its anchor every time. Reading
+// the animated rect back as the next position makes a menu drift on rerenders.
+// Above menus keep their CSS translation, so top remains its transform origin.
+export function fitPicker(spot, size, viewport, place = 'below') {
+  const maxHeight = Math.max(0, viewport.height - 16)
+  const height = Math.min(size.height, maxHeight)
+  const offset = place === 'above' ? height + 8 : 0
+  const minTop = (viewport.offsetTop ?? 0) + 8
+  const maxTop = minTop + maxHeight - height
+  return {
+    left: Math.max(8, Math.min(spot.left, viewport.width - size.width - 8)),
+    top: Math.max(minTop, Math.min(spot.top - offset, maxTop)) + offset,
+    maxHeight,
+  }
+}

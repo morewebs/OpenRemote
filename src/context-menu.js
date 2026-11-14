@@ -33,7 +33,7 @@ export function stepCursor(list, at, key) {
  * else to the left. On a phone there is room on neither side, so it opens
  * over the menu, just under its row. Always inside the window.
  */
-export function submenuPlace({ menu, row, list, vw, vh }) {
+export function submenuPlace({ menu, row, list, vw, vh, offsetTop = 0 }) {
   let left = menu.right + 4
   let top = row.top - 7
   if (left + list.width > vw - 8) left = menu.left - 4 - list.width
@@ -41,6 +41,6 @@ export function submenuPlace({ menu, row, list, vw, vh }) {
     left = Math.max(8, Math.min(row.left + 16, vw - list.width - 8))
     top = row.bottom + 2
   }
-  top = Math.max(8, Math.min(top, vh - list.height - 8))
+  top = Math.max(offsetTop + 8, Math.min(top, offsetTop + vh - list.height - 8))
   return { left, top }
 }

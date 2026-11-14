@@ -350,7 +350,12 @@ html[data-reduce-motion] .nc-send:not(:disabled) {
 }
 
 .ca-attach {
-  padding: 4px;
+  flex: none;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
 }
 
 @media (prefers-reduced-motion: reduce) {

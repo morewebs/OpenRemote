@@ -60,6 +60,16 @@ test('a submenu opens beside its row: right where there is room, else left, else
   assert.ok(SUBMENU_LINGER_MS > 0 && SUBMENU_LINGER_MS <= 400, 'long enough to cross rows, short enough to feel gone')
 })
 
+test('a submenu respects the visible viewport when the phone keyboard pans it', () => {
+  const menu = { left: 8, top: 48, right: 288 }
+  const list = { width: 280, height: 200 }
+  for (const row of [{ left: 8, top: 0, bottom: 44 }, { left: 8, top: 500, bottom: 544 }]) {
+    const at = submenuPlace({ menu, row, list, vw: 320, vh: 300, offsetTop: 40 })
+    assert.ok(at.left >= 8 && at.left + list.width <= 312)
+    assert.ok(at.top >= 48 && at.top + list.height <= 332)
+  }
+})
+
 test('the menu draws a submenu row as one, and keeps the keyboard hand-back', () => {
   const source = readFileSync(new URL('./ContextMenu.jsx', import.meta.url), 'utf8')
   assert.match(source, /aria-haspopup=\{item\.submenu \? 'menu' : undefined\}/)
@@ -71,6 +81,6 @@ test('the menu draws a submenu row as one, and keeps the keyboard hand-back', ()
   assert.match(source, /focusOpener\(opener\)/)
   // Android's back closes it.
   assert.match(source, /useBack\(true, onClose\)/)
-  // A long submenu scrolls its own list rather than closing the menu.
-  assert.match(source, /if \(!subRef\.current\?\.contains\(e\.target\)\) close\.current\(\)/)
+  // Either list can scroll without closing the whole menu.
+  assert.match(source, /if \(!inside\(e\.target\)\) close\.current\(\)/)
 })

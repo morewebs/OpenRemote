@@ -998,7 +998,10 @@ export default function NewChat({
     leaveModel()
   }
 
-  const openPicker = (kind) => (e) => setPicker({ kind, x: e.clientX, y: e.clientY })
+  const openPicker = (kind) => (e) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    setPicker({ kind, x: isMobile ? rect.left : e.clientX, y: isMobile ? rect.top : e.clientY })
+  }
   // Permission hangs off the composer's right edge, the mirror of the model
   // list on the left, and never off the pointer.
   const leavePermission = () => {
@@ -1025,7 +1028,7 @@ export default function NewChat({
     setPicker({
       kind: 'permission',
       x: Math.round(rect.right - 264),
-      y: spot?.top ?? Math.round(rect.bottom),
+      y: isMobile ? Math.round(rect.top) : spot?.top ?? Math.round(rect.bottom),
     })
   }
   // The project list shares the composer box's left edge and always opens in
@@ -1044,7 +1047,7 @@ export default function NewChat({
     setPicker({
       kind: 'project',
       x: Math.round(box.left),
-      y: Math.round((row?.bottom ?? box.bottom) + 8),
+      y: Math.round(isMobile ? (row?.top ?? box.top) : (row?.bottom ?? box.bottom) + 8),
     })
   }
   const leaveEffort = () => {
@@ -1097,7 +1100,7 @@ export default function NewChat({
       return
     }
     const spot = spotAtBox(boxRef.current?.getBoundingClientRect())
-    if (spot) setPicker({ kind, x: spot.left, y: spot.top })
+    if (spot) setPicker({ kind, x: spot.left, y: isMobile ? boxRef.current.getBoundingClientRect().top : spot.top })
     else setPicker({ kind, x: 16, y: 16 })
   }
   const openModelPicker = () => openBoxPicker('model')
@@ -1106,6 +1109,15 @@ export default function NewChat({
   // picker that isn't on screen (no catalog, no permission words) lets
   // its key fall through.
   const boxRef = useRef(null)
+  const mobilePickerSpot = (kind) => {
+    const box = boxRef.current?.getBoundingClientRect()
+    if (!box) return null
+    const row = boxRef.current.parentElement?.querySelector('.nc-below')?.getBoundingClientRect()
+    return {
+      left: kind === 'permission' ? box.right - 264 : box.left,
+      top: kind === 'project' || kind === 'machine' ? row?.top ?? box.top : box.top,
+    }
+  }
   const inputRef = useRef(null)
   useEffect(() => {
     if (!isMobile || !inputRef.current) return
@@ -1362,8 +1374,28 @@ export default function NewChat({
   // reached for. Every control is a real button (or an input while naming), so the
   // row is Tab-reachable. It lives at the top of the page rather than above the
   // composer, where it crowded the pickers.
+  const savePreset = (
+    <>
+      {presetEditing?.id === 'new' ? (
+        presetNameInput(presetEditing)
+      ) : (
+        <button
+          type="button"
+          className="nc-preset nc-preset-save"
+          onClick={beginSave}
+          disabled={!currentHarness}
+          title={currentHarness ? 'Save the current App, model, effort and permission as a setup' : 'Pick an App first.'}
+        >
+          <Plus size={12} weight="bold" />
+          Save this setup
+        </button>
+      )}
+    </>
+  )
+
   const presetsRow = (
     <div className="nc-presets" role="group" aria-label="Saved setups">
+        {isMobile && savePreset}
         {presets.map((preset) => {
           const armed = rowIsArmed(armedPreset, preset.id)
           return (
@@ -1415,21 +1447,115 @@ export default function NewChat({
             </span>
           )
         })}
-        {presetEditing?.id === 'new' ? (
-          presetNameInput(presetEditing)
-        ) : (
-          <button
-            type="button"
-            className="nc-preset nc-preset-save"
-            onClick={beginSave}
-            disabled={!currentHarness}
-            title={currentHarness ? 'Save the current App, model, effort and permission as a setup' : 'Pick an App first.'}
-          >
-            <Plus size={12} weight="bold" />
-            Save this setup
-          </button>
-        )}
+        {!isMobile && savePreset}
+
       </div>
+  )
+
+  const permissionPicker = (
+    <>
+      {permissionWords.length > 0 && (
+        <button
+          type="button"
+          className="nc-meta"
+          data-unset={!chosenPermission || undefined}
+          onClick={openPermissionPicker}
+          aria-haspopup="listbox"
+          aria-expanded={picker?.kind === 'permission'}
+          data-picker="permission"
+          title={hintPermission('What the app may do without asking')}
+        >
+          <span className="nc-mobile-field-label">Permission</span>
+          <span className="nc-control-label">{permissionWords.find((w) => (w.w ?? w) === chosenPermission)?.l ?? chosenPermission ?? (isMobile && optionsOpen ? 'App default' : 'Permission')}</span>
+        </button>
+      )}
+      {(picker?.kind === 'permission' || permissionLeaving) && (
+        <PickerMenu
+          label="Permission"
+          portal={isMobile}
+          place={isMobile ? 'above' : 'below'}
+          getAnchor={isMobile ? () => mobilePickerSpot('permission') : undefined}
+          hideSearch
+          leaving={permissionLeaving}
+          items={permissionWords.map((word) => ({ id: word.w ?? word, name: word.l ?? word.w ?? word }))}
+          groups={null}
+          selectedId={chosenPermission ?? ''}
+          onChoose={(id) => {
+            setPermission(id)
+            leavePermission()
+          }}
+          onClose={leavePermission}
+          anchor={{ left: picker.x, top: picker.y }}
+          renderSubline={(item) =>
+            item.id === currentHarness?.default_permission ? (
+              <span className="nc-item-sub">
+                {harnessLabel(currentHarness)} runs this by default
+              </span>
+            ) : null
+          }
+        />
+      )}
+    </>
+  )
+
+  const harnessPicker = (
+    <>
+      <button
+        className="nc-meta"
+        data-unset={!currentHarness || undefined}
+        onClick={() => openBoxPicker('harness')}
+        aria-haspopup="listbox"
+        aria-expanded={picker?.kind === 'harness'}
+        data-picker="harness"
+        disabled={isMobile && !available.length}
+        title={hintHarness('App')}
+      >
+        <span className="nc-mobile-field-label">App</span>
+        <span className="nc-provider" key={currentHarness?.id ?? 'none'}>
+          <HarnessMark harness={currentHarness?.id} size={16} />
+          <span className="nc-provider-name">
+            {currentHarness?.name ?? (isMobile ? mobileStatus?.kind === 'loading' ? 'Loading Apps…' : 'Apps unavailable' : 'No app installed')}
+          </span>
+        </span>
+      </button>
+      {(picker?.kind === 'harness' || harnessLeaving) && (
+        <PickerMenu
+          label="App"
+          portal={isMobile}
+          place={isMobile ? 'above' : 'below'}
+          getAnchor={isMobile ? () => mobilePickerSpot('harness') : undefined}
+          searchPlaceholder="Search apps"
+          leaving={harnessLeaving}
+          items={available.map((h) => ({ id: h.id, name: h.name }))}
+          renderIcon={(h) => <HarnessMark harness={h.id} size={16} />}
+          groups={null}
+          selectedId={currentHarness?.id ?? ''}
+          onChoose={(id) => {
+            setHarness(id)
+            // Effort words belong to the harness's own catalog - a
+            // switch resets the choice to the new harness's default.
+            setEffort(null)
+            setPermission(null)
+            leaveHarness('close')
+          }}
+          onClose={() => leaveHarness('close')}
+          anchor={{ left: picker.x, top: picker.y }}
+          footer={
+            // The way in to the harness manager - the only row in
+            // the empty state, and the honest answer when the list
+            // is missing something. It manages this computer's
+            // harnesses; a phone has none (a machine's are in
+            // Machines).
+            isMobile ? null : <button
+              type="button"
+              onClick={() => leaveHarness('manage')}
+            >
+              Manage apps…
+            </button>
+          }
+        />
+      )}
+    </>
   )
 
   return (
@@ -1538,7 +1664,9 @@ export default function NewChat({
           </p>
         )}
         <div className="nc-foot">
+          {attachInput.button}
           <div className="nc-pickers">
+            {isMobile && harnessPicker}
             {modelsPending ? (
               <span className="nc-skeleton" aria-hidden="true" />
             ) : (modelItems.length > 0 || resolvedDefault) && (
@@ -1553,19 +1681,24 @@ export default function NewChat({
                     data-unset={!model || undefined}
                     title={hintModel('Model')}
                   >
-                    {model ? shownModelName : 'Model'}
+                    <span className="nc-mobile-field-label">Model</span>
+                    <span className="nc-control-label">{model ? shownModelName : 'Model'}</span>
                   </button>
                 ) : (
                   // No catalog to pick from, but the harness's own config
                   // says what a fresh chat runs - its words, shown as the
                   // fact it is. The wire's first-turn truth replaces it.
                   <span className="nc-meta nc-static" title="The model this app runs, from its own config">
-                    {defaultLabel}
+                    <span className="nc-mobile-field-label">Model</span>
+                    <span className="nc-control-label">{defaultLabel}</span>
                   </span>
                 )}
                 {(picker?.kind === 'model' || modelLeaving) && (
                   <PickerMenu
                     label="Model"
+                    portal={isMobile}
+                    place={isMobile ? 'above' : 'below'}
+                    getAnchor={isMobile ? () => mobilePickerSpot('model') : undefined}
                     searchPlaceholder="Search models"
                     wide
                     leaving={modelLeaving}
@@ -1617,12 +1750,16 @@ export default function NewChat({
                     data-picker="endpoint"
                     title="Which model server this chat runs through"
                   >
-                    via {endpointWord}
+                    <span className="nc-mobile-field-label">Provider</span>
+                    <span className="nc-control-label">{isMobile && optionsOpen ? endpointWord : `via ${endpointWord}`}</span>
                   </button>
                 )}
                 {picker?.kind === 'endpoint' && (
                   <PickerMenu
                     label="Endpoint"
+                    portal={isMobile}
+                    place={isMobile ? 'above' : 'below'}
+                    getAnchor={isMobile ? () => mobilePickerSpot('endpoint') : undefined}
                     searchPlaceholder="Search endpoints"
                     items={[
                       {
@@ -1662,57 +1799,7 @@ export default function NewChat({
                 <span className="nc-via">via</span>
               </>
             )}
-            <button
-              className="nc-meta"
-              data-unset={!currentHarness || undefined}
-              onClick={() => openBoxPicker('harness')}
-              aria-haspopup="listbox"
-              aria-expanded={picker?.kind === 'harness'}
-              data-picker="harness"
-              disabled={isMobile && !available.length}
-              title={hintHarness('App')}
-            >
-              <span className="nc-provider" key={currentHarness?.id ?? 'none'}>
-                <HarnessMark harness={currentHarness?.id} size={16} />
-                <span className="nc-provider-name">
-                  {currentHarness?.name ?? (isMobile ? mobileStatus?.kind === 'loading' ? 'Loading Apps…' : 'Apps unavailable' : 'No app installed')}
-                </span>
-              </span>
-            </button>
-            {(picker?.kind === 'harness' || harnessLeaving) && (
-              <PickerMenu
-                label="App"
-                searchPlaceholder="Search apps"
-                leaving={harnessLeaving}
-                items={available.map((h) => ({ id: h.id, name: h.name }))}
-                renderIcon={(h) => <HarnessMark harness={h.id} size={16} />}
-                groups={null}
-                selectedId={currentHarness?.id ?? ''}
-                onChoose={(id) => {
-                  setHarness(id)
-                  // Effort words belong to the harness's own catalog - a
-                  // switch resets the choice to the new harness's default.
-                  setEffort(null)
-                  setPermission(null)
-                  leaveHarness('close')
-                }}
-                onClose={() => leaveHarness('close')}
-                anchor={{ left: picker.x, top: picker.y }}
-                footer={
-                  // The way in to the harness manager - the only row in
-                  // the empty state, and the honest answer when the list
-                  // is missing something. It manages this computer's
-                  // harnesses; a phone has none (a machine's are in
-                  // Machines).
-                  isMobile ? null : <button
-                    type="button"
-                    onClick={() => leaveHarness('manage')}
-                  >
-                    Manage apps…
-                  </button>
-                }
-              />
-            )}
+            {!isMobile && harnessPicker}
             {model && effortTiers.length > 0 && (
               <div className="nc-effort-wrap">
                 <button
@@ -1723,7 +1810,8 @@ export default function NewChat({
                   data-picker="effort"
                   title={hintEffort("The app's own effort tier")}
                 >
-                  <FadingLabel text={effortLabel(chosenEffort)} />
+                  <span className="nc-mobile-field-label">Effort</span>
+                  <FadingLabel text={isMobile && optionsOpen && !chosenEffort ? 'App default' : effortLabel(chosenEffort)} />
                 </button>
                 {(picker?.kind === 'effort' || effortLeaving) && (
                   <EffortSlider
@@ -1747,6 +1835,7 @@ export default function NewChat({
               </div>
             )}
 
+            {isMobile && permissionPicker}
           </div>
           {isMobile && (
             <button
@@ -1768,6 +1857,7 @@ export default function NewChat({
               <SlidersHorizontal size={20} />
             </button>
           )}
+          {isMobile && optionsOpen && <div className="nc-mobile-presets">{presetsRow}</div>}
           <div className="nc-send-group">
             {/* The buttons plugins add to the composer (dictation's
                 microphone, say), beside the send button; a project's plugin
@@ -1781,50 +1871,12 @@ export default function NewChat({
             />
             {/* What the agent may do without asking sits by the send button:
                 the last thing to check before a message goes. */}
-            {permissionWords.length > 0 && (
-              <button
-                type="button"
-                className="nc-meta"
-                data-unset={!chosenPermission || undefined}
-                onClick={openPermissionPicker}
-                aria-haspopup="listbox"
-                aria-expanded={picker?.kind === 'permission'}
-                data-picker="permission"
-                title={hintPermission('What the app may do without asking')}
-              >
-                {permissionWords.find((w) => (w.w ?? w) === chosenPermission)?.l ?? chosenPermission ?? 'Permission'}
-              </button>
-            )}
-            {(picker?.kind === 'permission' || permissionLeaving) && (
-              <PickerMenu
-                label="Permission"
-                hideSearch
-                leaving={permissionLeaving}
-                items={permissionWords.map((word) => ({ id: word.w ?? word, name: word.l ?? word.w ?? word }))}
-                groups={null}
-                selectedId={chosenPermission ?? ''}
-                onChoose={(id) => {
-                  setPermission(id)
-                  leavePermission()
-                }}
-                onClose={leavePermission}
-                anchor={{ left: picker.x, top: picker.y }}
-                renderSubline={(item) =>
-                  item.id === currentHarness?.default_permission ? (
-                    <span className="nc-item-sub">
-                      {harnessLabel(currentHarness)} runs this by default
-                    </span>
-                  ) : null
-                }
-              />
-            )}
-            {attachInput.button}
+            {!isMobile && permissionPicker}
             <button className="nc-send" onClick={start} disabled={!canSend} aria-label="Start chat" title={sendWhy ?? (isMobile ? 'Start chat' : 'Start chat (Enter)')}>
               <ArrowUp size={16} weight="bold" />
             </button>
           </div>
         </div>
-        {isMobile && optionsOpen && <div className="nc-mobile-presets">{presetsRow}</div>}
       </div>
       <div className="nc-under">
         {/* The picked harness isn't signed in: one quiet row under the
@@ -1876,6 +1928,9 @@ export default function NewChat({
             {picker?.kind === 'project' && (
               <PickerMenu
                 label="Project"
+                portal={isMobile}
+                place={isMobile ? 'above' : 'below'}
+                getAnchor={isMobile ? () => mobilePickerSpot('project') : undefined}
                 searchPlaceholder="Search projects"
                 wide
                 items={[
@@ -1935,6 +1990,9 @@ export default function NewChat({
               {picker?.kind === 'machine' && (
                 <PickerMenu
                   label="Run on"
+                  portal={isMobile}
+                  place={isMobile ? 'above' : 'below'}
+                  getAnchor={isMobile ? () => mobilePickerSpot('machine') : undefined}
                   searchPlaceholder="Search machines"
                   items={machineOptions.map((m) => ({ ...m, id: m.id ?? 'here', veiled: !m.here }))}
                   groups={null}

@@ -1,9 +1,10 @@
 .nc-menu {
   position: fixed;
-  z-index: 30;
+  z-index: 120;
   display: flex;
   flex-direction: column;
   width: 264px;
+  max-width: calc(100vw - 16px);
   max-height: 380px;
   padding: 6px;
   border: 1px solid rgba(255, 255, 255, 0.09);
@@ -13,6 +14,16 @@
     0 4px 10px rgba(0, 0, 0, 0.32),
     0 16px 44px rgba(0, 0, 0, 0.44);
   animation: nc-menu-in 0.14s ease-out;
+}
+
+.nc-menu.is-phone .nc-item,
+.nc-menu.is-phone .nc-footer button,
+.nc-menu.is-phone .nc-search {
+  min-height: 44px;
+}
+
+.nc-menu.is-phone .nc-search {
+  flex-shrink: 0;
 }
 
 @keyframes nc-menu-in {

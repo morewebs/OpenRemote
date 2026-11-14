@@ -36,6 +36,19 @@ supported architectures and remains the fallback. Starting with 0.5.1, the
 publish job requires both ARM downloads as well as the universal APK, and
 the Android job verifies their signatures and native-library architectures.
 
+The GitHub Android job sets `VITE_ANDROID_DISTRIBUTION=github` for the
+frontend build. About checks the public GitHub latest-release API each time
+it opens and shows the result beside the version. A newer stable release
+offers its universal APK in the external browser; Android handles the user's
+installation confirmation and signature checks. Failed checks offer Retry
+instead of reporting that the app is current. The request times out after
+15 seconds and is cancelled when About closes.
+
+Only native Android builds with this explicit value show the badge. Future
+Google Play builds must use `VITE_ANDROID_DISTRIBUTION=play` (or leave it
+unset); their frontend bundle omits the GitHub update component. Do not reuse
+the GitHub frontend bundle for a Play build.
+
 The version-free names start with the first tag after this landed - v0.3.2
 predates them, so its release page has only the versioned assets.
 

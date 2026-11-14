@@ -1,14 +1,21 @@
-import { useEffect, useRef, useState } from 'react'
-import { CaretLeft, CaretRight, X } from '@phosphor-icons/react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { CaretLeft, CaretRight, CircleNotch, X } from '@phosphor-icons/react'
 // The one copy of the version the UI renders - package.json is the
 // source; tauri.conf.json and src-tauri/Cargo.toml carry it for the
 // installer side.
 import { version } from '../package.json'
 import './about.css'
-import { isMobile } from './platform.js'
+import { hasTauri, isMobile } from './platform.js'
 import { SplashMark } from './Splash.jsx'
 import { useBack } from './use-back.js'
 import { useDialog } from './dialog-focus.js'
+import { githubAndroidUpdates } from './android-updates.js'
+
+// This dynamic chunk is omitted entirely unless the APK pipeline opts in.
+// A future Play build uses its own distribution value and has no checker.
+const AndroidUpdateBadge = import.meta.env.VITE_ANDROID_DISTRIBUTION === 'github'
+  ? lazy(() => import('./AndroidUpdateBadge.jsx'))
+  : null
 
 export default function AboutModal({ onClose, daemonVersion, api }) {
   const [view, setView] = useState('about')
@@ -146,7 +153,14 @@ function AboutScreen({
           <div className="ab-list">
             <div className="ab-row">
               <span className="ab-row-label">Version</span>
-              <span className="ab-row-value">{version}</span>
+              <div className="ab-version-line">
+                <span className="ab-row-value">{version}</span>
+                {githubAndroidUpdates({ native: hasTauri, mobile: isMobile, distribution: import.meta.env.VITE_ANDROID_DISTRIBUTION }) && AndroidUpdateBadge && (
+                  <Suspense fallback={<span className="ab-update-badge" role="status"><CircleNotch className="ab-update-spinner" size={16} aria-hidden="true" /> Checking…</span>}>
+                    <AndroidUpdateBadge version={version} />
+                  </Suspense>
+                )}
+              </div>
             </div>
             {daemonVersion && (
               <div className="ab-row">

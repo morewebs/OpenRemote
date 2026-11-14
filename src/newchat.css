@@ -1187,12 +1187,6 @@ html[data-reduce-motion] .nc-effort-speck {
   justify-content: center;
 }
 
-.is-phone .nc-menu .nc-item,
-.is-phone .nc-menu .nc-footer button,
-.is-phone .nc-menu .nc-search {
-  min-height: 44px;
-}
-
 .is-phone .nc-effort-head {
   grid-template-columns: 44px 1fr 44px;
 }
@@ -1209,6 +1203,7 @@ html[data-reduce-motion] .nc-effort-speck {
 
 .is-phone .nc-provider {
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   white-space: nowrap;
 }
@@ -1226,6 +1221,26 @@ html[data-reduce-motion] .nc-effort-speck {
 
 .is-phone .nc-foot .nc-meta:disabled {
   color: var(--text-3);
+}
+
+.is-phone .nc-control-label {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nc-mobile-field-label {
+  display: none;
+}
+
+.is-phone .nc-foot .nc-meta[aria-haspopup='listbox'][data-unset] {
+  padding-right: 24px;
+}
+
+.is-phone .nc-foot .nc-meta:disabled::after {
+  display: none;
 }
 
 .is-phone:not([data-options-open]) .nc-pickers > .nc-meta:not([data-picker='harness']),
@@ -1275,30 +1290,86 @@ html[data-reduce-motion] .nc-effort-speck {
 }
 
 .is-phone[data-options-open] .nc-foot {
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: 2px 4px;
+}
+
+.is-phone[data-options-open] .nc-foot:has(> .ca-attach) {
+  grid-template-columns: 44px 44px minmax(0, 1fr) auto;
+}
+
+.is-phone[data-options-open] .nc-foot > .ca-attach {
+  grid-column: 1;
+  grid-row: 2;
 }
 
 .is-phone[data-options-open] .nc-pickers {
-  flex: 1 0 100%;
-  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 0 4px;
+}
+
+.is-phone[data-options-open] .nc-pickers > [data-picker='permission'] {
+  grid-column: 2;
+}
+
+.is-phone[data-options-open] .nc-pickers > .nc-meta,
+.is-phone[data-options-open] .nc-effort-wrap > .nc-meta {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 52px;
+  gap: 3px;
+}
+
+.is-phone[data-options-open] .nc-mobile-field-label {
+  display: block;
+  max-width: 100%;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.is-phone[data-options-open] .nc-pickers .nc-meta[aria-haspopup='listbox'][data-unset]::after {
+  top: 68%;
 }
 
 .is-phone[data-options-open] .nc-send-group {
-  flex-wrap: wrap;
-  max-width: calc(100% - 48px);
+  flex-wrap: nowrap;
+  max-width: 100%;
+  width: 100%;
   justify-content: flex-end;
 }
 
 .nc-mobile-presets {
-  max-height: 120px;
-  overflow-y: auto;
-  margin-top: 8px;
-  padding: 12px 4px 4px;
-  border-top: 1px solid var(--line);
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.nc-mobile-presets::-webkit-scrollbar {
+  display: none;
 }
 
 .is-phone .nc-presets {
+  flex-wrap: nowrap;
+  width: max-content;
   padding-right: 0;
+}
+
+.is-phone .nc-preset-save {
+  border: 0;
+  padding: 0 8px;
+  color: var(--text-2);
+}
+
+.is-phone .nc-preset-save:hover {
+  background: var(--bg-hover);
 }
 
 .is-phone .nc-preset,

@@ -506,6 +506,8 @@ jobs:
     # phone users do not need to download libraries for other architectures.
     needs: release
     runs-on: ubuntu-latest
+    env:
+      VITE_ANDROID_DISTRIBUTION: github
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: channel

@@ -591,7 +591,18 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   margin-top: 8px;
+}
+
+.cv-foot .nc-pickers {
+  flex: 1;
+  min-width: 0;
+}
+
+.is-mobile .cv-foot .ca-attach {
+  width: 44px;
+  height: 44px;
 }
 
 .cv-meta {

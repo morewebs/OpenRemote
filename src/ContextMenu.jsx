@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom'
 import { CaretRight } from '@phosphor-icons/react'
 import { captureOpener, focusOpener } from './dialog-focus.js'
 import { useBack } from './use-back.js'
+import { isMobile } from './platform.js'
+import { fitPicker } from './picker-anchor.js'
 import { SUBMENU_LINGER_MS, menuActions, stepCursor, submenuPlace } from './context-menu.js'
 import './pickermenu.css'
 import './contextmenu.css'
@@ -64,12 +66,12 @@ export default function ContextMenu({ x, y, items, onClose }) {
     // right-click that opened the menu is still bubbling and must not count
     // as a click elsewhere.
     const wheel = (e) => {
-      if (!subRef.current?.contains(e.target)) close.current()
+      if (!inside(e.target)) close.current()
     }
     const listeners = [
       ['mousedown', away],
       ['contextmenu', away],
-      ['resize', shut],
+      ...(!isMobile ? [['resize', shut]] : []),
       ['blur', shut],
       ['wheel', wheel, { passive: true }],
     ]
@@ -83,35 +85,55 @@ export default function ContextMenu({ x, y, items, onClose }) {
     }
   }, [])
 
-  // Open at the cursor, kept inside the viewport.
+  // Open at the press, within the visible viewport even with a phone keyboard.
+  // Both lists can outgrow the screen, so constrain them before measuring.
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
-    const rect = el.getBoundingClientRect()
-    const left = Math.max(8, Math.min(x, window.innerWidth - rect.width - 8))
-    const top = Math.max(8, Math.min(y, window.innerHeight - rect.height - 8))
-    el.style.left = `${left}px`
-    el.style.top = `${top}px`
-  }, [x, y])
-
-  // The submenu sits beside its row (context-menu.js says where).
-  useLayoutEffect(() => {
-    const menu = ref.current
     const list = subRef.current
-    const row = rows.current[open]
-    if (!menu || !list || !row) return
-    const at = submenuPlace({
-      menu: menu.getBoundingClientRect(),
-      row: row.getBoundingClientRect(),
-      list: list.getBoundingClientRect(),
-      vw: window.innerWidth,
-      vh: window.innerHeight,
-    })
-    list.style.left = `${at.left}px`
-    list.style.top = `${at.top}px`
-  })
+    const fit = () => {
+      const viewport = window.visualViewport
+      const width = viewport?.width ?? window.innerWidth
+      const height = viewport?.height ?? window.innerHeight
+      const offsetTop = viewport?.offsetTop ?? 0
+      el.style.maxHeight = `${Math.max(0, height - 16)}px`
+      const at = fitPicker({ left: x, top: y }, el.getBoundingClientRect(), { width, height, offsetTop })
+      el.style.left = `${at.left}px`
+      el.style.top = `${at.top}px`
+      const row = rows.current[open]
+      if (!list || !row) return
+      list.style.maxHeight = `${Math.max(0, height - 16)}px`
+      const subAt = submenuPlace({
+        menu: el.getBoundingClientRect(),
+        row: row.getBoundingClientRect(),
+        list: list.getBoundingClientRect(),
+        vw: width,
+        vh: height,
+        offsetTop,
+      })
+      list.style.left = `${subAt.left}px`
+      list.style.top = `${subAt.top}px`
+    }
+    fit()
+    const observer = new ResizeObserver(fit)
+    observer.observe(el)
+    if (list) observer.observe(list)
+    // Scrolling the parent list must keep a submenu beside its own row.
+    el.addEventListener('scroll', fit)
+    window.addEventListener('resize', fit)
+    window.visualViewport?.addEventListener('resize', fit)
+    window.visualViewport?.addEventListener('scroll', fit)
+    return () => {
+      observer.disconnect()
+      el.removeEventListener('scroll', fit)
+      window.removeEventListener('resize', fit)
+      window.visualViewport?.removeEventListener('resize', fit)
+      window.visualViewport?.removeEventListener('scroll', fit)
+    }
+  }, [x, y, open])
 
   const run = (item) => {
+    if (item.disabled) return
     onClose()
     item.onSelect()
   }
@@ -124,6 +146,14 @@ export default function ContextMenu({ x, y, items, onClose }) {
     // The keys move into the list; the pointer leaves the focus where it is.
     if (byKeys) requestAnimationFrame(() => subRef.current?.focus())
   }
+
+  useEffect(() => {
+    rows.current[cursor]?.scrollIntoView({ block: 'nearest' })
+  }, [cursor])
+
+  useEffect(() => {
+    subRef.current?.querySelector('.nc-item.cursor')?.scrollIntoView({ block: 'nearest' })
+  }, [open, subCursor])
 
   const onKeyDown = (e) => {
     if (e.key === 'Escape') {
@@ -209,14 +239,27 @@ export default function ContextMenu({ x, y, items, onClose }) {
   // In the body, so no ancestor's transform or clipping can displace it.
   return (
     <>
+      {isMobile && createPortal(
+        <div
+          className="ctx-backdrop"
+          aria-hidden="true"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation()
+            onClose()
+          }}
+        />,
+        document.body,
+      )}
       {createPortal(
         <div
           ref={ref}
-          className="nc-menu ctx-menu"
+          className={`nc-menu ctx-menu${isMobile ? ' is-phone' : ''}`}
           role="menu"
           tabIndex={-1}
           style={{ left: x, top: y }}
           onKeyDown={onKeyDown}
+          onPointerDown={(e) => e.stopPropagation()}
           onContextMenu={(e) => e.preventDefault()}
         >
           {items.map((item, i) =>
@@ -253,10 +296,11 @@ export default function ContextMenu({ x, y, items, onClose }) {
         createPortal(
           <div
             ref={subRef}
-            className="nc-menu ctx-menu ctx-sub"
+            className={`nc-menu ctx-menu ctx-sub${isMobile ? ' is-phone' : ''}`}
             role="menu"
             tabIndex={-1}
             onKeyDown={onSubKeyDown}
+            onPointerDown={(e) => e.stopPropagation()}
             onMouseEnter={() => clearTimeout(linger.current)}
             onContextMenu={(e) => e.preventDefault()}
           >

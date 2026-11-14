@@ -883,14 +883,31 @@
 
   .dv-modal-backdrop {
     align-items: flex-end;
-    padding: 0;
+    padding: 16px 12px max(12px, env(safe-area-inset-bottom));
   }
 
   .dv-modal,
   .dv-devmodal {
     width: 100%;
-    max-height: 86vh;
-    border-radius: 14px 14px 0 0;
+    max-height: calc(100dvh - 32px - env(safe-area-inset-bottom));
+    border-radius: 20px;
+  }
+
+  .dv-modal-close {
+    width: 44px;
+    height: 44px;
+    flex: none;
+  }
+
+  .dv-modal .dv-act,
+  .dv-modal .pn-btn {
+    min-height: 44px;
+  }
+
+  .dv-modal-hint {
+    color: var(--text-2);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
   }
 }
 

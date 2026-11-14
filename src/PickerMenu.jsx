@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Check, ClockCounterClockwise, MagnifyingGlass } from '@phosphor-icons/react'
 import { isMobile } from './platform.js'
 import { useBack } from './use-back.js'
-import { resolvePickerSpot } from './picker-anchor.js'
+import { fitPicker, resolvePickerSpot } from './picker-anchor.js'
 import './pickermenu.css'
 
 /**
@@ -23,6 +24,8 @@ export default function PickerMenu({
   onChoose,
   onClose,
   anchor, // { left, top }, from the pointer that opened the menu when there was one
+  getAnchor, // a live phone anchor when the keyboard moves the composer
+  portal = false, // escape the phone sheet, except when a dialog owns the menu
   renderIcon,
   renderTrailing,
   renderSubline, // a muted second line inside the item (efforts, paths)
@@ -105,36 +108,35 @@ export default function PickerMenu({
     // whether the menu hangs above its trigger or below it.
     const keepInView = () => {
       if (!el.isConnected) return
-      const vw = window.innerWidth
-      const vh = window.innerHeight
-      const rect = el.getBoundingClientRect()
-      // Above the box the menu is shifted with a transform, so the layout rect
-      // is already the visual one. Rewriting top from that rect would drop it
-      // back onto the field.
-      if (place === 'above') {
-        let left = spot.left
-        if (rect.right > vw - 8) left = Math.max(8, vw - rect.width - 8)
-        el.style.left = `${left}px`
-        if (rect.top < 8) el.style.top = `${Math.round(spot.top + (8 - rect.top))}px`
-        return
-      }
-      let { left, top } = rect
-      let maxHeight = ''
-      if (rect.bottom > vh - 8) {
-        top = Math.max(8, vh - rect.height - 8)
-        if (top + rect.height > vh - 8) {
-          top = 8
-          maxHeight = `${vh - 16}px`
-        }
-      }
-      if (rect.right > vw - 8) left = Math.max(8, vw - rect.width - 8)
+      const viewport = window.visualViewport
+      el.style.maxHeight = `min(380px, ${Math.max(0, (viewport?.height ?? window.innerHeight) - 16)}px)`
+      const size = el.getBoundingClientRect()
+      const { left, top } = fitPicker(
+        getAnchor?.() ?? spot,
+        { width: size.width, height: size.height },
+        {
+          width: viewport?.width ?? window.innerWidth,
+          height: viewport?.height ?? window.innerHeight,
+          offsetTop: viewport?.offsetTop ?? 0,
+        },
+        place,
+      )
       el.style.left = `${left}px`
       el.style.top = `${top}px`
-      el.style.maxHeight = maxHeight
     }
     keepInView()
+    // Fonts and async rows can change the height after the first layout.
+    const observer = new ResizeObserver(keepInView)
+    observer.observe(el)
     window.addEventListener('resize', keepInView)
-    return () => window.removeEventListener('resize', keepInView)
+    window.visualViewport?.addEventListener('resize', keepInView)
+    window.visualViewport?.addEventListener('scroll', keepInView)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', keepInView)
+      window.visualViewport?.removeEventListener('resize', keepInView)
+      window.visualViewport?.removeEventListener('scroll', keepInView)
+    }
   })
 
   useEffect(() => {
@@ -194,10 +196,10 @@ export default function PickerMenu({
     ? `No ${plural(label)} match "${query}"`
     : `No ${plural(label)} yet`
 
-  return (
+  const menu = (
     <div
       ref={ref}
-      className={`nc-menu${wide ? ' nc-menu--wide' : ''}${leaving ? ' is-out' : ''}${place === 'above' ? ' is-above' : ''}`}
+      className={`nc-menu${isMobile ? ' is-phone' : ''}${wide ? ' nc-menu--wide' : ''}${leaving ? ' is-out' : ''}${place === 'above' ? ' is-above' : ''}`}
       role="listbox"
       tabIndex={-1}
       aria-label={label}
@@ -265,4 +267,7 @@ export default function PickerMenu({
       {footer && <div className="nc-footer">{footer}</div>}
     </div>
   )
+  // The phone sheet moves over its sidebar. Its popups must escape that
+  // stacking context; desktop menus stay inside their dialog's focus scope.
+  return portal ? createPortal(menu, document.body) : menu
 }

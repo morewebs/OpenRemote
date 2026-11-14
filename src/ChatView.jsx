@@ -1541,6 +1541,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
             spellCheck={false}
           />
           <div className="cv-foot">
+            {attachInput.button}
             <div className="nc-pickers">
               {modelsPending && !chat.model ? (
                 <span className="nc-skeleton" aria-hidden="true" />
@@ -1567,6 +1568,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
               {picker?.kind === 'model' && (
                 <PickerMenu
                   label="Model"
+                  portal={isMobile}
                   searchPlaceholder="Search models"
                   wide
                   items={modelItems}
@@ -1622,6 +1624,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
               {picker?.kind === 'endpoint' && canSwitchEndpoint && (
                 <PickerMenu
                   label="Endpoint"
+                  portal={isMobile}
                   searchPlaceholder="Search endpoints"
                   items={[
                     {
@@ -1706,7 +1709,6 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
 
             </div>
             <div className="nc-send-group">
-              {attachInput.button}
               {/* The buttons plugins add to the composer (dictation's
                   microphone, say), dimmed while the chat can't take text. A
                   project's plugin shows only in its project's chats. */}
@@ -1750,6 +1752,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false }) 
               {picker?.kind === 'permission' && (
                 <PickerMenu
                   label="Permission"
+                  portal={isMobile}
                   searchPlaceholder="Search permission words"
                   items={(harness?.permission_modes ?? []).map((word) => ({
                     id: word.w,

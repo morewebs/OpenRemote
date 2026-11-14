@@ -1621,6 +1621,7 @@ export default function Sidebar({
         // shows.
         <PickerMenu
           label="Move to project"
+          portal={isMobile}
           items={moveTargets(moving.row)}
           selectedId={currentProject(moving.row)}
           anchor={moving.at ?? undefined}

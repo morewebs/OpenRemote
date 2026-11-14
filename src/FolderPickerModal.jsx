@@ -3,6 +3,8 @@
 // never typed - the same rule everywhere, local and remote alike.
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { isMobile } from './platform.js'
 import { ArrowUp, Folder, House, X } from '@phosphor-icons/react'
 import './devices.css'
 import './folders.css'
@@ -18,7 +20,8 @@ export default function FolderPickerModal({ api, where, start, onChoose, onClose
   useDialog(panelRef, onClose)
   const [listing, setListing] = useState(null)
   const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const requestedPath = useRef(start ?? null)
   // Every open carries a token and its own stop. Over the mesh a slow
   // folder request can resolve after a later fast one (click a big
   // remote folder, then Home), and last-resolved-wins would clobber the
@@ -30,6 +33,7 @@ export default function FolderPickerModal({ api, where, start, onChoose, onClose
   const inFlight = useRef(null)
 
   const open = async (path) => {
+    requestedPath.current = path
     openSeq.current += 1
     const token = openSeq.current
     inFlight.current?.abort()
@@ -59,7 +63,7 @@ export default function FolderPickerModal({ api, where, start, onChoose, onClose
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return (
+  const panel = (
     <div
       className="dv-modal-backdrop"
       onMouseDown={(e) => {
@@ -78,6 +82,11 @@ export default function FolderPickerModal({ api, where, start, onChoose, onClose
           {listing?.path ?? ' '}
         </div>
         <div className="fb-list" aria-busy={loading}>
+          {loading && <p className="fb-empty" role="status">Loading folders…</p>}
+          {error && <div className="fb-failure" role="alert">
+            <p className="dv-error">{error}</p>
+            <button type="button" className="dv-act" onClick={() => open(requestedPath.current)}>Try again</button>
+          </div>}
           {listing?.parent && (
             <button type="button" className="fb-row" onClick={() => open(listing.parent)}>
               <ArrowUp size={13} />
@@ -96,10 +105,9 @@ export default function FolderPickerModal({ api, where, start, onChoose, onClose
               <span className="pv">{dir.name}</span>
             </button>
           ))}
-          {listing && listing.dirs.length === 0 && <p className="fb-empty">No folders inside.</p>}
+          {listing && !loading && !error && listing.dirs.length === 0 && <p className="fb-empty">No folders inside.</p>}
           {listing?.truncated && <p className="fb-empty">Showing the first 2000 folders.</p>}
         </div>
-        {error && <p className="dv-error">{error}</p>}
         <div className="fb-foot">
           <button type="button" className="dv-act" onClick={onClose}>
             Cancel
@@ -107,7 +115,7 @@ export default function FolderPickerModal({ api, where, start, onChoose, onClose
           <button
             type="button"
             className="dv-act primary"
-            disabled={!listing || loading}
+            disabled={!listing || loading || !!error}
             onClick={() => onChoose(listing.path)}
           >
             Use this folder
@@ -116,4 +124,5 @@ export default function FolderPickerModal({ api, where, start, onChoose, onClose
       </div>
     </div>
   )
+  return isMobile ? createPortal(panel, document.body) : panel
 }

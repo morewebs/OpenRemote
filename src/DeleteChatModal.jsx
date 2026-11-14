@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { isMobile } from './platform.js'
 import { X } from '@phosphor-icons/react'
 import { useBack } from './use-back.js'
 import { useDialog } from './dialog-focus.js'
@@ -31,7 +33,7 @@ export default function DeleteChatModal({ title, onDelete, onClose }) {
     }
   }
 
-  return (
+  const panel = (
     <div
       className="dv-modal-backdrop"
       onMouseDown={(e) => {
@@ -62,4 +64,5 @@ export default function DeleteChatModal({ title, onDelete, onClose }) {
       </div>
     </div>
   )
+  return isMobile ? createPortal(panel, document.body) : panel
 }
