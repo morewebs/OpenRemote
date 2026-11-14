@@ -141,7 +141,7 @@ impl Files {
             return Ok(identity);
         }
         let candidate = Identity::generate();
-        match self.link_new_identity(&candidate) {
+        match self.publish_new_identity(&candidate) {
             Ok(()) => Ok(candidate),
             // Another process minted first. This machine's identity is
             // theirs, and ours must never reach the registry.
@@ -155,21 +155,30 @@ impl Files {
     }
 
     /// Puts `identity` in place only if no identity exists yet. The
-    /// candidate is written whole to a file of its own and then hard-linked
-    /// under its final name: the link is exclusive (it fails when the name
-    /// is taken, the create_new/O_EXCL guarantee) and atomic (an identity
-    /// only ever appears complete), so a crash cannot leave a half-written
-    /// identity behind for every later mint to trip over.
-    fn link_new_identity(&self, identity: &Identity) -> std::io::Result<()> {
+    /// candidate is written whole to a file of its own and then published
+    /// exclusively and atomically, so a crash cannot leave a half-written
+    /// identity behind for every later mint to trip over. Android forbids
+    /// apps from making hard links, so it uses a no-replace rename instead.
+    fn publish_new_identity(&self, identity: &Identity) -> std::io::Result<()> {
         openremote_core::fsx::create_private_dir(&self.dir)?;
         let json = serde_json::to_vec_pretty(identity).map_err(std::io::Error::other)?;
         let candidate = self
             .dir
             .join(format!("identity.json.{}", uuid::Uuid::new_v4()));
         openremote_core::fsx::write_private(&candidate, &json)?;
-        let linked = std::fs::hard_link(&candidate, self.dir.join("identity.json"));
+        #[cfg(target_os = "android")]
+        let published = rustix::fs::renameat_with(
+            rustix::fs::CWD,
+            &candidate,
+            rustix::fs::CWD,
+            self.dir.join("identity.json"),
+            rustix::fs::RenameFlags::NOREPLACE,
+        )
+        .map_err(std::io::Error::from);
+        #[cfg(not(target_os = "android"))]
+        let published = std::fs::hard_link(&candidate, self.dir.join("identity.json"));
         let _ = std::fs::remove_file(&candidate);
-        linked
+        published
     }
 
     pub fn save_identity(&self, identity: &Identity) -> std::io::Result<()> {
@@ -252,7 +261,7 @@ mod tests {
         let again = Files::new(&data).mint_identity().unwrap();
         assert_eq!(again.device_id, first.device_id);
         let refused = Files::new(&data)
-            .link_new_identity(&Identity::generate())
+            .publish_new_identity(&Identity::generate())
             .unwrap_err();
         assert_eq!(refused.kind(), std::io::ErrorKind::AlreadyExists);
         std::fs::remove_dir_all(&data).unwrap();

@@ -15,6 +15,8 @@ https://github.com/morewebs/OpenRemote/releases/latest/download/OpenRemote-Setup
 https://github.com/morewebs/OpenRemote/releases/latest/download/OpenRemote-x86_64.AppImage
 https://github.com/morewebs/OpenRemote/releases/latest/download/OpenRemote-amd64.deb
 https://github.com/morewebs/OpenRemote/releases/latest/download/OpenRemote-universal.dmg
+https://github.com/morewebs/OpenRemote/releases/latest/download/OpenRemote-arm64.apk
+https://github.com/morewebs/OpenRemote/releases/latest/download/OpenRemote-armv7.apk
 https://github.com/morewebs/OpenRemote/releases/latest/download/OpenRemote-universal.apk
 https://github.com/morewebs/OpenRemote/releases/latest/download/openremote-daemon-linux-x86_64
 https://github.com/morewebs/OpenRemote/releases/latest/download/SHA256SUMS
@@ -26,6 +28,13 @@ https://github.com/morewebs/OpenRemote/releases/latest/download/SHA256SUMS-porta
 Every published release carries both names for each bundle: the versioned
 one Tauri produces (`OpenRemote_0.3.2_x64-setup.exe`) and the version-free
 one above. A version bump never edits a download link anywhere.
+
+On Android, choose `OpenRemote-arm64.apk` for 64-bit ARM Android or
+`OpenRemote-armv7.apk` for 32-bit ARM Android. Each is a complete installable
+APK with only that native architecture. The universal APK includes all four
+supported architectures and remains the fallback. Starting with 0.5.1, the
+publish job requires both ARM downloads as well as the universal APK, and
+the Android job verifies their signatures and native-library architectures.
 
 The version-free names start with the first tag after this landed - v0.3.2
 predates them, so its release page has only the versioned assets.
@@ -48,7 +57,7 @@ it makes no request at all, and a copy that no longer matches is fetched
 again rather than started.
 
 The three assets are the same binaries the installer carries, staged from
-the same build. They are deliberately outside the six required names the
+the same build. They are deliberately outside the eight required names the
 publish job enforces: the npm channel is a second door to the app, so a
 release that could not produce them still publishes its installers and says
 so in the run.

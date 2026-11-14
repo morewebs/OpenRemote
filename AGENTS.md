@@ -224,9 +224,10 @@ an old process is still alive; find it before re-running).
   Nightly builds are their own workflow, `.github/workflows/nightly.yml`:
   they run when CI passes on the default branch and publish the dated
   `nightly-<stamp>` release and the rolling `nightly` pre-release. A manual
-  `release.yml` run stays build-only. Every stable release carries the six
+  `release.yml` run stays build-only. Every stable release carries the eight
   version-free asset names (`OpenRemote-Setup-x64.exe`, `-Setup-x64.msi`,
-  `-x86_64.AppImage`, `-amd64.deb`, `-universal.dmg`, `-universal.apk`) so
+  `-x86_64.AppImage`, `-amd64.deb`, `-universal.dmg`, `-universal.apk`,
+  `-arm64.apk`, `-armv7.apk`) so
   `releases/latest/download/<name>` is the stable channel. The nightly
   channel uses `OpenRemote-Nightly-Setup-x64.exe` and
   `OpenRemote-Nightly-x86_64.AppImage` under `releases/download/nightly/`.
@@ -254,7 +255,7 @@ an old process is still alive; find it before re-running).
   path is not yet proven by a test release.
 - `npm/` is a second front door: a small launcher published to the registry as
   `@morewebs/openremote`. It holds no build, it reads `releases/latest` at run
-  time, fetches the portable Windows pair the Windows job stages beside the six
+  time, fetches the portable Windows pair the Windows job stages beside the eight
   names above, verifies both against `SHA256SUMS-portable-windows-x64`, keeps them
   under the user's local app data and starts the console. So a launcher version
   does not pin a release, and publishing the launcher is a manual `npm publish`

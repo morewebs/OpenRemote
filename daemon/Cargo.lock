@@ -859,6 +859,7 @@ dependencies = [
  "hyper-util",
  "openremote-core",
  "openremote-noise",
+ "rustix",
  "rustls",
  "serde",
  "serde_json",

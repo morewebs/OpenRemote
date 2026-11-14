@@ -27,10 +27,11 @@ name: Release
 #
 # Every published release carries version-free names beside the versioned
 # assets (OpenRemote-Setup-x64.exe, -x64.msi, -x86_64.AppImage,
-# -amd64.deb, -universal.dmg, -universal.apk). A channel URL therefore
+# -amd64.deb, -universal.dmg, -universal.apk, -arm64.apk, -armv7.apk).
+# A channel URL therefore
 # never carries a version, and a version bump never edits a download link.
 # The publish job refuses to finish a release that is missing any of the
-# six, so a platform that silently changed its artifact name fails the run
+# eight, so a platform that silently changed its artifact name fails the run
 # instead of shipping a page with a dead download link.
 #
 # In-app updates: with the updater signing key in the repository's secrets
@@ -501,7 +502,8 @@ jobs:
     # sidecar staging the desktop jobs do is not needed - but tauri's
     # config still lists the sidecar and the CLI resolves it, so stage
     # one anyway. Gradle drives cargo back through the tauri CLI once
-    # per ABI; the default is all four, into one universal APK.
+    # per ABI. Keep the universal APK and build standalone ARM flavors so
+    # phone users do not need to download libraries for other architectures.
     needs: release
     runs-on: ubuntu-latest
     steps:
@@ -564,7 +566,9 @@ jobs:
         run: |
           set -euo pipefail
           assets="$(gh release view "$TAG" --json assets --jq '.assets[].name' 2>/dev/null || true)"
-          if grep -qxF "OpenRemote_${TAG#v}_universal.apk" <<< "$assets"; then
+          if grep -qxF "OpenRemote_${TAG#v}_universal.apk" <<< "$assets" \
+             && grep -qxF "OpenRemote_${TAG#v}_arm64.apk" <<< "$assets" \
+             && grep -qxF "OpenRemote_${TAG#v}_armv7.apk" <<< "$assets"; then
             echo "skip=1" >> "$GITHUB_OUTPUT"
           fi
         env:
@@ -586,28 +590,43 @@ jobs:
           printf 'storeFile=openremote-release.keystore.p12\npassword=%s\nkeyAlias=%s\n' "$KEYSTORE_PASSWORD" "$KEYSTORE_ALIAS" > src-tauri/gen/android/keystore.properties
       - run: npx tauri android build --apk
         if: steps.build.outputs.skip != '1'
+      - run: npx tauri android build --apk --split-per-abi --target aarch64 armv7
+        if: steps.build.outputs.skip != '1'
       # The signature is part of the release contract: the job fails if
       # the APK does not verify, and the log carries the signer cert.
       # AGP signs in the assemble when the release signing config is
       # wired; the -unsigned sibling is the intermediate.
-      - name: verify the signature and stage the APK
+      - name: verify signatures and architectures, then stage APKs
         if: steps.build.outputs.skip != '1'
         run: |
           set -euo pipefail
-          APK="$(find src-tauri/gen/android/app/build/outputs/apk/universal/release -name 'app-universal-*.apk' ! -name '*unsigned*' -printf '%T@ %p\n' | sort -n | tail -n 1 | cut -d' ' -f2-)"
-          test -n "$APK"
-          echo "APK: $APK"
           APKSIGNER="$(ls -1 "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)"
-          "$APKSIGNER" verify --verbose --print-certs "$APK" | head -n 12
-          cp "$APK" "OpenRemote_${TAG#v}_universal.apk"
-          cp "$APK" OpenRemote-universal.apk
+          for entry in universal:universal arm64:arm64 arm:armv7; do
+            flavor="${entry%%:*}"
+            name="${entry##*:}"
+            APK="src-tauri/gen/android/app/build/outputs/apk/${flavor}/release/app-${flavor}-release.apk"
+            test -s "$APK"
+            "$APKSIGNER" verify --verbose --print-certs "$APK"
+            abis="$(unzip -Z1 "$APK" | sed -n 's|^lib/\([^/]*\)/.*\.so$|\1|p' | sort -u)"
+            case "$name" in
+              arm64) expected=arm64-v8a ;;
+              armv7) expected=armeabi-v7a ;;
+              universal) expected="$(printf '%s\n' arm64-v8a armeabi-v7a x86 x86_64 | sort)" ;;
+            esac
+            if [ "$abis" != "$expected" ]; then
+              echo "::error::${name} APK contains unexpected native architectures: ${abis}"
+              exit 1
+            fi
+            cp "$APK" "OpenRemote_${TAG#v}_${name}.apk"
+            cp "$APK" "OpenRemote-${name}.apk"
+          done
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: steps.build.outputs.skip != '1'
         with:
           name: android-apk
           path: |
-            OpenRemote_*_universal.apk
-            OpenRemote-universal.apk
+            OpenRemote_*.apk
+            OpenRemote-*.apk
 
   macos:
     # One universal .dmg for Apple silicon and Intel. The daemon is built
@@ -771,6 +790,8 @@ jobs:
             OpenRemote-amd64.deb
             OpenRemote-universal.dmg
             OpenRemote-universal.apk
+            OpenRemote-arm64.apk
+            OpenRemote-armv7.apk
           )
           assets=()
           while IFS= read -r file; do

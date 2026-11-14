@@ -3029,6 +3029,7 @@ dependencies = [
  "hyper-util",
  "openremote-core",
  "openremote-noise",
+ "rustix",
  "rustls",
  "serde",
  "serde_json",
@@ -3156,7 +3157,7 @@ dependencies = [
 
 [[package]]
 name = "openremote-ui-desktop"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "adblock",
  "android_system_properties",

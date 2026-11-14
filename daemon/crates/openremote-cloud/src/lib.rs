@@ -1324,6 +1324,41 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// A first sign-in must save a usable identity and its credentials before
+    /// it can survive reopening the app. Android denies hard links even in
+    /// private storage, so this also exercises how a new identity is placed.
+    #[tokio::test]
+    async fn a_fresh_sign_in_persists_its_identity_and_credentials() {
+        let base = backend(|head| {
+            if head.starts_with("POST /v1/auth/oauth/token ") {
+                (200, br#"{"access_token":"test-access","refresh_token":"test-refresh","expires_in":3600}"#)
+            } else if head.starts_with("POST /v1/openremote/devices ") {
+                (200, br#"{"device":{"kind":"desktop"},"credential":"test-device","account":{"id":"acc-1","email":"owner@example.test","name":"owner"}}"#)
+            } else {
+                (404, UNAVAILABLE)
+            }
+        })
+        .await;
+        let dir = scratch_dir();
+        let config = test_config(&base);
+        let cloud = Cloud::open(config.clone(), &dir);
+        let state = state_of(&cloud.begin_signin(52882));
+        let signed_in = cloud.finish_signin("test-code", &state).await.unwrap();
+        assert_eq!(cloud.phase(), Phase::Connecting);
+
+        let reopened = Cloud::open(config, &dir);
+        assert!(reopened.enrolled());
+        assert_eq!(reopened.device_id(), Some(signed_in.device_id));
+        assert!(reopened.identity().unwrap().private_key().is_some());
+        assert_eq!(reopened.device_credential().as_deref(), Some("test-device"));
+        assert_eq!(reopened.account_token().await.unwrap(), "test-access");
+        assert_eq!(
+            Files::new(&dir).credentials().refresh_token.as_deref(),
+            Some("test-refresh")
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     /// Damage on disk is what a crash, a full disk or a virus scanner leaves,
     /// never something `save_identity` writes: the file is put there as raw
     /// bytes, not through `Files`.
