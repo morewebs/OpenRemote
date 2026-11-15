@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:mock": "node scripts/mock-preview.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "build:web": "vite build --config vite.web.config.js",

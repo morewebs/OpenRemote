@@ -59,6 +59,7 @@ Console (port 5175):
 ```sh
 npm install
 npm run dev            # browser only
+npm run dev:mock       # actual UI + hot reload + sample backend, port 5176
 npx tauri dev          # desktop shell (Windows tested)
 ```
 
