@@ -771,12 +771,12 @@ button:active,
 }
 
 .sb-foot {
-  padding: 8px 14px 10px;
+  padding: 4px 14px;
   border-top: 1px solid var(--line);
 }
 
-/* The footer's icon row: account, mobile, metrics, settings. Evenly
-   spaced round buttons, large enough to hit without aiming. */
+/* The footer's icon row: account, mobile, metrics, settings. Keep the
+   desktop strip compact; the phone overrides retain larger touch targets. */
 .sb-foot-row {
   display: flex;
   justify-content: space-evenly;
@@ -789,10 +789,10 @@ button:active,
   justify-content: center;
   position: relative;
   width: 40px;
-  height: 40px;
+  height: 32px;
   padding: 0;
   border: 0;
-  border-radius: 14px;
+  border-radius: 10px;
   background: transparent;
   color: var(--text-2);
   cursor: pointer;
