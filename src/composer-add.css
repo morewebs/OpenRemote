@@ -13,6 +13,21 @@
 .ca-action-status { color: var(--accent); font-size: 11px; }
 .ca-add-footnote { margin: 3px 6px; color: var(--text-3); font-size: 10px; line-height: 1.5; }
 .ca-add-menu .nc-footer { border-top: 0; padding-top: 7px; }
+/* A desktop action menu sits beside the composer. Reserve the sheet's
+   header, icon tiles and touch spacing for phones. */
+.nc-menu.ca-add-menu:not(.is-phone) { width: 264px; padding: 5px; border-radius: 12px; }
+.ca-add-menu:not(.is-phone) .nc-items { scrollbar-gutter: auto; padding-right: 0; }
+.ca-add-menu:not(.is-phone) .ca-add-heading { justify-content: flex-start; padding: 0 2px 4px; font-size: 12px; }
+.ca-add-menu:not(.is-phone) .ca-add-heading button { width: 26px; height: 26px; }
+.ca-add-menu:not(.is-phone) .ca-add-heading button:last-child { margin-left: auto; }
+.ca-add-menu:not(.is-phone) .nc-group + .nc-group { padding-top: 4px; margin-top: 4px; }
+.ca-add-menu:not(.is-phone) .nc-item { min-height: 30px; padding: 4px 8px; border-radius: 7px; }
+.ca-add-menu:not(.is-phone) .nc-item-main { flex-wrap: nowrap; gap: 9px; }
+.ca-add-menu:not(.is-phone) .nc-item-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ca-add-menu:not(.is-phone) .ca-add-icon { width: 18px; height: 20px; background: none; border-radius: 0; }
+.ca-add-menu:not(.is-phone) .ca-add-icon svg { width: 18px; height: 18px; }
+.ca-add-menu:not(.is-phone) .nc-item-detail { order: 0; flex: 0 1 auto; max-width: 90px; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ca-add-menu:not(.is-phone) .nc-footer { display: none; }
 .ca-add-backdrop { position: fixed; inset: 0; z-index: 119; background: rgba(0,0,0,.48); }
 .nc-menu.ca-add-menu.is-phone { width: 100%; max-width: none; padding: 10px 16px max(18px, env(safe-area-inset-bottom)); border-radius: 28px 28px 0 0; background: #171717; border: 1px solid rgba(255,255,255,.05); transform: none; animation: ca-sheet-in .16s ease-out; }
 .ca-add-menu.is-phone .ca-add-heading { position: relative; padding: 10px 0 18px; font-size: 18px; }

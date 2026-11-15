@@ -235,7 +235,7 @@ export default function PickerMenu({
       style={spot}
       onKeyDown={onKeyDown}
     >
-      {actions && <div className="ca-add-heading">
+      {actions && (isMobile || onBack) && <div className="ca-add-heading">
         {onBack ? <button type="button" onClick={onBack} aria-label="Back to Add to chat"><ArrowLeft size={20} /></button> : <span className="ca-add-heading-space" />}
         <span>{label}</span>
         <button type="button" onClick={onClose} aria-label="Close Add to chat"><X size={20} /></button>

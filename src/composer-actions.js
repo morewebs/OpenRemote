@@ -3,7 +3,7 @@ export function composerActions({ images = true, mobile = false, clipboard = fal
   return [
     ...(images && mobile ? [{ id: 'camera', name: 'Camera', icon: 'camera', group: 'Add', tile: true }] : []),
     ...(images ? [{ id: 'photos', name: 'Photos', icon: 'photos', group: 'Add', tile: true }] : []),
-    { id: 'files', name: 'Files', icon: 'files', group: 'Add', tile: true, note: 'PDF, Word, spreadsheets and text' },
+    { id: 'files', name: 'Files', icon: 'files', group: 'Add', tile: true, note: 'PDF, Word, spreadsheets and text up to 10 MB' },
     ...(clipboard ? [{ id: 'clipboard', name: 'Paste from clipboard', icon: 'clipboard', group: 'Context' }] : []),
     { id: 'reference', name: 'Reference files or chats', icon: 'reference', group: 'Context', hint: '@' },
     ...(browser ? [{ id: 'browser', name: 'Browser context', icon: 'browser', group: 'Context', hint: 'submenu' }] : []),
