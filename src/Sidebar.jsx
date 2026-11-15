@@ -8,7 +8,7 @@ import {
   ArrowUp,
   ArrowsInLineVertical,
   CaretDown,
-  ChartBar,
+  ChartLineUp,
   ChatCircle,
   CheckCircle,
   Circle,
@@ -1594,7 +1594,7 @@ export default function Sidebar({
             aria-label="Metrics"
             onClick={() => onSelect('metrics')}
           >
-            <ChartBar size={20} weight="duotone" />
+            <ChartLineUp size={20} weight="regular" />
           </button>
           )}
           <button
