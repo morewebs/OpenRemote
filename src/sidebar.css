@@ -988,6 +988,14 @@ of the list rather than as a banner that arrived from somewhere else. */
   box-shadow: -16px 0 32px rgba(0, 0, 0, 0.4);
 }
 
+/* The sheet slides across a sidebar that stays put: while it moves, it is
+   also composited, and on Android a tap on a region it just left can be
+   answered by the sheet's layer instead of the sidebar below it - one dead
+   press, then the layer list settles and the second press lands. So once
+   the drawer is open, the sidebar stands above the sheet in the stack,
+   and while it is closed the sidebar is gone - hidden, out of the tap and
+   tab paths - instead of merely covered. The hide waits out the slide
+   back, so it is painted until the sheet covers it. */
 .app-frame.is-mobile .sidebar,
 .app-frame.is-mobile .sidebar.collapsed,
 .app-frame.is-mobile .sidebar.collapsed:has(.search:focus-within),
@@ -996,15 +1004,25 @@ of the list rather than as a banner that arrived from somewhere else. */
   top: 0;
   bottom: 0;
   left: 0;
-  z-index: 1;
+  z-index: 3;
   width: 264px;
   margin: 0;
   border-right: 0;
   box-shadow: none;
   transform: none;
-  visibility: visible;
+  visibility: hidden;
   animation: none;
-  transition: none;
+  transition: visibility 0s 0.32s;
+}
+
+/* Open: it is there at once, above the sheet, and the sheet's own touch
+   handler no longer gets the press. */
+.app-frame.is-mobile.drawer-open .sidebar,
+.app-frame.is-mobile.drawer-open .sidebar.collapsed,
+.app-frame.is-mobile.drawer-open .sidebar.collapsed:has(.search:focus-within),
+.app-frame.is-mobile.drawer-open .sidebar:has(.search:focus-within) {
+  visibility: visible;
+  transition: visibility 0s 0s;
 }
 
 .app-frame.is-mobile .sb-backdrop {
