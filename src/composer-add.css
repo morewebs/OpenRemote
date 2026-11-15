@@ -15,14 +15,14 @@
 .ca-add-menu .nc-footer { border-top: 0; padding-top: 7px; }
 /* A desktop action menu sits beside the composer. Reserve the sheet's
    header, icon tiles and touch spacing for phones. */
-.nc-menu.ca-add-menu:not(.is-phone) { width: 264px; padding: 5px; border-radius: 12px; }
+.nc-menu.ca-add-menu:not(.is-phone) { width: 264px; padding: 5px; border-radius: 14px; background: #2d2d2d; }
 .ca-add-menu:not(.is-phone) .nc-items { scrollbar-gutter: auto; padding-right: 0; }
 .ca-add-menu:not(.is-phone) .ca-add-heading { justify-content: flex-start; padding: 0 2px 4px; font-size: 12px; }
 .ca-add-menu:not(.is-phone) .ca-add-heading button { width: 26px; height: 26px; }
 .ca-add-menu:not(.is-phone) .ca-add-heading button:last-child { margin-left: auto; }
-.ca-add-menu:not(.is-phone) .nc-group + .nc-group { padding-top: 4px; margin-top: 4px; }
-.ca-add-menu:not(.is-phone) .nc-item { min-height: 30px; padding: 4px 8px; border-radius: 7px; }
-.ca-add-menu:not(.is-phone) .nc-item-main { flex-wrap: nowrap; gap: 9px; }
+.ca-add-menu:not(.is-phone) .nc-group + .nc-group { border: 0; padding-top: 0; margin-top: 0; }
+.ca-add-menu:not(.is-phone) .nc-item { min-height: 28px; padding: 4px 8px; border-radius: 6px; color: var(--text-1); font-weight: 400; }
+.ca-add-menu:not(.is-phone) .nc-item-main { min-height: 20px; flex-wrap: nowrap; gap: 10px; }
 .ca-add-menu:not(.is-phone) .nc-item-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ca-add-menu:not(.is-phone) .ca-add-icon { width: 18px; height: 20px; background: none; border-radius: 0; }
 .ca-add-menu:not(.is-phone) .ca-add-icon svg { width: 18px; height: 18px; }

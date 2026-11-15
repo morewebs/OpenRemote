@@ -21,7 +21,7 @@ test('camera and clipboard actions appear only where available, plugins retain i
   assert.deepEqual(phone.filter(a => a.tile).map(a => a.id), ['camera', 'photos', 'files'])
   assert.ok(phone.some(a => a.id === 'clipboard'))
   assert.equal(phone.find(a => a.id === 'plugin:voice/dictate').detail, 'Voice')
-  assert.ok(phone.some(a => a.id === 'effort'))
+  assert.ok(!phone.some(a => a.id === 'effort'), 'Thinking stays out of the Add menu')
   assert.ok(!phone.some(a => a.id === 'web-search'), 'no fictitious built-in mode')
 })
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { Camera, ImageSquare, Paperclip, ClipboardText, At, Globe, Command, Brain, PlugsConnected, CaretRight, Plus, Selection, CursorClick } from '@phosphor-icons/react'
+import { Camera, ImageSquare, Paperclip, Clipboard, At, Globe, PuzzlePiece, CaretRight, Plus, Selection, CursorClick } from '@phosphor-icons/react'
 import PickerMenu from './PickerMenu.jsx'
 import { composerActions } from './composer-actions.js'
 import { hasTauri, isMobile } from './platform.js'
@@ -14,9 +14,13 @@ import { errorCopy } from './error-copy.js'
 import { composerChatId } from './composer-scope.js'
 import './composer-add.css'
 
-const ICONS = { camera: Camera, photos: ImageSquare, files: Paperclip, clipboard: ClipboardText, reference: At, browser: Globe, commands: Command, effort: Brain, plugin: PlugsConnected, region: Selection, element: CursorClick }
+function SlashSquare({ size }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2" /><path d="m15 7-6 10" /></svg>
+}
 
-export default function ComposerAddMenu({ composerKey, takesImages, disabled, pickPhoto, pickFile, pickCamera, pasteClipboard, onReference, onCommands, onPlugins, onEffort, effort, onError, pluginActions = [] }) {
+const ICONS = { camera: Camera, photos: ImageSquare, files: Paperclip, clipboard: Clipboard, reference: At, browser: Globe, commands: SlashSquare, plugin: PuzzlePiece, region: Selection, element: CursorClick }
+
+export default function ComposerAddMenu({ composerKey, takesImages, disabled, pickPhoto, pickFile, pickCamera, pasteClipboard, onReference, onCommands, onPlugins, onError, pluginActions = [] }) {
   const [open, setOpen] = useState(false)
   const [screen, setScreen] = useState('root')
   const [tabKey, setTabKey] = useState(null)
@@ -30,7 +34,7 @@ export default function ComposerAddMenu({ composerKey, takesImages, disabled, pi
     ? pages.map(t => ({ id: t.key, name: t.title || t.url, detail: new URL(t.url).host, icon: 'browser', veiled: true }))
     : screen === 'browser' && tab
       ? browserContextActions({ features: browser.features, images: takesImages, mobile: isMobile }).map(i => ({ ...i, detail: tab.title || new URL(tab.url).host }))
-      : composerActions({ images: takesImages, mobile: isMobile, clipboard: Boolean(navigator.clipboard?.read || navigator.clipboard?.readText), browser: hasTauri, pluginActions, effort: onEffort ? effort || 'Choose effort' : null, plugins: !isMobile && Boolean(onPlugins) })
+      : composerActions({ images: takesImages, mobile: isMobile, clipboard: Boolean(navigator.clipboard?.read || navigator.clipboard?.readText), browser: hasTauri, pluginActions, plugins: !isMobile && Boolean(onPlugins) })
         .map(i => i.id === 'browser' && !pages.length ? { ...i, name: 'Open browser' } : i)
   const choose = async (id) => {
     if (disabled) return
@@ -58,7 +62,7 @@ export default function ComposerAddMenu({ composerKey, takesImages, disabled, pi
     }
     close()
     // Keep file/clipboard requests inside the user activation that chose them.
-    const run = { photos: pickPhoto, files: pickFile, camera: pickCamera, clipboard: pasteClipboard, reference: onReference, commands: onCommands, plugins: onPlugins, effort: onEffort }[id]
+    const run = { photos: pickPhoto, files: pickFile, camera: pickCamera, clipboard: pasteClipboard, reference: onReference, commands: onCommands, plugins: onPlugins }[id]
     if (run) run()
     else selected.onChoose?.()
   }
@@ -67,7 +71,7 @@ export default function ComposerAddMenu({ composerKey, takesImages, disabled, pi
       <Plus size={21} />
     </button>
     {open && <PickerMenu label={screen === 'root' ? 'Add to chat' : screen === 'pages' ? 'Choose a page' : 'Browser context'} presentation="actions" items={items} groups={[]} hideSearch portal place="above" anchor={{ left: trigger.current?.getBoundingClientRect().left ?? 16, top: trigger.current?.getBoundingClientRect().top ?? 16 }} onClose={close} onBack={screen !== 'root' ? () => setScreen(screen === 'browser' && pages.length > 1 ? 'pages' : 'root') : null} onChoose={choose}
-      renderIcon={item => { const Icon = ICONS[item.icon] || PlugsConnected; return <span className="ca-add-icon">{item.input ? <PluginGlyph name={item.input.icon} size={22} /> : <Icon size={22} />}</span> }}
+      renderIcon={item => { const Icon = ICONS[item.icon] || PuzzlePiece; return <span className="ca-add-icon">{item.input ? <PluginGlyph name={item.input.icon} size={22} /> : <Icon size={22} weight="regular" />}</span> }}
       renderTrailing={item => <>{item.state?.state === 'busy' && <span className="ca-action-status">Working</span>}{item.state?.state === 'active' && <span className="ca-action-status">Active</span>}{item.hint && <span className="ca-add-hint">{item.hint === 'submenu' ? <CaretRight size={15} /> : item.hint}</span>}</>}
       footer={<p className="ca-add-footnote">{screen === 'root' ? 'PDF, Word, spreadsheets and text up to 10 MB' : 'Added only to this chat when you send'}</p>}
     />}

@@ -753,8 +753,6 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
     onReference: () => menus.begin('@'),
     onCommands: () => menus.begin('/'),
     onPlugins: onOpenPlugins,
-    onEffort: canChange.effort && efforts.length ? () => toggleEffort() : undefined,
-    effort: chat.effort,
   })
 
   // An OpenRemote command from the composer, run here before the rest of

@@ -118,7 +118,7 @@ export function AttachmentChips({ composerKey, takesImages = true, app = 'This a
  * and text actions remain available to text-only Apps. `disabled` follows
  * whether this composer can currently be edited.
  */
-export function useAttachInput(composerKey, { enabled, onError, refuse = null, disabled = false, inputRef, setText, workspace = null, projectId, deviceId, onReference, onCommands, onPlugins, onEffort, effort }) {
+export function useAttachInput(composerKey, { enabled, onError, refuse = null, disabled = false, inputRef, setText, workspace = null, projectId, deviceId, onReference, onCommands, onPlugins }) {
   const fileRef = useRef(null)
   const photoRef = useRef(null)
   const cameraRef = useRef(null)
@@ -192,7 +192,7 @@ export function useAttachInput(composerKey, { enabled, onError, refuse = null, d
       />
       <input ref={photoRef} type="file" accept="image/*" multiple hidden onChange={picked} />
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={picked} />
-      <ComposerAddMenu composerKey={composerKey} takesImages={enabled} disabled={disabled} pickPhoto={() => photoRef.current?.click()} pickFile={() => fileRef.current?.click()} pickCamera={() => cameraRef.current?.click()} pasteClipboard={pasteClipboard} onReference={onReference} onCommands={onCommands} onPlugins={onPlugins} onEffort={onEffort} effort={effort} pluginActions={pluginActions} onError={onError} />
+      <ComposerAddMenu composerKey={composerKey} takesImages={enabled} disabled={disabled} pickPhoto={() => photoRef.current?.click()} pickFile={() => fileRef.current?.click()} pickCamera={() => cameraRef.current?.click()} pasteClipboard={pasteClipboard} onReference={onReference} onCommands={onCommands} onPlugins={onPlugins} pluginActions={pluginActions} onError={onError} />
     </>
   )
   return { onPaste, onDragOver, onDrop, button, pluginActions }

@@ -1186,8 +1186,6 @@ export default function NewChat({
     onReference: () => menus.begin('@'),
     onCommands: () => menus.begin('/'),
     onPlugins: onOpenPlugins,
-    onEffort: model && effortTiers.length ? () => toggleEffort() : undefined,
-    effort: chosenEffort,
   })
   useEffect(() => {
     takeInserter()
