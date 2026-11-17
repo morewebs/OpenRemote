@@ -120,13 +120,29 @@ pub fn gather(rx: &mpsc::Receiver<Vec<PathBuf>>, quiet: Duration) -> Option<Vec<
     }
 }
 
+struct WatchInterest {
+    path: PathBuf,
+    point: PathBuf,
+    resolved_point: PathBuf,
+}
+
+impl WatchInterest {
+    fn logical_change(&self, changed: &Path) -> Option<PathBuf> {
+        // FSEvents reports resolved paths. Rebase onto the requested path so
+        // folder creation and removals match even when the target is absent.
+        let suffix = changed.strip_prefix(&self.resolved_point).ok()?;
+        let logical = self.point.join(suffix);
+        relevant(&logical, &self.path).then_some(logical)
+    }
+}
+
 struct State {
     watcher: Option<notify::RecommendedWatcher>,
     /// What is watched now, so a resync only adds and drops the difference.
     points: HashMap<PathBuf, RecursiveMode>,
     /// Workspaces the composer asked about, and when last.
     workspaces: HashMap<PathBuf, Instant>,
-    interests: Vec<PathBuf>,
+    interests: Vec<WatchInterest>,
 }
 
 /// The watcher. Cheap to share; does nothing until `start`.
@@ -171,18 +187,25 @@ impl CommandWatch {
             .spawn(move || {
                 while let Some(paths) = gather(&raw_rx, QUIET) {
                     let Some(me) = me.upgrade() else { return };
-                    let interests = me.lock().interests.clone();
-                    let touched: Vec<PathBuf> = paths
-                        .into_iter()
-                        .filter(|p| interests.iter().any(|i| relevant(p, i)))
-                        .collect();
+                    let touched: BTreeSet<_> = {
+                        let state = me.lock();
+                        paths
+                            .iter()
+                            .flat_map(|path| {
+                                state
+                                    .interests
+                                    .iter()
+                                    .filter_map(|i| i.logical_change(path))
+                            })
+                            .collect()
+                    };
                     if touched.is_empty() {
                         continue;
                     }
                     // A folder that appeared is watched with what is in it
                     // from now on.
                     me.resync();
-                    on_change(touched);
+                    on_change(touched.into_iter().collect());
                 }
             })
             .ok();
@@ -216,20 +239,25 @@ impl CommandWatch {
         state
             .workspaces
             .retain(|_, asked| now.duration_since(*asked) < FORGET_AFTER);
-        let mut interests = home_interests(&self.home);
+        let mut interests = Vec::new();
         let mut wanted: HashMap<PathBuf, RecursiveMode> = HashMap::new();
-        for interest in &interests {
-            if let Some((point, mode)) = watch_point(interest, &self.home) {
-                merge(&mut wanted, point, mode);
-            }
-        }
-        let workspaces: Vec<PathBuf> = state.workspaces.keys().cloned().collect();
-        for workspace in workspaces {
-            for interest in workspace_interests(&workspace) {
-                if let Some((point, mode)) = watch_point(&interest, &workspace) {
-                    merge(&mut wanted, point, mode);
+        let roots = std::iter::once((&self.home, home_interests(&self.home))).chain(
+            state
+                .workspaces
+                .keys()
+                .map(|workspace| (workspace, workspace_interests(workspace))),
+        );
+        for (base, paths) in roots {
+            for path in paths {
+                if let Some((point, mode)) = watch_point(&path, base) {
+                    let resolved_point = point.canonicalize().unwrap_or_else(|_| point.clone());
+                    merge(&mut wanted, resolved_point.clone(), mode);
+                    interests.push(WatchInterest {
+                        path,
+                        point,
+                        resolved_point,
+                    });
                 }
-                interests.push(interest);
             }
         }
         state.interests = interests;
@@ -324,21 +352,31 @@ mod tests {
     fn a_new_command_file_is_heard_without_a_restart() {
         let home = tempfile::tempdir().unwrap();
         let ws = tempfile::tempdir().unwrap();
+        let nested = ws.path().join("nested");
+        std::fs::create_dir(&nested).unwrap();
+        let workspace = nested.join("..");
         let watch = CommandWatch::new(home.path().to_path_buf());
         let (tx, rx) = mpsc::channel();
         let tx = Mutex::new(tx);
         watch.start(Box::new(move |paths| {
             let _ = tx.lock().unwrap().send(paths);
         }));
-        watch.note_workspace(ws.path());
+        watch.note_workspace(&workspace);
+        assert!(
+            watch
+                .lock()
+                .points
+                .contains_key(&workspace.canonicalize().unwrap()),
+            "register the path reported by native watchers"
+        );
         // The folder does not exist yet: its creation and the file in it
         // both count.
-        let commands = ws.path().join(".claude").join("commands");
+        let commands = workspace.join(".claude").join("commands");
         std::fs::create_dir_all(&commands).unwrap();
         let heard = rx
             .recv_timeout(Duration::from_secs(10))
             .expect("heard the folder");
-        assert!(heard.iter().all(|p| p.starts_with(ws.path())), "{heard:?}");
+        assert!(heard.iter().all(|p| p.starts_with(&workspace)), "{heard:?}");
         std::thread::sleep(Duration::from_millis(100));
         std::fs::write(commands.join("ship.md"), "---\ndescription: Ship it\n---\n").unwrap();
         let heard = loop {
