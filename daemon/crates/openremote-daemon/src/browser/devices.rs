@@ -265,7 +265,7 @@ impl Devices {
             .filter(|d| d.device != me && now - d.heard <= STALE_MS && !d.tabs.is_empty())
             .cloned()
             .collect();
-        out.sort_by(|a, b| b.at.cmp(&a.at));
+        out.sort_by_key(|device| std::cmp::Reverse(device.at));
         out
     }
 

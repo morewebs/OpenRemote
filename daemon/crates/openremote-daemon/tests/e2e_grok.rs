@@ -509,13 +509,21 @@ async fn grok_commands_reach_the_composer_once_a_chat_lists_them() {
     let (daemon, ws) = grok_daemon(Some("plain")).await;
     let workspace = ws.path().to_string_lossy().into_owned();
     let query = format!("/commands?harness=grok&workspace={}", encode(&workspace));
-    // Before any chat runs, grok has nothing to list through us.
+    // The built-in catalog is available before Grok reports any commands
+    // from a running chat.
     let before = call(&daemon, "GET", &query, None).await;
     assert_eq!(before.status, 200, "{}", before.raw);
+    let before_commands = before.body["commands"].as_array().expect("command list");
     assert!(
-        command_names(&before.body).is_empty(),
-        "no list before a chat runs: {}",
-        before.raw
+        before_commands.iter().any(|row| row["source"] == "builtin"
+            && row["name"] == "help"
+            && row["route"] == "console"),
+        "built-ins are available before a chat runs"
+    );
+    assert!(
+        !command_names(&before.body)
+            .iter()
+            .any(|name| name == "fixture-grok-only")
     );
 
     let id = create_grok(&daemon, &ws).await;
