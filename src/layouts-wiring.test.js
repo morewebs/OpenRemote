@@ -39,7 +39,7 @@ test('the shell gives the palette its room and applies the plan', () => {
   // something would be lost and fits the shape to the window it lands in.
   assert.ok(app.includes('restoreConfirm(plan, layout)'), 'the shell asks before it replaces panes')
   assert.ok(app.includes('<RestoreLayoutConfirm'), 'and the question is the modal family')
-  assert.ok(app.includes('fitLayout(plan.layout'), 'the shape is fitted to this window')
+  assert.ok(app.includes('if (!fitsWorkspace(plan.layout))'), 'the shape is checked against actual workspace width and height')
   assert.ok(app.includes('isChatView(plan.primaryRole)') && app.includes("plan.primaryRole === 'new'"),
     'and the primary pane navigates to what the shape said it was')
 })

@@ -2,6 +2,7 @@
 // was typed, what a pick puts in the text, and - when the message is sent
 // - the OpenRemote commands taken out of it to run in the app. A pick is
 // plain text: what you see is what is sent. Pure: tested without a DOM.
+import { maskReferences, normalizeAuthoredText } from './document-reference.js'
 
 // OpenRemote's own commands. They run in the app when the message is
 // sent and never reach the harness; on a name the harness also has
@@ -111,7 +112,7 @@ export function chatList(chats) {
 // chat this console knows.
 export function mentionedChats(text, chats) {
   const ids = new Set()
-  for (const match of text.matchAll(CHAT_POINTER)) {
+  for (const match of maskReferences(text).matchAll(CHAT_POINTER)) {
     const found = chatList(chats).find((c) => String(c.id).startsWith(match[1]))
     if (found) ids.add(found.id)
   }
@@ -400,7 +401,7 @@ export function argItems(query, choices = []) {
 // own commands included - stays as typed.
 export function takeCommands(text, own = OPENREMOTE_COMMANDS) {
   const names = new Map(own.map((c) => [c.name, c]))
-  const list = words(text)
+  const list = words(maskReferences(text))
   const run = []
   const cut = []
   for (let i = 0; i < list.length; i += 1) {
@@ -424,5 +425,5 @@ export function takeCommands(text, own = OPENREMOTE_COMMANDS) {
   }
   let rest = text
   for (const [start, stop] of cut.reverse()) rest = rest.slice(0, start) + rest.slice(stop)
-  return { run, text: rest.replace(/[ \t]{2,}/g, ' ').trim() }
+  return { run, text: normalizeAuthoredText(rest) }
 }

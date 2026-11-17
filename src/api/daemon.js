@@ -262,6 +262,7 @@ export class DaemonApi {
     this.url = normaliseUrl(url)
     this.token = token
     this.prefix = prefix
+    this.messageBodyLimit = prefix.startsWith('/devices/') ? 4 * 1024 * 1024 : 72 * 1024 * 1024
     this.fetch =
       typeof fetchImpl === 'function' ? fetchImpl : (target, init) => globalThis.fetch(target, init)
   }
@@ -482,6 +483,9 @@ export class DaemonApi {
   }
 
   async sendMessage(path, body, timeoutMs) {
+    if (new TextEncoder().encode(JSON.stringify(body)).length > this.messageBodyLimit) {
+      throw consoleError(`This message, its attachments and references exceed the ${Math.round(this.messageBodyLimit / (1024 * 1024))} MB request limit. Remove an attachment or split the message.`)
+    }
     try {
       return await this.call('POST', path, body, { timeoutMs })
     } catch (err) {

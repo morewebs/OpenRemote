@@ -6,6 +6,9 @@ import { useEffect, useState } from 'react'
 import Sidebar from '../Sidebar.jsx'
 import NewChat from '../NewChat.jsx'
 import ChatView from '../ChatView.jsx'
+import { carryAppDraft } from '../app-selection.js'
+import { composerDrafts } from '../composer-drafts.js'
+import { moveAttachments } from '../attachments.js'
 import { KeyboardProvider } from '../keyboard.jsx'
 import { useConsole } from '../state/console.jsx'
 import { WebConsoleProvider } from './console.jsx'
@@ -33,6 +36,7 @@ function Shell({ onSignOut }) {
     sessionsAnswered,
   } = useConsole()
   const [view, setView] = useState('new')
+  const [setupSeed, setSetupSeed] = useState(null)
   const [history, setHistory] = useState(['new'])
   const [index, setIndex] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(() =>
@@ -63,6 +67,7 @@ function Shell({ onSignOut }) {
   }
 
   const open = (id) => {
+    setSetupSeed(null)
     const session = sessions.find((row) => row.id === id)
     if (session) {
       ensureChat(session)
@@ -76,6 +81,7 @@ function Shell({ onSignOut }) {
   // The sidebar names static views and chats with the same callback: a chat
   // must pass through open, which ensures its record, before the view changes.
   const select = (next) => {
+    if (next === 'new') setSetupSeed(null)
     if (STATIC.has(next)) go(next)
     else open(next)
   }
@@ -134,6 +140,7 @@ function Shell({ onSignOut }) {
               web
               machinesOnly
               defaultTarget={machineId}
+              setupSeed={setupSeed}
               onOpen={open}
               topRight={null}
             />
@@ -150,7 +157,13 @@ function Shell({ onSignOut }) {
           {view === 'settings' && <WebSettingsView />}
           {!STATIC.has(view) &&
             (chats[view] && chatLoads[view] === 'ready' ? (
-              <ChatView chat={chats[view]} web onBack={() => go('new')} />
+              <ChatView chat={chats[view]} web onBack={() => go('new')} onChooseApp={({ seed, composerKey }) => {
+                if (seed.target) setMachineId(seed.target)
+                composerDrafts.write('new', carryAppDraft(composerDrafts.read('new'), composerDrafts.read(composerKey)))
+                moveAttachments(composerKey, 'new')
+                setSetupSeed({ ...seed, nonce: Date.now() })
+                go('new')
+              }} />
             ) : (
               <LoadingStatus>{chatLoads[view] === 'error' ? 'The chat could not be reached. Retrying...' : 'Loading the chat...'}</LoadingStatus>
             ))}

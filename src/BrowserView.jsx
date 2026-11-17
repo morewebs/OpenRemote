@@ -39,7 +39,7 @@ import {
 } from '@phosphor-icons/react'
 import { hasTauri, isMobile } from './platform.js'
 import { PICKER_CANCEL, PICKER_SOURCE, formatPicked } from './browser-pick.js'
-import { insertToComposer, inserterKey } from './composer-insert.js'
+import { inserterKey, composerTarget } from './composer-insert.js'
 import { sharedWith, tellDaemon } from './browser-share.js'
 import { SEARCH_ENGINES, inlineFor, omnibox, security, shownAddress, suggest } from './browser-omnibox.js'
 import { browserSetting, setSitePermission, useBrowserPrefs } from './browser-prefs.js'
@@ -50,7 +50,7 @@ import { DEVICES, browserHasFocus, fitDevice, fileName, nextZoom, permissionName
 import { canRecord } from './browser-record.js'
 import { AgentBadge, AgentBar, PermissionBar } from './BrowserInfobar.jsx'
 import { consoleError, errorCopy } from './error-copy.js'
-import { NO_COMPOSER, addToFocused, focusedComposer } from './attachments.js'
+import { NO_COMPOSER, addAttachment, attachments, focusedComposer } from './attachments.js'
 import { cameWhole, clipFor, regionScale, screenshotAttachment } from './browser-attach.js'
 import BrowserRegion from './BrowserRegion.jsx'
 import ContextMenu from './ContextMenu.jsx'
@@ -874,9 +874,11 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   // Point at an element on the page and attach it to the chat: its
   // address, its kind and its words land in the composer's draft, where
   // the agent reads them. The picker runs in the page; Esc backs out.
-  const startPick = async () => {
+  const startPick = async (recipient = null) => {
     const tab = activeTab()
     if (!tab?.native || picking) return
+    const target = recipient?.isLive ? recipient : composerTarget(inserterKey())
+    if (!target) { notify('No chat is open. Open one, then select the element again'); return }
     if (!can('cdp')) {
       notify('Selecting an element is not available on this platform')
       return
@@ -911,9 +913,8 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
       }
       const line = formatPicked({ ...pick, url: tab.url, title: tab.title })
       // The chat it lands in has the browser in play from now on.
-      const target = inserterKey()
-      if (insertToComposer(line)) {
-        sharedWith(target, tellDaemon)
+      if (target.insert(line)) {
+        sharedWith(target.key, tellDaemon)
         notify('Attached to the chat')
       } else notify('No chat is open. Open one, then select the element again')
     } catch {
@@ -944,9 +945,12 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
   // pane says which; with none on screen it says so instead of keeping the
   // picture where nobody is looking. A private tab's picture is taken only
   // because the user asked for it here, and it is never kept in history.
-  const attachPicture = (item, what) => {
+  const attachPicture = (item, what, target) => {
     try {
-      const { key } = addToFocused(item)
+      if (!target?.isLive()) throw consoleError(NO_COMPOSER)
+      const key = target.key
+      if (attachments(key).length >= 10) throw consoleError('A message can carry 10 attachments at most.')
+      addAttachment(item, key)
       sharedWith(key, tellDaemon)
       notify(key === 'new' ? `${what} added to the new chat` : `${what} added to the chat`)
     } catch (err) {
@@ -963,6 +967,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
 
   const screenshot = async () => {
     const tab = activeTab()
+    const target = composerTarget(focusedComposer())
     if (!tab?.native) return
     if (!can('cdp')) {
       notify('Screenshots are not available on this platform')
@@ -974,17 +979,18 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
       notify("The page's picture couldn't be taken.")
       return
     }
-    attachPicture(screenshotAttachment(dataUrl, tab.url), 'Screenshot')
+    attachPicture(screenshotAttachment(dataUrl, tab.url), 'Screenshot', target)
   }
 
-  const startRegion = async () => {
+  const startRegion = async (recipient = null) => {
     const tab = activeTab()
     if (!tab?.native || region) return
+    const target = recipient?.isLive ? recipient : composerTarget(focusedComposer())
     if (!can('cdp')) {
       notify('Screenshots are not available on this platform')
       return
     }
-    if (!composerReady()) return
+    if (!target?.isLive()) { notify(errorCopy(consoleError(NO_COMPOSER))); return }
     // A fresh picture to drag over: the swap shows it in the page's place
     // once the picker covers the page.
     await picture$(tab.native, 0)
@@ -995,6 +1001,7 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
     setRegion({
       tab: tab.native,
       url: tab.url,
+      target,
       scale: regionScale(tab.zoom ?? 1, fit),
       box: { left: at.x - pageBox.left, top: at.y - pageBox.top, width: at.width, height: at.height },
     })
@@ -1019,8 +1026,23 @@ export default function BrowserView({ onClosePane = null, askToShow = null }) {
       notify("That part of the page couldn't be taken.")
       return
     }
-    attachPicture(screenshotAttachment(dataUrl, reg.url), 'Screenshot')
+    attachPicture(screenshotAttachment(dataUrl, reg.url), 'Screenshot', reg.target)
   }
+
+  // The shell opens the requested page before a composer action runs. Keep
+  // its original recipient through the user's region or element selection.
+  const actedRequest = useRef(null)
+  useEffect(() => {
+    if (!askToShow?.action || actedRequest.current === askToShow || current?.key !== askToShow.tab || !current?.native) return undefined
+    actedRequest.current = askToShow
+    let cancelled = false
+    frames(2).then(() => {
+      if (cancelled || !askToShow.target?.isLive()) return
+      if (askToShow.action === 'region') startRegion(askToShow.target)
+      if (askToShow.action === 'element') startPick(askToShow.target)
+    })
+    return () => { cancelled = true }
+  }, [askToShow, current?.key, current?.native])
 
   // The picker belongs to the page it was opened on: another tab, or the
   // page going, ends it.

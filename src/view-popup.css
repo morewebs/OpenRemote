@@ -11,7 +11,6 @@
   grid-template-rows: minmax(0, 1fr);
   padding: 28px;
   background: rgba(0, 0, 0, 0.55);
-  animation: vp-fade 0.12s ease-out;
 }
 
 .vp-window {
@@ -53,12 +52,6 @@
 .vp-close:hover {
   background: var(--bg-hover);
   color: var(--text-1);
-}
-
-@keyframes vp-fade {
-  from {
-    opacity: 0;
-  }
 }
 
 /* A phone fills the screen in either orientation. */

@@ -876,16 +876,6 @@ export default function SettingsView({ onReplay, onOpenChat, onClose = null, onM
     if (panelRef.current) panelRef.current.scrollTop = 0
   }, [active, query])
 
-  // Restart the fade when the visible section changes. Removing `hidden`
-  // does not replay a CSS animation on its own.
-  useEffect(() => {
-    const panel = panelRef.current
-    if (!panel) return
-    panel.classList.remove('stg-switch')
-    void panel.offsetWidth
-    panel.classList.add('stg-switch')
-  }, [active, query])
-
   useEffect(() => {
     const panel = panelRef.current
     if (!panel) return

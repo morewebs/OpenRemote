@@ -111,7 +111,7 @@ test('a message is answered only after the gate names its frame', () => {
 
 test("a project's plugin shows only in its project's composers and sidebar", () => {
   const buttons = read('PluginComposerButtons.jsx')
-  assert.match(buttons, /const project = projectFor\(projects, workspace\)\?\.id \?\? null/)
+  assert.match(buttons, /const project = projectId === undefined \? projectFor\(projects, workspace\)\?\.id \?\? null : projectId/)
   assert.match(buttons, /const shown = host\.inputsFor\(project\)/)
   const sidebar = read('Sidebar.jsx')
   assert.match(sidebar, /const pluginViews = pluginHost\?\.viewsFor\(contextProject\) \?\? \[\]/)
@@ -132,10 +132,11 @@ test('a write needs a click: the grant is made in the click handler and nowhere 
     host,
     /if \(composers\.get\(handle\) === entry\) composers\.delete\(handle\)\s*\n\s*forgetComposer\(grantsRef\.current, handle\)/,
   )
-  assert.match(read('PluginComposerButtons.jsx'), /\}, \[registerComposer, handle, composer\]\)/)
+  assert.match(read('PluginComposerButtons.jsx'), /\}, \[registerComposer, handle, composer, project, deviceId\]\)/)
   const buttons = read('PluginComposerButtons.jsx')
   assert.equal((buttons.match(/clickInput\(/g) ?? []).length, 1)
-  assert.match(buttons, /onClick=\{\(\) => host\.clickInput\(pluginId, input\.id, handle\)\}/)
+  assert.match(buttons, /onChoose: \(\) => host\.clickInput\(pluginId, input\.id, handle\)/)
+  assert.match(buttons, /onClick=\{onChoose\}/, 'quick controls share the same dispatch as the Add menu')
   // No other file grants anything.
   for (const file of readdirSync(new URL('./', import.meta.url))) {
     if (!/\.jsx?$/.test(file) || file.endsWith('.test.js') || file === 'plugin-calls.js' || file === 'plugins-host.jsx') continue
@@ -178,7 +179,8 @@ test("a plugin's view is a pane like a chat, known by its key", () => {
   const app = read('App.jsx')
   assert.match(app, /const isChatView = \(v\) => !STATIC_VIEWS\.includes\(v\) && !isPluginView\(v\)/)
   assert.match(app, /isPluginView\(view\) \? \(\s*\n\s*\/\/[^\n]*\n\s*<PluginView viewKey=\{view\} \/>/)
-  assert.match(app, /if \(isPluginView\(leaf\.view\)\) return <PluginView viewKey=\{leaf\.view\} \/>/)
+  assert.match(app, /const paneView = leaf\.view \?\? view/)
+  assert.match(app, /if \(isPluginView\(paneView\)\) return <PluginView viewKey=\{paneView\} \/>/)
   assert.match(app, /<PluginProvider>/)
 })
 

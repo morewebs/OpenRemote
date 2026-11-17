@@ -7,7 +7,6 @@
   place-items: center;
   padding: 24px;
   background: rgba(0, 0, 0, 0.55);
-  animation: ab-fade 0.12s ease-out;
 }
 
 .ab-modal {
@@ -18,20 +17,6 @@
   border-radius: 14px;
   background: #1c1c1c;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), 0 4px 16px rgba(0, 0, 0, 0.3);
-  animation: ab-pop 0.14s ease-out;
-}
-
-@keyframes ab-fade {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes ab-pop {
-  from {
-    opacity: 0;
-    transform: translateY(6px) scale(0.98);
-  }
 }
 
 .ab-head {
@@ -200,14 +185,6 @@
   flex-direction: column;
   background: var(--bg-app);
   color: var(--text-1);
-  animation: ab-screen-in 0.28s cubic-bezier(0.32, 0.72, 0, 1);
-}
-
-@keyframes ab-screen-in {
-  from {
-    transform: translate3d(28px, 0, 0);
-    opacity: 0;
-  }
 }
 
 .ab-toolbar {

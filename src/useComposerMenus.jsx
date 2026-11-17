@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useConsole } from './state/console.jsx'
 import ComposerMenu from './ComposerMenu.jsx'
 import { applyPick, argItems, chatList, commandItems, filesForQuery, holdDismissal, mentionItems, menuAt, menuKeyOf, ownCommands } from './composer-menus.js'
+import { beginCompletion } from './composer-actions.js'
 
 // The / commands this device picked lately, newest first: the menu's
 // "Recent" before anything is typed.
@@ -242,5 +243,17 @@ export function useComposerMenus({
       <ComposerMenu items={items} active={Math.min(active, items.length - 1)} onPick={pick} onHover={setActive} />
     ) : null
 
-  return { element, onKeyDown, track, dismiss, open: Boolean(element) }
+  const begin = (marker) => {
+    const field = inputRef.current
+    const next = beginCompletion(text, field?.selectionStart, field?.selectionEnd, marker)
+    setDismissed(null)
+    setText(next.text)
+    setCaret(next.caret)
+    requestAnimationFrame(() => {
+      field?.focus()
+      field?.setSelectionRange(next.caret, next.caret)
+    })
+  }
+
+  return { element, onKeyDown, track, dismiss, begin, open: Boolean(element) }
 }

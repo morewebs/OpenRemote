@@ -10,6 +10,8 @@
 
 import { addAttachment, attachments } from './attachments.js'
 import { consoleError, errorCopy } from './error-copy.js'
+import { wireBytes, MAX_MESSAGE_BYTES } from './send-bound.js'
+import { documentReference } from './document-reference.js'
 
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 export const MAX_IMAGES = 10
@@ -76,8 +78,19 @@ export function outgoing(text, items, { images = true, app = 'This app', remote 
   const blocks = []
   const sent = []
   let pictures = 0
+  let preparationError = null
   for (const item of items) {
-    if (item.kind === 'element') {
+    if (item.status === 'pending') {
+      preparationError = 'Attachments are still being prepared. Wait or remove them before sending.'
+      continue
+    }
+    if (item.status === 'error') {
+      preparationError = 'An attachment could not be read. Retry or remove it before sending.'
+      continue
+    }
+    if (item.kind === 'document') {
+      blocks.push(documentReference(item))
+    } else if (item.kind === 'element') {
       blocks.push(elementText(item))
       const parts = images ? dataUrlParts(item.dataUrl) : null
       if (parts) sent.push({ kind: 'image', mime: parts.mime, data: parts.data })
@@ -88,11 +101,17 @@ export function outgoing(text, items, { images = true, app = 'This app', remote 
     }
   }
   const words = [String(text ?? '').trim(), ...blocks].filter(Boolean).join('\n\n')
-  let error = null
-  if (pictures && !images) error = noPictures(app)
+  let error = preparationError
+  if (error) { /* Preparation errors take priority over payload limits. */ }
+  else if (pictures && !images) error = noPictures(app)
   else if (sent.length > MAX_IMAGES) error = TOO_MANY
   else if (sent.some((a) => base64Bytes(a.data) > MAX_IMAGE_BYTES)) error = TOO_BIG
   else if (remote && sent.reduce((n, a) => n + a.data.length, words.length) > REMOTE_BYTES) error = TOO_BIG_REMOTE
+  else if (wireBytes(words) > MAX_MESSAGE_BYTES) error = 'This message exceeds the 2.0 MB text limit. Remove a document or split the message.'
+  else if (items.length > MAX_IMAGES) error = 'A message can carry 10 attachments at most. Remove an attachment before sending.'
+  // Image data is base64 ASCII. Count it without copying tens of megabytes
+  // on each keystroke; the API checks the exact complete body once at send.
+  else if (wireBytes(words) + sent.reduce((n, a) => n + a.data.length + JSON.stringify({ kind: a.kind, mime: a.mime, data: '' }).length + 1, 2) > (remote ? REMOTE_BYTES : 72 * 1024 * 1024)) error = `This message and its attachments exceed the ${remote ? '3.8' : '72'} MB limit. Remove a file or split the message.`
   return { text: words, attachments: sent, error }
 }
 

@@ -1,0 +1,60 @@
+.nc-menu.ca-add-menu { width: 316px; padding: 8px; border-radius: 20px; background: #222; }
+.ca-add-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 4px 12px; color: var(--text-1); font-size: 14px; font-weight: 600; }
+.ca-add-heading button, .ca-add-heading-space { display: grid; place-items: center; width: 32px; height: 32px; flex: none; }
+.ca-add-heading button { background: none; border: 0; border-radius: 50%; color: var(--text-2); cursor: pointer; }
+.ca-add-heading button:hover { background: var(--bg-hover); }
+.ca-add-menu .nc-group + .nc-group { border-top: 1px solid rgba(255,255,255,.065); padding-top: 6px; margin-top: 6px; }
+.ca-add-menu .nc-item { min-height: 48px; padding: 7px 10px; border-radius: 12px; text-align: left; }
+.ca-add-menu .nc-item-main { width: 100%; gap: 12px; }
+.ca-add-menu .nc-item-name { flex: 1; font-size: 13px; white-space: normal; overflow-wrap: anywhere; }
+.ca-add-icon { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 50%; background: rgba(255,255,255,.065); color: #e8e8e8; }
+.ca-add-menu .nc-item-detail { padding-left: 46px; color: var(--text-3); font-size: 11px; }
+.ca-add-hint { display: flex; align-items: center; color: var(--text-3); font-size: 12px; }
+.ca-action-status { color: var(--accent); font-size: 11px; }
+.ca-add-footnote { margin: 3px 6px; color: var(--text-3); font-size: 10px; line-height: 1.5; }
+.ca-add-menu .nc-footer { border-top: 0; padding-top: 7px; }
+/* A desktop action menu sits beside the composer. Reserve the sheet's
+   header, icon tiles and touch spacing for phones. */
+.nc-menu.ca-add-menu:not(.is-phone) { width: 264px; padding: 5px; border-radius: 14px; background: #2d2d2d; }
+.ca-add-menu:not(.is-phone) .nc-items { scrollbar-gutter: auto; padding-right: 0; }
+.ca-add-menu:not(.is-phone) .ca-add-heading { justify-content: flex-start; padding: 0 2px 4px; font-size: 12px; }
+.ca-add-menu:not(.is-phone) .ca-add-heading button { width: 26px; height: 26px; }
+.ca-add-menu:not(.is-phone) .ca-add-heading button:last-child { margin-left: auto; }
+.ca-add-menu:not(.is-phone) .nc-group + .nc-group { border: 0; padding-top: 0; margin-top: 0; }
+.ca-add-menu:not(.is-phone) .nc-item { min-height: 28px; padding: 4px 8px; border-radius: 6px; color: var(--text-1); font-weight: 400; }
+.ca-add-menu:not(.is-phone) .nc-item-main { min-height: 20px; flex-wrap: nowrap; gap: 10px; }
+.ca-add-menu:not(.is-phone) .nc-item-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ca-add-menu:not(.is-phone) .ca-add-icon { width: 18px; height: 20px; background: none; border-radius: 0; }
+.ca-add-menu:not(.is-phone) .ca-add-icon svg { width: 18px; height: 18px; }
+.ca-add-menu:not(.is-phone) .nc-item-detail { order: 0; flex: 0 1 auto; max-width: 90px; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ca-add-menu:not(.is-phone) .nc-footer { display: none; }
+.ca-add-backdrop { position: fixed; inset: 0; z-index: 119; background: rgba(0,0,0,.48); }
+.nc-menu.ca-add-menu.is-phone { width: 100%; max-width: none; padding: 10px 16px max(18px, env(safe-area-inset-bottom)); border-radius: 28px 28px 0 0; background: #171717; border: 1px solid rgba(255,255,255,.05); transform: none;}
+.ca-add-menu.is-phone .ca-add-heading { position: relative; padding: 10px 0 18px; font-size: 18px; }
+.ca-add-menu.is-phone .ca-add-heading::before { content: ''; position: absolute; width: 38px; height: 4px; border-radius: 4px; background: #414141; top: -2px; left: calc(50% - 19px); }
+.ca-add-menu.is-phone .ca-add-heading button { width: 44px; height: 44px; }
+.ca-add-menu.is-phone .ca-add-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px,1fr)); gap: 9px; padding-bottom: 8px; }
+.ca-add-menu.is-phone .ca-add-tiles .nc-item { min-height: 106px; padding: 14px 6px; background: #242424; border-radius: 18px; }
+.ca-add-menu.is-phone .ca-add-tiles .nc-item-main { display: flex; flex-direction: column; gap: 11px; }
+.ca-add-menu.is-phone .ca-add-tiles .nc-item-name { flex: none; text-align: center; }
+.ca-add-menu.is-phone .ca-add-tiles .ca-add-icon { width: 42px; height: 42px; }
+.ca-add-menu.is-phone .nc-group + .nc-group { border: 0; background: #222; border-radius: 17px; padding: 3px; margin-top: 10px; }
+.ca-add-menu.is-phone .nc-item { min-height: 56px; }
+.ca-add-menu.is-phone .nc-item-name { font-size: 15px; }
+.ca-add-menu.is-phone .nc-group + .nc-group .nc-item + .nc-item { border-top: 1px solid rgba(255,255,255,.055); border-radius: 0 0 13px 13px; }
+.ca-add-menu :is(button, [tabindex]):focus-visible, .ca-attach:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ca-add-menu .nc-item.cursor { background: rgba(255,255,255,.065); }
+.ca-add-menu.is-phone .ca-add-tiles .nc-item:is(.cursor,:hover) { background: #303030; }
+.ca-document { padding: 5px 30px 5px 6px; min-width: 150px; max-width: min(280px,100%); }
+.ca-document-open { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 0; border: 0; background: none; text-align: left; color: inherit; cursor: pointer; }
+.ca-document[data-status="error"] { border-color: #b3716c; }
+.ca-document[data-status="error"] .ca-where { color: #dfa39b; white-space: normal; }
+.ca-document .ca-name { max-width: 180px; }
+.ca-retry { border: 0; background: none; color: var(--accent); font-size: 11px; padding: 4px; cursor: pointer; }
+.ca-document-preview { width: min(720px,calc(100vw - 32px)); max-height: calc(100dvh - 32px); }
+.ca-document-preview pre { max-height: 58dvh; overflow: auto; padding: 16px; background: #151515; border-radius: 12px; color: var(--text-1); font: 12px/1.6 var(--font-mono,monospace); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ca-document-preview p { color: var(--text-3); font-size: 12px; line-height: 1.5; }
+.ca-document-preview h2 { overflow-wrap: anywhere; }
+@media (prefers-reduced-motion: reduce) { .nc-menu.ca-add-menu { animation: none; } }
+html[data-reduce-motion] .nc-menu.ca-add-menu { animation: none; }
+@media (hover: none) { .ca-document .ca-remove { width: 28px; height: 32px; } }

@@ -20,7 +20,7 @@ import './contextmenu.css'
  * or the right arrow (the left arrow or Esc goes back). The rules live in
  * context-menu.js.
  */
-export default function ContextMenu({ x, y, items, onClose }) {
+export default function ContextMenu({ x, y, items, onClose, compact = false, label = null }) {
   const ref = useRef(null)
   const subRef = useRef(null)
   const rows = useRef([])
@@ -254,8 +254,9 @@ export default function ContextMenu({ x, y, items, onClose }) {
       {createPortal(
         <div
           ref={ref}
-          className={`nc-menu ctx-menu${isMobile ? ' is-phone' : ''}`}
+          className={`nc-menu ctx-menu${compact ? ' is-compact' : ''}${isMobile ? ' is-phone' : ''}`}
           role="menu"
+          aria-label={label}
           tabIndex={-1}
           style={{ left: x, top: y }}
           onKeyDown={onKeyDown}
@@ -296,8 +297,9 @@ export default function ContextMenu({ x, y, items, onClose }) {
         createPortal(
           <div
             ref={subRef}
-            className={`nc-menu ctx-menu ctx-sub${isMobile ? ' is-phone' : ''}`}
+            className={`nc-menu ctx-menu ctx-sub${compact ? ' is-compact' : ''}${isMobile ? ' is-phone' : ''}`}
             role="menu"
+            aria-label={items[open]?.label}
             tabIndex={-1}
             onKeyDown={onSubKeyDown}
             onPointerDown={(e) => e.stopPropagation()}

@@ -15,6 +15,7 @@ import { webApi } from './webapi.js'
 import { browserDeviceName } from './peer.js'
 import { accountFetch, accountTokens } from './account-session.js'
 import { startPolling } from './poll.js'
+import { firstMessageDelivery } from '../first-message.js'
 
 const NO_PLUGINS = { installed: [] }
 const EMPTY = new Set()
@@ -353,7 +354,7 @@ export function WebConsoleProvider({
       fast,
       effort,
       permissionMode,
-      { deviceId = null, mentionedChats = [], endpointId = null } = {},
+      { deviceId = null, mentionedChats = [], endpointId = null, attachments = [], returnDelivery = false } = {},
     ) => {
       const machine = deviceId ?? machineRef.current
       const api = apiFor(machine)
@@ -369,8 +370,7 @@ export function WebConsoleProvider({
       })
       ensureChat(session)
       setSessions((current) => [session, ...current.filter((row) => row.id !== session.id)])
-      if (text?.trim()) {
-        api.prompt(session.id, text.trim(), mentionedChats).catch(() => {
+      const delivery = firstMessageDelivery(api, session.id, text, mentionedChats, attachments, () => {
           setChats((current) => {
             const chat = current[session.id]
             if (!chat) return current
@@ -389,17 +389,18 @@ export function WebConsoleProvider({
               ),
             }
           })
-        })
-      }
+      })
+      if (returnDelivery) return { id: session.id, delivery }
+      delivery.catch(() => {})
       return session.id
     },
     [apiFor, ensureChat],
   )
 
   const sendPrompt = useCallback(
-    (chatId, text, mentioned = []) => {
+    (chatId, text, mentioned = [], attachments = []) => {
       const executor = executorOf(chatId)
-      return apiFor(executor).prompt(chatId, text, mentioned)
+      return apiFor(executor).prompt(chatId, text, mentioned, attachments)
     },
     [apiFor, executorOf],
   )
@@ -440,7 +441,7 @@ export function WebConsoleProvider({
   )
   const resumeChat = useCallback((chatId) => chatAction(chatId, (api) => api.resume(chatId)), [chatAction])
   const queueMessage = useCallback(
-    (chatId, text, mentioned = []) => chatAction(chatId, (api) => api.queue(chatId, text, mentioned)),
+    (chatId, text, mentioned = [], attachments = []) => chatAction(chatId, (api) => api.queue(chatId, text, mentioned, attachments)),
     [chatAction],
   )
   const removeQueued = useCallback(
@@ -452,7 +453,7 @@ export function WebConsoleProvider({
     [chatAction],
   )
   const steerMessage = useCallback(
-    (chatId, text, mentioned = []) => chatAction(chatId, (api) => api.steer(chatId, text, mentioned)),
+    (chatId, text, mentioned = [], attachments = []) => chatAction(chatId, (api) => api.steer(chatId, text, mentioned, attachments)),
     [chatAction],
   )
   const resumeQueue = useCallback(

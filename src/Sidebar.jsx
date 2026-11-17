@@ -8,7 +8,7 @@ import {
   ArrowUp,
   ArrowsInLineVertical,
   CaretDown,
-  ChartBar,
+  ChartLineUp,
   ChatCircle,
   CheckCircle,
   Circle,
@@ -31,6 +31,7 @@ import {
   PuzzlePiece,
   TrashSimple,
   UserCircle,
+  SquaresFour,
   X,
 } from '@phosphor-icons/react'
 import PickerMenu from './PickerMenu.jsx'
@@ -42,6 +43,7 @@ import { activeSessions } from './archive.js'
 import { deviceName, isPhone, sessionsForMode } from './cloud.js'
 import { hasTauri, isMobile } from './platform.js'
 import { CHAT_DRAG_TYPE, acceptsChatDrop, chatDragPayload } from './split.js'
+import { setSidebarDraggedChat } from './workspace-layout.js'
 import { useMoveChat } from './useMoveChat.jsx'
 import { dropMoves } from './move-chat.js'
 import './move.css'
@@ -63,6 +65,7 @@ import { rolledStatus } from './team.js'
 import { usePlugins } from './plugins-host.jsx'
 import { PluginGlyph } from './plugin-icons.jsx'
 import { frontProject } from './plugin-runtime.js'
+import { collapseOtherProjects, filterProjectRows, loadProjectPreferences, moveProject, orderProjects, projectRows, pruneCollapsedProjects, storeProjectPreferences } from './project-workflow.js'
 import './sidebar.css'
 import './team.css'
 
@@ -141,6 +144,9 @@ export default function Sidebar({
   // whether it is open (the pane sits beside the chat, not inside it).
   onBrowser = null,
   browserOpen = false,
+  onWorkspaceLayout = null,
+  workspaceLayoutOpen = false,
+  canSplitChat = null,
   // The shell hosts the rename dialog above both surfaces that offer it, so
   // the row menu only asks for it. `renamedTitles` is the one-beat overlay of
   // names just saved, until the console's own record carries them.
@@ -157,6 +163,13 @@ export default function Sidebar({
   const pluginViews = pluginHost?.viewsFor(contextProject) ?? []
   const privacy = usePrivacyMode()
   const [query, setQuery] = useState('')
+  const [projectFilter, setProjectFilter] = useState(null)
+  const [projectPreferences, setProjectPreferences] = useState(loadProjectPreferences)
+  const arrangeProjects = (change) => setProjectPreferences(current => {
+    const next = typeof change === 'function' ? change(current) : change
+    storeProjectPreferences(next)
+    return next
+  })
   const [searchOn, setSearchOn] = useState(false)
   const [collapsed, setCollapsed] = useState(loadCollapsed)
   // The leads whose workers are folded away (open by default).
@@ -277,12 +290,14 @@ export default function Sidebar({
     })
   }, [sessions, archived, chats, mode, devices, thisDevice, renamedTitles])
 
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    const sorted = [...rows].sort((a, b) => b.updatedAt - a.updatedAt)
-    if (!q) return sorted
-    return sorted.filter((c) => c.title.toLowerCase().includes(q))
-  }, [rows, query])
+  const orderedProjects = useMemo(() => orderProjects(projects, rows, projectPreferences), [projects, rows, projectPreferences])
+  const filtered = useMemo(() => filterProjectRows(orderedProjects, rows, query, projectFilter), [orderedProjects, rows, query, projectFilter])
+  const visible = useMemo(() => [...filtered.rows].sort((a, b) => b.updatedAt - a.updatedAt), [filtered.rows])
+  const searching = Boolean(query.trim() || projectFilter)
+  const filterProject = (projects ?? []).find(p => p.id === projectFilter)
+  useEffect(() => {
+    if (projectsAnswered && projectFilter && !filterProject) setProjectFilter(null)
+  }, [projectsAnswered, projectFilter, filterProject])
 
   // The chats that are blocked on a person, oldest wait first. This group
   // ignores the search field on purpose: a search narrows the lists below, and
@@ -371,7 +386,7 @@ export default function Sidebar({
   // waiting worker is in that group, like any chat that waits.
   const nest = useMemo(() => nestTeams(standing), [standing])
   const rest = nest.top
-  const grouped = useMemo(() => sections(projects, rest, folders), [projects, rest, folders])
+  const grouped = useMemo(() => sections(filtered.projects, rest, folders), [filtered.projects, rest, folders])
   // Every lead's workers among all the rows, for the status a lead's row
   // shows of its whole team: waiting beats failed beats running, so a worker
   // that waits in the group above still lights its lead.
@@ -423,16 +438,33 @@ export default function Sidebar({
   }
   const collapseOthers = (id) => {
     setCollapsed(() => {
-      const next = {}
-      for (const { project } of grouped.projects) if (project.id !== id) next[project.id] = true
+      const next = collapseOtherProjects(projects, id)
       storeCollapsed(next)
       return next
     })
   }
   const projectMenuItems = (project, shownName, folderIsGone) => {
     const folder = project.folders?.[0]
+    const pinned = projectPreferences.pins.includes(project.id)
+    const at = orderedProjects.findIndex(p => p.id === project.id)
+    const canMove = delta => {
+      const neighbor = orderedProjects[at + delta]
+      return Boolean(neighbor) && projectPreferences.pins.includes(neighbor.id) === pinned
+    }
     return [
-      { label: 'New chat here', icon: <Plus size={14} />, onSelect: () => onNewChatIn?.(project.id) },
+      { label: 'New chat', icon: <Plus size={14} />, disabled: folderIsGone || !onNewChatIn, onSelect: () => onNewChatIn?.(project.id) },
+      { label: pinned ? 'Unpin' : 'Pin', icon: pinned ? <PushPinSlash size={14} /> : <PushPin size={14} />, onSelect: () => arrangeProjects(current => ({ ...current, pins: togglePin(current.pins, project.id) })) },
+      { label: 'Search chats', icon: <MagnifyingGlass size={14} />, onSelect: () => {
+        setProjectFilter(project.id)
+        setQuery('')
+        requestAnimationFrame(() => searchRef.current?.focus())
+      } },
+      { label: 'Mark all as read', icon: <CheckCircle size={14} />, disabled: !projectRows(project, rows).some(row => unread.has(row.id)), onSelect: () => {
+        let next = seenRef.current
+        for (const row of projectRows(project, rows)) next = recordSeen(next, row.id, row.updatedAt)
+        remember(next)
+      } },
+      { divider: true },
       // The file manager is the desktop app's: the phone and the web console
       // have no folder of this computer's to show.
       ...(hasTauri && !isMobile && !web && !folderIsGone
@@ -443,31 +475,58 @@ export default function Sidebar({
             {
               label: 'Copy path',
               icon: <Copy size={14} />,
-              onSelect: () =>
-                navigator.clipboard?.writeText(folder).then(
-                  () => setCopyNote('Path copied.'),
-                  () => setCopyNote("Couldn't copy the path."),
-                ),
+              onSelect: async () => {
+                try {
+                  if (!navigator.clipboard?.writeText) throw new Error('This window has no clipboard')
+                  await navigator.clipboard.writeText(folder)
+                  setCopyNote('Path copied.')
+                } catch (err) { setCopyNote(errorCopy(err)) }
+              },
             },
           ]
         : []),
-      { divider: true },
-      {
-        label: 'Collapse all others',
-        icon: <ArrowsInLineVertical size={14} />,
-        disabled: !grouped.projects.some(({ project: other }) => other.id !== project.id && !collapsed[other.id]),
-        onSelect: () => collapseOthers(project.id),
-      },
+      { label: 'Organize', icon: <ArrowsInLineVertical size={14} />, submenu: [
+        { label: 'Move up', icon: <ArrowUp size={14} />, disabled: !canMove(-1), onSelect: () => arrangeProjects(current => moveProject(orderedProjects, project.id, -1, current)) },
+        { label: 'Move down', icon: <ArrowDown size={14} />, disabled: !canMove(1), onSelect: () => arrangeProjects(current => moveProject(orderedProjects, project.id, 1, current)) },
+        { divider: true },
+        { label: folded(project.id) ? 'Expand project' : 'Collapse project', icon: <CaretDown size={14} />, onSelect: () => toggleProject(project.id) },
+        {
+          label: 'Collapse all others',
+          icon: <ArrowsInLineVertical size={14} />,
+          disabled: !(projects ?? []).some(other => other.id !== project.id && !collapsed[other.id]),
+          onSelect: () => collapseOthers(project.id),
+        },
+      ] },
       { divider: true },
       {
         label: 'Remove project',
         icon: <TrashSimple size={14} />,
         hint: 'Chats stay',
         danger: true,
-        onSelect: () => setArmed((current) => armRow(current, project.id)),
+        onSelect: () => {
+          setArmed((current) => armRow(current, project.id))
+          // The menu returns focus when it unmounts. Focus the replacement
+          // confirmation after that hand-back, so Escape can keep the project.
+          requestAnimationFrame(() => document.querySelector(`[data-project-id="${CSS.escape(project.id)}"] .sb-unregister`)?.focus())
+        },
       },
     ]
   }
+
+  const organizationItems = () => [
+    { header: 'Sort projects' },
+    ...[['manual', 'Manual order'], ['name', 'Name'], ['recent', 'Recent activity']].map(([id, label]) => ({
+      label, icon: projectPreferences.sort === id ? <CheckCircle size={14} /> : <Circle size={14} />,
+      onSelect: () => arrangeProjects(current => ({ ...current, sort: id })),
+    })),
+    { divider: true },
+    { label: 'Collapse all projects', icon: <ArrowsInLineVertical size={14} />, onSelect: () => {
+      const next = Object.fromEntries((projects ?? []).map(p => [p.id, true]))
+      setCollapsed(next)
+      storeCollapsed(next)
+    } },
+    { label: 'Expand all projects', icon: <CaretDown size={14} />, onSelect: () => { setCollapsed({}); storeCollapsed({}) } },
+  ]
 
   // A search opens the projects it matches, whatever the person had folded
   // away: the grouped rows only draw while a project is open, so a folded
@@ -478,12 +537,12 @@ export default function Sidebar({
   const openedBySearch = useMemo(() => {
     const ids = new Set()
     const q = query.trim().toLowerCase()
-    if (!q) return ids
+    if (!q && !projectFilter) return ids
     for (const { project, items } of grouped.projects) {
-      if (items.length > 0 || projectName(project).toLowerCase().includes(q)) ids.add(project.id)
+      ids.add(project.id)
     }
     return ids
-  }, [grouped, query])
+  }, [grouped, query, projectFilter])
 
   // A project is folded only when the person folded it and no search is
   // showing something inside it.
@@ -492,17 +551,13 @@ export default function Sidebar({
   // The projects the daemon no longer lists are forgotten, so their ids cannot
   // fold a different project that takes the same id later.
   useEffect(() => {
-    const known = new Set((projects ?? []).map((p) => p.id))
     setCollapsed((current) => {
-      const ids = Object.keys(current)
-      if (!ids.length) return current
-      const kept = {}
-      for (const id of ids) if (known.has(id)) kept[id] = true
-      if (Object.keys(kept).length === ids.length) return current
+      const kept = pruneCollapsedProjects(current, projects, projectsAnswered)
+      if (kept === current) return current
       storeCollapsed(kept)
       return kept
     })
-  }, [projects])
+  }, [projects, projectsAnswered])
 
   // The keyboard's walk through the list goes in the order it reads: the
   // chats that need the user first (they are at the top of the list), then
@@ -515,7 +570,7 @@ export default function Sidebar({
     planList(items, {
       pins,
       page,
-      expanded: showAll.has(key),
+      expanded: searching || showAll.has(key),
       keep: (row) => row.id === active,
     })
   const flatPlan = planFor('flat', grouped.flat, CHATS_PAGE)
@@ -824,10 +879,10 @@ export default function Sidebar({
       ...(onSplit && !isMobile
         ? [
             { divider: true },
-            { label: 'Split right', icon: <ArrowRight size={14} />, onSelect: split('row', false) },
-            { label: 'Split down', icon: <ArrowDown size={14} />, onSelect: split('col', false) },
-            { label: 'Split left', icon: <ArrowLeft size={14} />, onSelect: split('row', true) },
-            { label: 'Split up', icon: <ArrowUp size={14} />, onSelect: split('col', true) },
+            { label: 'Split right', icon: <ArrowRight size={14} />, disabled: canSplitChat && !canSplitChat(item.key, 'row', false), onSelect: split('row', false) },
+            { label: 'Split down', icon: <ArrowDown size={14} />, disabled: canSplitChat && !canSplitChat(item.key, 'col', false), onSelect: split('col', false) },
+            { label: 'Split left', icon: <ArrowLeft size={14} />, disabled: canSplitChat && !canSplitChat(item.key, 'row', true), onSelect: split('row', true) },
+            { label: 'Split up', icon: <ArrowUp size={14} />, disabled: canSplitChat && !canSplitChat(item.key, 'col', true), onSelect: split('col', true) },
           ]
         : []),
     ]
@@ -909,10 +964,10 @@ export default function Sidebar({
       ...(canSplit
         ? [
             { divider: true },
-            { label: 'Split right', icon: <ArrowRight size={14} />, onSelect: split('row', false) },
-            { label: 'Split down', icon: <ArrowDown size={14} />, onSelect: split('col', false) },
-            { label: 'Split left', icon: <ArrowLeft size={14} />, onSelect: split('row', true) },
-            { label: 'Split up', icon: <ArrowUp size={14} />, onSelect: split('col', true) },
+            { label: 'Split right', icon: <ArrowRight size={14} />, disabled: canSplitChat && !canSplitChat(row.id, 'row', false), onSelect: split('row', false) },
+            { label: 'Split down', icon: <ArrowDown size={14} />, disabled: canSplitChat && !canSplitChat(row.id, 'col', false), onSelect: split('col', false) },
+            { label: 'Split left', icon: <ArrowLeft size={14} />, disabled: canSplitChat && !canSplitChat(row.id, 'row', true), onSelect: split('row', true) },
+            { label: 'Split up', icon: <ArrowUp size={14} />, disabled: canSplitChat && !canSplitChat(row.id, 'col', true), onSelect: split('col', true) },
           ]
         : []),
       { divider: true },
@@ -1020,6 +1075,7 @@ export default function Sidebar({
     <div
       key={row.id}
       className={`chat-item${workerCount > 0 ? ' chat-item--lead' : ''}`}
+      data-menu-open={menu?.chatId === row.id ? 'true' : undefined}
       // A chat is a thing you can drag into a pane: the middle opens it
       // there, an edge band splits. Right-click and the palette still do
       // the same job for anyone who never drags.
@@ -1031,10 +1087,12 @@ export default function Sidebar({
         e.dataTransfer.setData(CHAT_DRAG_TYPE, row.id)
         e.dataTransfer.setData('text/plain', chatDragPayload(row.id))
         e.dataTransfer.effectAllowed = 'move'
+        setSidebarDraggedChat(row.id)
         // A project head can take it too: the drop moves the chat there.
         setDragging(row)
       }}
       onDragEnd={() => {
+        setSidebarDraggedChat(null)
         setDragging(null)
         setDropOn(null)
       }}
@@ -1048,6 +1106,7 @@ export default function Sidebar({
         setMenu({
           x: e.clientX,
           y: e.clientY,
+          chatId: row.id,
           items: menuItems(row, { x: e.clientX, y: e.clientY }),
         })
       }}
@@ -1138,14 +1197,15 @@ export default function Sidebar({
         title="Chat actions"
         aria-label={`Actions for ${row.title}`}
         aria-haspopup="menu"
+        aria-expanded={menu?.chatId === row.id}
         tabIndex={-1}
         onClick={(e) => {
           e.stopPropagation()
           const rect = e.currentTarget.getBoundingClientRect()
-          setMenu({ x: Math.round(rect.right), y: Math.round(rect.bottom + 6), items: menuItems(row) })
+          setMenu({ x: Math.round(rect.right), y: Math.round(rect.bottom + 6), chatId: row.id, items: menuItems(row) })
         }}
       >
-        <DotsThree size={16} weight="bold" />
+        <DotsThree size={20} weight="bold" />
       </button>
     </div>
   )
@@ -1177,7 +1237,7 @@ export default function Sidebar({
         </div>
         )}
         <button className="side-tile" onClick={() => onSelect('new')} title={hintNew('New chat')}>
-          <Plus size={16} weight="bold" />
+          <Plus size={20} weight="bold" />
           New chat
         </button>
         <label className="side-tile search">
@@ -1197,6 +1257,7 @@ export default function Sidebar({
               }
             }}
             placeholder="Search"
+            aria-label="Search projects and chats"
             title={hintSearch('Search chats')}
             spellCheck={false}
           />
@@ -1206,6 +1267,13 @@ export default function Sidebar({
             </button>
           )}
         </label>
+        {filterProject && (
+          <div className="sb-project-filter">
+            <FolderSimple size={13} />
+            <span className="pv">{projectName(filterProject)}</span>
+            <button type="button" aria-label="Clear project filter" title="Clear project filter" onClick={() => setProjectFilter(null)}><X size={12} /></button>
+          </div>
+        )}
         {/* Plugins and automations act on this computer, so the desktop
             shows them in Local and Cloud alike (a phone runs no chats and
             has neither); Machines belongs to Cloud and reveals and
@@ -1335,6 +1403,10 @@ export default function Sidebar({
 
         <div className="section-title sb-projects-head">
           Projects
+          <button type="button" className="sb-project-organize" aria-label="Organize projects" title="Organize projects" aria-haspopup="menu" onClick={e => {
+            const rect = e.currentTarget.getBoundingClientRect()
+            setMenu({ x: rect.right, y: rect.bottom + 6, items: organizationItems() })
+          }}><DotsThree size={20} weight="bold" /></button>
           {/* The one way a folder becomes a project - the same flow the
               home screen's Add project button opens. */}
           {!web && (
@@ -1345,13 +1417,11 @@ export default function Sidebar({
               title="Add a project"
               aria-label="Add a project"
             >
-              <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-                <path d="M6 1.25v9.5M1.25 6h9.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-              </svg>
+              <Plus size={20} weight="bold" />
             </button>
           )}
         </div>
-        {grouped.projects.length === 0 && (
+        {grouped.projects.length === 0 && !searching && (
           <p className="sb-empty">
             {projectsAnswered ? 'No projects yet.' : 'Loading your projects…'}
           </p>
@@ -1386,6 +1456,8 @@ export default function Sidebar({
           return (
             <section
               key={project.id}
+              data-project-id={project.id}
+              data-menu-open={menu?.projectId === project.id ? 'true' : undefined}
               className={`project${isArmed ? ' armed' : ''}${dropOn === project.id ? ' mv-drop' : ''}`}
               {...dropTarget(project, project.id)}
               // Focus or a click leaving the row is a decision to keep it:
@@ -1405,13 +1477,14 @@ export default function Sidebar({
                 onClick={() => toggleProject(project.id)}
                 onContextMenu={(e) => {
                   e.preventDefault()
-                  setMenu({ x: e.clientX, y: e.clientY, items: projectMenuItems(project, shownName, folderIsGone) })
+                  setMenu({ x: e.clientX, y: e.clientY, projectId: project.id, items: projectMenuItems(project, shownName, folderIsGone) })
                 }}
                 aria-expanded={!isCollapsed}
               >
                 <span className={`project-caret${isCollapsed ? ' closed' : ''}`}>
-                  <CaretDown size={12} />
+                  <CaretDown size={14} />
                 </span>
+                {projectPreferences.pins.includes(project.id) && <PushPin size={14} className="sb-project-pin" aria-label="Pinned project" />}
                 <span className="project-name pv">{shownName}</span>
                 {nameSuffix && (
                   <span className="project-count-part project-folder pv" title={nameSuffix}>
@@ -1453,9 +1526,9 @@ export default function Sidebar({
                         setArmed(clearRow())
                       }
                     }}
-                    onClick={() => {
+                    onClick={async () => {
                       setArmed(clearRow())
-                      removeProject(project.id)
+                      try { await removeProject(project.id) } catch (err) { setCopyNote(errorCopy(err)) }
                     }}
                   >
                     Remove
@@ -1466,8 +1539,22 @@ export default function Sidebar({
                 </>
               ) : (
                 <>
-                  {/* A new chat already in this project, straight from its
-                      row: no trip through the home screen's project picker. */}
+                  {/* Match keyboard order to the visible actions: menu,
+                      then the new-chat shortcut at the far right. */}
+                  <button
+                    type="button"
+                    className="sb-project-more"
+                    title="Project actions"
+                    aria-label={`Actions for project ${shownName}`}
+                    aria-haspopup="menu"
+                    aria-expanded={menu?.projectId === project.id}
+                    onClick={e => {
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      setMenu({ x: rect.right, y: rect.bottom + 6, projectId: project.id, items: projectMenuItems(project, shownName, folderIsGone) })
+                    }}
+                  >
+                    <DotsThree size={20} weight="bold" />
+                  </button>
                   <button
                     type="button"
                     className="sb-project-new"
@@ -1475,19 +1562,7 @@ export default function Sidebar({
                     aria-label={`New chat in ${shownName}`}
                     onClick={() => onNewChatIn?.(project.id)}
                   >
-                    <Plus size={12} weight="bold" />
-                  </button>
-                  {/* Unregistering keeps the chats - they fall to the flat
-                      list below; the folder on disk is never touched. It asks
-                      once first, because that click sits beside the `+`. */}
-                  <button
-                    type="button"
-                    className="sb-project-remove"
-                    title="Remove project (chats stay)"
-                    aria-label={`Remove ${shownName}`}
-                    onClick={() => setArmed((current) => armRow(current, project.id))}
-                  >
-                    <TrashSimple size={11} />
+                    <Plus size={20} weight="bold" />
                   </button>
                 </>
               )}
@@ -1495,7 +1570,9 @@ export default function Sidebar({
                 <p className="sb-empty sb-project-empty">
                   {folderIsGone
                     ? "This project's folder is gone. Remove the project to clear it."
-                    : sessionsAnswered
+                    : query.trim()
+                      ? 'No chats match this search.'
+                      : sessionsAnswered
                       ? 'No chats yet.'
                       : 'Loading your chats…'}
                 </p>
@@ -1517,7 +1594,7 @@ export default function Sidebar({
         {/* Only while there are chats to be outside a project: with every
             project at zero, the projects say it and this line would be a
             second sentence about nothing. */}
-        {grouped.projects.length > 0 && grouped.flat.length === 0 && rows.length > 0 && (
+        {!searching && grouped.projects.length > 0 && grouped.flat.length === 0 && rows.length > 0 && (
           <p className="sb-empty">
             {sessionsAnswered ? 'No chats outside projects.' : 'Loading your chats…'}
           </p>
@@ -1530,7 +1607,7 @@ export default function Sidebar({
             says it has no chats yet; the generic line would say it twice. An
             unanswered first poll is not "no chats yet": until the list has
             answered, the line says it is still reading. */}
-        {rows.length === 0 && grouped.projects.length === 0 && (
+        {!searching && rows.length === 0 && grouped.projects.length === 0 && (
           <p className="sb-empty">
             {!sessionsAnswered
               ? 'Loading your chats…'
@@ -1541,8 +1618,8 @@ export default function Sidebar({
                   : 'No chats yet.'}
           </p>
         )}
-        {rows.length > 0 && query.trim() && visible.length === 0 && (
-          <p className="sb-empty">No chats match “{query.trim()}”.</p>
+        {searching && grouped.projects.length === 0 && visible.length === 0 && sessionsAnswered && (
+          <p className="sb-empty">{query.trim() ? `No projects or chats match “${query.trim()}”.` : 'No chats in this project yet.'}</p>
         )}
         </div>
       </nav>
@@ -1550,7 +1627,7 @@ export default function Sidebar({
       <footer className="sb-foot">
         {/* Account opens in the main pane. Mobile, Metrics and Settings
             open over it, keeping the current chat in place. */}
-        <div className="sb-foot-row" role="group" aria-label="Account, mobile, metrics, settings">
+        <div className="sb-foot-row" role="group" aria-label="Account, mobile, metrics, workspace layout, settings">
           <button
             type="button"
             className={`sb-icon-btn${active === 'account' && !searchOn ? ' on' : ''}`}
@@ -1594,9 +1671,12 @@ export default function Sidebar({
             aria-label="Metrics"
             onClick={() => onSelect('metrics')}
           >
-            <ChartBar size={20} weight="duotone" />
+            <ChartLineUp size={20} weight="regular" />
           </button>
           )}
+          {!isMobile && onWorkspaceLayout && <button type="button" className={`sb-icon-btn${workspaceLayoutOpen ? ' on' : ''}`}
+            data-picker="workspace-layout" title="Workspace layout" aria-label="Workspace layout" aria-haspopup="menu" aria-expanded={workspaceLayoutOpen}
+            onClick={onWorkspaceLayout}><SquaresFour size={22} /></button>}
           <button
             type="button"
             className={`sb-icon-btn${active === 'settings' && !searchOn ? ' on' : ''}`}
@@ -1612,7 +1692,7 @@ export default function Sidebar({
       {menu && (
         // The menu's own rows, held from the moment it opened: see the
         // onContextMenu above for why they are not rebuilt here.
-        <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />
+        <ContextMenu x={menu.x} y={menu.y} items={menu.items} compact={Boolean(menu.projectId || menu.chatId)} label={menu.projectId ? 'Project actions' : menu.chatId ? 'Conversation actions' : undefined} onClose={() => setMenu(null)} />
       )}
       {moving && (
         // The project picker the app already has, opened where the row's menu

@@ -20,8 +20,8 @@ export function onBrowserRequest(fn) {
  * on the phone. With `url`, that address opens in a new tab; with `tab`,
  * the browser shows that tab.
  */
-export function requestBrowser({ chatId, url = null, tab = null }) {
-  for (const fn of handlers) fn({ chatId, url, tab })
+export function requestBrowser({ chatId, url = null, tab = null, action = null, target = null }) {
+  for (const fn of handlers) fn({ chatId, url, tab, ...(action ? { action, target } : {}) })
 }
 
 const BROWSER_TOOL = 'mcp__openremote__browser_'

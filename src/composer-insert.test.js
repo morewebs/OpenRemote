@@ -2,6 +2,26 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { claimInserter, insertToComposer, resetInserter } from './composer-insert.js'
 
+test('mounting an inactive pane registers async delivery without stealing the active composer', async () => {
+  const { composerTarget, inserterKey } = await import('./composer-insert.js')
+  resetInserter()
+  const active = []
+  const background = []
+  claimInserter(text => active.push(text), 'active', {})
+  const owner = {}
+  claimInserter(text => background.push(text), 'background', owner, false)
+  assert.equal(inserterKey(), 'active')
+  insertToComposer('selected pane')
+  assert.deepEqual(active, ['selected pane'])
+  const pending = composerTarget('background')
+  assert.equal(pending.insert('targeted result'), true)
+  claimInserter(text => background.push(text), 'background', owner, true)
+  assert.equal(inserterKey(), 'background')
+  assert.equal(pending.isLive(), true)
+  assert.deepEqual(background, ['targeted result'])
+  resetInserter()
+})
+
 test('insert with no composer claimed returns false', () => {
   resetInserter()
   assert.equal(insertToComposer('hello'), false)

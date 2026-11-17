@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs'
 
 const source = readFileSync(new URL('./Sidebar.jsx', import.meta.url), 'utf8')
 
-test('the project trash asks before it unregisters', () => {
+test('project actions ask before unregistering', () => {
   assert.ok(
     source.includes("from './row-confirm.js'"),
     'the sidebar uses the shared armed-row rules instead of a private confirm',
@@ -28,9 +28,9 @@ test('the project trash asks before it unregisters', () => {
     source.includes('rowIsArmed(armed, project.id)'),
     'the armed project is the one the rules name',
   )
-  // The arm button is the trash; it must not also act.
-  const trash = source.indexOf('className="sb-project-remove"')
-  assert.ok(trash >= 0, 'the trash is still the way in')
+  // The menu button opens actions; it must not also unregister.
+  const trash = source.indexOf('className="sb-project-more"')
+  assert.ok(trash >= 0, 'project actions have a visible menu button')
   const end = source.indexOf('</button>', trash)
   const handler = source.slice(trash, end)
   assert.equal(
@@ -191,7 +191,8 @@ test('a search opens the projects it matches, whatever the person folded', () =>
     source.includes('const openedBySearch = useMemo(() => {'),
     'the search decides which projects to open',
   )
-  assert.ok(source.includes('if (items.length > 0 || projectName(project).toLowerCase().includes(q)) ids.add(project.id)'))
+  assert.ok(source.includes('filterProjectRows(orderedProjects, rows, query, projectFilter)'))
+  assert.ok(source.includes('ids.add(project.id)'), 'the already-filtered projects open during search')
   assert.ok(
     source.includes('const folded = (id) => !!collapsed[id] && !openedBySearch.has(id)'),
     'one rule for folded, used by the head and the keyboard order',
@@ -202,8 +203,8 @@ test('a search opens the projects it matches, whatever the person folded', () =>
   )
   assert.equal(
     (source.match(/folded\(project\.id\)/g) ?? []).length,
-    2,
-    'the head and the order both ask the same question',
+    3,
+    'the head, menu and keyboard order ask the same question',
   )
 })
 
@@ -216,7 +217,7 @@ test('the folded projects are remembered, and stale ids are forgotten', () => {
   )
   assert.ok(source.includes('storeCollapsed(next)'), 'and the change is written at the press')
   // A stale id cannot fold a project that takes it later.
-  assert.ok(source.includes('for (const id of ids) if (known.has(id)) kept[id] = true'))
+  assert.ok(source.includes('pruneCollapsedProjects(current, projects, projectsAnswered)'))
   assert.ok(source.includes('storeCollapsed(kept)'))
 })
 test('a row whose stream is between attempts says reconnecting in its tooltip', () => {

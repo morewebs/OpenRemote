@@ -92,7 +92,7 @@
   overflow: visible;
 }
 
-/* the cloud: stroke-draws once, then settles to a faint fill */
+/* The cloud stays drawn when the window returns to the foreground. */
 .cm-cloud {
   fill: none;
   stroke: var(--text-1);
@@ -100,12 +100,10 @@
   stroke-linejoin: round;
   stroke-linecap: round;
   stroke-dasharray: 120;
-  stroke-dashoffset: 120;
-  animation: cm-draw 1.6s cubic-bezier(0.4, 0, 0.2, 1) 80ms forwards;
+  stroke-dashoffset: 0;
 }
 
-/* the machines: small cards in the app's line treatment, fading in as
-   they check in */
+/* The machines use the app's line treatment. */
 .cm-node rect {
   fill: rgba(255, 255, 255, 0.035);
   stroke: rgba(255, 255, 255, 0.16);
@@ -131,28 +129,14 @@
 }
 
 .cm-node {
-  opacity: 0;
-  animation: cm-appear 0.5s ease-out var(--cm-delay) forwards;
+  opacity: 1;
 }
 
 .cm-link {
   stroke: rgba(255, 255, 255, 0.14);
   stroke-width: 1.2;
   stroke-dasharray: 4 4;
-  opacity: 0;
-  animation: cm-appear 0.5s ease-out var(--cm-delay) forwards;
-}
-
-@keyframes cm-draw {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-@keyframes cm-appear {
-  to {
-    opacity: 1;
-  }
+  opacity: 1;
 }
 
 @keyframes cm-breathe {

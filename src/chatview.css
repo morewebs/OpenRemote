@@ -29,6 +29,21 @@
   white-space: nowrap;
 }
 
+/* The pane header already names the chat. Keep its facts and run controls
+   here, since interrupt, resume and sync are part of this row too. */
+.split-area.is-split .cv-head {
+  padding: 6px 14px 8px;
+}
+
+.split-area.is-split .cv-head h1 {
+  display: none;
+}
+
+.split-area.is-split .cv-facts {
+  margin-top: 0;
+  overflow-wrap: anywhere;
+}
+
 .cv-facts {
   display: flex;
   align-items: center;
@@ -598,6 +613,37 @@
 .cv-foot .nc-pickers {
   flex: 1;
   min-width: 0;
+}
+
+@container workspace-pane (max-width: 560px) {
+  .split-area.is-split .cv-thread {
+    padding: 18px 12px calc(var(--cv-clear, 130px) + 14px);
+  }
+
+  .split-area.is-split .cv-composer {
+    left: 0;
+    right: 0;
+    padding: 0 10px 12px;
+  }
+
+  .split-area.is-split .cv-box {
+    min-width: 0;
+    padding: 12px 10px 8px;
+    border-radius: 18px;
+  }
+
+  .split-area.is-split .cv-where {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .split-area.is-split .cv-fact {
+    min-width: 0;
+    max-width: 100%;
+  }
 }
 
 .is-mobile .cv-foot .ca-attach {

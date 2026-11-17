@@ -35,7 +35,7 @@ test("a user's message and another agent's both show their pictures; the origin 
 test('both composers take paste, drop and the attach button, and show the chips', () => {
   for (const [file, key] of [
     ['ChatView.jsx', 'composerKey'],
-    ['NewChat.jsx', "'new'"],
+    ['NewChat.jsx', 'composerKey'],
   ]) {
     const view = read(file)
     assert.match(view, /onPaste=\{attachInput\.onPaste\}/, `${file} paste`)
@@ -61,7 +61,7 @@ test("the browser's text bus and its picture bus follow the same focus", () => {
   const fresh = read('NewChat.jsx')
   assert.match(
     fresh,
-    /releaseInserter\.current = claimInserter\(attach, 'new'\)\s*\n\s*releasePictures\.current\?\.\(\)\s*\n\s*releasePictures\.current = setFocusedComposer\('new'\)/,
+    /releaseInserter\.current = claimInserter\(attach, composerKey, inputRef\)\s*\n\s*releasePictures\.current\?\.\(\)\s*\n\s*releasePictures\.current = setFocusedComposer\(composerKey\)/,
   )
 })
 
@@ -82,7 +82,7 @@ test('sending refuses what the app cannot carry before anything runs, and says i
   assert.equal((chat.match(/setError\(errorCopy\(err\)\)/g) ?? []).length, 2, 'send and steer')
   const fresh = read('NewChat.jsx')
   assert.match(fresh, /attachments: payload\.attachments/)
-  assert.match(fresh, /moveAttachments\('new', id\)/)
+  assert.match(fresh, /moveAttachments\(composerKey, scopedComposerKey\(id, composerScope\)\)/)
 })
 
 test('a queued message shows its pictures, and Edit brings them back', () => {

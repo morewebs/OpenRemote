@@ -1,0 +1,116 @@
+.file-change {
+  margin: 7px 0;
+  min-width: 0;
+}
+
+.file-change-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 5px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.file-change-toggle:hover,
+.file-change-toggle:focus-visible {
+  color: var(--text-1);
+}
+
+.file-change-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+}
+
+.file-change-added { color: var(--green); }
+.file-change-removed, .file-change-error { color: var(--red); }
+.file-change.is-failed .file-change-action { color: var(--red); }
+.file-change.is-pending .file-change-action { color: var(--text-3); }
+
+.file-change-panel {
+  margin-top: 6px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.file-change-path {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 16px;
+  padding: 10px 12px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.file-change-path span {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.file-change-code {
+  max-height: 400px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 4px 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.7;
+  tab-size: 4;
+}
+
+.file-change-line {
+  display: flex;
+  min-width: max-content;
+  padding-right: 16px;
+  border-left: 3px solid transparent;
+}
+
+.file-change-line.is-add {
+  background: rgba(74, 180, 100, 0.14);
+  border-left-color: var(--green);
+}
+
+.file-change-line.is-del {
+  background: rgba(248, 113, 113, 0.12);
+  border-left-color: var(--red);
+}
+
+.file-change-number {
+  width: 48px;
+  padding-right: 10px;
+  flex: none;
+  color: var(--text-3);
+  text-align: right;
+  user-select: none;
+}
+
+.file-change-sign {
+  width: 18px;
+  flex: none;
+  color: var(--text-3);
+  user-select: none;
+}
+
+.file-change-line code {
+  font: inherit;
+  white-space: pre;
+}
+
+.file-change-empty, .file-change-limit, .file-change-error {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

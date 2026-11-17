@@ -32,11 +32,11 @@ This is a composer feature spanning input, context collection and delivery. Pres
 
 ## Menu content and behavior
 
-The initial menu has two sections. Use plain sentence-case labels, small consistent icons, restrained separators and no promotional copy. Preserve the existing typography and palette; the menu inherits the current theme rather than introducing another visual system.
+The initial menu has two sections. Use plain sentence-case labels, small consistent icons, restrained separators and no promotional copy. Preserve the existing typography and palette; the menu inherits the current theme rather than introducing another visual system. The user's supplied ChatGPT and Claude phone screenshots are the visual references: a bottom sheet titled Add to chat, with Camera, Photos and Files as separate prominent actions, followed by quieter context and tool rows. Desktop uses a compact anchored menu with the same actions.
 
 **Add**
 
-- **Files and photos:** multi-select supported files from the device. Images continue through the existing conversion path. Documents enter the new document ingestion path. Supported types are named in the picker/help text.
+- **Photos** and **Files:** separate pickers for images and supported documents. Images continue through the existing conversion path. Documents enter the new document ingestion path. Supported types are named in the picker/help text. Mixed drag-and-drop remains supported.
 - **Paste from clipboard:** add clipboard images or a named text attachment when the platform exposes an explicit clipboard-read API. Permission denial explains that the user can paste directly into the composer; ordinary Ctrl/Cmd+V continues to work without a menu.
 - **Take a photo:** on phones whose file input supports camera capture, open a separate image input requesting the rear camera. The operating system owns capture; cancellation leaves the draft alone.
 - **Reference files or chats:** open the existing @ picker at the preserved cursor. This references files on the execution machine, whereas Files and photos imports selected bytes from the user's current device.
@@ -111,4 +111,4 @@ The comparison supports a familiar attachment entry point and discoverable conne
 
 ## Approval status
 
-The user selected the unified-menu approach. This written design is pending approval; product implementation has not started.
+The user selected the unified-menu approach, then supplied ChatGPT and Claude phone references and instructed the agent to handle the work itself. This delegates remaining design and implementation decisions; no further approval gate is needed for this scope.

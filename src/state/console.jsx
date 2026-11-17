@@ -12,6 +12,7 @@ import { isMobile, openExternal } from '../platform.js'
 import { loadArchived, saveArchived, withArchived } from '../archive.js'
 import { webFetch } from '../web/transport.js'
 import { descendantsOf, isAlive } from '../team.js'
+import { firstMessageDelivery } from '../first-message.js'
 
 export const ConsoleContext = createContext(null)
 
@@ -798,7 +799,7 @@ export function ConsoleProvider({ children }) {
   const createChat = useCallback(
     async (
       text, workspace, harness, model, fast, effort, permissionMode,
-      { deviceId = null, synced = false, mentionedChats = [], endpointId = null, attachments = [] } = {},
+      { deviceId = null, synced = false, mentionedChats = [], endpointId = null, attachments = [], returnDelivery = false } = {},
     ) => {
       const session = await api.createSession({
         harness, workspace, model, effort, fast, permissionMode, endpointId, deviceId, synced,
@@ -810,16 +811,16 @@ export function ConsoleProvider({ children }) {
       // chat rather than swallowed here: the person is already looking at it,
       // and an agent that never answered without a word about why is the one
       // failure this console must not ship.
-      if (text.trim() || attachments.length) {
-        api.prompt(session.id, text.trim(), mentionedChats, attachments).catch((err) => {
-          queueEvent(session.id, {
-            type: 'daemon.error',
-            id: `send-failed-${Date.now()}`,
-            seq: null,
-            message: errorCopy(err),
-          })
+      const delivery = firstMessageDelivery(api, session.id, text, mentionedChats, attachments, (err) => {
+        queueEvent(session.id, {
+          type: 'daemon.error',
+          id: `send-failed-${Date.now()}`,
+          seq: null,
+          message: errorCopy(err),
         })
-      }
+      })
+      if (returnDelivery) return { id: session.id, delivery }
+      delivery.catch(() => {})
       return session.id
     },
     [api, ensureChat, queueEvent],

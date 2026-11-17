@@ -38,11 +38,15 @@ import ChangesModal from './ChangesModal.jsx'
 import RaceModal from './RaceModal.jsx'
 import SaveLayoutModal from './SaveLayoutModal.jsx'
 import RestoreLayoutConfirm from './RestoreLayoutConfirm.jsx'
-import { fitLayout, restoreConfirm } from './layouts.js'
+import { restoreConfirm } from './layouts.js'
 import RenameChatModal from './RenameChatModal.jsx'
 import { overlayStale } from './rename-chat.js'
 import { canSeedChat, chatSetup } from './chat-setup.js'
 import { pickable } from './harness-manager.js'
+import { carryAppDraft } from './app-selection.js'
+import { composerDrafts } from './composer-drafts.js'
+import { scopedComposerKey } from './composer-scope.js'
+import { moveAttachments } from './attachments.js'
 import { chatTitle } from './shape.js'
 import ViewPopup from './ViewPopup.jsx'
 import { POPUP_VIEWS, onPopup } from './popups.js'
@@ -53,12 +57,9 @@ import { frontProject, isPluginView, settingsKey } from './plugin-runtime.js'
 import { freePanes, raceLayout } from './race.js'
 import {
   MAX_PANES,
-  closeLeaf,
-  focusByIndex,
   focusLeaf,
   leafById,
   leaves,
-  moveLeaf,
   newLayout,
   paneCount,
   reconcilePanes,
@@ -68,6 +69,7 @@ import {
   splitLeaf,
 } from './split.js'
 import { onBesideRequest } from './team-placement.js'
+import { closeWorkspacePane, dockPane, layoutFits, paneCompletion, paneForView, promotionMode } from './workspace-layout.js'
 import LeadWorkersModal from './LeadWorkersModal.jsx'
 
 
@@ -207,6 +209,18 @@ function Shell() {
   // Split panes: more chats beside the primary view, Local and Cloud alike.
   // The primary pane follows the history above; the others hold their own.
   const [layout, setLayout] = useState(loadLayout)
+  const [layoutControl, setLayoutControl] = useState(null)
+  const [workspaceRoom, setWorkspaceRoom] = useState({ width: 0, height: 0 })
+  const [workspaceNotice, setWorkspaceNotice] = useState(null)
+  const closeLayoutControl = useCallback(() => setLayoutControl(null), [])
+  const openWorkspaceLayout = useCallback(e => {
+    const footerButton = document.querySelector('.sb-foot [data-picker="workspace-layout"]')
+    const button = e?.currentTarget ?? (footerButton?.getClientRects().length ? footerButton : document.querySelector('.titlebar [data-picker="workspace-layout"]'))
+    const rect = button?.getBoundingClientRect()
+    const above = Boolean(button?.closest('.sb-foot'))
+    setLayoutControl(current => current ? null : { x: rect?.left ?? 280, y: above ? rect.top - 8 : (rect?.bottom ?? 36) + 8, above })
+  }, [])
+  const canRestoreWorkspace = useCallback(plan => layoutFits(plan.layout, workspaceRoom.width, workspaceRoom.height), [workspaceRoom])
   useEffect(() => {
     try {
       sessionStorage.setItem(SPLIT_KEY, JSON.stringify(layout))
@@ -324,6 +338,8 @@ function Shell() {
       ? 'new'
       : stored
   const chat = isChatView(view) ? chats[view] ?? null : null
+  const workspaceRef = useRef(null)
+  workspaceRef.current = { layout, view, mode, chats, sessions }
 
   // Whether this window has had a working connection at any point, which is
   // the one fact that tells a daemon that stopped apart from one that never
@@ -498,6 +514,12 @@ function Shell() {
   // design, so the rule for "which chat is this pane about" lives in one place.
   const focusedChatId = paneChatId(focused?.view, isChatView(view) ? view : null)
   const openInFocus = (id) => {
+    const holder = isChatView(id) ? paneForView(layout, view, id) : null
+    if (holder) {
+      setLayout(l => focusLeaf(l, holder.id))
+      if (narrow) setSidebarOpen(false)
+      return
+    }
     // The same rule for the focused pane's own route: an ordinary New chat
     // (the tile, the shortcut) is not a press of the setup row.
     if (id === 'new') setSetupSeed(null)
@@ -574,12 +596,22 @@ function Shell() {
   }, [chats, sessions, renamed])
 
   // Open a chat in a new pane beside the focused one.
+  const fitsWorkspace = candidate => {
+    const box = document.querySelector('.split-area')?.getBoundingClientRect()
+    return Boolean(box && layoutFits(candidate, box.width, box.height))
+  }
+  const canSplitChat = (id, dir, before) => Boolean(paneForView(layout, view, id)) || fitsWorkspace(splitLeaf(layout, layout.focus, dir, id, before)) && paneCount(layout) < MAX_PANES
+  const splitWorkspace = (id, dir, before = false) => setLayout(current => {
+    const candidate = splitLeaf(current, id, dir, 'new', before)
+    return fitsWorkspace(candidate) ? candidate : current
+  })
   const openBeside = (id, dir = 'row', before = false) => {
+    const holder = isChatView(id) || isPluginView(id) ? paneForView(layout, view, id) : null
+    if (holder) { setLayout(l => focusLeaf(l, holder.id)); return }
     const session = (sessions ?? []).find((s) => s.id === id)
     if (session) ensureChat(session)
     const next = splitLeaf(layout, layout.focus, dir, id, before)
-    if (next === layout) openInFocus(id)
-    else setLayout(next)
+    if (next !== layout && fitsWorkspace(next)) setLayout(next)
   }
 
   // The race's chats arrived: one pane each, in the order they were picked.
@@ -603,22 +635,30 @@ function Shell() {
   // already lives in is not a move.
   const dropInPane = (leafId, id, place) => {
     const leaf = leafById(layout, leafId)
-    if (!leaf || leaf.view === id) return
+    if (!leaf) return
     const session = (sessions ?? []).find((s) => s.id === id)
     if (session) ensureChat(session)
+    const source = paneForView(layout, view, id)
+    const bounds = document.querySelector('.split-area')?.getBoundingClientRect()
+    if (source) {
+      if (place.zone === 'center' || source.id === leafId) setLayout(l => focusLeaf(l, source.id))
+      else {
+        const candidate = dockPane(layout, source.id, leafId, place.zone)
+        if (bounds && layoutFits(candidate, bounds.width, bounds.height)) setLayout(candidate)
+      }
+      return
+    }
     if (place.zone === 'center' || !panesCanSplit) {
       if (leaf.view === null) {
+        setLayout(l => focusLeaf(l, leaf.id))
         openSession(id)
       } else {
         setLayout((l) => focusLeaf(setLeafView(l, leaf.id, id), leaf.id))
       }
       return
     }
-    // A move, not a copy: the pane the chat came from becomes a New chat, so
-    // the same chat never streams in two panes with two drafts. The primary is
-    // left alone (its view is navigation), and a sidebar drag has no source.
-    const source = leaves(layout.root).find((pane) => pane.view === id)
-    setLayout((l) => moveLeaf(l, source?.id ?? null, leafId, place.dir, place.before, id))
+    const candidate = splitLeaf(layout, leafId, place.dir, id, place.before)
+    if (bounds && layoutFits(candidate, bounds.width, bounds.height)) setLayout(candidate)
   }
   // A chat asks to show another beside it - a lead's team bar opening a
   // worker, a worker's "Started by" chip going back to its lead: in the
@@ -640,7 +680,7 @@ function Shell() {
     }
     const origin = leaves(layout.root).find((l) => (l.view ?? view) === from) ?? focused
     const next = splitLeaf(layout, origin.id, 'row', chat)
-    if (next === layout) openInFocus(chat)
+    if (next === layout || !fitsWorkspace(next)) openInFocus(chat)
     else setLayout(next)
   }
   useEffect(() => onBesideRequest((request) => besideRequest.current?.(request)), [])
@@ -698,15 +738,16 @@ function Shell() {
     if (!leaf) return []
     const v = leaf.view ?? view
     const full = paneCount(layout) >= MAX_PANES
-    const split = (dir, before) => () => setLayout((l) => splitLeaf(l, leafId, dir, 'new', before))
+    const split = (dir, before) => () => splitWorkspace(leafId, dir, before)
+    const blocked = (dir, before) => full || !fitsWorkspace(splitLeaf(layout, leafId, dir, 'new', before))
     // The same four words as the pane header's menu, so a split is called
     // one thing everywhere it can be started.
     const items = [
       ...(full ? [{ header: `${MAX_PANES} panes is the most` }] : []),
-      { label: 'Split right', icon: <ArrowRight size={14} />, hint: kb.label('split-right'), disabled: full, onSelect: split('row', false) },
-      { label: 'Split down', icon: <ArrowDown size={14} />, hint: kb.label('split-down'), disabled: full, onSelect: split('col', false) },
-      { label: 'Split left', icon: <ArrowLeft size={14} />, disabled: full, onSelect: split('row', true) },
-      { label: 'Split up', icon: <ArrowUp size={14} />, disabled: full, onSelect: split('col', true) },
+      { label: 'Split right', icon: <ArrowRight size={14} />, hint: kb.label('split-right'), disabled: blocked('row', false), onSelect: split('row', false) },
+      { label: 'Split down', icon: <ArrowDown size={14} />, hint: kb.label('split-down'), disabled: blocked('col', false), onSelect: split('col', false) },
+      { label: 'Split left', icon: <ArrowLeft size={14} />, disabled: blocked('row', true), onSelect: split('row', true) },
+      { label: 'Split up', icon: <ArrowUp size={14} />, disabled: blocked('col', true), onSelect: split('col', true) },
     ]
     const title = chats[v]?.title
     if (isChatView(v) && title) {
@@ -724,10 +765,10 @@ function Shell() {
         },
       )
     }
-    if (leaf.view !== null) {
+    if (paneCount(layout) > 1) {
       items.push(
         { divider: true },
-        { label: 'Close pane', icon: <X size={14} />, hint: kb.label('close-pane'), onSelect: () => setLayout((l) => closeLeaf(l, leafId)) },
+        { label: 'Close pane', icon: <X size={14} />, hint: kb.label('close-pane'), onSelect: () => closePane(leafId) },
       )
     }
     return items
@@ -847,11 +888,8 @@ function Shell() {
   // primary pane's view is navigation, so that is the one thing the shell still
   // has to do.
   const restoreNow = (plan) => {
-    // Fractions carry no pixel floor of their own: a shape saved in a wide
-    // window restored into a narrow one came back as slivers. innerWidth is the
-    // whole window rather than the pane area, so the floor is slightly weaker
-    // than the panes deserve, and it is the only width the shell knows here.
-    setLayout(fitLayout(plan.layout, { width: typeof window === 'undefined' ? 0 : window.innerWidth }))
+    if (!fitsWorkspace(plan.layout)) { setWorkspaceNotice('This layout needs more room. Enlarge the workspace first.'); return }
+    setLayout(plan.layout)
     if (!plan.primaryRole) return
     if (plan.primaryRole === 'new') navigate('new')
     else if (isChatView(plan.primaryRole)) openSession(plan.primaryRole)
@@ -859,6 +897,7 @@ function Shell() {
   }
   const applySavedLayout = (plan) => {
     if (!plan?.ok) return
+    if (!fitsWorkspace(plan.layout)) { setWorkspaceNotice('This layout needs more room. Enlarge the workspace first.'); return }
     const ask = restoreConfirm(plan, layout)
     if (ask) return setPendingRestore({ plan, ask })
     restoreNow(plan)
@@ -870,7 +909,7 @@ function Shell() {
     // A project row opens a New chat of its own chosen project, so any setup
     // left from the last press of "New chat with this setup" is spent.
     setSetupSeed(null)
-    setPresetProject({ id, nonce: Date.now() })
+    setPresetProject({ id, nonce: Date.now(), leafId: leaves(layout.root).find(p => p.view === null).id })
     focusPrimary()
     navigate('new')
     if (typeof window !== 'undefined' && !window.matchMedia('(min-width: 640px)').matches)
@@ -889,7 +928,7 @@ function Shell() {
       thisDevice,
     })
     if (!canSeedChat(setup)) return
-    setSetupSeed({ nonce: Date.now(), ...setup })
+    setSetupSeed({ nonce: Date.now(), ...setup, leafId: leaves(layout.root).find(p => p.view === null).id })
     focusPrimary()
     navigate('new')
     if (typeof window !== 'undefined' && !window.matchMedia('(min-width: 640px)').matches)
@@ -961,26 +1000,46 @@ function Shell() {
     }
   }, [])
   useShortcut('toggle-mode', () => switchMode(mode === 'local' ? 'cloud' : 'local'), desk)
-  useShortcut('split-right', () => setLayout((l) => splitLeaf(l, l.focus, 'row')), desk)
-  useShortcut('split-down', () => setLayout((l) => splitLeaf(l, l.focus, 'col')), desk)
+  useShortcut('split-right', () => splitWorkspace(layout.focus, 'row'), desk)
+  useShortcut('split-down', () => splitWorkspace(layout.focus, 'col'), desk)
   // Ctrl+1..4: the panes in reading order, the way VS Code numbers its
   // editor groups.
-  useShortcut('focus-pane-1', () => setLayout((l) => focusByIndex(l, 0)), desk)
-  useShortcut('focus-pane-2', () => setLayout((l) => focusByIndex(l, 1)), desk)
-  useShortcut('focus-pane-3', () => setLayout((l) => focusByIndex(l, 2)), desk)
-  useShortcut('focus-pane-4', () => setLayout((l) => focusByIndex(l, 3)), desk)
-  // The primary pane is the window's own view; only a split pane closes.
+  const focusPane = index => {
+    const pane = leaves(layout.root)[index]
+    if (!pane) return
+    setLayout(l => focusLeaf(l, pane.id))
+    requestAnimationFrame(() => {
+      const element = document.querySelector(`[data-leaf-id="${pane.id}"]`)
+      const target = element?.querySelector('textarea:not(:disabled)') ?? element?.querySelector('.split-label')
+      target?.focus({ preventScroll: true })
+    })
+  }
+  useShortcut('focus-pane-1', () => focusPane(0), desk)
+  useShortcut('focus-pane-2', () => focusPane(1), desk)
+  useShortcut('focus-pane-3', () => focusPane(2), desk)
+  useShortcut('focus-pane-4', () => focusPane(3), desk)
+  const closePane = id => {
+    const next = closeWorkspacePane(layout, id, view)
+    if (next.layout === layout) return
+    setLayout(next.layout)
+    const record = chats[next.primaryView] ?? (sessions ?? []).find(s => s.id === next.primaryView)
+    const compatibleMode = promotionMode(mode, record, thisDevice)
+    if (compatibleMode !== mode) keepMode(compatibleMode)
+    if (next.primaryView !== view) navigate(next.primaryView)
+  }
+  // Closing the navigation owner promotes an adjacent surviving pane.
   useShortcut(
     'close-pane',
     () => {
-      if (!focused || focused.view === null) return false
-      setLayout((l) => closeLeaf(l, focused.id))
+      if (!focused || paneCount(layout) < 2) return false
+      closePane(focused.id)
     },
     desk,
   )
   // The palette's recent chats: the navigation history, newest first.
   const recentChatIds = [...new Set([...history].reverse().filter(isChatView))]
   const primaryFocused = focused?.view === null
+  const primaryLeafId = leaves(layout.root).find(leaf => leaf.view === null)?.id ?? layout.focus
 
   // What the primary pane shows: the view the app's navigation points at.
   // Until this device is in an account, home is the sign-in door. Every
@@ -1042,7 +1101,8 @@ function Shell() {
       {view === 'machines' && <MachinesView onOpenChat={openSession} openDevice={openDevice} />}
       {!STATIC_VIEWS.includes(view) &&
         (chat ? (
-          <ChatView key={chat.id} chat={chat} focused={primaryFocused} />
+          <ChatView key={chat.id} chat={chat} focused={primaryFocused} onOpenPlugins={() => goView('plugins')}
+            onChooseApp={selection => choosePaneApp(primaryLeafId, chat.id, selection)} />
         ) : (
           <div className="cv-none">That chat is no longer in this workspace.</div>
         ))}
@@ -1061,21 +1121,59 @@ function Shell() {
 
   // A split pane holds a chat or a New chat composer; the same chats and
   // composers serve Local and Cloud, so one window mixes both.
+  const openPaneResult = (leafId, id, originMode) => {
+    const current = workspaceRef.current
+    const result = paneCompletion(current.layout, leafId, id)
+    if (result.target === 'closed') return
+    if (result.target === 'primary') {
+      const record = current.chats[id] ?? (current.sessions ?? []).find(s => s.id === id)
+      const compatibleMode = record ? promotionMode(current.mode, record, thisDevice) : originMode
+      if (compatibleMode !== current.mode) keepMode(compatibleMode)
+      openSession(id)
+    } else setLayout(l => paneCompletion(l, leafId, id).layout)
+  }
+  const choosePaneApp = (leafId, chatId, { seed, composerKey }) => {
+    const current = workspaceRef.current
+    const leaf = leafById(current.layout, leafId)
+    if (!leaf || (leaf.view ?? current.view) !== chatId) return
+    const scope = Object.hasOwn(leaf, 'scope') ? leaf.scope : leaf.view === null ? null : leaf.id
+    const destination = scopedComposerKey('new', scope)
+    composerDrafts.write(destination, carryAppDraft(composerDrafts.read(destination), composerDrafts.read(composerKey)))
+    moveAttachments(composerKey, destination)
+    setPresetProject(current => current?.leafId === leafId ? null : current)
+    setSetupSeed({ ...seed, leafId, nonce: Date.now() })
+    setLayout(l => focusLeaf(setLeafView(l, leafId, 'new'), leafId))
+    if (leaf.view === null) navigate('new')
+  }
   const paneContent = (leaf) => {
-    if (leaf.view === null) return primaryContent
-    if (isPluginView(leaf.view)) return <PluginView viewKey={leaf.view} />
-    if (leaf.view === 'new') {
+    const primary = leaf.view === null
+    const paneView = leaf.view ?? view
+    const scope = Object.hasOwn(leaf, 'scope') ? leaf.scope : primary ? null : leaf.id
+    if (isPluginView(paneView)) return <PluginView viewKey={paneView} />
+    if (primary && (STATIC_VIEWS.includes(paneView) && paneView !== 'new'
+      || mode === 'cloud' && needsSignIn(cloud) && paneView === 'new'
+      || paneView === 'new' && bootSeed && !sessionsAnswered && connection.state !== 'error')) return primaryContent
+    if (paneView === 'new') {
       return (
         <NewChat
-          onOpen={(id) => setLayout((l) => setLeafView(l, leaf.id, id))}
+          onOpen={id => openPaneResult(leaf.id, id, mode)}
           mode={mode}
           focused={leaf.id === layout.focus}
+          composerScope={scope}
+          compact={paneCount(layout) > 1}
+          addProjectOpen={primary ? addProjectOpen : false}
+          onAddProjectDone={primary ? () => setAddProjectOpen(false) : undefined}
+          presetProject={presetProject?.leafId === leaf.id ? presetProject : undefined}
+          setupSeed={setupSeed?.leafId === leaf.id ? setupSeed : undefined}
+          topRight={primary && paneCount(layout) === 1 ? <FloatingBar browserOn={browserOpen} onBrowser={canBrowse ? toggleBrowser : null} /> : undefined}
+          onOpenPlugins={() => goView('plugins')}
         />
       )
     }
-    const paneChat = chats[leaf.view]
+    const paneChat = chats[paneView]
     return paneChat ? (
-      <ChatView key={paneChat.id} chat={paneChat} focused={leaf.id === layout.focus} />
+      <ChatView key={paneChat.id} chat={paneChat} focused={leaf.id === layout.focus} onOpenPlugins={() => goView('plugins')} composerScope={scope} compact={paneCount(layout) > 1}
+        onChooseApp={selection => choosePaneApp(leaf.id, paneChat.id, selection)} />
     ) : (
       <div className="cv-none">That chat is no longer in this workspace.</div>
     )
@@ -1188,11 +1286,14 @@ function Shell() {
       onMode={switchMode}
       onSelect={(id) => (POPUP_VIEWS.includes(id) ? showPopup(id) : openInFocus(id))}
       onSplit={openBeside}
+      canSplitChat={canSplitChat}
       onAddProject={addProject}
       onNewChatIn={newChatIn}
       onReveal={() => setSidebarOpen(true)}
       onBrowser={canBrowse ? toggleBrowser : null}
       browserOpen={browserOpen}
+      onWorkspaceLayout={openWorkspaceLayout}
+      workspaceLayoutOpen={Boolean(layoutControl)}
       // The row menu's Rename opens the dialog hosted below; the overlay is
       // the name it shows until the console's own record catches up.
       onRenameChat={openRename}
@@ -1239,7 +1340,7 @@ function Shell() {
         onForward={goForward}
         canBack={onboarded && hIndex > 0}
         canForward={onboarded && hIndex < history.length - 1}
-        onSplit={onboarded ? () => setLayout((l) => splitLeaf(l, l.focus, 'row')) : undefined}
+        onSplit={onboarded && !sidebarOpen ? openWorkspaceLayout : undefined}
       />
       {manualConnect ? (
         <div className="app-body">
@@ -1298,6 +1399,7 @@ function Shell() {
             )}
             <CloudNotices />
             <div className="main-row">
+              {workspaceNotice && <div className="workspace-notice" role="status">{workspaceNotice}<button type="button" aria-label="Dismiss layout notice" onClick={() => setWorkspaceNotice(null)}><X size={16} /></button></div>}
               {/* One frame for the main area, split or not: with a single
                   pane it is just the app's view (no header), and either way
                   it is where a dragged chat can land and split. */}
@@ -1308,6 +1410,10 @@ function Shell() {
                 renderPane={renderPane}
                 onDropInPane={dropInPane}
                 canSplit={panesCanSplit}
+                onClosePane={closePane}
+                layoutControl={layoutControl}
+                onCloseLayoutControl={closeLayoutControl}
+                onRoomChange={setWorkspaceRoom}
                 onSaveLayout={() => setSavingLayout(true)}
                 onRestoreLayout={applySavedLayout}
                 // A saved "chat" pane comes back holding the chat on screen, so
@@ -1386,6 +1492,8 @@ function Shell() {
               raceFree={freePanes(layout)}
               panes={paneCount(layout)}
               paneCapacity={isMobile ? 1 : MAX_PANES}
+              onWorkspaceLayout={!isMobile ? openWorkspaceLayout : null}
+              canRestoreLayout={canRestoreWorkspace}
               onSaveLayout={() => setSavingLayout(true)}
               onRestoreLayout={applySavedLayout}
               // A saved "chat" pane comes back holding the chat on screen, which

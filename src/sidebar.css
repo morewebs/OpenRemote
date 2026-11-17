@@ -28,21 +28,6 @@
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  animation: pane-in 0.28s ease;
-}
-
-@keyframes pane-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-.sb-mode-fade {
-  animation: pane-in 0.28s ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -84,7 +69,8 @@ html[data-reduce-motion] .sb-mode-fade {
     width 0.34s cubic-bezier(0.25, 0.46, 0.45, 0.94),
     margin-right 0.34s cubic-bezier(0.25, 0.46, 0.45, 0.94),
     visibility 0s;
-  animation: sidebar-in 0.34s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  /* Keep motion tied to the toggle: an entrance animation can replay when
+     the webview is hidden and shown, even while this element stays mounted. */
 }
 
 /* collapse: the whole sidebar slides out as one unit - contents
@@ -194,6 +180,8 @@ html[data-reduce-motion] .sb-mode-fade {
 }
 
 .side-tile svg {
+  width: 20px;
+  height: 20px;
   color: var(--text-2);
 }
 
@@ -328,7 +316,7 @@ button:active,
   align-items: center;
   gap: 6px;
   width: 100%;
-  height: 30px;
+  height: 36px;
   padding: 0 8px;
   margin-top: 6px;
   border: 0;
@@ -347,6 +335,7 @@ button:active,
 
 .project-caret {
   display: grid;
+  flex: none;
   place-items: center;
   width: 14px;
   color: var(--text-3);
@@ -420,11 +409,12 @@ button:active,
 .sb-add-project {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 32px;
+  height: 32px;
+  flex: none;
   padding: 0;
   margin-left: auto;
-  margin-right: -4px;
+  margin-right: 0;
   border: 0;
   border-radius: 5px;
   background: transparent;
@@ -484,41 +474,46 @@ button:active,
   position: relative;
 }
 
-/* A project's own new chat and unregister live on its head row, revealed
-   on hover and keyboard focus (and always there on touch screens, which
-   have no hover). The row makes room so the name never runs under them. */
+/* Project actions appear on hover or keyboard focus. Touch screens keep
+   them visible because they have no hover. */
 .project:hover .project-head,
-.project:focus-within .project-head {
-  padding-right: 58px;
+.project[data-menu-open='true'] .project-head,
+.project:has(:focus-visible) .project-head {
+  padding-right: 74px;
 }
 
 .project:hover .project-count,
-.project:focus-within .project-count {
+.project[data-menu-open='true'] .project-count,
+.project:has(:focus-visible) .project-count {
   visibility: hidden;
 }
 
 .sb-project-new {
   position: absolute;
-  top: 6px;
-  right: 30px;
+  top: 2px;
+  right: 2px;
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 0;
   border-radius: 5px;
   background: transparent;
   color: var(--text-2);
   opacity: 0;
+  pointer-events: none;
   cursor: pointer;
   transition: opacity 0.12s ease;
 }
 
 .project:hover .sb-project-new,
-.project:focus-within .sb-project-new,
-.project:focus-within .sb-project-remove {
+.project[data-menu-open='true'] .sb-project-new,
+.project[data-menu-open='true'] .sb-project-more,
+.project:has(:focus-visible) .sb-project-new,
+.project:has(:focus-visible) .sb-project-more {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .sb-project-new:hover {
@@ -527,41 +522,104 @@ button:active,
 }
 
 @media (hover: none) {
-  .sb-project-new {
+  .sidebar .sb-project-new,
+  .sidebar .sb-project-more {
     opacity: 1;
+    pointer-events: auto;
   }
 
-  .project-head {
-    padding-right: 58px;
+  .sidebar .project .project-head {
+    padding-right: 74px;
   }
 }
 
-/* Unregister: a quiet action that never touches the disk. */
-.sb-project-remove {
+/* The menu sits to the left of the far-right new-chat shortcut. */
+.sb-project-more {
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: 2px;
+  right: 36px;
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 0;
   border-radius: 5px;
   background: transparent;
   color: var(--text-3);
   opacity: 0;
+  pointer-events: none;
   cursor: pointer;
   transition: opacity 0.12s ease;
 }
 
-.project:hover .sb-project-remove {
+.project:hover .sb-project-more {
   opacity: 1;
+  pointer-events: auto;
 }
 
-.sb-project-remove:hover {
+.sb-project-more:hover {
   background: var(--bg-active);
   color: var(--text-1);
+}
+
+.sb-project-pin {
+  flex: none;
+  color: var(--text-3);
+}
+
+.sb-project-organize {
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.sb-project-organize:hover {
+  color: var(--text-1);
+  background: var(--bg-hover);
+}
+
+.sb-project-organize + .sb-add-project {
+  margin-left: 2px;
+}
+
+.sb-project-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 8px 8px;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.sb-project-filter span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sb-project-filter button {
+  display: grid;
+  place-items: center;
+  padding: 3px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
 }
 
 /* Armed: the trash has been replaced by the word that unregisters. The word is
@@ -771,12 +829,12 @@ button:active,
 }
 
 .sb-foot {
-  padding: 8px 14px 10px;
+  padding: 4px 14px;
   border-top: 1px solid var(--line);
 }
 
-/* The footer's icon row: account, mobile, metrics, settings. Evenly
-   spaced round buttons, large enough to hit without aiming. */
+/* The footer's icon row: account, mobile, metrics, settings. Keep the
+   desktop strip compact; the phone overrides retain larger touch targets. */
 .sb-foot-row {
   display: flex;
   justify-content: space-evenly;
@@ -789,13 +847,18 @@ button:active,
   justify-content: center;
   position: relative;
   width: 40px;
-  height: 40px;
+  height: 32px;
   padding: 0;
   border: 0;
-  border-radius: 14px;
+  border-radius: 10px;
   background: transparent;
   color: var(--text-2);
   cursor: pointer;
+}
+
+.sb-icon-btn svg {
+  width: 22px;
+  height: 22px;
 }
 
 .sb-icon-btn:hover,
@@ -828,8 +891,7 @@ button:active,
 
 html[data-reduce-motion] .ab-bar span,
 html[data-reduce-motion] .dv-agent-dot,
-html[data-reduce-motion] .dot--running,
-html[data-reduce-motion] .sidebar {
+html[data-reduce-motion] .dot--running {
   animation: none;
 }
 
@@ -858,28 +920,12 @@ button:focus-visible {
     animation: none;
   }
 
-  .sidebar {
-    animation: none;
-  }
-
   .mode-switch-thumb,
   .machines-reveal,
   .machines-reveal > *,
   .sb-project-new,
   .sb-project-remove {
     transition: none;
-  }
-}
-
-@keyframes sidebar-in {
-  from {
-    opacity: 0;
-    transform: translateX(-8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
   }
 }
 
@@ -988,6 +1034,14 @@ of the list rather than as a banner that arrived from somewhere else. */
   box-shadow: -16px 0 32px rgba(0, 0, 0, 0.4);
 }
 
+/* The sheet slides across a sidebar that stays put: while it moves, it is
+   also composited, and on Android a tap on a region it just left can be
+   answered by the sheet's layer instead of the sidebar below it - one dead
+   press, then the layer list settles and the second press lands. So once
+   the drawer is open, the sidebar stands above the sheet in the stack,
+   and while it is closed the sidebar is gone - hidden, out of the tap and
+   tab paths - instead of merely covered. The hide waits out the slide
+   back, so it is painted until the sheet covers it. */
 .app-frame.is-mobile .sidebar,
 .app-frame.is-mobile .sidebar.collapsed,
 .app-frame.is-mobile .sidebar.collapsed:has(.search:focus-within),
@@ -996,15 +1050,25 @@ of the list rather than as a banner that arrived from somewhere else. */
   top: 0;
   bottom: 0;
   left: 0;
-  z-index: 1;
+  z-index: 3;
   width: 264px;
   margin: 0;
   border-right: 0;
   box-shadow: none;
   transform: none;
-  visibility: visible;
+  visibility: hidden;
   animation: none;
-  transition: none;
+  transition: visibility 0s 0.32s;
+}
+
+/* Open: it is there at once, above the sheet, and the sheet's own touch
+   handler no longer gets the press. */
+.app-frame.is-mobile.drawer-open .sidebar,
+.app-frame.is-mobile.drawer-open .sidebar.collapsed,
+.app-frame.is-mobile.drawer-open .sidebar.collapsed:has(.search:focus-within),
+.app-frame.is-mobile.drawer-open .sidebar:has(.search:focus-within) {
+  visibility: visible;
+  transition: visibility 0s 0s;
 }
 
 .app-frame.is-mobile .sb-backdrop {
@@ -1073,12 +1137,15 @@ of the list rather than as a banner that arrived from somewhere else. */
 
 .chat-more {
   position: absolute;
-  top: 50%;
-  right: 6px;
+  /* Layout centering survives the shared button:active transform reset. */
+  top: 0;
+  bottom: 0;
+  margin-block: auto;
+  right: 2px;
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: 0;
   border-radius: 999px;
@@ -1086,12 +1153,12 @@ of the list rather than as a banner that arrived from somewhere else. */
   color: var(--text-3);
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-50%);
   cursor: pointer;
   transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
 
 .chat-item:hover .chat-more,
+.chat-item[data-menu-open='true'] .chat-more,
 .chat-item:focus-within .chat-more {
   opacity: 1;
   pointer-events: auto;

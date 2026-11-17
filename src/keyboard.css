@@ -23,24 +23,11 @@
   box-shadow:
     0 4px 10px rgba(0, 0, 0, 0.32),
     0 24px 64px rgba(0, 0, 0, 0.5);
-  animation: kb-in 0.14s ease-out;
 }
 
 .kb-palette {
   width: min(600px, 92vw);
   max-height: 64vh;
-}
-
-@keyframes kb-in {
-  from {
-    opacity: 0;
-    transform: translateY(-6px) scale(0.99);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

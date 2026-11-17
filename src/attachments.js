@@ -14,6 +14,7 @@ import { consoleError } from './error-copy.js'
 
 const byComposer = new Map()
 const listeners = new Set()
+const removalListeners = new Set()
 // The composer the user is in, as a claim only its own composer can end
 // ({ key }), or null when none is on screen.
 let focused = null
@@ -58,11 +59,23 @@ export function addAttachment(item, key = focusedComposer()) {
 }
 
 export function removeAttachment(key, id) {
+  for (const fn of removalListeners) fn(id)
   byComposer.set(key || 'new', attachments(key).filter((a) => a.id !== id))
   changed()
 }
 
+// Async imports may finish after removal. Updating an absent id must never
+// recreate it or add its content to another composer's draft.
+export function updateAttachment(key, id, patch) {
+  const list = attachments(key)
+  if (!list.some(a => a.id === id)) return false
+  byComposer.set(key || 'new', list.map(a => a.id === id ? { ...a, ...patch } : a))
+  changed()
+  return true
+}
+
 export function clearAttachments(key) {
+  for (const item of attachments(key)) for (const fn of removalListeners) fn(item.id)
   byComposer.delete(key || 'new')
   changed()
 }
@@ -89,4 +102,9 @@ export function addToFocused(item) {
 export function subscribe(fn) {
   listeners.add(fn)
   return () => listeners.delete(fn)
+}
+
+export function onAttachmentRemoved(fn) {
+  removalListeners.add(fn)
+  return () => removalListeners.delete(fn)
 }

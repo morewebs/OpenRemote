@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ClockCounterClockwise, MagnifyingGlass } from '@phosphor-icons/react'
+import { Check, ClockCounterClockwise, MagnifyingGlass, X, ArrowLeft } from '@phosphor-icons/react'
 import { isMobile } from './platform.js'
 import { useBack } from './use-back.js'
 import { fitPicker, resolvePickerSpot } from './picker-anchor.js'
 import './pickermenu.css'
+import { useDialog } from './dialog-focus.js'
 
 /**
  * The cozy dropdown engine shared by the model / harness / device pickers.
@@ -35,10 +36,14 @@ export default function PickerMenu({
   hideSearch = false,
   leaving = false,
   place = 'below',
+  presentation = 'picker',
+  onBack = null,
 }) {
+  const actions = presentation === 'actions'
   const [query, setQuery] = useState('')
   const [cursor, setCursor] = useState(0)
-  const ref = useRef(null)
+  const panelRef = useRef(null)
+  const ref = panelRef
   const searchRef = useRef(null)
   // The element that opened this menu, kept for two uses: its rect places a menu opened
   // from the keyboard, and it takes the keyboard back when the menu closes. Both are
@@ -64,6 +69,7 @@ export default function PickerMenu({
   })()
 
   useBack(true, onClose)
+  useDialog(panelRef, onClose, { open: actions && isMobile, esc: false })
 
   useEffect(() => {
     // On a phone the keyboard would cover the list it's searching; the
@@ -109,7 +115,13 @@ export default function PickerMenu({
     const keepInView = () => {
       if (!el.isConnected) return
       const viewport = window.visualViewport
-      el.style.maxHeight = `min(380px, ${Math.max(0, (viewport?.height ?? window.innerHeight) - 16)}px)`
+      const height = viewport?.height ?? window.innerHeight
+      el.style.maxHeight = `min(${actions ? 620 : 380}px, ${Math.max(0, height - 16)}px)`
+      if (actions && isMobile) {
+        el.style.left = '0px'
+        el.style.top = `${(viewport?.offsetTop ?? 0) + height - el.getBoundingClientRect().height}px`
+        return
+      }
       const size = el.getBoundingClientRect()
       const { left, top } = fitPicker(
         getAnchor?.() ?? spot,
@@ -151,10 +163,26 @@ export default function PickerMenu({
   const onKeyDown = (e) => {
     if (e.key === 'Escape') {
       e.stopPropagation()
-      onClose()
+      if (onBack) onBack()
+      else onClose()
       return
     }
     if (!hideSearch && e.target !== searchRef.current) return
+    if (actions && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault()
+      const rows = [...ref.current.querySelectorAll('.nc-item')]
+      const at = rows.indexOf(document.activeElement)
+      const step = e.key === 'ArrowDown' ? 1 : -1
+      let next = at < 0 ? (step > 0 ? 0 : rows.length - 1) : at
+      for (let n = 0; n < rows.length; n++) {
+        if (at >= 0 || n > 0) next = (next + step + rows.length) % rows.length
+        if (!rows[next].disabled) break
+      }
+      setCursor(next)
+      rows[next]?.focus()
+      return
+    }
+    if (actions && e.target.tagName === 'BUTTON' && e.key === 'Enter') return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       setCursor((c) => Math.min(filtered.length - 1, c + 1))
@@ -164,7 +192,7 @@ export default function PickerMenu({
     } else if (e.key === 'Enter') {
       e.preventDefault()
       const item = filtered[cursor]
-      if (item) onChoose(item.id)
+      if (item && !item.disabled) onChoose(item.id)
     }
   }
 
@@ -198,14 +226,20 @@ export default function PickerMenu({
 
   const menu = (
     <div
-      ref={ref}
-      className={`nc-menu${isMobile ? ' is-phone' : ''}${wide ? ' nc-menu--wide' : ''}${leaving ? ' is-out' : ''}${place === 'above' ? ' is-above' : ''}`}
-      role="listbox"
+      ref={panelRef}
+      className={`nc-menu${isMobile ? ' is-phone' : ''}${wide ? ' nc-menu--wide' : ''}${leaving ? ' is-out' : ''}${place === 'above' ? ' is-above' : ''}${actions ? ' ca-add-menu' : ''}`}
+      role={actions ? (isMobile ? 'dialog' : 'menu') : 'listbox'}
+      aria-modal={actions && isMobile ? true : undefined}
       tabIndex={-1}
       aria-label={label}
       style={spot}
       onKeyDown={onKeyDown}
     >
+      {actions && (isMobile || onBack) && <div className="ca-add-heading">
+        {onBack ? <button type="button" onClick={onBack} aria-label="Back to Add to chat"><ArrowLeft size={20} /></button> : <span className="ca-add-heading-space" />}
+        <span>{label}</span>
+        <button type="button" onClick={onClose} aria-label="Close Add to chat"><X size={20} /></button>
+      </div>}
       {!hideSearch && <label className="nc-search">
         <MagnifyingGlass size={13} />
         <input
@@ -220,10 +254,10 @@ export default function PickerMenu({
         />
       </label>}
       {note && <p className="nc-note">{note}</p>}
-      <div className="nc-items">
+      <div className="nc-items" role={actions && isMobile ? 'menu' : undefined} aria-label={actions && isMobile ? label : undefined}>
         {grouped.map((group) => (
-          <div key={group.label ?? 'all'} className="nc-group">
-            {group.label && (
+          <div key={group.label ?? 'all'} className={`nc-group${actions && group.items.every(i => i.tile) ? ' ca-add-tiles' : ''}`}>
+            {group.label && !actions && (
               <div className="nc-group-label">
                 {group.label === 'Installed' && <ClockCounterClockwise size={10} />}
                 {group.label}
@@ -238,8 +272,9 @@ export default function PickerMenu({
                   className={`nc-item${item.detail ? ' has-detail' : ''}${
                     item.id === selectedId ? ' selected' : ''
                   }${i === cursor ? ' cursor' : ''}`}
-                  role="option"
-                  aria-selected={item.id === selectedId}
+                  role={actions ? 'menuitem' : 'option'}
+                  aria-selected={actions ? undefined : item.id === selectedId}
+                  disabled={item.disabled || undefined}
                   title={item.note || undefined}
                   onClick={() => onChoose(item.id)}
                   onMouseEnter={() => setCursor(i)}
@@ -269,5 +304,8 @@ export default function PickerMenu({
   )
   // The phone sheet moves over its sidebar. Its popups must escape that
   // stacking context; desktop menus stay inside their dialog's focus scope.
-  return portal ? createPortal(menu, document.body) : menu
+  const content = actions && isMobile ? <><div className="ca-add-backdrop" onMouseDown={onClose} aria-hidden="true" />{menu}</> : menu
+  // Pane containment keeps content responsive, but also contains fixed-position
+  // descendants. Pane pickers escape it so their viewport anchors stay correct.
+  return portal || triggerRef.current?.closest?.('.split-body') ? createPortal(content, document.body) : content
 }

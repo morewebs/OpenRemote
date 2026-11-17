@@ -1331,6 +1331,12 @@ fn answer_result(choice: &str, request: &Value) -> Value {
 /// Notifications → driver events. Also tracks the active turn for
 /// interrupt/steer.
 fn notification(method: &str, params: &Value, shared: &Shared) -> Option<DriverEvent> {
+    if let Some(event) = params
+        .get("item")
+        .and_then(|item| file_change_notification(method, item))
+    {
+        return Some(event);
+    }
     match method {
         "turn/started" => {
             if let Some(turn) = params.pointer("/turn/id").and_then(Value::as_str) {
@@ -1460,6 +1466,30 @@ fn notification(method: &str, params: &Value, shared: &Shared) -> Option<DriverE
     }
 }
 
+// The completed item carries the final diff, which can differ from the
+// one advertised at start. Preserve it in the result for console replay.
+fn file_change_notification(method: &str, item: &Value) -> Option<DriverEvent> {
+    if item.get("type")?.as_str()? != "fileChange" {
+        return None;
+    }
+    let tool_use_id = item.get("id")?.as_str()?.to_string();
+    match method {
+        "item/started" => Some(DriverEvent::ToolStarted {
+            tool_use_id,
+            name: "fileChange".into(),
+            input: item.clone(),
+        }),
+        "item/completed" => Some(DriverEvent::ToolResult {
+            tool_use_id,
+            name: "fileChange".into(),
+            text: item.to_string(),
+            is_error: item.get("status").and_then(Value::as_str) != Some("completed"),
+            images: Vec::new(),
+        }),
+        _ => None,
+    }
+}
+
 /// The model catalog for `/harnesses/codex/models`: a short-lived
 /// app-server, `initialize` + `model/list` (paginated), then kill. Every
 /// model arrives with Codex's own reasoning-effort words.
@@ -1551,6 +1581,41 @@ async fn read_stderr(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_changes_reach_the_console_with_content_and_outcome() {
+        let item = json!({"type": "fileChange", "id": "patch-1", "status": "inProgress",
+            "changes": [{"path": "hello.rs", "kind": {"type": "add"}, "diff": "+fn main() {}\n"}]});
+        let started = file_change_notification("item/started", &item).unwrap();
+        let DriverEvent::ToolStarted {
+            name,
+            input,
+            tool_use_id,
+        } = started
+        else {
+            panic!("file changes need a tool start");
+        };
+        assert_eq!(name, "fileChange");
+        assert_eq!(tool_use_id, "patch-1");
+        assert_eq!(input["changes"][0]["path"], "hello.rs");
+        for (status, failed) in [("completed", false), ("failed", true), ("declined", true)] {
+            let mut completed = item.clone();
+            completed["status"] = json!(status);
+            let DriverEvent::ToolResult { text, is_error, .. } =
+                file_change_notification("item/completed", &completed).unwrap()
+            else {
+                panic!("file changes need a tool result");
+            };
+            assert_eq!(is_error, failed);
+            assert_eq!(
+                serde_json::from_str::<Value>(&text).unwrap()["changes"],
+                item["changes"]
+            );
+        }
+        assert!(
+            file_change_notification("item/started", &json!({"type":"agentMessage"})).is_none()
+        );
+    }
 
     #[test]
     fn an_mcp_tool_call_reads_like_claudes_with_its_words_and_pictures() {

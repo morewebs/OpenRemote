@@ -16,5 +16,7 @@ export function webApi(peer, machineId) {
   if (!machineId) {
     throw new Error('a machine is required to use the web link')
   }
-  return new DaemonApi(PEER_ORIGIN, 'web-link', '', peer.fetchFor(machineId))
+  const api = new DaemonApi(PEER_ORIGIN, 'web-link', '', peer.fetchFor(machineId))
+  api.messageBodyLimit = 4 * 1024 * 1024
+  return api
 }

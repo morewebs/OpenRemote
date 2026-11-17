@@ -116,7 +116,7 @@ const SECTION_CAP = 8
 // The pages with no keyboard source behind them, so the crumb has a name.
 const PAGE_TITLES = { since: 'Since your last look', 'caught-up': 'Since your last look', layouts: 'Layouts', 'rule-run': 'Rules' }
 
-export default function CommandPalette({ recentChatIds, onClose, onOpenChat, onOpenProject, onOpenMachine, onRace, raceFree, panes = 1, paneCapacity = 4, onSaveLayout, onRestoreLayout, onRenameChat = null, onNewWithSetup = null, focusedChatId = null }) {
+export default function CommandPalette({ recentChatIds, onClose, onOpenChat, onOpenProject, onOpenMachine, onRace, raceFree, panes = 1, paneCapacity = 4, onSaveLayout, onRestoreLayout, onRenameChat = null, onNewWithSetup = null, focusedChatId = null, onWorkspaceLayout = null, canRestoreLayout = null }) {
   // One line on purpose: the stop-everything wiring test reads this call to
   // prove the palette stops chats through the action a single chat already
   // uses. The two new names sit before `stopChat`, which stays last.
@@ -480,6 +480,7 @@ export default function CommandPalette({ recentChatIds, onClose, onOpenChat, onO
           },
         ]
       : []
+    const workspaceRow = onWorkspaceLayout ? [{ key: 'action:workspace-layout', section: 'Actions', name: 'Workspace layout', sub: 'Arrange panes, presets and saved layouts', icon: <SquaresFour size={15} />, run: { workspaceLayout: true } }] : []
     const layoutsRow = savedLayouts.length
       ? [
           {
@@ -581,14 +582,14 @@ export default function CommandPalette({ recentChatIds, onClose, onOpenChat, onO
         }))
       : []
     return {
-      actions: [...stopRow, ...harnessRow, ...raceRow, ...sinceRow, ...layoutRow, ...layoutsRow, ...renameRow, ...setupRow, ...presetRow, ...reopenRow, ...review, ...markdown, ...jobRow, ...pages, ...actions],
+      actions: [...stopRow, ...harnessRow, ...raceRow, ...sinceRow, ...workspaceRow, ...layoutRow, ...layoutsRow, ...renameRow, ...setupRow, ...presetRow, ...reopenRow, ...review, ...markdown, ...jobRow, ...pages, ...actions],
       chats: chatRows,
       projectRows,
       machines: machineRows,
       harnessRows,
       ruleRows,
     }
-  }, [kb, sessions, archived, projects, devices, thisDevice, capabilities, machines, raceFree, moved, panes, savedLayouts, onScreen, reviewChat, markdownChat, hasFileChanges, focusedChatId, onRenameChat, rowSetup, onNewWithSetup, rulesCanRun, automations, machinesAnswered])
+  }, [kb, sessions, archived, projects, devices, thisDevice, capabilities, machines, raceFree, moved, panes, savedLayouts, onScreen, reviewChat, markdownChat, hasFileChanges, focusedChatId, onRenameChat, rowSetup, onNewWithSetup, rulesCanRun, automations, machinesAnswered, onWorkspaceLayout])
 
   const sections = useMemo(() => {
     if (page === 'layouts') {
@@ -597,11 +598,14 @@ export default function CommandPalette({ recentChatIds, onClose, onOpenChat, onO
       // the palette has (one control per row, the words carry the danger).
       const rows = savedLayouts.flatMap((entry) => {
         const panesText = `${entry.panes} ${entry.panes === 1 ? 'pane' : 'panes'}`
+        const plan = restoreShape(entry, { currentChat, capacity: paneCapacity })
+        const fits = plan.ok && (!canRestoreLayout || canRestoreLayout(plan))
         const restore = {
           key: `layout:${entry.id}`,
           section: 'Layouts',
           name: entry.name,
-          sub: panesText,
+          sub: fits ? panesText : 'Needs more workspace room',
+          disabled: !fits,
           icon: <SquaresFour size={15} />,
           run: { restoreLayout: entry },
         }
@@ -786,7 +790,7 @@ export default function CommandPalette({ recentChatIds, onClose, onOpenChat, onO
       }
       return { label, items }
     }).filter((s) => s.items.length)
-  }, [page, query, everything, tabRows, recentChatIds, kb, stopPhase, moved, harnessStopId, harnessPhase, savedLayouts, armedLayout])
+  }, [page, query, everything, tabRows, recentChatIds, kb, stopPhase, moved, harnessStopId, harnessPhase, savedLayouts, armedLayout, currentChat, paneCapacity, canRestoreLayout])
 
   const flat = sections.flatMap((s) => s.items)
 
@@ -841,7 +845,7 @@ export default function CommandPalette({ recentChatIds, onClose, onOpenChat, onO
   }
 
   const choose = (row) => {
-    if (!row) return
+    if (!row || row.disabled) return
     // A row with no action is a fact, not a control: the "and N more" row a
     // capped group ends with. Enter on it must do nothing rather than throw.
     if (!row.run) return
@@ -902,6 +906,11 @@ export default function CommandPalette({ recentChatIds, onClose, onOpenChat, onO
       requestAnimationFrame(() => onSaveLayout?.())
       return
     }
+    if (r.workspaceLayout) {
+      onClose()
+      requestAnimationFrame(() => onWorkspaceLayout?.())
+      return
+    }
     if (r.layouts) {
       setPage('layouts')
       setQuery('')
@@ -930,8 +939,8 @@ export default function CommandPalette({ recentChatIds, onClose, onOpenChat, onO
       // Nothing is applied until the whole shape fits: a window that cannot
       // hold it says why instead of drawing half of a four-pane layout.
       const plan = restoreShape(r.restoreLayout, { currentChat, capacity: paneCapacity })
-      if (!plan.ok) {
-        setLayoutNote(capacityLine(plan.refusal) || 'That layout cannot open in this window.')
+      if (!plan.ok || canRestoreLayout && !canRestoreLayout(plan)) {
+        setLayoutNote(capacityLine(plan.refusal) || 'This layout needs more room. Enlarge the workspace first.')
         inputRef.current?.focus()
         return
       }
@@ -1309,6 +1318,7 @@ export default function CommandPalette({ recentChatIds, onClose, onOpenChat, onO
                     type="button"
                     role="option"
                     aria-selected={i === cursor}
+                    disabled={row.disabled || undefined}
                     className={`kb-item${i === cursor ? ' cursor' : ''}`}
                     onMouseMove={() => i !== cursor && setCursor(i)}
                     onClick={() => choose(row)}

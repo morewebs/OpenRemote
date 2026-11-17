@@ -13,7 +13,6 @@
   box-shadow:
     0 4px 10px rgba(0, 0, 0, 0.32),
     0 16px 44px rgba(0, 0, 0, 0.44);
-  animation: nc-menu-in 0.14s ease-out;
 }
 
 .nc-menu.is-phone .nc-item,
@@ -26,37 +25,12 @@
   flex-shrink: 0;
 }
 
-@keyframes nc-menu-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
 .nc-menu.is-above {
   transform: translateY(calc(-100% - 8px));
-  animation: nc-menu-in-above 0.14s ease-out;
 }
 
 .nc-menu.is-above.is-out {
   animation: nc-menu-out-above 0.16s ease forwards;
-}
-
-@keyframes nc-menu-in-above {
-  from {
-    opacity: 0;
-    transform: translateY(calc(-100% - 4px));
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(calc(-100% - 8px));
-  }
 }
 
 @keyframes nc-menu-out-above {

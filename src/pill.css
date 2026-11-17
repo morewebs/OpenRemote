@@ -165,14 +165,6 @@ html[data-reduce-motion] .pill-send:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  animation: pt-in 0.14s ease-out;
-}
-
-@keyframes pt-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
 }
 
 .pt-user {

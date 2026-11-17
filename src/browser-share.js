@@ -5,29 +5,30 @@
 // has no chat yet, so its share waits for the chat it becomes.
 
 import { browserCall } from './browser-store.js'
+import { composerChatId } from './composer-scope.js'
 
-let waiting = false
+const waiting = new Set()
 
 /** The share reached composer `key` (a chat's id, or 'new'). */
 export function sharedWith(key, tell) {
   if (!key) return
-  if (key === 'new') {
-    waiting = true
+  if (composerChatId(key) === 'new') {
+    waiting.add(key)
     return
   }
-  tell(key)
+  tell(composerChatId(key))
 }
 
 /** The home screen's composer became chat `id`: tell it of a share made there. */
-export function chatMade(id, tell) {
-  if (!waiting) return
-  waiting = false
+export function chatMade(id, tell, key = 'new') {
+  if (!waiting.has(key)) return
+  waiting.delete(key)
   tell(id)
 }
 
 /** Test-only: forget a waiting share. */
 export function forgetShares() {
-  waiting = false
+  waiting.clear()
 }
 
 /** Tells this computer's daemon; a chat it does not hold (one on another
