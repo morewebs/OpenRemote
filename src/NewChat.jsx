@@ -42,6 +42,10 @@ import { spotAtBox } from './picker-anchor.js'
 import { greetingAt, greetingForNewChat, nextGreetingIndex } from './greetings.js'
 import { useComposerMenus } from './useComposerMenus.jsx'
 import { mentionedChats, ownCommands, takeCommands } from './composer-menus.js'
+import { ACTION_TARGETS, refusalFor } from './slash-actions.js'
+import { HelpModal } from './SlashDialogs.jsx'
+import { requestApp } from './app-requests.js'
+import { openPopup } from './popups.js'
 import { claimInserter, advanceComposerDraft } from './composer-insert.js'
 import { scopedComposerKey } from './composer-scope.js'
 import { useComposerDraft } from './useComposerDraft.js'
@@ -336,6 +340,7 @@ export default function NewChat({
   const effortLeavingRef = useRef(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const [showHelp, setShowHelp] = useState(false)
   const [harness, setHarness] = useState(() => setupSeed?.harness ?? openingPreset?.harness ?? loadDefaults().harness)
   const [model, setModel] = useState(null)
   const [models, setModels] = useState([])
@@ -1303,8 +1308,25 @@ export default function NewChat({
       // OpenRemote's commands set this chat's start (model, effort, fast,
       // permissions), its name, and whether it goes on Cloud; the rest is
       // the first message.
-      const { run, text: message } = takeCommands(text.trim(), ownCommands({ inChat: false, cloud: cloudReady }))
-      const picked = Object.fromEntries(run.map((c) => [c.name, c.arg]))
+      // A command the App can only run in its terminal is refused, with the
+      // reason, before a chat is made for it.
+      const refused = refusalFor(text.trim(), menus.commands)
+      if (refused) throw new Error(refused)
+      // The App's own words for what this screen sets (/models, /thinking)
+      // count as OpenRemote's; the ones that need a chat wait for one.
+      const before = ['model', 'effort', 'fast', 'permissions', 'rename', 'help', ...Object.keys(ACTION_TARGETS)]
+      const { run, text: message } = takeCommands(text.trim(), [
+        ...ownCommands({ inChat: false, cloud: cloudReady }),
+        ...menus.appCommands.filter((c) => before.includes(c.action)),
+      ])
+      const picked = Object.fromEntries(run.map((c) => [c.action ?? c.name, c.arg]))
+      if ('help' in picked) setShowHelp(true)
+      for (const action of Object.keys(ACTION_TARGETS)) {
+        if (!(action in picked)) continue
+        const target = ACTION_TARGETS[action]
+        if (target.view) requestApp('view', { id: target.view })
+        else openPopup('settings', { section: target.settings })
+      }
       const fastPicked = 'fast' in picked ? (picked.fast ? picked.fast.toLowerCase() === 'on' : !fast) : fast
       // The first message's pictures and picked elements, refused here when
       // the app can't take them - before a chat is made.
@@ -2059,6 +2081,14 @@ export default function NewChat({
           />, document.body
         )}
         {connection.state === 'error' && <p className="nc-error">{connection.error}</p>}
+        {showHelp && (
+          <HelpModal
+            app={harnessLabel(currentHarness) ?? 'this App'}
+            own={ownCommands({ inChat: false, cloud: cloudReady })}
+            commands={menus.commands}
+            onClose={() => setShowHelp(false)}
+          />
+        )}
         {error && <p className="nc-error">{error}</p>}
         {signInFor && createPortal(
           <SignInModal

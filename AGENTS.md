@@ -47,6 +47,11 @@ the project's own map.
   names the capability that widened; `--self-test` checks the check itself,
   and `--root` points it at another tree. Not build tooling; the one build
   script is `sync-daemon.mjs`.
+- `daemon/crates/openremote-daemon/src/slash.rs` and `slash_tables.rs` -
+  every App's own `/` commands and how each runs here (sent, the App's own
+  call, run by the console, or refused with a reason); `command_watch.rs`
+  reloads the `/` menu when a command folder changes. `docs/slash-commands.md`
+  is the inventory, generated from the tables.
 - `Archive/` - measured-and-killed experiments. Consult before
   resurrecting anything; never delete from it.
 

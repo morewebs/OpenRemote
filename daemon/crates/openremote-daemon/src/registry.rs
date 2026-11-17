@@ -118,6 +118,24 @@ impl SessionDriver {
         }
     }
 
+    /// One of the App's own commands through its protocol (slash.rs routes
+    /// `driver`). An App with no such call says so; the tables only route
+    /// a command here for an App whose driver answers it.
+    pub async fn run_command(
+        &mut self,
+        action: &str,
+        args: &str,
+    ) -> Result<openremote_harness::CommandRun, DriverError> {
+        match self {
+            SessionDriver::Codex(driver) => driver.run_command(action, args).await,
+            SessionDriver::Opencode(driver) => driver.run_command(action, args).await,
+            SessionDriver::Pi(driver) => driver.run_command(action, args).await,
+            _ => Err(DriverError::Harness(format!(
+                "this App has no call for /{action} here"
+            ))),
+        }
+    }
+
     pub async fn interrupt(&mut self) -> Result<(), DriverError> {
         match self {
             SessionDriver::Claude(driver) => driver.interrupt().await,

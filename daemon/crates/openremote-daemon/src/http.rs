@@ -388,6 +388,8 @@ async fn capabilities(State(app): State<Arc<App>>) -> Response {
     Json(json!({
         "daemon": env!("CARGO_PKG_VERSION"),
         "harnesses": app.supervisor.harnesses(),
+        // The / menu's lists changed when this moves (composer.rs).
+        "commands_rev": app.supervisor.commands_rev(),
     }))
     .into_response()
 }

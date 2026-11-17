@@ -138,7 +138,9 @@ async fn claudes_own_list_carries_the_plugins_and_is_asked_again_when_it_changes
 
     let view = commands(&daemon, &query).await;
     assert_eq!(view["runs_plugins"], true);
-    assert_eq!(entry(&view, "commands", "compact")["source"], "harness");
+    // claude lists /compact; OpenRemote's table knows it as a built-in.
+    assert_eq!(entry(&view, "commands", "compact")["source"], "builtin");
+    assert_eq!(entry(&view, "commands", "compact")["route"], "native");
     // claude lists the plugin's skill itself (loaded by --plugin-dir) ...
     let jot = entry(&view, "commands", "notes:jot");
     assert_eq!(jot["source"], "plugin");
@@ -445,4 +447,92 @@ async fn rename_gives_a_chat_the_name_every_device_shows() {
     )
     .await;
     assert_eq!(empty.status, 409, "{}", empty.raw);
+}
+
+#[tokio::test]
+async fn every_apps_built_ins_are_listed_routed_and_refused_where_they_cannot_run() {
+    let daemon = start_daemon(&[("claude", fixture_agent()), ("codex", fixture_agent())]).await;
+    let ws = workspace(Some("plain"));
+    let claude = commands(
+        &daemon,
+        &format!("harness=claude&workspace={}", encode(ws.path())),
+    )
+    .await;
+    // A terminal-only built-in is in the menu, dimmed, with its reason.
+    let theme = entry(&claude, "commands", "theme");
+    assert_eq!(theme["source"], "builtin");
+    assert_eq!(theme["route"], "refuse");
+    assert_eq!(theme["available"], false);
+    assert!(
+        theme["why"].as_str().unwrap().contains("terminal"),
+        "{theme}"
+    );
+    // One OpenRemote does itself names the action.
+    let copy = entry(&claude, "commands", "copy");
+    assert_eq!(copy["route"], "console");
+    assert_eq!(copy["action"], "copy");
+
+    let codex = commands(
+        &daemon,
+        &format!("harness=codex&workspace={}", encode(ws.path())),
+    )
+    .await;
+    assert_eq!(entry(&codex, "commands", "compact")["route"], "driver");
+    assert_eq!(entry(&codex, "commands", "vim")["route"], "refuse");
+
+    // A refused command opens no turn and says why.
+    let id = start_chat(&daemon, "s-create", "claude", ws.path()).await;
+    let refused = call(
+        &daemon,
+        "POST",
+        &format!("/sessions/{id}/prompts"),
+        Some(json!({"request_id": "s-p1", "text": "/theme"})),
+    )
+    .await;
+    assert_eq!(refused.status, 409, "{}", refused.raw);
+    let message = refused.body["error"].as_str().unwrap_or("");
+    assert!(message.starts_with("/theme "), "{message}");
+    let chat = call(&daemon, "GET", &format!("/sessions/{id}"), None).await;
+    assert_ne!(chat.body["status"], "working", "{}", chat.raw);
+
+    // Codex's /compact goes through its own call, never as words.
+    let cx = start_chat(&daemon, "s-codex", "codex", ws.path()).await;
+    prompt(&daemon, &cx, "s-p2", json!({"text": "/compact"}), 1).await;
+    let calls = std::fs::read_to_string(ws.path().join("fixture-codex-calls")).unwrap_or_default();
+    assert!(calls.contains("thread/compact/start"), "{calls}");
+    let input = std::fs::read_to_string(ws.path().join("fixture-codex-input")).unwrap_or_default();
+    assert!(!input.contains("/compact"), "{input}");
+}
+
+#[tokio::test]
+async fn a_new_command_file_reaches_the_menu_without_a_restart() {
+    let daemon = start_daemon(&[("claude", fixture_agent())]).await;
+    let ws = workspace(Some("plain"));
+    let query = format!("harness=claude&workspace={}", encode(ws.path()));
+    let before = commands(&daemon, &query).await["rev"].as_u64().unwrap();
+    // The folder does not exist yet: the first file in it still counts.
+    write(
+        ws.path(),
+        &[(
+            ".claude/commands/ship.md",
+            "---
+description: Ship it
+---
+Ship.",
+        )],
+    );
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    loop {
+        let caps = call(&daemon, "GET", "/capabilities", None).await;
+        if caps.body["commands_rev"].as_u64().unwrap_or(0) > before {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the new file was never heard"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    let after = commands(&daemon, &query).await;
+    assert!(after["rev"].as_u64().unwrap() > before, "{after}");
 }
