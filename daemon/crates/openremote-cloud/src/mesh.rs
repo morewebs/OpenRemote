@@ -2296,9 +2296,11 @@ mod tests {
 
     #[tokio::test]
     async fn a_nudge_from_a_device_the_list_does_not_know_fetches_the_list() {
-        let (mesh, _out, dir) = mesh_over(Arc::new(Nop));
+        let (mut mesh, _out, dir) = mesh_over(Arc::new(Nop));
+        // The higher-numbered device sends the nudge to the initiator.
+        mesh.me = DeviceId::from_bytes([0; 16]);
+        let stranger = DeviceId::from_bytes([1; 16]);
         let mesh = Arc::new(mesh);
-        let stranger = DeviceId::new();
         mesh.on_frame(stranger, &[NUDGE]);
         assert!(
             mesh.state().attempts.is_empty(),
