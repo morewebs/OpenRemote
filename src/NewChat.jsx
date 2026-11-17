@@ -44,6 +44,7 @@ import { useComposerMenus } from './useComposerMenus.jsx'
 import { mentionedChats, ownCommands, takeCommands } from './composer-menus.js'
 import { claimInserter, advanceComposerDraft } from './composer-insert.js'
 import { scopedComposerKey } from './composer-scope.js'
+import { useComposerDraft } from './useComposerDraft.js'
 import { recoverDraft } from './composer-recovery.js'
 import { chatMade, tellDaemon } from './browser-share.js'
 import { isMobile } from './platform.js'
@@ -68,24 +69,10 @@ export function effortLabel(tier) {
   return tier
 }
 
-export function FadingLabel({ text, className }) {
-  const shown = useRef(text)
-  const [outgoing, setOutgoing] = useState(null)
-  const [, bump] = useState(0)
-  useEffect(() => {
-    if (text === shown.current) return
-    setOutgoing(shown.current)
-    shown.current = text
-    bump((n) => n + 1)
-    const id = setTimeout(() => setOutgoing(null), 320)
-    return () => clearTimeout(id)
-  }, [text])
+export function EffortLabel({ text, className }) {
   return (
     <span className={`nc-label-swap${className ? ` ${className}` : ''}`}>
-      {outgoing != null && <span className="nc-label-out">{outgoing}</span>}
-      <span className="nc-label-in" key={shown.current}>
-        {shown.current}
-      </span>
+      <span>{text}</span>
     </span>
   )
 }
@@ -197,7 +184,7 @@ export function EffortSlider({
         ) : (
           <span />
         )}
-        <FadingLabel className="nc-effort-name" text={effortLabel(value ?? tiers[index])} />
+        <EffortLabel className="nc-effort-name" text={effortLabel(value ?? tiers[index])} />
       </div>
       <div
         className={`nc-effort-slider${dragging ? ' is-drag' : ''}${fast ? ' is-fast' : ''}`}
@@ -312,7 +299,7 @@ export default function NewChat({
   // was pressed again: no key and no click anywhere else took the arm away.
   const [armedPreset, setArmedPreset] = useState(null)
   const presetArmWatch = useArmedRow(armedPreset, setArmedPreset)
-  const [text, setText] = useState('')
+  const [text, setText, captureDraft] = useComposerDraft(composerKey)
   const [optionsOpen, setOptionsOpen] = useState(false)
   // A new chat opens on the next sentence. While the box stays empty the
   // line keeps moving, so a page left sitting does not freeze on one greeting.
@@ -1296,6 +1283,7 @@ export default function NewChat({
 
   const start = async () => {
     if (!canSend) return
+    const clearSentDraft = captureDraft()
     advanceComposerDraft(composerKey)
     setBusy(true)
     setError(null)
@@ -1320,7 +1308,7 @@ export default function NewChat({
         if (picked.effort) setEffort(picked.effort)
         if ('fast' in picked) setFast(fastPicked)
         if (picked.permissions) setPermission(picked.permissions)
-        setText('')
+        clearSentDraft()
         return
       }
       const created = await createChat(
@@ -1349,7 +1337,7 @@ export default function NewChat({
       for (const item of sent) removeAttachment(composerKey, item.id)
       moveAttachments(composerKey, scopedComposerKey(id, composerScope))
       if (picked.rename) await renameChat(id, picked.rename)
-      setText('')
+      clearSentDraft()
       onOpen(id)
     } catch (err) {
       setError(errorCopy(err))
@@ -1824,7 +1812,7 @@ export default function NewChat({
                   title={hintEffort("The app's own effort tier")}
                 >
                   <span className="nc-mobile-field-label">Effort</span>
-                  <FadingLabel text={isMobile && optionsOpen && !chosenEffort ? 'App default' : effortLabel(chosenEffort)} />
+                  <EffortLabel text={isMobile && optionsOpen && !chosenEffort ? 'App default' : effortLabel(chosenEffort)} />
                 </button>
                 {(picker?.kind === 'effort' || effortLeaving) && (
                   <EffortSlider

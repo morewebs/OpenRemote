@@ -94,6 +94,39 @@
   min-width: 0;
 }
 
+/* Match the desktop attachment menu's compact action rows. */
+.ctx-menu.is-compact:not(.is-phone) {
+  padding: 5px;
+  border-radius: 14px;
+  background: #2d2d2d;
+}
+
+.ctx-menu.is-compact:not(.is-phone) .nc-item {
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.ctx-menu.is-compact:not(.is-phone) .nc-item:not(.ctx-danger) {
+  color: var(--text-1);
+}
+
+.ctx-menu.is-compact:not(.is-phone) .nc-item-main {
+  min-height: 20px;
+}
+
+.ctx-menu.is-compact:not(.is-phone) .ctx-icon,
+.ctx-menu.is-compact:not(.is-phone) .ctx-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.ctx-menu.is-compact:not(.is-phone) .ctx-sep {
+  margin: 3px 6px;
+}
+
 .ctx-menu .nc-item-name {
   min-width: 0;
   overflow: hidden;

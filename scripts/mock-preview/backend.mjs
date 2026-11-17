@@ -34,6 +34,12 @@ export function createMockBackend() {
     agentSettings = { harnesses: [], tools: true, max_depth: 2, max_children: 4, max_live: 8, permissions: {} }
     for (const chat of sessions) {
       addEvent(chat, { type: 'message.added', message: { id: randomUUID(), role: 'user', text: chat.title } })
+      if (chat.id === 'design-review') {
+        addEvent(chat, { type: 'tool.started', name: 'write', turn: 1, input: { path: '/preview/openremote/hello.md', content: '# Hello\n\nThis file is sample data.\n\n- Created from a tool event\n- Expand to inspect the content\n' } })
+        addEvent(chat, { type: 'tool.result', name: 'write', turn: 1, output: 'Created file successfully: hello.md', is_error: false })
+        addEvent(chat, { type: 'tool.started', name: 'Edit', turn: 1, input: { file_path: '/preview/openremote/src/App.jsx', old_string: 'const greeting = "Hello"\nreturn greeting', new_string: 'const greeting = "Welcome back"\nreturn greeting' } })
+        addEvent(chat, { type: 'tool.result', name: 'Edit', turn: 1, output: 'Updated successfully', is_error: false })
+      }
       addEvent(chat, { type: 'message.added', message: { id: randomUUID(), role: 'assistant', text: 'This is sample conversation data in the actual OpenRemote UI. Open the + menu, change models, or send a message to inspect the interaction.' } })
     }
   }

@@ -119,6 +119,13 @@ struct State {
     next_generation: u64,
     auto_update: bool,
     online: std::collections::HashSet<DeviceId>,
+    /// Online, by the relay's word, before the device list named them. The
+    /// host was told they are online when this device could not yet reach
+    /// them (no key to link with), so its compare failed; it is told again
+    /// when the list catches up. Without this, a device that signs in while
+    /// the list is still loading meets its peers only on the next periodic
+    /// compare, minutes later.
+    unlisted_online: std::collections::HashSet<DeviceId>,
 }
 
 pub struct Mesh {
@@ -428,19 +435,48 @@ impl Mesh {
         }
         st.peers = peers;
         st.auto_update = body["prefs"]["auto_update"].as_bool().unwrap_or(true);
+        // Peers that came online before this list named them, and that this
+        // device can reach now: the host hears they are online again, so the
+        // compare that failed for want of a key runs now.
+        let reachable: Vec<DeviceId> = st
+            .unlisted_online
+            .iter()
+            .copied()
+            .filter(|id| {
+                st.online.contains(id) && st.peers.get(id).is_some_and(|p| p.problem.is_none())
+            })
+            .collect();
+        for id in &reachable {
+            st.unlisted_online.remove(id);
+        }
+        drop(st);
+        for id in reachable {
+            self.host.online(id);
+        }
         unpinnable.is_empty()
     }
 
     fn set_online(&self, ids: &[DeviceId]) {
-        self.state().online = ids.iter().copied().collect();
+        let mut st = self.state();
+        st.online = ids.iter().copied().collect();
+        let unlisted: Vec<DeviceId> = ids
+            .iter()
+            .copied()
+            .filter(|id| *id != self.me && !st.peers.contains_key(id))
+            .collect();
+        st.unlisted_online = unlisted.into_iter().collect();
     }
 
     fn presence(&self, id: DeviceId, online: bool) {
         let mut st = self.state();
         if online {
             st.online.insert(id);
+            if id != self.me && !st.peers.contains_key(&id) {
+                st.unlisted_online.insert(id);
+            }
         } else {
             st.online.remove(&id);
+            st.unlisted_online.remove(&id);
             fail_peer(&mut st, id, "offline");
         }
     }
@@ -688,6 +724,14 @@ impl Mesh {
                     // task per frame to discover that is the churn this
                     // coalescing exists to stop.
                     if st.links.get(&from).is_some_and(Link::is_up) {
+                        return;
+                    }
+                    // A device the list doesn't know yet knocked: fetch the
+                    // list again, as a handshake from one does. An attempt
+                    // now would fail at once for want of its key, and the
+                    // list's arrival is what links it.
+                    if !st.peers.contains_key(&from) {
+                        self.refresh.notify_one();
                         return;
                     }
                     st.attempts.retain(|_, until| now < *until);
@@ -2178,6 +2222,93 @@ mod tests {
             cloud.view()["error"].as_str(),
             Some(crate::IDENTITY_MISSING),
             "a missing identity is offered the sign-in that joins again"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A host that writes down which peers it was told are online.
+    #[derive(Default)]
+    struct OnlineLog(Mutex<Vec<DeviceId>>);
+    impl OnlineLog {
+        fn told(&self) -> Vec<DeviceId> {
+            self.0.lock().unwrap().clone()
+        }
+    }
+    impl CloudHost for OnlineLog {
+        fn dispatch(&self, _: PeerContext, _: Request) -> BoxFuture<'static, Response> {
+            Box::pin(std::future::ready(Response {
+                status: 200,
+                content_type: None,
+                body: Vec::new(),
+            }))
+        }
+        fn note(&self, _: PeerContext, _: Value) {}
+        fn linked(&self, _: DeviceId) {}
+        fn online(&self, peer: DeviceId) {
+            self.0.lock().unwrap().push(peer);
+        }
+        fn revoked(&self) {}
+    }
+
+    fn devices(ids: &[DeviceId]) -> Value {
+        json!({"devices": ids.iter().map(|id| json!({
+            "id": id.to_string(), "noise_pubkey": key(), "name": "d", "kind": "machine",
+        })).collect::<Vec<_>>()})
+    }
+
+    #[test]
+    fn a_peer_online_before_the_list_names_it_is_announced_when_it_does() {
+        // A device that just signed in hears from the relay who is online
+        // before its first device list arrives. The host's compare with those
+        // peers failed for want of a key; when the list names them, the host
+        // must hear again, or the two devices meet only on the periodic
+        // compare minutes later.
+        let log = Arc::new(OnlineLog::default());
+        let (mesh, _out, dir) = mesh_over(Arc::clone(&log) as Arc<dyn CloudHost>);
+        let known = DeviceId::new();
+        let early = DeviceId::new();
+        let fleeting = DeviceId::new();
+        mesh.update_devices(&devices(&[known]));
+        mesh.set_online(&[known, early, mesh.me]);
+        mesh.presence(fleeting, true);
+        mesh.presence(fleeting, false);
+        assert!(log.told().is_empty(), "the bookkeeping itself tells nobody");
+
+        mesh.update_devices(&devices(&[known, early, fleeting]));
+        assert_eq!(
+            log.told(),
+            vec![early],
+            "only the peer that was online and unlisted; not the one already \
+             listed, not one that left, not this device"
+        );
+
+        // The next refresh does not say it again.
+        mesh.update_devices(&devices(&[known, early, fleeting]));
+        assert_eq!(log.told(), vec![early]);
+
+        // A peer that comes online unlisted later is caught the same way.
+        let late = DeviceId::new();
+        mesh.presence(late, true);
+        mesh.update_devices(&devices(&[known, early, fleeting, late]));
+        assert_eq!(log.told(), vec![early, late]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_nudge_from_a_device_the_list_does_not_know_fetches_the_list() {
+        let (mesh, _out, dir) = mesh_over(Arc::new(Nop));
+        let mesh = Arc::new(mesh);
+        let stranger = DeviceId::new();
+        mesh.on_frame(stranger, &[NUDGE]);
+        assert!(
+            mesh.state().attempts.is_empty(),
+            "no attempt that could only fail for want of a key"
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_millis(100), mesh.refresh.notified())
+                .await
+                .is_ok(),
+            "the list is asked for again"
         );
         std::fs::remove_dir_all(&dir).unwrap();
     }

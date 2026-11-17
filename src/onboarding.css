@@ -210,28 +210,10 @@
   background: var(--text-2);
 }
 
-/* The step body swaps in place. The dots stay put and only change colour,
-   so the card reads as one page turning rather than a new panel. */
-.ob-stage {
-  animation: ob-step-in 0.22s cubic-bezier(0.2, 0, 0, 1) both;
-}
-
 /* The welcome card is one centered column: the title, the sentence, and a
    button that fills the row, so the dots under it sit on the same axis. */
 .ob-stage.is-welcome {
   text-align: center;
-}
-
-@keyframes ob-step-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

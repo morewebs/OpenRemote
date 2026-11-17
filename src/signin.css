@@ -10,7 +10,6 @@
   grid-template-rows: minmax(0, 1fr);
   padding: 24px;
   background: rgba(0, 0, 0, 0.55);
-  animation: dv-fade 0.12s ease-out;
 }
 
 .si-modal {
@@ -24,7 +23,6 @@
   border-radius: 14px;
   background: #1c1c1c;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), 0 4px 16px rgba(0, 0, 0, 0.3);
-  animation: dv-pop 0.14s ease-out;
 }
 
 .si-head {

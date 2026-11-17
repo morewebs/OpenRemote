@@ -22,7 +22,6 @@
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
-  animation: ib-in 0.18s ease-out both;
 }
 
 .ib-badge--red {
@@ -38,13 +37,6 @@
 .ib-badge:focus-visible {
   outline: 1px solid currentColor;
   outline-offset: 2px;
-}
-
-@keyframes ib-in {
-  from {
-    opacity: 0;
-    transform: translateY(-2px);
-  }
 }
 
 /* Reduced motion, both ways: the system setting and the in-app switch. */

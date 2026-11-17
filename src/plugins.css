@@ -293,20 +293,6 @@ html[data-reduce-motion] .pg-tabs-thumb {
   transition: color 0.16s ease, background 0.16s ease;
 }
 
-.pg-stage {
-  animation: pg-in 0.22s ease;
-}
-
-@keyframes pg-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .pg-stage {
     animation: none;

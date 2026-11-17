@@ -32,7 +32,7 @@ import { bodyPreview, MAX_RENDER_LINES, shouldRenderLive } from './render-budget
 import { jsonCaption, jsonIsLarge, jsonShape, readJson } from './json-card.js'
 import ContextRing from './ContextRing.jsx'
 import PickerMenu from './PickerMenu.jsx'
-import { EffortSlider, FadingLabel, effortLabel } from './NewChat.jsx'
+import { EffortSlider, EffortLabel, effortLabel } from './NewChat.jsx'
 import { EndpointManagerModal } from './EndpointManager.jsx'
 import { hasTauri, isMobile } from './platform.js'
 import { findDevServers } from './devservers.js'
@@ -43,6 +43,9 @@ import { useComposerMenus } from './useComposerMenus.jsx'
 import { mentionedChats, ownCommands, takeCommands } from './composer-menus.js'
 import { claimInserter, advanceComposerDraft } from './composer-insert.js'
 import { scopedComposerKey } from './composer-scope.js'
+import { useComposerDraft } from './useComposerDraft.js'
+import FileChangeCard from './FileChangeCard.jsx'
+import { fileChangeCards } from './file-change-card.js'
 import { addAttachment, removeAttachment, setFocusedComposer } from './attachments.js'
 import { AttachmentChips, useAttachInput, useAttachments } from './ComposerAttachments.jsx'
 import { outgoing, outgoingOrThrow, takesNoPictures, takesPictures } from './composer-attachments.js'
@@ -210,14 +213,17 @@ function MarkdownBody({ text, live = false, className, tail = '' }) {
 function WorkCluster({ items, running, chat }) {
   const { sessions } = useConsole()
   const [open, setOpen] = useState(false)
-  const live = workIsLive(items, running)
-  const tools = items.filter((item) => item.kind === 'tool')
+  const files = items.filter(item => item.kind === 'tool').flatMap(item => fileChangeCards(item).map(file => ({ file, item })))
+  const ordinary = items.filter(item => item.kind !== 'tool' || fileChangeCards(item).length === 0)
+  const live = workIsLive(ordinary, running)
+  const tools = ordinary.filter((item) => item.kind === 'tool')
   return (
     <div className="cv-node cv-work">
-      <button type="button" className="cv-reasoning-head" onClick={() => setOpen(!open)} aria-expanded={open}>
+      {ordinary.length > 0 && <button type="button" className="cv-reasoning-head" onClick={() => setOpen(!open)} aria-expanded={open}>
         {live && <span className="cv-tool-status-dot" />}
-        {workLabel(items, live)}
-      </button>
+        {workLabel(ordinary, live)}
+      </button>}
+      {files.map(({ file, item }, i) => <FileChangeCard key={`${item.id}-${i}`} file={file} result={item.result} />)}
       {open && tools.length > 0 && (
         <ul className="cv-work-list">
           {tools.map((item) => {
@@ -568,7 +574,8 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
     'signed-out': 'Sign in to Cloud to continue this chat',
     gone: `${where} left your Cloud - this copy is read-only`,
   }[access]
-  const [text, setText] = useState('')
+  const composerKey = scopedComposerKey(chat.id, composerScope)
+  const [text, setText, captureDraft] = useComposerDraft(composerKey)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [picker, setPicker] = useState(null)
@@ -615,7 +622,6 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
   const queue = chat.queue ?? []
   // What rides the next message besides its words: pictures, and elements
   // picked in the browser (attachments.js keeps them per composer).
-  const composerKey = scopedComposerKey(chat.id, composerScope)
   const attached = useAttachments(composerKey)
   const harness = (capabilities?.harnesses ?? []).find((h) => h.id === chat.harness)
   // The daemon's honors.attachments for the chat's app; a chat whose app
@@ -978,6 +984,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
 
   const send = async () => {
     if (!canSend) return
+    const clearSentDraft = captureDraft()
     advanceComposerDraft(composerKey)
     setBusy(true)
     setError(null)
@@ -988,7 +995,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
         else await sendPrompt(chat.id, message, pointed, attachments)
       }
       clearSent(sent)
-      setText('')
+      clearSentDraft()
     } catch (err) {
       // A refused picture (an app that reads none, over 5 MB, past what
       // Cloud carries) is the daemon's or the console's sentence.
@@ -1139,11 +1146,12 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
     }
     setBusy(true)
     setError(null)
+    const clearSentDraft = captureDraft()
     try {
       const { message, pointed, attachments, sent } = await prepare()
       if (message || attachments.length) await steerMessage(chat.id, message, pointed, attachments)
       clearSent(sent)
-      setText('')
+      clearSentDraft()
     } catch (err) {
       setError(errorCopy(err))
     } finally {
@@ -1695,7 +1703,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
                     data-picker="effort"
                     title={hintEffort("The app's own effort")}
                   >
-                    <FadingLabel text={effortLabel(chat.effort)} />
+                    <EffortLabel text={effortLabel(chat.effort)} />
                   </button>
                   {(picker?.kind === 'effort' || effortLeaving) && (
                     <EffortSlider

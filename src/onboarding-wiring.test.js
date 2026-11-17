@@ -96,14 +96,13 @@ test('the ready screen can step back to the page before it', () => {
   assert.match(css, /\.ob-progress \{[^}]*grid-column: 2/)
 })
 
-test('the step body fades in, and both motion switches turn it off', () => {
+test('the step body swaps in place, and both motion switches stop the progress-dot transition', () => {
   const view = source('Onboarding.jsx')
-  assert.match(view, /className=\{`ob-stage/, 'the stage is the frame the fade runs on')
-  assert.match(view, /key=\{step\}/, 'and it remounts per step, which restarts the fade')
+  assert.match(view, /className=\{`ob-stage/, 'the stage is the frame for the current step')
+  assert.match(view, /key=\{step\}/, 'each step has its own form state')
   const css = source('onboarding.css')
-  assert.match(css, /@keyframes ob-step-in/)
   // The contract asks for both switches, not one: the media query for the OS
   // setting and the in-app toggle, which cannot be expressed as a media query.
-  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.ob-stage[^{]*\{\s*animation: none;/)
-  assert.match(css, /html\[data-reduce-motion\] \.ob-stage/)
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.ob-dot[^{]*\{\s*transition: none;/)
+  assert.match(css, /html\[data-reduce-motion\] \.ob-dot/)
 })

@@ -21,17 +21,7 @@
     radial-gradient(620px 420px at 78% 8%, rgba(255, 255, 255, 0.035), transparent 70%),
     radial-gradient(520px 400px at 8% 92%, rgba(255, 255, 255, 0.025), transparent 70%),
     radial-gradient(900px 520px at 50% 125%, rgba(255, 255, 255, 0.02), transparent 75%);
-  animation: nc-glow-in 0.8s ease-out both, nc-glow-breathe 9s ease-in-out 0.8s infinite;
-}
-
-@keyframes nc-glow-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
+  animation: nc-glow-breathe 9s ease-in-out infinite;
 }
 
 @keyframes nc-glow-breathe {
@@ -52,7 +42,7 @@
 }
 
 /* The in-app switch, for someone who turned motion off in Settings: the
-   glow lands without its fade and does not breathe. */
+   glow does not breathe. */
 html[data-reduce-motion] .newchat::before {
   animation: none;
 }
@@ -62,9 +52,7 @@ html[data-reduce-motion] .nc-provider,
 html[data-reduce-motion] .nc-effort,
 html[data-reduce-motion] .nc-effort-fill,
 html[data-reduce-motion] .nc-effort-thumb,
-html[data-reduce-motion] .nc-effort-slider.is-fast .nc-effort-fill,
-html[data-reduce-motion] .nc-label-in,
-html[data-reduce-motion] .nc-label-out {
+html[data-reduce-motion] .nc-effort-slider.is-fast .nc-effort-fill {
   transition: none;
   animation: none;
 }
@@ -75,9 +63,7 @@ html[data-reduce-motion] .nc-label-out {
   .nc-effort,
   .nc-effort-fill,
   .nc-effort-thumb,
-  .nc-effort-slider.is-fast .nc-effort-fill,
-  .nc-label-in,
-  .nc-label-out {
+  .nc-effort-slider.is-fast .nc-effort-fill {
     transition: none;
     animation: none;
   }
@@ -189,7 +175,6 @@ html[data-reduce-motion] .nc-label-out {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  animation: nc-provider-in 0.22s ease;
 }
 
 .nc-effort-wrap {
@@ -211,19 +196,6 @@ html[data-reduce-motion] .nc-label-out {
   box-shadow:
     0 4px 10px rgba(0, 0, 0, 0.32),
     0 16px 44px rgba(0, 0, 0, 0.44);
-  animation: nc-menu-in 0.18s ease;
-}
-
-@keyframes nc-menu-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
 }
 
 .nc-effort-head {
@@ -263,22 +235,6 @@ html[data-reduce-motion] .nc-label-out {
 
 .nc-effort-bolt {
   transition: opacity 0.22s ease, transform 0.22s ease;
-}
-
-.nc-effort-fast.on .nc-effort-bolt {
-  animation: nc-fast-in 0.22s ease;
-}
-
-@keyframes nc-fast-in {
-  from {
-    opacity: 0.35;
-    transform: scale(0.86);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
 }
 
 .nc-effort-name {
@@ -357,35 +313,6 @@ html[data-reduce-motion] .nc-label-out {
   grid-area: 1 / 1;
 }
 
-.nc-label-in {
-  animation: nc-label-in 0.32s ease;
-}
-
-.nc-label-out {
-  animation: nc-label-out 0.32s ease forwards;
-  pointer-events: none;
-}
-
-@keyframes nc-label-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes nc-label-out {
-  from {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0;
-  }
-}
-
 .nc-effort-slider {
   position: relative;
   container-type: inline-size;
@@ -437,23 +364,10 @@ html[data-reduce-motion] .nc-label-out {
 
 .nc-effort.is-above {
   transform: translateY(calc(-100% - 8px));
-  animation: nc-menu-in-above 0.18s ease;
 }
 
 .nc-effort.is-above.is-out {
   animation: nc-menu-out-above 0.16s ease forwards;
-}
-
-@keyframes nc-menu-in-above {
-  from {
-    opacity: 0;
-    transform: translateY(calc(-100% - 4px));
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(calc(-100% - 8px));
-  }
 }
 
 @keyframes nc-menu-out-above {
@@ -554,16 +468,6 @@ html[data-reduce-motion] .nc-label-out {
 @keyframes nc-fast-dots {
   to {
     background-position: 9px center;
-  }
-}
-
-@keyframes nc-provider-in {
-  from {
-    opacity: 0;
-  }
-
-  to {
-    opacity: 1;
   }
 }
 

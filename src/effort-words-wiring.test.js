@@ -35,5 +35,5 @@ test('the chip and the facts row agree on the word', () => {
   // The facts row has always printed the raw tier; the chip now matches it
   // rather than naming the same tier twice.
   assert.match(view, /\{chat\.effort && <span className="cv-fact">\{chat\.effort\}<\/span>\}/)
-  assert.match(view, /<FadingLabel text=\{effortLabel\(chat\.effort\)\} \/>/)
+  assert.match(view, /<EffortLabel text=\{effortLabel\(chat\.effort\)\} \/>/)
 })

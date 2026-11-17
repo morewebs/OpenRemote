@@ -29,7 +29,7 @@
 .ca-add-menu:not(.is-phone) .nc-item-detail { order: 0; flex: 0 1 auto; max-width: 90px; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ca-add-menu:not(.is-phone) .nc-footer { display: none; }
 .ca-add-backdrop { position: fixed; inset: 0; z-index: 119; background: rgba(0,0,0,.48); }
-.nc-menu.ca-add-menu.is-phone { width: 100%; max-width: none; padding: 10px 16px max(18px, env(safe-area-inset-bottom)); border-radius: 28px 28px 0 0; background: #171717; border: 1px solid rgba(255,255,255,.05); transform: none; animation: ca-sheet-in .16s ease-out; }
+.nc-menu.ca-add-menu.is-phone { width: 100%; max-width: none; padding: 10px 16px max(18px, env(safe-area-inset-bottom)); border-radius: 28px 28px 0 0; background: #171717; border: 1px solid rgba(255,255,255,.05); transform: none;}
 .ca-add-menu.is-phone .ca-add-heading { position: relative; padding: 10px 0 18px; font-size: 18px; }
 .ca-add-menu.is-phone .ca-add-heading::before { content: ''; position: absolute; width: 38px; height: 4px; border-radius: 4px; background: #414141; top: -2px; left: calc(50% - 19px); }
 .ca-add-menu.is-phone .ca-add-heading button { width: 44px; height: 44px; }
@@ -55,7 +55,6 @@
 .ca-document-preview pre { max-height: 58dvh; overflow: auto; padding: 16px; background: #151515; border-radius: 12px; color: var(--text-1); font: 12px/1.6 var(--font-mono,monospace); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ca-document-preview p { color: var(--text-3); font-size: 12px; line-height: 1.5; }
 .ca-document-preview h2 { overflow-wrap: anywhere; }
-@keyframes ca-sheet-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .nc-menu.ca-add-menu { animation: none; } }
 html[data-reduce-motion] .nc-menu.ca-add-menu { animation: none; }
 @media (hover: none) { .ca-document .ca-remove { width: 28px; height: 32px; } }
