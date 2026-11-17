@@ -25,10 +25,12 @@ export function createEscLayers() {
       }
     },
     depth: () => layers.length,
+    blocksShortcut: combo => combo === 'Esc' && layers.length > 0,
   }
 }
 
 const layers = createEscLayers()
+export const escapeLayerOwnsKey = combo => layers.blocksShortcut(combo)
 
 /**
  * While `open`, Esc closes this layer - only when it is the top one, so the

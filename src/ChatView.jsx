@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ArrowUp,
   ArrowUpRight,
@@ -25,6 +26,8 @@ import { harnessLabel } from './harness-names.js'
 import { findModel, modelDisplayName, prettyModelName } from './model-display.js'
 import { HarnessMark } from './brand-marks.jsx'
 import HarnessManagerModal from './HarnessManagerModal.jsx'
+import { pickable } from './harness-manager.js'
+import { appSelection } from './app-selection.js'
 import SignInModal from './SignInModal.jsx'
 import { isCommandRun } from './command-card.js'
 import { renderMarkdown } from './markdown.js'
@@ -32,6 +35,7 @@ import { bodyPreview, MAX_RENDER_LINES, shouldRenderLive } from './render-budget
 import { jsonCaption, jsonIsLarge, jsonShape, readJson } from './json-card.js'
 import ContextRing from './ContextRing.jsx'
 import PickerMenu from './PickerMenu.jsx'
+import ComposerOptions from './ComposerOptions.jsx'
 import { EffortSlider, EffortLabel, effortLabel } from './NewChat.jsx'
 import { EndpointManagerModal } from './EndpointManager.jsx'
 import { hasTauri, isMobile } from './platform.js'
@@ -530,10 +534,12 @@ const LIVE_SETTINGS = {
   opencode: { model: true, effort: false, fast: false },
 }
 
-export default function ChatView({ chat, onBack, focused = true, web = false, onOpenPlugins = null, composerScope = null }) {
+export default function ChatView({ chat, onBack, focused = true, web = false, onOpenPlugins = null, composerScope = null, compact = false, onChooseApp = null }) {
   const privacy = usePrivacyMode()
   const {
     capabilities,
+    capabilitiesFor,
+    projects,
     connection,
     sendPrompt,
     updateChatSettings,
@@ -592,6 +598,9 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
   const [endpointModels, setEndpointModels] = useState([])
   const [manageModels, setManageModels] = useState(false)
   const [managingHarnesses, setManagingHarnesses] = useState(false)
+  const [appCaps, setAppCaps] = useState(null)
+  const [appError, setAppError] = useState(null)
+  const [appAttempt, setAppAttempt] = useState(0)
   const [signInFor, setSignInFor] = useState(null)
   const [customDraft, setCustomDraft] = useState('')
   const scrollRef = useRef(null)
@@ -624,6 +633,20 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
   // picked in the browser (attachments.js keeps them per composer).
   const attached = useAttachments(composerKey)
   const harness = (capabilities?.harnesses ?? []).find((h) => h.id === chat.harness)
+  useEffect(() => {
+    if (picker?.kind !== 'harness' || !elsewhere) return
+    let cancelled = false
+    setAppCaps(null)
+    setAppError(null)
+    if (!reachable) { setAppError(`Connect to ${where} to choose an App.`); return }
+    capabilitiesFor(chat.executor).then(caps => {
+      if (cancelled) return
+      if (caps) setAppCaps(caps)
+      else setAppError(`Could not load Apps on ${where}.`)
+    }).catch(() => { if (!cancelled) setAppError(`Could not load Apps on ${where}.`) })
+    return () => { cancelled = true }
+  }, [picker?.kind, elsewhere, chat.executor, reachable, capabilitiesFor, appAttempt])
+  const availableApps = ((elsewhere ? appCaps : capabilities)?.harnesses ?? []).filter(pickable)
   // The daemon's honors.attachments for the chat's app; a chat whose app
   // this computer does not list (it runs elsewhere) falls back to the apps
   // known to read pictures, and that device's daemon still has the last word.
@@ -727,9 +750,9 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
   // must not take the browser's text or pictures. A new claim releases the
   // one it replaces, so only the latest is outstanding.
   const claims = useRef({ text: null, pictures: null })
-  const claimText = () => {
+  const claimText = (active = true) => {
     claims.current.text?.()
-    claims.current.text = claimInserter(attach, composerKey, inputRef)
+    claims.current.text = claimInserter(attach, composerKey, inputRef, active)
   }
   // The browser's pictures go to the composer the user is in, like its text
   // (claimInserter): this one while it is the focused pane's, or the moment
@@ -739,15 +762,13 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
     claims.current.pictures = setFocusedComposer(composerKey)
   }
   useEffect(() => {
-    claimText()
+    claimText(focused)
+    if (focused) claimPictures()
     return () => {
       claims.current.text?.()
       claims.current.pictures?.()
       claims.current = { text: null, pictures: null }
     }
-  }, [])
-  useEffect(() => {
-    if (focused) claimPictures()
   }, [focused, composerKey])
   const attachInput = useAttachInput(composerKey, {
     enabled: takesImages,
@@ -1071,6 +1092,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
     focused,
   )
   useShortcut('pick-model', () => openPickerAt('model'), focused)
+  useShortcut('pick-harness', () => onChooseApp ? openPickerAt('harness') : false, focused)
   useShortcut(
     'pick-effort',
     () => {
@@ -1559,8 +1581,12 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
             disabled={!alive || !reachable}
             spellCheck={false}
           />
-          <div className="cv-foot">
+          <div className={`cv-foot${compact ? ' is-compact-composer' : ''}`}>
             {attachInput.button}
+            {compact && <button type="button" className="nc-compact-model" onClick={togglePicker('model')} disabled={!canChange.model}
+              title={chat.model ? modelDisplayName(models, chat.model) : 'Model'} aria-label={`Model: ${chat.model ? modelDisplayName(models, chat.model) : 'App default'}`}>
+              <HarnessMark harness={chat.harness} size={16} /><span>{chat.model ? modelDisplayName(models, chat.model) : 'Model'}</span>
+            </button>}
             <div className="nc-pickers">
               {modelsPending && !chat.model ? (
                 <span className="nc-skeleton" aria-hidden="true" />
@@ -1587,7 +1613,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
               {picker?.kind === 'model' && (
                 <PickerMenu
                   label="Model"
-                  portal={isMobile}
+                  portal
                   searchPlaceholder="Search models"
                   wide
                   items={modelItems}
@@ -1643,7 +1669,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
               {picker?.kind === 'endpoint' && canSwitchEndpoint && (
                 <PickerMenu
                   label="Endpoint"
-                  portal={isMobile}
+                  portal
                   searchPlaceholder="Search endpoints"
                   items={[
                     {
@@ -1672,26 +1698,35 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
                   }
                 />
               )}
-              {/* The harness is the one this chat already runs: the daemon
-                  takes a harness when it starts a session, not as a setting,
-                  so a list of the installed harnesses here could only look
-                  like a choice while choosing did nothing. The chip opens the
-                  harness manager instead - the one thing beside it that acts,
-                  and on a phone the only route to it, since the picker this
-                  replaced had no footer there. */}
+              {/* A different App prepares a new chat in this pane. The picker
+                  states that transition before the person chooses. */}
               <button
                 type="button"
                 className="nc-meta"
-                onClick={() => {
-                  hidePicker()
-                  setManagingHarnesses(true)
-                }}
-                aria-haspopup="dialog"
-                title={`App - ${harnessText}; this opens the Apps dialog`}
+                onClick={togglePicker('harness')}
+                disabled={!onChooseApp}
+                aria-haspopup="listbox"
+                aria-expanded={picker?.kind === 'harness'}
+                data-picker="harness"
+                title={`App - ${harnessText}`}
               >
                 <HarnessMark harness={chat.harness} size={16} />
                 {harnessText}
               </button>
+              {picker?.kind === 'harness' && <PickerMenu label="App" portal place="above" searchPlaceholder="Search apps"
+                items={elsewhere && !appCaps && !appError ? [{ id: '__loading__', name: 'Loading Apps…', disabled: true }] : availableApps.map(app => ({ id: app.id, name: harnessLabel(app), disabled: app.id !== chat.harness && !onChooseApp }))}
+                groups={null} selectedId={chat.harness} leaving={pickerLeaving} onClose={hidePicker} anchor={{ left: picker.x, top: picker.y }}
+                note={appError ?? 'Choose another App to prepare a new chat with your draft and project.'}
+                renderIcon={app => <HarnessMark harness={app.id} size={16} />}
+                onChoose={id => {
+                  if (id === chat.harness) { hidePicker(); return }
+                  const seed = appSelection(chat, availableApps.find(app => app.id === id), { projects, thisDevice })
+                  if (!seed || !onChooseApp) return
+                  onChooseApp({ seed, composerKey })
+                }}
+                footer={appError ? <button type="button" onClick={() => setAppAttempt(n => n + 1)}>Retry</button>
+                  : !web && !isMobile && !elsewhere ? <button type="button" onClick={() => { hidePicker(); setManagingHarnesses(true) }}>Manage apps…</button> : null}
+              />}
               {canChange.effort && efforts.length > 0 && (
                 <div className="nc-effort-wrap">
                   <button
@@ -1727,6 +1762,12 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
               )}
 
             </div>
+            {compact && <ComposerOptions items={[
+              { label: `App: ${harnessText}`, disabled: !onChooseApp, onSelect: togglePicker('harness') },
+              ...(canChange.effort && efforts.length ? [{ label: `Effort: ${chat.effort ? effortLabel(chat.effort) : 'App default'}`, onSelect: toggleEffort }] : []),
+              ...((harness?.permission_modes ?? []).length ? [{ label: `Permission: ${chat.permissionMode ?? 'App default'}`, disabled: !canChange.permission || chat.running, onSelect: togglePicker('permission', 'right') }] : []),
+              ...(canSwitchEndpoint ? [{ label: 'Model provider', onSelect: togglePicker('endpoint') }] : []),
+            ]} />}
             <div className="nc-send-group">
               {/* The buttons plugins add to the composer (dictation's
                   microphone, say), dimmed while the chat can't take text. A
@@ -1772,7 +1813,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
               {picker?.kind === 'permission' && (
                 <PickerMenu
                   label="Permission"
-                  portal={isMobile}
+                  portal
                   searchPlaceholder="Search permission words"
                   items={(harness?.permission_modes ?? []).map((word) => ({
                     id: word.w,
@@ -1821,24 +1862,24 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
         {(error || connection.state === 'error') && (
           <p className="cv-error-line">{error ?? connection.error}</p>
         )}
-        {managingHarnesses && !web && (
+        {managingHarnesses && !web && createPortal(
           <HarnessManagerModal
             onClose={() => setManagingHarnesses(false)}
             onSignIn={(id) => {
               setManagingHarnesses(false)
               setSignInFor(id)
             }}
-          />
+          />, document.body
         )}
-        {signInFor && <SignInModal harnessId={signInFor} onDone={() => setSignInFor(null)} />}
-        {manageModels && (
+        {signInFor && createPortal(<SignInModal harnessId={signInFor} onDone={() => setSignInFor(null)} />, document.body)}
+        {manageModels && createPortal(
           <EndpointManagerModal
             harness={chat.harness}
             deviceId={elsewhere ? chat.executor : null}
             where={elsewhere ? where : 'this computer'}
             onClose={() => setManageModels(false)}
             onChanged={reloadEndpoints}
-          />
+          />, document.body
         )}
       </div>
     </div>

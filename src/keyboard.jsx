@@ -25,6 +25,7 @@ import {
   unbind,
 } from './shortcuts.js'
 import { isMobile } from './platform.js'
+import { escapeLayerOwnsKey } from './esc-layer.js'
 
 export const isMac =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '')
@@ -98,6 +99,7 @@ export function KeyboardProvider({ children }) {
       if (capturing.current || e.defaultPrevented) return
       const combo = comboFromEvent(e, isMac)
       if (!combo) return
+      if (escapeLayerOwnsKey(combo)) return
       const id = actionForCombo(bindingsRef.current, combo)
       if (!id) return
       if (overlayOpen()) return

@@ -17,11 +17,15 @@ const between = (from, to) => {
   return source.slice(start, end)
 }
 
-test('a drop moves a chat, and a drop on its own pane does nothing', () => {
-  const drop = between('const panesCanSplit', '// Right-click in the main area')
-  assert.match(drop, /if \(!leaf \|\| leaf\.view === id\) return/, 'the self-drop is refused before anything runs')
-  assert.match(drop, /moveLeaf\(l, source\?\.id \?\? null, leafId/, 'the drop moves rather than copies')
+test('a drop moves the existing pane identity, including the navigation pane', () => {
+  const drop = between('const dropInPane', '// A chat asks to show another beside it')
+  assert.match(drop, /if \(!leaf\) return/, 'a missing destination is refused before anything runs')
+  assert.match(drop, /const source = paneForView\(layout, view, id\)/, 'the current navigation view participates in the lookup')
+  assert.match(drop, /dockPane\(layout, source\.id, leafId, place\.zone\)/, 'the drop moves the actual pane rather than replacing its view')
+  assert.match(drop, /place\.zone === 'center' \|\| source\.id === leafId\) setLayout\(l => focusLeaf\(l, source\.id\)\)/, 'a center drop focuses the pane already showing the chat')
+  assert.ok(drop.indexOf('if (source)') < drop.indexOf('!panesCanSplit'), 'moving existing panes remains available at capacity')
   assert.match(drop, /!panesCanSplit/, 'and reads the split decision the tint reads')
+  assert.match(drop, /layoutFits\(candidate, bounds\.width, bounds\.height\)/, 'edge drops use the measured workspace')
 })
 
 test('the cap and the phone are one decision, and the pane draws from it', () => {

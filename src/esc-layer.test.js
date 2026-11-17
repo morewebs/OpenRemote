@@ -2,6 +2,18 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createEscLayers } from './esc-layer.js'
 
+test('workspace Escape takes priority over interrupt regardless of window listener order', () => {
+  const layers = createEscLayers()
+  assert.equal(layers.blocksShortcut('Esc'), false)
+  const workspace = layers.claim()
+  let interrupts = 0
+  if (!layers.blocksShortcut('Esc')) interrupts++
+  assert.equal(interrupts, 0)
+  assert.equal(layers.blocksShortcut('Mod+1'), false)
+  workspace.release()
+  assert.equal(layers.blocksShortcut('Esc'), false)
+})
+
 test('only the top layer counts as open', () => {
   const layers = createEscLayers()
   const window_ = layers.claim() // a view in its own window

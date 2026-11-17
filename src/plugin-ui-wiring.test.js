@@ -179,7 +179,8 @@ test("a plugin's view is a pane like a chat, known by its key", () => {
   const app = read('App.jsx')
   assert.match(app, /const isChatView = \(v\) => !STATIC_VIEWS\.includes\(v\) && !isPluginView\(v\)/)
   assert.match(app, /isPluginView\(view\) \? \(\s*\n\s*\/\/[^\n]*\n\s*<PluginView viewKey=\{view\} \/>/)
-  assert.match(app, /if \(isPluginView\(leaf\.view\)\) return <PluginView viewKey=\{leaf\.view\} \/>/)
+  assert.match(app, /const paneView = leaf\.view \?\? view/)
+  assert.match(app, /if \(isPluginView\(paneView\)\) return <PluginView viewKey=\{paneView\} \/>/)
   assert.match(app, /<PluginProvider>/)
 })
 

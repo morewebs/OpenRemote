@@ -367,3 +367,104 @@ html[data-reduce-motion] .nc-send:not(:disabled) {
 html[data-reduce-motion] .ca-remove {
   transition: none;
 }
+
+/* Pane width, rather than window width, decides when the controls need a
+   second row. Keep every picker and the two primary actions reachable. */
+@container workspace-pane (max-width: 560px) {
+  .split-area.is-split :is(.nc-foot, .cv-foot) {
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr);
+    gap: 4px 8px;
+  }
+
+  .split-area.is-split :is(.nc-foot, .cv-foot) > .nc-pickers {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    flex-wrap: wrap;
+    min-width: 0;
+    gap: 2px 4px;
+  }
+
+  .split-area.is-split :is(.nc-foot, .cv-foot) > .ca-attach {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .split-area.is-split :is(.nc-foot, .cv-foot) > .nc-send-group {
+    grid-column: 2;
+    grid-row: 2;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    min-width: 0;
+    max-width: 100%;
+    gap: 4px;
+    margin-left: 0;
+  }
+
+  .split-area.is-split :is(.nc-pickers, .nc-send-group) > :is(.nc-meta, .nc-effort-wrap) {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .split-area.is-split :is(.nc-pickers, .nc-send-group) .nc-meta {
+    min-height: 32px;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    text-align: left;
+  }
+
+  .split-area.is-split :is(.nc-control-label, .nc-provider-name) {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .split-area.is-split .nc-provider {
+    min-width: 0;
+  }
+
+  .split-area.is-split :is(.nc-meta svg, .nc-send, .nc-dev-dot) {
+    flex: none;
+  }
+
+  .split-area.is-split .nc-label-swap {
+    width: auto;
+    white-space: normal;
+  }
+
+  .split-area.is-split .ca-chip {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .split-area.is-split .plg-input {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .split-area.is-split .plg-input-label {
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+}
+
+/* Split composers keep one steady toolbar. Secondary choices live behind
+   Chat options, so a long model name cannot push Send onto another row. */
+.split-area.is-split :is(.nc-foot, .cv-foot).is-compact-composer {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin-top: 8px;
+}
+.split-area.is-split :is(.nc-foot, .cv-foot).is-compact-composer > .nc-pickers { display: none; }
+.nc-compact-model { display: flex; align-items: center; gap: 7px; flex: 1 1 0; min-width: 0; height: 32px; padding: 0 4px; border: 0; border-radius: 6px; background: transparent; color: var(--text-2); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.nc-compact-model > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nc-compact-model:disabled { cursor: default; }
+.nc-compact-model:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-1); }
+.nc-compact-options { display: grid; place-items: center; flex: none; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 6px; color: var(--text-3); background: transparent; cursor: pointer; }
+.nc-compact-options:hover, .nc-compact-options[aria-expanded='true'] { color: var(--text-1); background: var(--bg-hover); }
+.nc-compact-model:focus-visible, .nc-compact-options:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.split-area.is-split :is(.nc-foot, .cv-foot).is-compact-composer > .nc-send-group { display: flex; flex: none; flex-wrap: nowrap; gap: 5px; margin-left: 0; }
+.split-area.is-split .is-compact-composer > .nc-send-group > .nc-meta { display: none; }
+.split-area.is-split :is(.nc-box, .cv-box) > textarea { min-height: 48px; }

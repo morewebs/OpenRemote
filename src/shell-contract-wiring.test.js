@@ -188,14 +188,13 @@ const REQUIRED = (file, name) => (contractOf(file, name) ?? []).filter((p) => !p
 
 // ---- the three contracts the shell has the most trouble keeping ----
 
-test('App hands SplitArea every prop the pane header needs', () => {
+test('App hands SplitArea its pane and centralized layout contracts', () => {
   const app = source('App.jsx')
   const sites = callSites(app, 'SplitArea')
   assert.ok(sites.length > 0, 'the shell renders SplitArea')
-  // The header's Layouts menu and the drag label need these; they are defaulted
-  // in the component so a missing one is silent, which is exactly how the
-  // propless menumes shipped green.
-  const needed = ['layout', 'setLayout', 'renderPane', 'labelFor', 'onSaveLayout', 'onRestoreLayout', 'currentChat']
+  // Defaulted callbacks can disappear silently, so check the layout panel's
+  // opening, closing and actions as well as the pane renderer's arguments.
+  const needed = ['layout', 'setLayout', 'renderPane', 'labelFor', 'onSaveLayout', 'onRestoreLayout', 'currentChat', 'onClosePane', 'layoutControl', 'onCloseLayoutControl']
   for (const site of sites) {
     for (const prop of needed) {
       assert.ok(
@@ -204,17 +203,21 @@ test('App hands SplitArea every prop the pane header needs', () => {
       )
     }
   }
-  // And the split area hands the same three to the pane that draws the header:
-  // this is the hand-off that was missing for hours while every test passed.
+  // Pane controls stay local; workspace layout actions reach the one panel.
   const inner = callSites(source('SplitArea.jsx'), 'Pane')
   assert.ok(inner.length > 0, 'SplitArea renders a Pane')
   for (const site of inner) {
-    for (const prop of ['onSaveLayout', 'onRestoreLayout', 'currentChat']) {
+    for (const prop of ['currentChat', 'onStartDrag', 'onZoom', 'onClose', 'onSplit', 'onDropInPane']) {
       assert.ok(
         site.props.has(prop) || site.spread,
         `SplitArea.jsx:${site.line} renders Pane without ${prop}`,
       )
     }
+  }
+  const panels = callSites(source('SplitArea.jsx'), 'WorkspaceLayouts')
+  assert.equal(panels.length, 1, 'SplitArea renders one centralized layout panel')
+  for (const prop of REQUIRED('WorkspaceLayouts.jsx', 'WorkspaceLayouts')) {
+    assert.ok(panels[0].props.has(prop), `SplitArea renders WorkspaceLayouts without ${prop}`)
   }
 })
 
@@ -250,10 +253,6 @@ const DECLARED_NOT_PASSED = new Map([
   [
     'ChatView.onBack',
     'ChatView declares onBack in its props and never reads it (the shell never passes one); owner: ChatView',
-  ],
-  [
-    'NewChat.onAddProjectDone',
-    'NewChat calls onAddProjectDone?.() and the pane instance omits it on purpose; the declaration wants a default; owner: NewChat',
   ],
 ])
 

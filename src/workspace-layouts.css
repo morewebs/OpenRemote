@@ -1,0 +1,127 @@
+.workspace-layout-menu .nc-menu.ca-add-menu {
+  width: 304px;
+  padding: 9px;
+  border-radius: 14px;
+  background: #222;
+}
+
+.workspace-layout-menu .nc-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 6px 12px;
+  font-size: 12px;
+}
+
+.workspace-layout-menu .nc-note strong {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.workspace-layout-menu .ca-add-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.workspace-layout-menu .ca-add-tiles .nc-item {
+  justify-content: flex-start;
+  min-width: 0;
+  min-height: 76px;
+  padding: 10px 2px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.workspace-layout-menu .ca-add-tiles .nc-item-main {
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workspace-layout-menu .ca-add-tiles .nc-item-name {
+  overflow: visible;
+  white-space: normal;
+  text-align: center;
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.workspace-layout-menu .nc-menu .nc-group + .nc-group {
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+  padding-top: 6px;
+}
+
+.workspace-layout-menu .nc-group:not(.ca-add-tiles) .nc-item {
+  min-height: 32px;
+}
+
+.workspace-layout-menu .nc-item-main > svg {
+  flex: none;
+  color: var(--text-3);
+}
+
+.workspace-layout-menu .nc-item:disabled {
+  opacity: 0.4;
+}
+
+.workspace-layout-menu .nc-item:disabled .nc-item-sub {
+  color: var(--text-2);
+}
+
+.workspace-layout-menu .nc-item-sub {
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.workspace-layout-menu .nc-menu .nc-footer {
+  display: block;
+  border-top: 1px solid var(--line);
+  margin-top: 7px;
+  padding-top: 8px;
+}
+
+.workspace-layout-hint {
+  margin: 0 5px 3px;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.workspace-preset-shape {
+  display: grid;
+  gap: 3px;
+  width: 40px;
+  height: 27px;
+}
+
+.workspace-preset-shape i {
+  display: block;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.workspace-preset-shape--columns {
+  grid-template-columns: repeat(var(--workspace-slots), minmax(0, 1fr));
+}
+
+.workspace-preset-shape--rows {
+  grid-template-rows: repeat(var(--workspace-slots), minmax(0, 1fr));
+}
+
+.workspace-preset-shape--main-stack {
+  grid-template-columns: 3fr 2fr;
+  grid-template-rows: repeat(var(--workspace-stack), minmax(0, 1fr));
+}
+
+.workspace-preset-shape--main-stack i:first-child {
+  grid-row: 1 / -1;
+}
+
+.workspace-preset-shape--grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}

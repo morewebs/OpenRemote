@@ -56,8 +56,8 @@ test('a saved preset is written through storePresets, never in memory only', () 
 
 test('one preset is the default, and New chat opens on it', () => {
   assert.match(newchat, /defaultPreset\(loadPresets\(\)\)/)
-  assert.match(newchat, /useState\(\(\) => openingPreset\?\.harness \?\? loadDefaults\(\)\.harness\)/)
-  assert.match(newchat, /const pendingPreset = useRef\(openingPreset \?\? null\)/)
+  assert.match(newchat, /useState\(\(\) => setupSeed\?\.harness \?\? openingPreset\?\.harness \?\? loadDefaults\(\)\.harness\)/)
+  assert.match(newchat, /const pendingPreset = useRef\(setupSeed \?\? openingPreset \?\? null\)/)
   assert.match(newchat, /aria-pressed=\{preset\.default === true\}/)
 })
 

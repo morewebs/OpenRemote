@@ -1,408 +1,287 @@
-import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, DotsThree, FloppyDisk, SquaresFour, X } from '@phosphor-icons/react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowsIn, ArrowsOut, DotsSixVertical, X } from '@phosphor-icons/react'
 import ContextMenu from './ContextMenu.jsx'
-import SplitGlyph from './SplitGlyph.jsx'
+import WorkspaceLayouts from './WorkspaceLayouts.jsx'
 import { HarnessMark } from './brand-marks.jsx'
-import { useHint, useKeyboard } from './keyboard.jsx'
-import { MIN_PANES, SAVED_LAYOUTS_NONE, loadLayouts, offerLayouts } from './layouts.js'
+import { useKeyboard } from './keyboard.jsx'
+import { useEscLayer } from './esc-layer.js'
 import { RECONNECTING, paneChatId, paneHeader } from './pane-header.js'
 import { projectFor } from './projects.js'
 import { useConsole } from './state/console.jsx'
-import {
-  MAX_PANES,
-  acceptsChatDrop,
-  balanceSplit,
-  chatDragPayload,
-  closeLeaf,
-  CHAT_DRAG_TYPE,
-  createDividerDrag,
-  draggedChat,
-  focusLeaf,
-  paneCount,
-  resizeSplit,
-  splitLeaf,
-  tintZone,
-} from './split.js'
+import { acceptsChatDrop, balanceSplit, draggedChat, dropZone, focusLeaf, leafById, leaves, MAX_PANES, splitLeaf } from './split.js'
+import { dockPane, equalizeWorkspace, layoutFits, paneForView, presetLayout, resizeWorkspaceDivider, sidebarDraggedChat, workspaceGeometry, workspaceGestureValid } from './workspace-layout.js'
 import './split.css'
 
-function SplitNode({ node, setLayout, renderNode }) {
-  const ref = useRef(null)
-  const row = node.dir === 'row'
-  const startDrag = (index) => (e) => {
-    e.preventDefault()
-    const box = ref.current?.getBoundingClientRect()
-    if (!box) return
-    const total = row ? box.width : box.height
-    // One controller for the whole gesture: it returns the sizes to paint on
-    // every move and the single delta to commit on release. Painting is two
-    // inline flex values on the cells this strip divides, so dragging beside
-    // a streaming chat does not re-render the transcript at pointer rate.
-    const drag = createDividerDrag({
-      sizes: node.sizes,
-      index,
-      total,
-      start: row ? e.clientX : e.clientY,
-    })
-    const target = e.currentTarget
-    target.setPointerCapture(e.pointerId)
-    const move = (ev) => {
-      const { sizes } = drag.move(row ? ev.clientX : ev.clientY)
-      const cells = ref.current?.children
-      if (!cells?.[index] || !cells?.[index + 1]) return
-      cells[index].style.flex = `${sizes[index]} 1 0`
-      cells[index + 1].style.flex = `${sizes[index + 1]} 1 0`
-    }
-    const done = () => {
-      target.removeEventListener('pointermove', move)
-      target.removeEventListener('pointerup', done)
-      target.removeEventListener('pointercancel', done)
-      // The one layout commit of the drag. A gesture that never moved (the
-      // first half of a double-click on the strip) commits nothing, so it
-      // cannot churn the shell either. `total` rides along so the commit is
-      // clamped by the same pixel floor the last painted frame used: without
-      // it, release would land on the old fractional floor and the divider
-      // would jump back.
-      const delta = drag.release()
-      if (delta !== 0) setLayout((l) => resizeSplit(l, node.id, index, delta, total))
-    }
-    target.addEventListener('pointermove', move)
-    target.addEventListener('pointerup', done)
-    target.addEventListener('pointercancel', done)
-  }
-  return (
-    <div className={`split-node split-node--${node.dir}`} ref={ref}>
-      {node.children.map((child, i) => (
-        <div className="split-cell" key={child.id} style={{ flex: `${node.sizes[i]} 1 0` }}>
-          {renderNode(child)}
-          {i < node.children.length - 1 && (
-            <div
-              className="split-divider"
-              role="separator"
-              aria-label="Resize the panes"
-              aria-orientation={row ? 'vertical' : 'horizontal'}
-              title="Drag to resize - double-click to even them out."
-              onPointerDown={startDrag(i)}
-              onDoubleClick={() => setLayout((l) => balanceSplit(l, node.id))}
-            />
-          )}
-        </div>
-      ))}
-    </div>
-  )
-}
+const position = r => ({ left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.w * 100}%`, height: `${r.h * 100}%` })
+const actionLabel = zone => ({ center: 'Swap panes', left: 'Dock left', right: 'Dock right', top: 'Dock above', bottom: 'Dock below' })[zone]
 
-// One pane: its header (a title, the split actions, close) and the view it
-// holds. Dropping a chat on the middle keeps it here; dropping it on an
-// outer band splits this pane on that side, with the half it will take
-// highlighted while the chat hovers.
-function Pane({
-  node,
-  layout,
-  setLayout,
-  renderPane,
-  labelFor,
-  showHeader,
-  onDropInPane,
-  canSplit,
-  onSaveLayout,
-  onRestoreLayout,
-  currentChat,
-}) {
+function Pane({ node, rect, focused, hidden, zoomed, showHeader, labelFor, renderPane, currentChat, onFocus, onStartDrag, onZoom, onClose, onSplit, onDropInPane, layout, room, canSplit, onPreview, onClearPreview }) {
   const [menu, setMenu] = useState(null)
-  // The saved-layouts menu, in the same pattern as the split menu above it:
-  // a ContextMenu anchored under its own button, with the same keys.
-  const [layoutMenu, setLayoutMenu] = useState(null)
-  const layoutsRef = useRef(null)
-  const [zone, setZone] = useState(null)
-  const place = useRef(null)
-  const menuRef = useRef(null)
-  const count = paneCount(layout)
-  const focused = layout.focus === node.id
-  const primary = node.view === null
-  const full = count >= MAX_PANES
-  // Whether a split can happen at all: false at the pane cap, and false on a
-  // phone, which has no panes. The buttons, the menu and the drop tint all
-  // read this one value, so nothing offers a split the shell will refuse.
-  const splittable = Boolean(canSplit) && !full
+  const dropRef = useRef(null)
   const label = labelFor(node)
-  // What a person needs to tell this header from the one beside it: the chat
-  // record's own project, harness and status, on top of the shell's label for
-  // the pane. A pane holding no chat keeps the role's name.
   const { chats, projects, reconnecting } = useConsole()
   const chatId = paneChatId(node.view, currentChat)
   const chat = chatId ? (chats?.[chatId] ?? null) : null
-  const head = paneHeader({
-    label,
-    chat,
-    project: chat ? projectFor(projects ?? [], chat.workspace) : null,
-    // The console's mirror of the stream's retry, read per chat: a pane whose
-    // transcript stopped when the stream dropped says so here.
+  const head = paneHeader({ label, chat, project: chat ? projectFor(projects ?? [], chat.workspace) : null,
     reconnecting: chatId ? Boolean(reconnecting?.[chatId]) : false,
   })
-  // A pane that cannot be dragged must not say it can: a New chat pane has nothing
-  // to carry, so `draggable` below is false for it while the tooltip used to append
-  // the instruction anyway. One predicate, read twice.
-  const canDrag = !primary && node.view !== 'new'
-  const headTitle = primary || !canDrag ? head.title : `${head.title} - drag onto another pane's edge to move it`
-  const hintRight = useHint('split-right')
-  const hintDown = useHint('split-down')
   const kb = useKeyboard()
-
-  const splitTo = (dir, before) => () => setLayout((l) => splitLeaf(l, node.id, dir, 'new', before))
-
-  const openMenu = () => {
-    const box = menuRef.current?.getBoundingClientRect()
-    if (box) setMenu({ x: box.right - 208, y: box.bottom + 4 })
-  }
-
-  // The saved layouts are read when the menu opens, not held in state: a shape
-  // saved from the palette (or another pane) is in storage by then, and a
-  // stale list would offer a layout that is no longer there.
-  const openLayoutMenu = () => {
-    const box = layoutsRef.current?.getBoundingClientRect()
-    if (!box) return
-    setLayoutMenu({ x: box.right - 208, y: box.bottom + 4 })
-  }
-
-  const layoutMenuItems = () => {
-    const offers = offerLayouts(loadLayouts(), { currentChat })
-    const items = []
-    if (offers.length === 0) items.push({ header: SAVED_LAYOUTS_NONE })
-    for (const offer of offers) {
-      items.push({
-        label: offer.name,
-        icon: <SquaresFour size={14} />,
-        hint: offer.countLine,
-        // A shape this window cannot hold stays in the menu with its reason
-        // under it: an entry that vanishes teaches nothing.
-        disabled: !offer.ok,
-        onSelect: offer.ok ? () => onRestoreLayout(offer.plan) : undefined,
-      })
-      if (!offer.ok) items.push({ header: offer.note })
-    }
-    // Saving is the one thing the header offers when the window is already
-    // split: a one-pane window is not a shape, so there would be nothing to
-    // save (layouts.js's MIN_PANES).
-    if (count >= MIN_PANES && onSaveLayout) {
-      if (items.length) items.push({ divider: true })
-      items.push({ label: 'Save this layout…', icon: <FloppyDisk size={14} />, onSelect: () => onSaveLayout() })
-    }
-    return items
-  }
-
-  const menuItems = [
-    ...(full ? [{ header: `${MAX_PANES} panes is the most` }] : []),
-    { label: 'Split right', icon: <ArrowRight size={14} />, hint: kb?.label('split-right'), disabled: !splittable, onSelect: splitTo('row', false) },
-    { label: 'Split down', icon: <ArrowDown size={14} />, hint: kb?.label('split-down'), disabled: !splittable, onSelect: splitTo('col', false) },
-    { label: 'Split left', icon: <ArrowLeft size={14} />, disabled: !splittable, onSelect: splitTo('row', true) },
-    { label: 'Split up', icon: <ArrowUp size={14} />, disabled: !splittable, onSelect: splitTo('col', true) },
-  ]
-
-  const over = (e) => {
-    if (!onDropInPane) return
-    // Only a chat may tint a pane. The payload is unreadable during dragover,
-    // so the drag's own types are the check: a file or a selected paragraph
-    // never passes it, and the pane does not promise an action it cannot do.
-    if (!acceptsChatDrop(e.dataTransfer.types)) return
+  const over = e => {
+    if (!onDropInPane || !acceptsChatDrop(e.dataTransfer.types)) return
     e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    const box = e.currentTarget.getBoundingClientRect()
-    // Where no split is possible the drop replaces this pane's view, so the
-    // tint covers the whole pane rather than a half it will not become.
-    const next = tintZone(splittable, box, e.clientX, e.clientY)
-    place.current = next
-    setZone(next.zone)
+    const id = sidebarDraggedChat()
+    const source = id ? paneForView(layout, currentChat, id) : null
+    const zone = zoomed ? { zone: 'center' } : dropZone(e.currentTarget.getBoundingClientRect(), e.clientX, e.clientY)
+    let candidate = null
+    if (zone.zone !== 'center') {
+      candidate = source ? dockPane(layout, source.id, node.id, zone.zone) : canSplit ? splitLeaf(layout, node.id, zone.dir, id ?? 'new', zone.before) : null
+      if (!candidate || candidate === layout || !layoutFits(candidate, room.width, room.height)) {
+        dropRef.current = { zone: 'center' }
+        onPreview({ rect: zoomed ? { x: 0, y: 0, w: 1, h: 1 } : source ? workspaceGeometry(layout).panes.find(p => p.id === source.id) : rect, label: source ? 'Focus this chat' : 'Open here' })
+        return
+      }
+    }
+    dropRef.current = zone
+    const dest = zoomed ? { x: 0, y: 0, w: 1, h: 1 } : candidate ? workspaceGeometry(candidate).panes.find(p => p.id === (source?.id ?? candidate.focus)) : source ? workspaceGeometry(layout).panes.find(p => p.id === source.id) : rect
+    onPreview({ rect: dest, label: zone.zone === 'center' ? source ? 'Focus this chat' : 'Open here' : actionLabel(zone.zone) })
   }
-
-  const leave = (e) => {
-    // A missing relatedTarget is the pointer leaving the window (or a drag the
-    // browser cancelled), not a move between children.
+  const leave = e => {
     if (e.relatedTarget && e.currentTarget.contains(e.relatedTarget)) return
-    place.current = null
-    setZone(null)
+    dropRef.current = null
+    onClearPreview()
   }
-
-  const drop = (e) => {
-    const view = draggedChat(e.dataTransfer)
-    const at = place.current ?? { zone: 'center' }
-    place.current = null
-    setZone(null)
-    if (!view) return
+  const drop = e => {
+    const id = draggedChat(e.dataTransfer)
+    const zone = dropRef.current ?? { zone: 'center' }
+    dropRef.current = null
+    onClearPreview()
+    if (!id) return
     e.preventDefault()
-    onDropInPane?.(node.id, view, at)
+    onDropInPane?.(node.id, id, zone)
   }
-
-  // A drag can end away from this pane: dropped on the window, cancelled with
-  // Esc, or lost with the pointer. The tint is cleared from the window as
-  // well, so no half-pane highlight outlives the drag that drew it.
-  useEffect(() => {
-    if (!zone) return undefined
-    const clear = () => {
-      place.current = null
-      setZone(null)
-    }
-    window.addEventListener('dragend', clear)
-    window.addEventListener('drop', clear)
-    return () => {
-      window.removeEventListener('dragend', clear)
-      window.removeEventListener('drop', clear)
-    }
-  }, [zone])
-
-  return (
-    <section
-      className={`split-pane${focused ? ' focused' : ''}${zone ? ` drop-${zone}` : ''}`}
-      data-leaf-id={node.id}
-      onPointerDownCapture={() => setLayout((l) => focusLeaf(l, node.id))}
-      aria-label={label}
-    >
-      {showHeader && (
-        <header className="split-bar">
-          <span
-            className={`split-label${head.chat ? ' split-label--chat' : ''}`}
-            title={headTitle}
-            draggable={canDrag}
-            onDragStart={(e) => {
-              // The same pair the sidebar writes: the private type the panes
-              // test, and the prefixed text/plain an older reader understands.
-              e.dataTransfer.setData(CHAT_DRAG_TYPE, node.view)
-              e.dataTransfer.setData('text/plain', chatDragPayload(node.view))
-              e.dataTransfer.effectAllowed = 'move'
-            }}
-          >
-            {/* The sidebar's dot, in the sidebar's language: same classes, same
-                status values, so a streaming or waiting pane reads the same as
-                its row does. */}
-            {head.chat && <span className={`dot dot--${head.status}`} aria-hidden="true" />}
-            {head.chat && head.harness && <HarnessMark harness={head.harness} size={12} />}
-            <span className="split-title">{head.title}</span>
-            {/* A word, not a dot: the dot still says the chat's status, and
-                the transport's retry is not a status the dot language grows.
-                The sidebar's row tooltip says the same word. */}
-            {head.reconnecting && <span className="split-reconnecting">{RECONNECTING}</span>}
-            {head.project && <span className="split-project">{`· ${head.project}`}</span>}
-          </span>
-          <div className="split-actions">
-            <button
-              type="button"
-              className="split-btn"
-              title={hintRight('Split right')}
-              aria-label="Split right"
-              disabled={!splittable}
-              onClick={splitTo('row', false)}
-            >
-              <SplitGlyph size={14} />
-            </button>
-            {/* The saved shapes, beside the split: one control, the same menu
-                pattern as the split options, and only when the shell has
-                handed the header a way to put a shape back. */}
-            {onRestoreLayout && (
-              <button
-                type="button"
-                ref={layoutsRef}
-                className="split-btn split-btn--text"
-                title="Saved layouts"
-                aria-label="Saved layouts"
-                aria-haspopup="menu"
-                aria-expanded={Boolean(layoutMenu)}
-                onClick={openLayoutMenu}
-              >
-                Layouts
-              </button>
-            )}
-            <button
-              type="button"
-              ref={menuRef}
-              className="split-btn"
-              title="Split this pane another way"
-              aria-label="More split options"
-              aria-haspopup="menu"
-              aria-expanded={Boolean(menu)}
-              onClick={openMenu}
-            >
-              <DotsThree size={16} weight="bold" />
-            </button>
-            {!primary && (
-              <button
-                type="button"
-                className="split-btn"
-                title="Close this pane"
-                aria-label="Close this pane"
-                onClick={() => setLayout((l) => closeLeaf(l, node.id))}
-              >
-                <X size={13} />
-              </button>
-            )}
-          </div>
-        </header>
-      )}
-      <div
-        className="split-body"
-        onDragOver={over}
-        onDragLeave={leave}
-        onDrop={drop}
-      >
-        {renderPane(node)}
-        {zone && <div className={`split-drop split-drop--${zone}`} aria-hidden="true" />}
+  const items = [
+    { label: zoomed ? 'Restore panes' : 'Maximize pane', icon: <ArrowsOut size={18} />, onSelect: onZoom },
+    { divider: true },
+    ...[['right', 'row', false, ArrowRight], ['down', 'col', false, ArrowDown], ['left', 'row', true, ArrowLeft], ['up', 'col', true, ArrowUp]].map(([name, dir, before, Icon]) => ({
+      label: `Split ${name}`, icon: <Icon size={18} />, hint: kb?.label(`split-${name}`),
+      disabled: !canSplit || !layoutFits(splitLeaf(layout, node.id, dir, 'new', before), room.width, room.height),
+      onSelect: () => onSplit(node.id, dir, before),
+    })),
+    { divider: true },
+    { label: 'Move pane', disabled: !showHeader, submenu: leaves(layout.root).filter(p => p.id !== node.id).map(p => ({ label: `Swap with ${labelFor(p)}`, onSelect: () => onSplit(node.id, null, p.id) })) },
+    ...(showHeader ? [{ divider: true }, { label: 'Close pane', icon: <X size={18} />, hint: kb?.label('close-pane'), onSelect: onClose }] : []),
+  ]
+  return <section className={`split-pane${focused ? ' focused' : ''}${zoomed ? ' is-maximized' : ''}${menu ? ' has-menu' : ''}`}
+    data-leaf-id={node.id} style={{ ...position(rect), display: hidden ? 'none' : undefined }} inert={hidden || undefined}
+    onPointerDownCapture={onFocus} onFocusCapture={onFocus} aria-label={label}>
+    {showHeader && <header className="split-bar">
+      <div className="split-label" title={`${head.title} - drag to dock or swap; double-click to maximize`}
+        tabIndex={0} role="button" aria-label={`Move ${head.title}`} onPointerDown={e => onStartDrag(e, node.id)} onDoubleClick={onZoom}
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onZoom() } }}
+        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY }) }}>
+        <DotsSixVertical size={14} className="split-grip" />
+        {head.chat && <span className={`dot dot--${head.status}`} aria-hidden="true" />}
+        {head.chat && head.harness && <HarnessMark harness={head.harness} size={16} />}
+        <span className="split-title">{head.title}</span>
+        {head.reconnecting && <span className="split-reconnecting">{RECONNECTING}</span>}
+        {head.project && <span className="split-project">{head.project}</span>}
       </div>
-      {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} />}
-      {layoutMenu && (
-        <ContextMenu
-          x={layoutMenu.x}
-          y={layoutMenu.y}
-          items={layoutMenuItems()}
-          onClose={() => setLayoutMenu(null)}
-        />
-      )}
-    </section>
-  )
+      <div className="split-actions">
+        <button type="button" className="split-btn" title={zoomed ? 'Restore panes' : 'Maximize pane'} aria-label={zoomed ? 'Restore panes' : 'Maximize pane'} onClick={onZoom}>{zoomed ? <ArrowsIn size={18} /> : <ArrowsOut size={18} />}</button>
+        <button type="button" className="split-btn" title="Close this pane" aria-label="Close this pane" onClick={onClose}><X size={18} /></button>
+      </div>
+    </header>}
+    <div className="split-body" onDragOver={over} onDragLeave={leave} onDrop={drop}>{renderPane(node)}</div>
+    {menu && <ContextMenu x={menu.x} y={menu.y} items={items} compact label="Pane actions" onClose={() => setMenu(null)} />}
+  </section>
 }
 
-// Renders a split layout: nested rows and columns of panes with draggable
-// dividers. What a pane shows is the caller's (`renderPane`), so Local and
-// Cloud chats, new-chat composers and the primary view all share one frame.
-// One pane is the app's whole main area, headerless; two or more get the
-// headers, because that is where the split and close actions live and where a
-// saved shape is put back.
-//
-// `onRestoreLayout` is the shell's own "apply this plan" (it owns the layout
-// and the primary pane's view), and `currentChat` is the chat a restored
-// "chat" pane should hold; without them the header offers no Layouts control
-// rather than a menu that cannot do anything.
-export default function SplitArea({
-  layout,
-  setLayout,
-  renderPane,
-  labelFor,
-  onDropInPane,
-  canSplit = true,
-  onSaveLayout = null,
-  onRestoreLayout = null,
-  currentChat = null,
-}) {
-  const count = paneCount(layout)
-
-  const renderNode = (node) => {
-    if (node.type === 'leaf') {
-      return (
-        <Pane
-          key={node.id}
-          node={node}
-          layout={layout}
-          setLayout={setLayout}
-          renderPane={renderPane}
-          labelFor={labelFor}
-          showHeader={count > 1}
-          onDropInPane={onDropInPane}
-          canSplit={canSplit}
-          onSaveLayout={onSaveLayout}
-          onRestoreLayout={onRestoreLayout}
-          currentChat={currentChat}
-        />
-      )
+/** Flat keyed panes stay mounted when the layout tree changes around them. */
+export default function SplitArea({ layout, setLayout, renderPane, labelFor, onDropInPane, canSplit = true, onSaveLayout = null, onRestoreLayout = null, currentChat = null, onClosePane = null, layoutControl = null, onCloseLayoutControl = null, onRoomChange = null }) {
+  const areaRef = useRef(null)
+  const latest = useRef(layout)
+  latest.current = layout
+  const [room, setRoom] = useState({ width: 0, height: 0 })
+  const [zoom, setZoom] = useState(null)
+  const [preview, setPreview] = useState(null)
+  const [dragging, setDragging] = useState(null)
+  const [resizing, setResizing] = useState(false)
+  const [dragArmed, setDragArmed] = useState(false)
+  const ghostRef = useRef(null)
+  const gesture = useRef(null)
+  const ordered = leaves(layout.root)
+  const count = ordered.length
+  const geometry = workspaceGeometry(layout)
+  const zoomId = ordered.some(p => p.id === zoom) && count > 1 ? zoom : null
+  const dragLeaf = dragging ? leafById(layout, dragging.id) : null
+  const clearPreview = useCallback(() => setPreview(null), [])
+  useLayoutEffect(() => {
+    if (zoomId && zoomId !== layout.focus) setZoom(layout.focus)
+  }, [layout.focus, zoomId])
+  useLayoutEffect(() => {
+    const current = gesture.current
+    if (current && (!workspaceGestureValid(current.base, layout, current.pointerId, current.pointerId) || current.chat !== currentChat)) current.cancel()
+  }, [layout.root, layout.focus, currentChat])
+  useLayoutEffect(() => {
+    const element = areaRef.current
+    const measure = () => { gesture.current?.cancel(); const r = element.getBoundingClientRect(); const size = { width: r.width, height: r.height }; setRoom(size); onRoomChange?.(size) }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [onRoomChange])
+  useEffect(() => {
+    const clear = () => setPreview(null)
+    window.addEventListener('dragend', clear)
+    window.addEventListener('drop', clear)
+    return () => { window.removeEventListener('dragend', clear); window.removeEventListener('drop', clear) }
+  }, [])
+  useEffect(() => () => gesture.current?.cancel(), [])
+  useEscLayer(Boolean(dragArmed || resizing || zoomId), () => {
+    if (gesture.current) gesture.current.cancel()
+    else setZoom(null)
+  })
+  const paint = next => {
+    const g = workspaceGeometry(next)
+    for (const r of g.panes) {
+      const el = areaRef.current?.querySelector(`[data-leaf-id="${r.id}"]`)
+      if (el) Object.assign(el.style, position(r))
     }
-    return <SplitNode key={node.id} node={node} setLayout={setLayout} renderNode={renderNode} />
+    for (const r of g.dividers) {
+      const el = areaRef.current?.querySelector(`[data-divider-id="${r.id}"]`)
+      if (el) Object.assign(el.style, { left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: r.dir === 'row' ? '9px' : `${r.w * 100}%`, height: r.dir === 'col' ? '9px' : `${r.h * 100}%` })
+    }
   }
-
-  return <div className={`split-area${count > 1 ? ' is-split' : ''}`}>{renderNode(layout.root)}</div>
+  const startResize = (e, divider) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    const base = latest.current
+    const box = areaRef.current.getBoundingClientRect()
+    const row = divider.dir === 'row'
+    const total = row ? box.width * divider.bounds.w : box.height * divider.bounds.h
+    const start = row ? e.clientX : e.clientY
+    const target = e.currentTarget
+    const pointerId = e.pointerId
+    let delta = 0
+    let painted = base
+    setResizing(true)
+    target.setPointerCapture(e.pointerId)
+    const move = ev => {
+      if (ev.pointerId !== pointerId) return
+      delta = ((row ? ev.clientX : ev.clientY) - start) / total
+      painted = resizeWorkspaceDivider(base, divider, delta, box.width, box.height)
+      paint(painted)
+    }
+    const finish = commit => {
+      target.removeEventListener('pointermove', move)
+      target.removeEventListener('pointerup', up)
+      target.removeEventListener('pointercancel', cancel)
+      target.removeEventListener('lostpointercapture', cancel)
+      window.removeEventListener('blur', cancel)
+      gesture.current = null
+      setResizing(false)
+      if (commit && delta !== 0) setLayout(painted)
+      else paint(latest.current)
+    }
+    const up = ev => {
+      if (ev.pointerId !== pointerId) return
+      if (!workspaceGestureValid(base, latest.current, ev.pointerId, pointerId)) return finish(false)
+      move(ev)
+      finish(true)
+    }
+    const cancel = ev => { if (!ev || ev.type === 'blur' || ev.pointerId === pointerId) finish(false) }
+    gesture.current = { cancel, base, pointerId, chat: currentChat }
+    target.addEventListener('pointermove', move)
+    target.addEventListener('pointerup', up)
+    target.addEventListener('pointercancel', cancel)
+    target.addEventListener('lostpointercapture', cancel)
+    window.addEventListener('blur', cancel)
+  }
+  const startPaneDrag = (e, id) => {
+    if (e.button !== 0 || zoomId || count < 2) return
+    e.preventDefault()
+    const base = focusLeaf(latest.current, id)
+    const start = { x: e.clientX, y: e.clientY }
+    const target = e.currentTarget
+    const pointerId = e.pointerId
+    setDragArmed(true)
+    const box = areaRef.current.getBoundingClientRect()
+    let started = false
+    let next = null
+    let lastTarget = null
+    target.setPointerCapture(e.pointerId)
+    const move = ev => {
+      if (ev.pointerId !== pointerId) return
+      if (!started && Math.hypot(ev.clientX - start.x, ev.clientY - start.y) < 7) return
+      if (!started) setDragging({ id, x: ev.clientX - box.left + 14, y: ev.clientY - box.top + 14 })
+      started = true
+      if (ghostRef.current) { ghostRef.current.style.left = `${ev.clientX - box.left + 14}px`; ghostRef.current.style.top = `${ev.clientY - box.top + 14}px` }
+      const x = (ev.clientX - box.left) / box.width
+      const y = (ev.clientY - box.top) / box.height
+      const hit = workspaceGeometry(base).panes.find(p => p.id !== id && x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h)
+      next = null
+      if (!hit) { if (lastTarget) setPreview(null); lastTarget = null; return }
+      const at = dropZone({ left: hit.x * box.width + box.left, top: hit.y * box.height + box.top, right: (hit.x + hit.w) * box.width + box.left, bottom: (hit.y + hit.h) * box.height + box.top, width: hit.w * box.width, height: hit.h * box.height }, ev.clientX, ev.clientY)
+      const candidate = dockPane(base, id, hit.id, at.zone)
+      if (at.zone !== 'center' && !layoutFits(candidate, box.width, box.height)) { if (lastTarget) setPreview(null); lastTarget = null; return }
+      next = candidate
+      if (lastTarget === `${hit.id}:${at.zone}`) return
+      lastTarget = `${hit.id}:${at.zone}`
+      setPreview({ rect: workspaceGeometry(candidate).panes.find(p => p.id === id), label: actionLabel(at.zone), targets: hit, zone: at.zone })
+    }
+    const finish = commit => {
+      target.removeEventListener('pointermove', move)
+      target.removeEventListener('pointerup', up)
+      target.removeEventListener('pointercancel', cancel)
+      target.removeEventListener('lostpointercapture', cancel)
+      window.removeEventListener('blur', cancel)
+      gesture.current = null
+      setDragging(null)
+      setDragArmed(false)
+      setPreview(null)
+      if (commit && next) setLayout(next)
+    }
+    const up = ev => {
+      if (ev.pointerId !== pointerId) return
+      if (!workspaceGestureValid(base, latest.current, ev.pointerId, pointerId)) return finish(false)
+      if (started) move(ev)
+      finish(true)
+    }
+    const cancel = ev => { if (!ev || ev.type === 'blur' || ev.pointerId === pointerId) finish(false) }
+    gesture.current = { cancel, base, pointerId, chat: currentChat }
+    target.addEventListener('pointermove', move)
+    target.addEventListener('pointerup', up)
+    target.addEventListener('pointercancel', cancel)
+    target.addEventListener('lostpointercapture', cancel)
+    window.addEventListener('blur', cancel)
+  }
+  const split = (id, dir, before) => {
+    setZoom(null)
+    if (!dir) { setLayout(l => dockPane(l, id, before, 'center')); return }
+    const candidate = splitLeaf(latest.current, id, dir, 'new', before)
+    if (layoutFits(candidate, room.width, room.height)) setLayout(candidate)
+  }
+  const closePanel = useCallback(() => onCloseLayoutControl?.(), [onCloseLayoutControl])
+  return <div ref={areaRef} className={`split-area${count > 1 ? ' is-split' : ''}${dragging ? ' is-dragging' : ''}`}>
+    {ordered.map(node => <Pane key={node.id} node={node} rect={zoomId === node.id ? { x: 0, y: 0, w: 1, h: 1 } : geometry.panes.find(p => p.id === node.id)}
+      focused={layout.focus === node.id} hidden={Boolean(zoomId && zoomId !== node.id)} zoomed={zoomId === node.id} showHeader={count > 1}
+      labelFor={labelFor} renderPane={renderPane} currentChat={currentChat} layout={layout} room={room} canSplit={canSplit && count < MAX_PANES}
+      onFocus={() => setLayout(l => focusLeaf(l, node.id))} onStartDrag={startPaneDrag}
+      onZoom={() => { setLayout(l => focusLeaf(l, node.id)); setZoom(z => z === node.id ? null : node.id) }}
+      onClose={() => { setZoom(null); onClosePane?.(node.id) }} onSplit={split} onDropInPane={onDropInPane} onPreview={setPreview} onClearPreview={clearPreview} />)}
+    {!zoomId && geometry.dividers.map(d => <div key={d.id} data-divider-id={d.id} className={`split-divider split-divider--${d.dir}`}
+      style={{ left: `${d.x * 100}%`, top: `${d.y * 100}%`, width: d.dir === 'row' ? 9 : `${d.w * 100}%`, height: d.dir === 'col' ? 9 : `${d.h * 100}%` }}
+      role="separator" tabIndex={0} aria-label="Resize the panes" aria-orientation={d.dir === 'row' ? 'vertical' : 'horizontal'}
+      aria-valuenow={Math.round((d.dir === 'row' ? (d.x - d.bounds.x) / d.bounds.w : (d.y - d.bounds.y) / d.bounds.h) * 100)} aria-valuemin={0} aria-valuemax={100}
+      title="Drag to resize - double-click to equalize" onPointerDown={e => startResize(e, d)} onDoubleClick={() => setLayout(l => { const candidate = balanceSplit(l, d.splitId); return layoutFits(candidate, room.width, room.height) ? candidate : l })}
+      onKeyDown={e => { const keys = d.dir === 'row' ? ['ArrowLeft', 'ArrowRight'] : ['ArrowUp', 'ArrowDown']; if (!keys.includes(e.key)) return; e.preventDefault(); setLayout(l => resizeWorkspaceDivider(l, d, (e.key === keys[0] ? -1 : 1) * (e.shiftKey ? .1 : .025), room.width, room.height)) }} />)}
+    {preview?.rect && <div className="split-drop" style={position(preview.rect)} aria-hidden="true"><span>{preview.label}</span></div>}
+    {preview?.targets && <div className="split-targets" style={{ left: `calc(${(preview.targets.x + preview.targets.w / 2) * 100}% - 65px)`, top: `calc(${(preview.targets.y + preview.targets.h / 2) * 100}% - 57px)` }} aria-hidden="true">
+      {['top', 'left', 'center', 'right', 'bottom'].map(zone => <span key={zone} className={`split-target split-target--${zone}${zone === preview.zone ? ' on' : ''}`}>{({ top: '↑', left: '←', center: 'Swap', right: '→', bottom: '↓' })[zone]}</span>)}
+    </div>}
+    {dragging && dragLeaf && <div ref={ghostRef} className="split-drag-ghost" style={{ left: dragging.x, top: dragging.y }}>{labelFor(dragLeaf)}</div>}
+    {layoutControl && <WorkspaceLayouts layout={layout} width={room.width} height={room.height} anchor={layoutControl} currentChat={currentChat}
+      onPreset={preset => { setZoom(null); const candidate = presetLayout(latest.current, preset); if (layoutFits(candidate, room.width, room.height)) setLayout(candidate) }}
+      onEqualize={() => setLayout(l => { const candidate = equalizeWorkspace(l); return layoutFits(candidate, room.width, room.height) ? candidate : l })} onSave={onSaveLayout} onRestore={onRestoreLayout} onClose={closePanel} />}
+  </div>
 }

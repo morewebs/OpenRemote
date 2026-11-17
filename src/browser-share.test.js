@@ -44,5 +44,5 @@ test('the browser tells the daemon on a pick or a picture, and a new chat on its
   const told = fresh.indexOf('chatMade(id, tellDaemon, composerKey)')
   assert.ok(made > 0 && told > made && told < fresh.indexOf('onOpen(id)', made), 'told once the chat exists, before it opens')
   const chat = read('./ChatView.jsx')
-  assert.match(chat, /claimInserter\(attach, composerKey, inputRef\)/)
+  assert.match(chat, /claimInserter\(attach, composerKey, inputRef, active\)/)
 })

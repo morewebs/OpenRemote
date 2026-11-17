@@ -10,8 +10,8 @@ import { readFileSync } from 'node:fs'
 const source = readFileSync(new URL('./SplitArea.jsx', import.meta.url), 'utf8')
 
 const startDrag = source.slice(
-  source.indexOf('const startDrag'),
-  source.indexOf('return (', source.indexOf('const startDrag')),
+  source.indexOf('const startResize'),
+  source.indexOf('const startPaneDrag'),
 )
 
 test('a divider drag commits the layout once, on release', () => {
@@ -20,14 +20,24 @@ test('a divider drag commits the layout once, on release', () => {
     1,
     'a second commit in the gesture is the pointer-rate re-render this fix removed',
   )
-  assert.match(startDrag, /if \(delta !== 0\) setLayout/, 'and only when the strip actually moved')
-  assert.match(startDrag, /drag\.release\(\)/, 'the committed delta is the whole gesture')
+  assert.match(startDrag, /if \(commit && delta !== 0\) setLayout\(painted\)/, 'and only on release after the strip actually moved')
+  assert.match(startDrag, /painted = resizeWorkspaceDivider\(base, divider, delta, box\.width, box\.height\)/, 'each preview uses the whole delta and respects nested pane floors')
+  assert.match(startDrag, /const up = ev =>/)
+  assert.match(startDrag, /workspaceGestureValid\(base, latest\.current, ev\.pointerId, pointerId\)/, 'stale gestures cannot overwrite new work')
+  assert.match(startDrag, /const cancel = ev =>/)
+  assert.match(startDrag, /else paint\(latest\.current\)/, 'cancellation rolls back the preview')
+  assert.match(startDrag, /addEventListener\('pointercancel', cancel\)/)
+  assert.match(startDrag, /addEventListener\('lostpointercapture', cancel\)/)
 })
 
 test('while the pointer moves, the strip is repainted without a commit', () => {
-  assert.match(startDrag, /style\.flex/, 'the two cells are painted in place')
-  assert.match(startDrag, /cells\[index\]\.style\.flex/)
-  assert.match(startDrag, /cells\[index \+ 1\]\.style\.flex/)
+  const move = startDrag.slice(startDrag.indexOf('const move'), startDrag.indexOf('const finish'))
+  assert.match(move, /paint\(painted\)/)
+  assert.doesNotMatch(move, /setLayout\(/)
+  const paint = source.slice(source.indexOf('const paint ='), source.indexOf('const startResize'))
+  assert.match(paint, /workspaceGeometry\(next\)/)
+  assert.match(paint, /Object\.assign\(el\.style, position\(r\)\)/, 'normalized rectangles repaint existing pane elements')
+  assert.match(source, /ordered\.map\(node => <Pane key=\{node\.id\}/, 'pane siblings retain their identities when the tree changes')
 })
 
 const over = source.slice(source.indexOf('const over ='), source.indexOf('const leave ='))
@@ -41,10 +51,11 @@ test('a drag that carries no chat never tints a pane', () => {
 
 test('a drag that ends anywhere clears the tint it drew', () => {
   const pane = source.slice(source.indexOf('function Pane('), source.indexOf('export default function SplitArea'))
-  assert.match(pane, /window\.addEventListener\('dragend', clear\)/)
-  assert.match(pane, /window\.addEventListener\('drop', clear\)/)
-  assert.match(pane, /removeEventListener\('dragend', clear\)/)
-  assert.match(pane, /removeEventListener\('drop', clear\)/)
+  assert.match(source, /const clear = \(\) => setPreview\(null\)/)
+  assert.match(source, /window\.addEventListener\('dragend', clear\)/)
+  assert.match(source, /window\.addEventListener\('drop', clear\)/)
+  assert.match(source, /removeEventListener\('dragend', clear\)/)
+  assert.match(source, /removeEventListener\('drop', clear\)/)
   // The pointer leaving the window is a leave too (relatedTarget null).
   assert.match(pane, /if \(e\.relatedTarget && e\.currentTarget\.contains\(e\.relatedTarget\)\) return/)
 })

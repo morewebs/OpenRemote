@@ -58,7 +58,7 @@ test('a token event does not rebuild the palette rows', () => {
   // every mutation used to rebuild two hundred rows, and they do not include
   // the browser's tabs either: the Browser group has its own memo below, so a
   // page event rebuilds that group and nothing else.
-  assert.match(palette, /\}, \[kb, sessions, archived, projects, devices, thisDevice, capabilities, machines, raceFree, moved, panes, savedLayouts, onScreen, reviewChat, markdownChat, hasFileChanges, focusedChatId, onRenameChat, rowSetup, onNewWithSetup, rulesCanRun, automations, machinesAnswered\]\)/)
+  assert.match(palette, /\}, \[kb, sessions, archived, projects, devices, thisDevice, capabilities, machines, raceFree, moved, panes, savedLayouts, onScreen, reviewChat, markdownChat, hasFileChanges, focusedChatId, onRenameChat, rowSetup, onNewWithSetup, rulesCanRun, automations, machinesAnswered, onWorkspaceLayout\]\)/)
   // The setup row is the one that reads a chat's own fields, and it is built in
   // a memo keyed on those fields: the record is read per render, but a token
   // that grows the timeline rebuilds nothing (chat-setup.js answers the setup).

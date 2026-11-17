@@ -1,7 +1,7 @@
 # Split workspace: snap and polish
 
 Date: 2026-11-17
-Status: proposed, awaiting design approval
+Status: approved for implementation after the interactive preview and user's "continue"
 
 ## Intent and decisions
 

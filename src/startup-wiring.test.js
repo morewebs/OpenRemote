@@ -58,11 +58,15 @@ test('the New chat composer waits for the boot seed to resolve', () => {
   assert.match(app, /Opening your chat\.\.\./)
   // The quiet panel is the one the missing-chat pane already uses.
   assert.match(app, /className="cv-none"/)
-  // A split pane's New chat is a deliberate one, not a seed: its branch
-  // (`paneContent`) must not be guarded by the seed.
+  // Only the navigation pane follows the boot seed. Deliberately opened
+  // secondary composers still render while the initial chat is resolving.
   const pane = app.match(/const paneContent = \(leaf\) => \{[\s\S]*?\n  \}/)
   assert.ok(pane, 'paneContent must exist')
-  assert.doesNotMatch(pane[0], /bootSeed/)
+  assert.match(pane[0], /const primary = leaf\.view === null/)
+  assert.match(pane[0], /const paneView = leaf\.view \?\? view/)
+  const gate = pane[0].slice(pane[0].indexOf('if (primary &&'), pane[0].indexOf("if (paneView === 'new')"))
+  assert.match(gate, /paneView === 'new' && bootSeed && !sessionsAnswered/)
+  assert.match(gate, /return primaryContent/)
 })
 
 test('the boot is keyed on the connection and its failure, not on the state it shows', () => {

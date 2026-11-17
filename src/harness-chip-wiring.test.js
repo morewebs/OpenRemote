@@ -1,11 +1,6 @@
-// The harness chip in a chat's composer used to open a listbox of every
-// installed harness, and choosing a row only closed the listbox: a control
-// that read as "switch this chat's harness" while switching nothing. The
-// daemon takes a harness when it starts a session - a chat's settings are
-// the model, the effort, fast, and the permission word - so the listbox
-// could not have worked. The chip opens the harness manager instead, which
-// is the one thing beside it that acts, and on a phone the only route to it,
-// since the picker it replaced had no footer there.
+// Selection opens the App picker; management remains an explicit footer
+// action. Selecting another App prepares a new composer because the daemon
+// binds an existing chat to the App that created it.
 //
 // Source text, like the repo's other wiring checks: this is the half a pure
 // test cannot see, and a call site that loses its import is still valid text.
@@ -16,27 +11,15 @@ import test from 'node:test'
 
 const read = (file) => readFileSync(new URL(`./${file}`, import.meta.url), 'utf8')
 
-test('the chat harness chip opens the manager, not a listbox that chose nothing', () => {
+test('App selection opens a working picker and management is an explicit action', () => {
   const view = read('ChatView.jsx')
-  // No harness listbox, and nothing left that would build one.
-  assert.doesNotMatch(view, /kind === 'harness'/)
-  assert.doesNotMatch(view, /togglePicker\('harness'/)
-  assert.doesNotMatch(view, /import \{ pickable \}/)
-  assert.doesNotMatch(view, /filter\(pickable\)/)
-  // The chip itself closes any open picker and opens the manager.
-  assert.match(
-    view,
-    /onClick=\{\(\) => \{\s*\n\s*hidePicker\(\)\s*\n\s*setManagingHarnesses\(true\)\s*\n\s*\}\}/,
-  )
-  // It announces a dialog rather than a listbox, and its title names the mark
-  // before the action, so the harness stays the fact the chip shows. The name
-  // is the one the chip prints: `harnessText` already resolved it, which also
-  // keeps a plugin-provided harness reading as its own name rather than a bare
-  // lowercase id.
-  assert.match(view, /aria-haspopup="dialog"\s*\n\s*title=\{`App - \$\{harnessText\}/)
-  assert.doesNotMatch(view, /aria-expanded=\{picker\?\.kind === 'harness'\}/)
-  // The manager it opens is still rendered by this view.
-  assert.match(view, /\{managingHarnesses && !web && \(/)
+  assert.match(view, /onClick=\{togglePicker\('harness'\)\}/)
+  assert.match(view, /aria-expanded=\{picker\?\.kind === 'harness'\}/)
+  assert.match(view, /kind === 'harness' && <PickerMenu label="App"/)
+  assert.match(view, /onChooseApp\(\{ seed, composerKey \}\)/)
+  assert.match(view, /onSelect: togglePicker\('harness'\)/, 'compact options use the same selector')
+  assert.match(view, /setManagingHarnesses\(true\)[^\n]*>Manage apps…<\/button>/)
+  assert.match(view, /\{managingHarnesses && !web && createPortal\(/)
   assert.match(view, /<HarnessManagerModal/)
 })
 
@@ -62,7 +45,7 @@ test('a view imports every harness-names helper it calls', () => {
   }
 })
 
-test('the daemon cannot take a harness on a running session, which is why the listbox went', () => {
+test('the existing session stays bound to its App; a different App uses a new composer', () => {
   // The wire, read from the daemon: a chat's settings are the model, the
   // effort, fast and the permission word, and a harness is chosen when the
   // session starts. If this ever grows a harness field, a picker becomes

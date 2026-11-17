@@ -31,6 +31,7 @@ import {
   PuzzlePiece,
   TrashSimple,
   UserCircle,
+  SquaresFour,
   X,
 } from '@phosphor-icons/react'
 import PickerMenu from './PickerMenu.jsx'
@@ -42,6 +43,7 @@ import { activeSessions } from './archive.js'
 import { deviceName, isPhone, sessionsForMode } from './cloud.js'
 import { hasTauri, isMobile } from './platform.js'
 import { CHAT_DRAG_TYPE, acceptsChatDrop, chatDragPayload } from './split.js'
+import { setSidebarDraggedChat } from './workspace-layout.js'
 import { useMoveChat } from './useMoveChat.jsx'
 import { dropMoves } from './move-chat.js'
 import './move.css'
@@ -142,6 +144,9 @@ export default function Sidebar({
   // whether it is open (the pane sits beside the chat, not inside it).
   onBrowser = null,
   browserOpen = false,
+  onWorkspaceLayout = null,
+  workspaceLayoutOpen = false,
+  canSplitChat = null,
   // The shell hosts the rename dialog above both surfaces that offer it, so
   // the row menu only asks for it. `renamedTitles` is the one-beat overlay of
   // names just saved, until the console's own record carries them.
@@ -874,10 +879,10 @@ export default function Sidebar({
       ...(onSplit && !isMobile
         ? [
             { divider: true },
-            { label: 'Split right', icon: <ArrowRight size={14} />, onSelect: split('row', false) },
-            { label: 'Split down', icon: <ArrowDown size={14} />, onSelect: split('col', false) },
-            { label: 'Split left', icon: <ArrowLeft size={14} />, onSelect: split('row', true) },
-            { label: 'Split up', icon: <ArrowUp size={14} />, onSelect: split('col', true) },
+            { label: 'Split right', icon: <ArrowRight size={14} />, disabled: canSplitChat && !canSplitChat(item.key, 'row', false), onSelect: split('row', false) },
+            { label: 'Split down', icon: <ArrowDown size={14} />, disabled: canSplitChat && !canSplitChat(item.key, 'col', false), onSelect: split('col', false) },
+            { label: 'Split left', icon: <ArrowLeft size={14} />, disabled: canSplitChat && !canSplitChat(item.key, 'row', true), onSelect: split('row', true) },
+            { label: 'Split up', icon: <ArrowUp size={14} />, disabled: canSplitChat && !canSplitChat(item.key, 'col', true), onSelect: split('col', true) },
           ]
         : []),
     ]
@@ -959,10 +964,10 @@ export default function Sidebar({
       ...(canSplit
         ? [
             { divider: true },
-            { label: 'Split right', icon: <ArrowRight size={14} />, onSelect: split('row', false) },
-            { label: 'Split down', icon: <ArrowDown size={14} />, onSelect: split('col', false) },
-            { label: 'Split left', icon: <ArrowLeft size={14} />, onSelect: split('row', true) },
-            { label: 'Split up', icon: <ArrowUp size={14} />, onSelect: split('col', true) },
+            { label: 'Split right', icon: <ArrowRight size={14} />, disabled: canSplitChat && !canSplitChat(row.id, 'row', false), onSelect: split('row', false) },
+            { label: 'Split down', icon: <ArrowDown size={14} />, disabled: canSplitChat && !canSplitChat(row.id, 'col', false), onSelect: split('col', false) },
+            { label: 'Split left', icon: <ArrowLeft size={14} />, disabled: canSplitChat && !canSplitChat(row.id, 'row', true), onSelect: split('row', true) },
+            { label: 'Split up', icon: <ArrowUp size={14} />, disabled: canSplitChat && !canSplitChat(row.id, 'col', true), onSelect: split('col', true) },
           ]
         : []),
       { divider: true },
@@ -1082,10 +1087,12 @@ export default function Sidebar({
         e.dataTransfer.setData(CHAT_DRAG_TYPE, row.id)
         e.dataTransfer.setData('text/plain', chatDragPayload(row.id))
         e.dataTransfer.effectAllowed = 'move'
+        setSidebarDraggedChat(row.id)
         // A project head can take it too: the drop moves the chat there.
         setDragging(row)
       }}
       onDragEnd={() => {
+        setSidebarDraggedChat(null)
         setDragging(null)
         setDropOn(null)
       }}
@@ -1620,7 +1627,7 @@ export default function Sidebar({
       <footer className="sb-foot">
         {/* Account opens in the main pane. Mobile, Metrics and Settings
             open over it, keeping the current chat in place. */}
-        <div className="sb-foot-row" role="group" aria-label="Account, mobile, metrics, settings">
+        <div className="sb-foot-row" role="group" aria-label="Account, mobile, metrics, workspace layout, settings">
           <button
             type="button"
             className={`sb-icon-btn${active === 'account' && !searchOn ? ' on' : ''}`}
@@ -1667,6 +1674,9 @@ export default function Sidebar({
             <ChartLineUp size={20} weight="regular" />
           </button>
           )}
+          {!isMobile && onWorkspaceLayout && <button type="button" className={`sb-icon-btn${workspaceLayoutOpen ? ' on' : ''}`}
+            data-picker="workspace-layout" title="Workspace layout" aria-label="Workspace layout" aria-haspopup="menu" aria-expanded={workspaceLayoutOpen}
+            onClick={onWorkspaceLayout}><SquaresFour size={22} /></button>}
           <button
             type="button"
             className={`sb-icon-btn${active === 'settings' && !searchOn ? ' on' : ''}`}

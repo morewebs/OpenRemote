@@ -1,308 +1,56 @@
-/* The row the chat area and the browser pane share: the chat keeps the
-   rest and the pane keeps its width. This lives here, not in the
-   browser's own CSS, because the browser loads lazily - the row has to
-   lay out right before the pane is ever opened. */
-.main-row {
-  flex: 1;
-  display: flex;
-  min-width: 0;
-  min-height: 0;
+.main-row { position: relative; flex: 1; display: flex; min-width: 0; min-height: 0; }
+.workspace-notice { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 90; display: flex; gap: 12px; align-items: center; width: max-content; max-width: calc(100% - 32px); padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-side); color: var(--text-2); font-size: 12px; box-shadow: 0 4px 20px #0005; }
+.workspace-notice button { display: grid; place-items: center; flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 5px; color: inherit; background: transparent; cursor: pointer; }
+.split-area { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.split-pane { position: absolute; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: var(--bg-app); }
+.split-area.is-split .split-pane { box-shadow: inset 0 0 0 1px var(--line); }
+.split-area.is-split .split-pane.focused { box-shadow: inset 0 0 0 1px rgba(162, 146, 225, .35); }
+.split-bar { flex: none; display: flex; align-items: center; gap: 4px; height: 40px; padding: 0 4px 0 8px; border-bottom: 1px solid var(--line); background: var(--bg-side); }
+.split-pane.focused .split-bar { box-shadow: inset 0 2px #a99bd7; background: #201e26; }
+.split-label { flex: 1; display: flex; align-items: center; gap: 7px; height: 100%; min-width: 0; user-select: none; touch-action: none; cursor: grab; color: var(--text-2); font-size: 12px; }
+.split-label:active { cursor: grabbing; }
+.split-label:focus-visible { outline: 1px solid var(--accent); outline-offset: -3px; border-radius: 5px; }
+.split-grip { flex: none; color: var(--text-3); opacity: 0; width: 12px; }
+.split-pane:hover .split-grip, .split-label:focus-visible .split-grip { opacity: 1; }
+.split-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.split-project { flex: 0 1 auto; max-width: 30%; overflow: hidden; color: var(--text-3); font-size: 11px; white-space: nowrap; text-overflow: ellipsis; }
+.split-reconnecting { flex: none; color: var(--text-3); font-size: 11px; white-space: nowrap; }
+.split-actions { flex: none; display: flex; align-items: center; opacity: 0; pointer-events: none; }
+.split-pane:hover .split-actions, .split-pane:focus-within .split-actions, .split-pane.has-menu .split-actions, .split-pane.is-maximized .split-actions { opacity: 1; pointer-events: auto; }
+.split-btn { display: grid; place-items: center; flex: none; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 6px; color: var(--text-3); background: transparent; cursor: pointer; }
+.split-btn:hover { color: var(--text-1); background: var(--bg-hover); }
+.split-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.split-body { position: relative; flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; container-type: size; container-name: workspace-pane; }
+.split-divider { position: absolute; z-index: 3; touch-action: none; }
+.split-divider--row { transform: translateX(-4px); cursor: col-resize; }
+.split-divider--col { transform: translateY(-4px); cursor: row-resize; }
+.split-divider::after { content: ''; position: absolute; background: var(--line); }
+.split-divider--row::after { top: 0; bottom: 0; left: 4px; width: 1px; }
+.split-divider--col::after { left: 0; right: 0; top: 4px; height: 1px; }
+.split-divider:hover::after, .split-divider:active::after, .split-divider:focus-visible::after { background: #b0a0e4; }
+.split-divider:focus-visible { outline: none; }
+.split-drop { position: absolute; z-index: 5; pointer-events: none; display: grid; place-items: center; border: 2px solid #b9a9ec; border-radius: 9px; background: rgba(167, 148, 220, .17); }
+.split-drop > span { padding: 7px 10px; border: 1px solid #6c5e8d; border-radius: 7px; background: #30293e; color: #eee; font-size: 12px; box-shadow: 0 3px 12px #0004; }
+.split-targets { position: absolute; z-index: 6; pointer-events: none; display: grid; grid-template-columns: repeat(3, 40px); grid-template-rows: repeat(3, 35px); gap: 5px; }
+.split-target { display: grid; place-items: center; border: 1px solid #756887; border-radius: 6px; background: #2c2638; color: #d6caef; font-size: 12px; box-shadow: 0 3px 10px #0004; }
+.split-target.on { color: white; background: #796493; border-color: #d8c4f6; }
+.split-target--top { grid-column: 2; }
+.split-target--left { grid-row: 2; }
+.split-target--center { grid-row: 2; grid-column: 2; font-size: 10px; }
+.split-target--right { grid-row: 2; grid-column: 3; }
+.split-target--bottom { grid-row: 3; grid-column: 2; }
+.split-drag-ghost { position: absolute; z-index: 7; pointer-events: none; max-width: 240px; padding: 8px 12px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border: 1px solid #6e5c87; border-radius: 8px; background: #2b2435; color: #eee; font-size: 12px; box-shadow: 0 5px 20px #0006; }
+.split-area.is-dragging { user-select: none; }
+.split-area.is-dragging .split-pane.focused { opacity: .45; }
+.split-glyph { display: block; }
+.split-area.is-split .split-body .cv-composer { padding: 0 14px 14px; }
+.split-area.is-split .split-body .newchat { padding: 0 14px 14px; }
+@container workspace-pane (max-width: 560px) {
+  .split-area.is-split .split-body :is(.cv-composer, .newchat) { padding-right: 10px; padding-left: 10px; padding-bottom: 12px; }
 }
-
-.split-area {
-  flex: 1;
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-}
-
-.split-node {
-  flex: 1;
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-}
-
-.split-node--row {
-  flex-direction: row;
-}
-
-.split-node--col {
-  flex-direction: column;
-}
-
-.split-cell {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-}
-
-.split-cell > .split-node {
-  flex: 1;
-}
-
-/* the divider straddles the cell's trailing edge: a 1px line with a wider
-   hit area, so it is easy to grab without taking layout space. The line
-   itself is a hair brighter on hover and while dragging, and the whole
-   strip carries the resize cursor - the pointer says "drag me" before the
-   colour does. */
-.split-divider {
-  position: absolute;
-  z-index: 3;
-  touch-action: none;
-}
-
-.split-node--row > .split-cell > .split-divider {
-  top: 0;
-  right: -3px;
-  bottom: 0;
-  width: 7px;
-  cursor: col-resize;
-}
-
-.split-node--col > .split-cell > .split-divider {
-  right: 0;
-  bottom: -3px;
-  left: 0;
-  height: 7px;
-  cursor: row-resize;
-}
-
-.split-divider::after {
-  content: '';
-  position: absolute;
-  background: var(--line);
-  transition: background 120ms ease;
-}
-
-.split-node--row > .split-cell > .split-divider::after {
-  top: 0;
-  bottom: 0;
-  left: 3px;
-  width: 1px;
-}
-
-.split-node--col > .split-cell > .split-divider::after {
-  top: 3px;
-  right: 0;
-  left: 0;
-  height: 1px;
-}
-
-.split-divider:hover::after,
-.split-divider:active::after {
-  background: var(--accent);
-}
-
-.split-pane {
-  position: relative;
-  /* The pane takes the room it is given. This has to live here, not on
-     .split-cell: with a single pane the root leaf is a direct child of
-     .split-area, and without a grow of its own it would shrink to the
-     width of whatever it holds - the home screen would hug the sidebar
-     and its glow would paint into a narrow band. */
-  flex: 1 1 0%;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  /* the pane in focus is where the sidebar opens the next chat */
-  box-shadow: inset 0 0 0 1px transparent;
-}
-
-.split-pane.focused {
-  box-shadow: inset 0 0 0 1px rgba(122, 92, 255, 0.35);
-}
-
-/* The pane header, VS Code's editor-group bar: the pane's title on the
-   left, its actions on the right. 30px, --bg-side, one hairline under it. */
-.split-bar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 6px 0 12px;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg-side);
-}
-
-.split-label {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  color: var(--text-3);
-  font-size: 12px;
-}
-
-/* The title is the one part that gives ground: it truncates the way the
-   sidebar's row does, and the project beside it only after the title has, so
-   the split toggle, Layouts and the overflow never move. */
-.split-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.split-project {
-  flex: 0 1 auto;
-  min-width: 12px;
-  max-width: 45%;
-  overflow: hidden;
-  color: var(--text-3);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  opacity: 0.85;
-}
-
-/* The one word a header adds while a chat's stream is between attempts. Quiet
-   on purpose: it is a fact about the transport, not a failure, and the dot
-   beside the title keeps saying the chat's own status. */
-.split-reconnecting {
-  flex: none;
-  color: var(--text-3);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-/* A chat pane's header carries the chat's own name, so it takes the brighter
-   ink a live sidebar row uses rather than the role's muted grey. */
-.split-label--chat {
-  color: var(--text-2);
-}
-
-/* A chat title is a thing you can drag to another pane's edge. */
-.split-label[draggable='true'] {
-  cursor: grab;
-}
-
-.split-label[draggable='true']:active {
-  cursor: grabbing;
-}
-
-.split-pane.focused .split-label {
-  color: var(--text-1);
-}
-
-.split-actions {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 1px;
-}
-
-.split-btn {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-3);
-  cursor: pointer;
-}
-
-.split-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text-1);
-}
-
-.split-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
-/* The header's one word: "Layouts" is a place to look rather than an action to
-   learn from a glyph, so it keeps the same 22px row and spends the width on the
-   word. */
-.split-btn--text {
-  width: auto;
-  padding: 0 7px;
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--text-2);
-  white-space: nowrap;
-}
-
-.split-btn--text:hover:not(:disabled) {
-  color: var(--text-1);
-}
-
-.split-glyph {
-  display: block;
-}
-
-.split-body {
-  position: relative;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-}
-
-/* Where a dragged chat would land: the half (or the whole pane, for the
-   middle) it is about to take, tinted in the accent and outlined, over the
-   content and under nothing. */
-.split-drop {
-  position: absolute;
-  z-index: 4;
-  pointer-events: none;
-  background: rgba(122, 92, 255, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(122, 92, 255, 0.55);
-}
-
-.split-drop--center {
-  inset: 0;
-}
-
-.split-drop--left {
-  inset: 0 50% 0 0;
-}
-
-.split-drop--right {
-  inset: 0 0 0 50%;
-}
-
-.split-drop--top {
-  inset: 0 0 50% 0;
-}
-
-.split-drop--bottom {
-  inset: 50% 0 0 0;
-}
-
-/* a pane is narrower than the window: the chat's gutters tighten to match,
-   but only once the window is actually split - a single pane keeps the
-   full-window spacing */
-.split-area.is-split .split-body .cv-head {
-  padding: 14px 18px 12px;
-}
-
-.split-area.is-split .split-body .cv-thread {
-  padding-right: 18px;
-  padding-left: 18px;
-}
-
-.split-area.is-split .split-body .cv-composer {
-  padding: 0 14px 14px;
-}
-
-/* A divider's hairline changes brightness on hover; both motion switches
-   change it at once. */
-@media (prefers-reduced-motion: reduce) {
-  .split-divider::after {
-    transition: none;
-  }
-}
-
-html[data-reduce-motion] .split-divider::after {
-  transition: none;
+@media (hover: none) { .split-actions { opacity: 1; pointer-events: auto; } }
+@container workspace-pane (max-width: 400px) { .split-project { display: none; } }
+@container workspace-pane (max-height: 230px) {
+  .split-area.is-split .nc-welcome, .split-area.is-split .nc-page-head { display: none; }
+  .split-area.is-split .nc-box > textarea { min-height: 32px; max-height: 64px; }
 }

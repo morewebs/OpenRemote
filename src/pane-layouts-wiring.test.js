@@ -1,6 +1,5 @@
-// The pane header's Layouts control, wired: one word button beside the split,
-// a ContextMenu in the existing pattern, a list built from layouts.js and
-// nothing reimplemented. The rules themselves are pinned in layouts.test.js.
+// Workspace layouts have one entry point in the sidebar and share the
+// existing picker engine. The pure layout rules live in layouts.test.js.
 
 import assert from 'node:assert/strict'
 import test from 'node:test'
@@ -9,43 +8,37 @@ import { readFileSync } from 'node:fs'
 const source = (file) => readFileSync(new URL(`./${file}`, import.meta.url), 'utf8')
 const area = source('SplitArea.jsx')
 const css = source('split.css')
+const panel = source('WorkspaceLayouts.jsx')
+const sidebar = source('Sidebar.jsx')
 
-test('the header gains one word control beside the split, in the same menu pattern', () => {
-  // The button sits in the header's own actions row, after the split and
-  // before the overflow, and it is a real button with the menu contract.
-  const actions = area.slice(area.indexOf('<div className="split-actions">'), area.indexOf('{!primary && ('))
-  assert.match(actions, /className="split-btn split-btn--text"/)
-  assert.match(actions, />\s*Layouts\s*</)
-  assert.match(actions, /aria-label="Saved layouts"/)
-  assert.match(actions, /aria-haspopup="menu"/)
-  assert.match(actions, /aria-expanded=\{Boolean\(layoutMenu\)\}/)
-  assert.match(actions, /onClick=\{openLayoutMenu\}/)
-  // It opens the same menu component the split options use, anchored under it,
-  // so the keyboard, the Escape key and the viewport clamp are the existing
-  // ones rather than a second implementation.
-  assert.match(area, /<ContextMenu\s+x=\{layoutMenu\.x\}/)
-  assert.match(area, /items=\{layoutMenuItems\(\)\}/)
-  assert.match(area, /onClose=\{\(\) => setLayoutMenu\(null\)\}/)
+test('the sidebar owns one workspace layout control and pane headers keep only pane actions', () => {
+  assert.equal((sidebar.match(/aria-label="Workspace layout"/g) ?? []).length, 1)
+  assert.match(sidebar, /aria-haspopup="menu" aria-expanded=\{workspaceLayoutOpen\}/)
+  assert.match(sidebar, /onClick=\{onWorkspaceLayout\}/)
+  const actions = area.slice(area.indexOf('<div className="split-actions">'), area.indexOf('</header>'))
+  assert.match(actions, /Maximize pane/)
+  assert.match(actions, /Close this pane/)
+  assert.doesNotMatch(actions, /Layouts|Split|split-btn--text/)
+  assert.match(panel, /<PickerMenu[\s\S]*?presentation="actions"[\s\S]*?hideSearch/)
+  assert.match(panel, /createPortal\(/)
 })
 
-test('the list comes from layouts.js, not from SplitArea', () => {
-  assert.match(area, /import \{[^}]*MIN_PANES[^}]*loadLayouts[^}]*offerLayouts[^}]*\} from '\.\/layouts\.js'/)
-  assert.match(area, /const offers = offerLayouts\(loadLayouts\(\), \{ currentChat \}\)/)
-  // Read when the menu opens: a shape saved elsewhere is in storage by then.
-  assert.match(area, /const openLayoutMenu = \(\) => \{[\s\S]{0,220}setLayoutMenu\(\{ x:/)
-  assert.doesNotMatch(area, /restoreShape\(/, 'the header does not restore on its own')
+test('the panel reads the saved list and uses the pure layout helpers', () => {
+  assert.match(panel, /import \{[^}]*loadLayouts[^}]*offerLayouts[^}]*\} from '\.\/layouts\.js'/)
+  assert.match(panel, /const offers = offerLayouts\(loadLayouts\(\), \{ currentChat \}\)/)
+  assert.match(panel, /const candidate = presetLayout\(layout, preset\)/)
+  assert.match(panel, /const fits = layoutFits\(candidate, width, height\)/)
+  assert.doesNotMatch(panel, /restoreShape\(/, 'the shell owns restoring a saved layout')
 })
 
 test('each layout carries its pane count, and one that cannot open says why', () => {
-  const menu = area.slice(area.indexOf('const layoutMenuItems'), area.indexOf('const over ='))
-  assert.match(menu, /hint: offer\.countLine/)
-  // A refused shape stays in the list, disabled, with its sentence under it.
-  assert.match(menu, /disabled: !offer\.ok/)
-  assert.match(menu, /if \(!offer\.ok\) items\.push\(\{ header: offer\.note \}\)/)
-  assert.match(menu, /onSelect: offer\.ok \? \(\) => onRestoreLayout\(offer\.plan\) : undefined/)
-  // Nothing saved is said in the menu rather than leaving it blank, in the one
-  // sentence layouts.js holds (the palette's Layouts page says it too).
-  assert.match(menu, /if \(offers\.length === 0\) items\.push\(\{ header: SAVED_LAYOUTS_NONE \}\)/)
+  assert.match(panel, /detail: offer\.countLine/)
+  assert.match(panel, /const fits = offer\.ok && layoutFits\(offer\.plan\.layout, width, height\)/)
+  assert.match(panel, /plan: offer\.plan, disabled: !fits/)
+  assert.match(panel, /note: offer\.note \?\?/)
+  assert.match(panel, /if \(!item \|\| item\.disabled\) return/)
+  assert.match(panel, /onRestore\(item\.plan\)/)
+  assert.match(panel, /if \(!offers\.length\) items\.push\(\{[^\n]*name: SAVED_LAYOUTS_NONE/)
 })
 
 test('the empty state is one sentence, shared with the palette\u2019s layouts page', () => {
@@ -58,33 +51,30 @@ test('the empty state is one sentence, shared with the palette\u2019s layouts pa
   assert.match(palette, /page === 'layouts'\s*\n\s*\? SAVED_LAYOUTS_NONE/)
   assert.match(palette, /'Nothing to show here yet\.'/)
   // And no second copy of the sentence anywhere the two of them say it.
-  const copies = (source('SplitArea.jsx').match(/'No saved layouts yet'/g) ?? []).length
-  assert.equal(copies, 0, 'the header menu reads the constant, not a copy')
+  const copies = (panel.match(/'No saved layouts yet'/g) ?? []).length
+  assert.equal(copies, 0, 'the workspace panel reads the constant, not a copy')
 })
 
 test('save-as is offered only when the window holds more than one pane', () => {
-  const menu = area.slice(area.indexOf('const layoutMenuItems'), area.indexOf('const over ='))
-  assert.match(menu, /if \(count >= MIN_PANES && onSaveLayout\) \{/)
-  assert.match(menu, /label: 'Save this layout…'/)
-  assert.match(menu, /onSelect: \(\) => onSaveLayout\(\)/)
+  assert.match(panel, /if \(count > 1\) items\.push\([\s\S]*?name: 'Save layout…'/)
+  assert.match(panel, /id === 'save'\) onSave\(\)/)
 })
 
-test('without the shell callbacks the control is not rendered at all', () => {
-  // A menu that could not apply or save anything would be a dead control, so
-  // the button is gated on the apply function the shell owns.
-  assert.match(area, /\{onRestoreLayout && \(/)
-  // And the shell hands over the three props (App.jsx is the one caller).
+test('the shell callbacks reach the centralized panel rather than every pane', () => {
+  assert.match(sidebar, /!isMobile && onWorkspaceLayout && <button/)
   assert.match(area, /onSaveLayout = null,/)
   assert.match(area, /onRestoreLayout = null,/)
   assert.match(area, /currentChat = null,/)
-  assert.match(area, /onRestoreLayout=\{onRestoreLayout\}/)
+  assert.match(area, /\{layoutControl && <WorkspaceLayouts/)
+  assert.match(area, /onSave=\{onSaveLayout\} onRestore=\{onRestoreLayout\}/)
+  assert.match(source('App.jsx'), /onWorkspaceLayout=\{openWorkspaceLayout\}/)
 })
 
-test('the word keeps the header row, and the stylesheet says so', () => {
-  assert.match(css, /\.split-btn--text \{/)
-  const rule = css.slice(css.indexOf('.split-btn--text {'), css.indexOf('.split-btn--text:hover'))
-  assert.match(rule, /width: auto/)
-  assert.match(rule, /font-size: 11\.5px/)
+test('the panel has compact preset tiles while pane actions retain desktop targets', () => {
+  const panelCss = source('workspace-layouts.css')
+  assert.match(panelCss, /width: 304px/)
+  assert.match(panelCss, /grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/)
+  assert.match(css, /\.split-btn \{[^}]*width: 32px; height: 32px/)
 })
 
 // ---- what the header says ----
@@ -102,10 +92,10 @@ test('a chat pane header shows the chat, a role pane keeps the role name', () =>
 test('the header wears the sidebar dot and the sidebar harness mark, one line', () => {
   // Same classes and statuses as the sidebar's row: one language, not two.
   assert.match(area, /className=\{`dot dot--\$\{head\.status\}`\}/)
-  assert.match(area, /<HarnessMark harness=\{head\.harness\} size=\{12\} \/>/)
+  assert.match(area, /<HarnessMark harness=\{head\.harness\} size=\{16\} \/>/)
   // The title truncates while the controls keep their width.
   assert.match(area, /<span className="split-title">\{head\.title\}<\/span>/)
-  assert.match(area, /<span className="split-project">\{`· \$\{head\.project\}`\}<\/span>/)
+  assert.match(area, /<span className="split-project">\{head\.project\}<\/span>/)
   assert.match(css, /\.split-title \{[\s\S]{0,140}text-overflow: ellipsis/)
   assert.match(css, /\.split-project \{[\s\S]{0,200}text-overflow: ellipsis/)
   assert.match(css, /\.split-actions \{\s*flex: none/, 'the actions never give ground to the title')

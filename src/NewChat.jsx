@@ -45,6 +45,7 @@ import { mentionedChats, ownCommands, takeCommands } from './composer-menus.js'
 import { claimInserter, advanceComposerDraft } from './composer-insert.js'
 import { scopedComposerKey } from './composer-scope.js'
 import { useComposerDraft } from './useComposerDraft.js'
+import ComposerOptions from './ComposerOptions.jsx'
 import { recoverDraft } from './composer-recovery.js'
 import { chatMade, tellDaemon } from './browser-share.js'
 import { isMobile } from './platform.js'
@@ -99,7 +100,7 @@ export function EffortSlider({
   const [live, setLive] = useState(snapped)
   const [specks, setSpecks] = useState([])
   useLayoutEffect(() => {
-    if (!isMobile || !panelRef.current) return
+    if (!panelRef.current) return
     const panel = panelRef.current
     const fit = () => {
       panel.style.maxHeight = `${Math.max(0, window.innerHeight - 16)}px`
@@ -250,6 +251,7 @@ export default function NewChat({
   onOpenPlugins = null,
   topRight = null,
   composerScope = null,
+  compact = false,
 }) {
   const composerKey = scopedComposerKey('new', composerScope)
   const privacy = usePrivacyMode()
@@ -262,7 +264,7 @@ export default function NewChat({
   const clashing = mode === 'local' ? clashes(plugins?.installed) : []
   // In Cloud a chat can run on this computer or one of the account's
   // machines; in Local it always runs here.
-  const [target, setTarget] = useState(null)
+  const [target, setTarget] = useState(() => setupSeed?.target ?? null)
   const [targetCaps, setTargetCaps] = useState(null)
   const [picking, setPicking] = useState(false)
   const [addProjectError, setAddProjectError] = useState(null)
@@ -284,7 +286,7 @@ export default function NewChat({
   const [openingPreset] = useState(() => defaultPreset(loadPresets()))
   // The preset waiting for a harness switch to finish: its slots can only
   // be settled once the new harness has answered with its model list.
-  const pendingPreset = useRef(openingPreset ?? null)
+  const pendingPreset = useRef(setupSeed ?? openingPreset ?? null)
   // A saved setup that no longer matches this machine settles to what is available here
   // without narrating the difference: the founder's call, and the right one. The two
   // notes below stay, because they are about the chat in front of you rather than about
@@ -323,7 +325,8 @@ export default function NewChat({
   }, [greetingOn, text])
   // The project the chat runs in: one of the registered projects, or
   // null - a chat that belongs to no project and runs in the home folder.
-  const [projectId, setProjectId] = useState(null)
+  const [projectId, setProjectId] = useState(() => setupSeed?.projectId ?? null)
+  const pendingWorkspace = useRef(setupSeed?.workspace ? { workspace: setupSeed.workspace, target: setupSeed.target ?? null } : null)
   const [picker, setPicker] = useState(null)
   const [harnessLeaving, setHarnessLeaving] = useState(false)
   const [modelLeaving, setModelLeaving] = useState(false)
@@ -333,7 +336,7 @@ export default function NewChat({
   const effortLeavingRef = useRef(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
-  const [harness, setHarness] = useState(() => openingPreset?.harness ?? loadDefaults().harness)
+  const [harness, setHarness] = useState(() => setupSeed?.harness ?? openingPreset?.harness ?? loadDefaults().harness)
   const [model, setModel] = useState(null)
   const [models, setModels] = useState([])
   const [modelsPending, setModelsPending] = useState(true)
@@ -394,6 +397,8 @@ export default function NewChat({
     if (!setupSeed?.nonce || seedApplied.current === setupSeed.nonce) return
     seedApplied.current = setupSeed.nonce
     pendingPreset.current = setupSeed
+    if (Object.hasOwn(setupSeed, 'target')) setTarget(setupSeed.target)
+    if (setupSeed.workspace) pendingWorkspace.current = { workspace: setupSeed.workspace, target: setupSeed.target ?? null }
     if (setupSeed.harness) setHarness(setupSeed.harness)
     requestAnimationFrame(() => inputRef.current?.focus())
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -506,6 +511,12 @@ export default function NewChat({
   // default still names its harness, and a plugin's harness has a name that
   // only the daemon knows.
   const harnessList = (target ? targetCaps : isMobile ? null : capabilities)?.harnesses ?? null
+  useEffect(() => {
+    const waiting = pendingWorkspace.current
+    if (!waiting || target !== waiting.target) return
+    const project = targetProjects.find(p => p.folders?.includes(waiting.workspace))
+    if (project) { setProjectId(project.id); pendingWorkspace.current = null }
+  }, [targetProjects, target, setupSeed?.nonce])
   // Only what the machine reports installed - no dead UI.
   const available = (harnessList ?? []).filter(pickable)
   const currentHarness = available.find((h) => h.id === harness) ?? available[0] ?? null
@@ -1175,14 +1186,15 @@ export default function NewChat({
     onPlugins: onOpenPlugins,
   })
   useEffect(() => {
-    takeInserter()
+    releaseInserter.current = claimInserter(attach, composerKey, inputRef, focused)
+    if (focused) releasePictures.current = setFocusedComposer(composerKey)
     return () => {
       releaseInserter.current?.()
       releaseInserter.current = null
       releasePictures.current?.()
       releasePictures.current = null
     }
-  }, [])
+  }, [focused, composerKey])
   const openPickerAt = (kind) => {
     if (kind === 'model' || kind === 'harness') {
       const spot = spotAtBox(boxRef.current?.getBoundingClientRect())
@@ -1350,6 +1362,7 @@ export default function NewChat({
   // will own it, and it registers there. The same dialog serves both
   // surfaces - a chat's project pick and the Add project button.
   const chooseProjectFolder = async (folder) => {
+    pendingWorkspace.current = null
     setPicking(false)
     setAddProjectError(null)
     try {
@@ -1365,6 +1378,7 @@ export default function NewChat({
   // Switching machines: a project belongs to one machine, so the choice
   // starts over.
   const chooseTarget = (id) => {
+    pendingWorkspace.current = null
     setTarget(id)
     setProjectId(null)
     setPicker(null)
@@ -1473,7 +1487,7 @@ export default function NewChat({
       {(picker?.kind === 'permission' || permissionLeaving) && (
         <PickerMenu
           label="Permission"
-          portal={isMobile}
+          portal
           place={isMobile ? 'above' : 'below'}
           getAnchor={isMobile ? () => mobilePickerSpot('permission') : undefined}
           hideSearch
@@ -1522,7 +1536,7 @@ export default function NewChat({
       {(picker?.kind === 'harness' || harnessLeaving) && (
         <PickerMenu
           label="App"
-          portal={isMobile}
+          portal
           place={isMobile ? 'above' : 'below'}
           getAnchor={isMobile ? () => mobilePickerSpot('harness') : undefined}
           searchPlaceholder="Search apps"
@@ -1653,7 +1667,7 @@ export default function NewChat({
           placeholder="Describe the task"
           aria-label="Describe the task"
           rows={isMobile ? 1 : undefined}
-          autoFocus={!isMobile}
+          autoFocus={!isMobile && focused}
           spellCheck={false}
         />
         {/* Said above the send control, where the person is looking when the
@@ -1664,8 +1678,12 @@ export default function NewChat({
             {bound}
           </p>
         )}
-        <div className="nc-foot">
+        <div className={`nc-foot${compact ? ' is-compact-composer' : ''}`}>
           {attachInput.button}
+          {compact && <button type="button" className="nc-compact-model" onClick={openModelPicker} disabled={modelItems.length === 0}
+            title={model ? shownModelName : defaultLabel ?? 'Model'} aria-label={`Model: ${model ? shownModelName : defaultLabel ?? 'App default'}`}>
+            <HarnessMark harness={currentHarness?.id} size={16} /><span>{model ? shownModelName : defaultLabel ?? 'Model'}</span>
+          </button>}
           <div className="nc-pickers">
             {isMobile && harnessPicker}
             {modelsPending ? (
@@ -1697,8 +1715,8 @@ export default function NewChat({
                 {(picker?.kind === 'model' || modelLeaving) && (
                   <PickerMenu
                     label="Model"
-                    portal={isMobile}
-                    place={isMobile ? 'above' : 'below'}
+                    portal
+                    place={isMobile || compact ? 'above' : 'below'}
                     getAnchor={isMobile ? () => mobilePickerSpot('model') : undefined}
                     searchPlaceholder="Search models"
                     wide
@@ -1758,7 +1776,7 @@ export default function NewChat({
                 {picker?.kind === 'endpoint' && (
                   <PickerMenu
                     label="Endpoint"
-                    portal={isMobile}
+                    portal
                     place={isMobile ? 'above' : 'below'}
                     getAnchor={isMobile ? () => mobilePickerSpot('endpoint') : undefined}
                     searchPlaceholder="Search endpoints"
@@ -1819,10 +1837,10 @@ export default function NewChat({
                     tiers={effortTiers}
                     value={chosenEffort}
                     leaving={effortLeaving}
-                    place={isMobile ? 'above' : 'below'}
+                    place={isMobile || compact ? 'above' : 'below'}
                     spot={(() => {
                       const box = boxRef.current?.getBoundingClientRect()
-                      return isMobile && box
+                      return (isMobile || compact) && box
                         ? { left: box.left, top: box.top }
                         : spotAtBox(box, { gap: 8 })
                     })()}
@@ -1859,6 +1877,12 @@ export default function NewChat({
             </button>
           )}
           {isMobile && optionsOpen && <div className="nc-mobile-presets">{presetsRow}</div>}
+          {compact && <ComposerOptions items={[
+            { label: `App: ${currentHarness?.name ?? 'Choose App'}`, onSelect: () => openBoxPicker('harness') },
+            ...(effortTiers.length ? [{ label: `Effort: ${chosenEffort ? effortLabel(chosenEffort) : 'App default'}`, onSelect: toggleEffort }] : []),
+            ...(permissionWords.length ? [{ label: `Permission: ${chosenPermission ?? 'App default'}`, onSelect: openPermissionPicker }] : []),
+            ...(currentHarness?.custom_endpoint_supported && endpoints.length ? [{ label: 'Model provider', onSelect: () => openBoxPicker('endpoint') }] : []),
+          ]} />}
           <div className="nc-send-group">
             {/* The buttons plugins add to the composer (dictation's
                 microphone, say), beside the send button; a project's plugin
@@ -1930,7 +1954,7 @@ export default function NewChat({
             {picker?.kind === 'project' && (
               <PickerMenu
                 label="Project"
-                portal={isMobile}
+                portal
                 place={isMobile ? 'above' : 'below'}
                 getAnchor={isMobile ? () => mobilePickerSpot('project') : undefined}
                 searchPlaceholder="Search projects"
@@ -1951,6 +1975,7 @@ export default function NewChat({
                 }
                 onChoose={(id) => {
                   setProjectId(id === '__none__' ? null : id)
+                  pendingWorkspace.current = null
                   setPicker(null)
                 }}
                 onClose={() => setPicker(null)}
@@ -1992,7 +2017,7 @@ export default function NewChat({
               {picker?.kind === 'machine' && (
                 <PickerMenu
                   label="Run on"
-                  portal={isMobile}
+                  portal
                   place={isMobile ? 'above' : 'below'}
                   getAnchor={isMobile ? () => mobilePickerSpot('machine') : undefined}
                   searchPlaceholder="Search machines"
@@ -2021,7 +2046,7 @@ export default function NewChat({
         </div>
         {addProjectError && <p className="nc-error">{addProjectError}</p>}
         {!isMobile && targetOffline && <p className="nc-error"><span className="pv">{targetItem.name}</span> is offline.</p>}
-        {picking && (
+        {picking && createPortal(
           <FolderPickerModal
             api={apiFor(target)}
             where={targetItem?.name ?? 'this computer'}
@@ -2031,33 +2056,33 @@ export default function NewChat({
               setPicking(false)
               onAddProjectDone?.()
             }}
-          />
+          />, document.body
         )}
         {connection.state === 'error' && <p className="nc-error">{connection.error}</p>}
         {error && <p className="nc-error">{error}</p>}
-        {signInFor && (
+        {signInFor && createPortal(
           <SignInModal
             harnessId={signInFor}
             onDone={() => setSignInFor(null)}
-          />
+          />, document.body
         )}
-        {managingHarnesses && !web && (
+        {managingHarnesses && !web && createPortal(
           <HarnessManagerModal
             onClose={() => setManagingHarnesses(false)}
             onSignIn={(id) => {
               setManagingHarnesses(false)
               setSignInFor(id)
             }}
-          />
+          />, document.body
         )}
-        {manageModels && currentHarness && (
+        {manageModels && currentHarness && createPortal(
           <EndpointManagerModal
             harness={currentHarness.id}
             deviceId={target}
             where={targetItem?.name ?? 'this computer'}
             onClose={() => setManageModels(false)}
             onChanged={reloadEndpoints}
-          />
+          />, document.body
         )}
 
       </div>

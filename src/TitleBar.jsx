@@ -61,7 +61,6 @@ export default function TitleBar({
 }) {
   const { capabilities } = useConsole()
   const hintSidebar = useHint('toggle-sidebar')
-  const hintSplit = useHint('split-right')
   const [maximized, setMaximized] = useState(false)
   const [about, setAbout] = useState(false)
 
@@ -159,7 +158,7 @@ export default function TitleBar({
           this one is one click away (Ctrl+\; Ctrl+Shift+\ splits downward). */}
       <div className="tb-right">
         {onSplit && (
-          <button className="tb-toggle" onClick={onSplit} title={hintSplit('Split view')}>
+          <button className="tb-toggle" data-picker="workspace-layout" onClick={onSplit} title="Workspace layout" aria-label="Workspace layout" aria-haspopup="menu">
             <SplitGlyph />
           </button>
         )}

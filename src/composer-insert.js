@@ -13,9 +13,9 @@ const generations = new Map()
 // into and the browser pane never reports a delivery that went nowhere.
 // `key` names the composer (a chat's id, or 'new'), so the pane can say
 // which chat it shared with.
-export function claimInserter(fn, key = null, owner = null) {
+export function claimInserter(fn, key = null, owner = null, active = true) {
   const mine = { fn, key, owner: owner || {} }
-  current = mine
+  if (active) current = mine
   if (key) composers.set(key, mine)
   return function release() {
     // A later claim is not this one's to clear: the composer that took the bus

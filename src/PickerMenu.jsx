@@ -305,5 +305,7 @@ export default function PickerMenu({
   // The phone sheet moves over its sidebar. Its popups must escape that
   // stacking context; desktop menus stay inside their dialog's focus scope.
   const content = actions && isMobile ? <><div className="ca-add-backdrop" onMouseDown={onClose} aria-hidden="true" />{menu}</> : menu
-  return portal ? createPortal(content, document.body) : content
+  // Pane containment keeps content responsive, but also contains fixed-position
+  // descendants. Pane pickers escape it so their viewport anchors stay correct.
+  return portal || triggerRef.current?.closest?.('.split-body') ? createPortal(content, document.body) : content
 }
