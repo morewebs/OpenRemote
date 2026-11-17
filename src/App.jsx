@@ -1039,6 +1039,7 @@ function Shell() {
   // The palette's recent chats: the navigation history, newest first.
   const recentChatIds = [...new Set([...history].reverse().filter(isChatView))]
   const primaryFocused = focused?.view === null
+  const primaryLeafId = leaves(layout.root).find(leaf => leaf.view === null)?.id ?? layout.focus
 
   // What the primary pane shows: the view the app's navigation points at.
   // Until this device is in an account, home is the sign-in door. Every
@@ -1100,7 +1101,8 @@ function Shell() {
       {view === 'machines' && <MachinesView onOpenChat={openSession} openDevice={openDevice} />}
       {!STATIC_VIEWS.includes(view) &&
         (chat ? (
-          <ChatView key={chat.id} chat={chat} focused={primaryFocused} onOpenPlugins={() => goView('plugins')} />
+          <ChatView key={chat.id} chat={chat} focused={primaryFocused} onOpenPlugins={() => goView('plugins')}
+            onChooseApp={selection => choosePaneApp(primaryLeafId, chat.id, selection)} />
         ) : (
           <div className="cv-none">That chat is no longer in this workspace.</div>
         ))}
