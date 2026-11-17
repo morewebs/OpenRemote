@@ -24,6 +24,7 @@ import {
   settingsKey,
   viewKey,
   withDefaults,
+  PAGE_RUNTIMES,
 } from './plugin-runtime.js'
 
 const record = (over = {}) => ({
@@ -120,7 +121,31 @@ test('the calls are a closed list, each gated by the power the record holds', ()
   }
   // The chat calls reach exactly the daemon's five methods.
   assert.deepEqual(Object.values(CHAT_CALLS).sort(), ['chats/list', 'chats/prompt', 'chats/read', 'chats/start', 'chats/stop'])
-  assert.equal(ALL_CALLS.size, 14)
+  assert.equal(ALL_CALLS.size, 15)
+})
+
+test("a process plugin's pages ask its program, and reach chats and the network only through it", () => {
+  const proc = { name: 'Worktrunk', powers: ['agent_tools', 'run_programs', 'network', 'read_chats'], inputs: [{ id: 'w' }], runtime: 'process' }
+  assert.equal(refusal('program.request', proc), null)
+  // A JavaScript plugin has no program to ask.
+  assert.match(refusal('program.request', { ...proc, runtime: 'js' }), /no program/)
+  assert.match(refusal('program.request', { name: 'X', powers: [], inputs: [] }), /no program/)
+  // Its powers are its program's, gated by the daemon there; the frame's
+  // own chat and network routes stay a JavaScript plugin's.
+  for (const call of ['chats.list', 'chats.start', 'fetch']) assert.match(refusal(call, proc), /through its own program/, call)
+  for (const call of ['settings.get', 'files.read', 'ui.openView', 'composer.insert']) assert.equal(refusal(call, proc), null, call)
+  assert.ok(PAGE_RUNTIMES.has('js') && PAGE_RUNTIMES.has('process') && !PAGE_RUNTIMES.has('wasm'))
+})
+
+test("a process plugin's entry is its program, never a page", () => {
+  const plugin = record({ runtime: 'process', entry: 'bin/worktrunk', contributes: {
+    composer_inputs: [{ id: 'worktrees', label: 'Worktrees', icon: 'code', entry: 'ui/composer.js' }, { id: 'pageless', label: 'No page' }],
+    views: [{ id: 'main', title: 'Worktrees', place: 'sidebar', entry: 'ui/view.html' }],
+  } })
+  const ui = contributionsOf(plugin)
+  assert.equal(ui.entry, null)
+  assert.deepEqual(ui.inputs.map((i) => [i.id, i.entry]), [['worktrees', 'ui/composer.js']])
+  assert.deepEqual(ui.views.map((v) => v.entry), ['ui/view.html'])
 })
 
 test('a message counts only from a frame the host made, with the opaque origin', () => {

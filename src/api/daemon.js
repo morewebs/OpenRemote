@@ -802,6 +802,18 @@ export class DaemonApi {
     return this.call('POST', `/plugins/${seg(id)}/call`, { method, params })
   }
 
+  // Where folders on this computer stand in git: { places: { path: { branch,
+  // detached, worktree, root, main } | null } }. Read from git's own files.
+  gitPlaces(paths) {
+    return this.call('POST', '/git/places', { paths })
+  }
+
+  // A process plugin's page asking its program (`ui/request`); the daemon
+  // waits up to a minute for the program's answer.
+  pluginRequest(id, name, params = {}) {
+    return this.call('POST', `/plugins/${seg(id)}/request`, { name, params }, { timeoutMs: 70_000 })
+  }
+
   // ---- marketplaces (Plugins > Discover, Marketplaces) ----
 
   marketplaces() {

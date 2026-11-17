@@ -58,6 +58,15 @@
   color: var(--text-2);
 }
 
+/* The chat folder's git branch; a linked worktree says whose. */
+.cv-branch svg {
+  vertical-align: -1px;
+}
+
+.cv-worktree {
+  color: var(--text-3);
+}
+
 .cv-fact::before {
   content: '·';
   margin: 0 7px;

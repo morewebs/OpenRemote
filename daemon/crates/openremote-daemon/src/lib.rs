@@ -10,6 +10,7 @@ pub mod cloud_http;
 pub mod embedded;
 pub mod files;
 pub mod fsdirs;
+pub mod git_place;
 pub mod host;
 pub mod http;
 pub mod images;

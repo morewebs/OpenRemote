@@ -20,6 +20,7 @@ import {
   FolderOpen,
   FolderSimple,
   Gear,
+  GitBranch,
   House,
   PushPin,
   PushPinSlash,
@@ -65,6 +66,7 @@ import { rolledStatus } from './team.js'
 import { usePlugins } from './plugins-host.jsx'
 import { PluginGlyph } from './plugin-icons.jsx'
 import { frontProject } from './plugin-runtime.js'
+import { placeWords, useGitPlaces } from './git-places.js'
 import { collapseOtherProjects, filterProjectRows, loadProjectPreferences, moveProject, orderProjects, projectRows, pruneCollapsedProjects, storeProjectPreferences } from './project-workflow.js'
 import './sidebar.css'
 import './team.css'
@@ -290,6 +292,7 @@ export default function Sidebar({
     })
   }, [sessions, archived, chats, mode, devices, thisDevice, renamedTitles])
 
+  const placeOf = useGitPlaces(web ? null : api, rows.filter((row) => !row.device).map((row) => row.workspace))
   const orderedProjects = useMemo(() => orderProjects(projects, rows, projectPreferences), [projects, rows, projectPreferences])
   const filtered = useMemo(() => filterProjectRows(orderedProjects, rows, query, projectFilter), [orderedProjects, rows, query, projectFilter])
   const visible = useMemo(() => [...filtered.rows].sort((a, b) => b.updatedAt - a.updatedAt), [filtered.rows])
@@ -1165,6 +1168,14 @@ export default function Sidebar({
               screen together. A summary here that could act would be an
               approvals panel built out of a row, without any of that. */}
           {row.question && <span className="chat-question pv">{row.question}</span>}
+          {(() => {
+            const place = !row.device && row.workspace ? placeWords(placeOf(row.workspace)) : null
+            return place?.worktree ? (
+              <span className="chat-branch-name pv" title={place.title}>
+                <GitBranch size={10} aria-hidden="true" /> {place.branch}
+              </span>
+            ) : null
+          })()}
         </div>
         {mode === 'cloud' && row.device && (
           <span className="chat-device pv">{row.device}</span>

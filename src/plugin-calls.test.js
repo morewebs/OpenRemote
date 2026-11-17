@@ -57,6 +57,10 @@ function fakeApi() {
       asked.push(['file', id, path])
       return { type: 'text/plain', bytes: new TextEncoder().encode('hello').buffer }
     },
+    async pluginRequest(id, name, params) {
+      asked.push(['request', id, name, params])
+      return { result: { answered: name } }
+    },
     async pluginFetch(id, request) {
       asked.push(['fetch', id, request])
       return { status: 200, headers: [['content-type', 'text/plain']], body: btoa('ok') }

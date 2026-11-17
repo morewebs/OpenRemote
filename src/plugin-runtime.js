@@ -76,8 +76,17 @@ export const OWN_CALLS = new Set(['settings.get', 'files.read', 'ui.toast', 'ui.
 // Calls into a composer, for a plugin that adds composer buttons - and then
 // only into a composer whose button the user clicked (the host's grant).
 export const COMPOSER_CALLS = new Set(['composer.insert', 'composer.attach', 'composer.setState'])
+// A process plugin's pages asking its own program (`ui/request`): the one
+// way such a page reaches what its program does. Its program runs as the
+// user, approved at install, so asking it needs no power of its own.
+export const PROGRAM_CALLS = new Set(['program.request'])
 
-export const ALL_CALLS = new Set([...Object.keys(CALL_POWER), ...OWN_CALLS, ...COMPOSER_CALLS])
+export const ALL_CALLS = new Set([...Object.keys(CALL_POWER), ...OWN_CALLS, ...COMPOSER_CALLS, ...PROGRAM_CALLS])
+
+// The runtimes whose pages (views, composer buttons) run in the console: a
+// JavaScript plugin's, and a process plugin's, whose pages then reach its
+// program through program.request.
+export const PAGE_RUNTIMES = new Set(['js', 'process'])
 
 const POWER_WORDS = {
   run_programs: 'run programs',
@@ -144,7 +153,9 @@ export function readSettings(list) {
 // nothing is never drawn.
 export function contributionsOf(plugin) {
   const contributes = plugin?.contributes && typeof plugin.contributes === 'object' ? plugin.contributes : {}
-  const entry = insidePath(plugin?.entry) ? plugin.entry : null
+  // Only a JavaScript plugin's entry is a page; a process plugin's is its
+  // program, and its buttons each name their own page.
+  const entry = (plugin?.runtime ?? 'js') === 'js' && insidePath(plugin?.entry) ? plugin.entry : null
   const inputs = []
   for (const item of Array.isArray(contributes.composer_inputs) ? contributes.composer_inputs : []) {
     if (!item || typeof item.id !== 'string') continue
@@ -172,9 +183,16 @@ export function ridesProject(plugin, projectId) {
 // Why a frame's call is refused, in plain words, or null when the plugin may
 // make it. `plugin` is { name, powers, inputs } - the powers from the
 // install record.
-export function refusal(call, { name = 'This plugin', powers = [], inputs = [] } = {}) {
+export function refusal(call, { name = 'This plugin', powers = [], inputs = [], runtime = 'js' } = {}) {
   if (typeof call !== 'string' || !ALL_CALLS.has(call)) return `There is no openremote call named ${call}.`
+  if (PROGRAM_CALLS.has(call)) {
+    return runtime === 'process' ? null : `${name} has no program of its own to ask.`
+  }
   const power = CALL_POWER[call]
+  // A process plugin's pages reach the chats and the network through its
+  // program, which the daemon gates; the frame's own routes are a
+  // JavaScript plugin's.
+  if (power && runtime === 'process') return `${name}'s pages reach that through its own program (openremote.program.request).`
   if (power) {
     return powers.includes(power)
       ? null

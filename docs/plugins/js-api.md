@@ -270,6 +270,24 @@ done, so its indicator goes off.
 | `ui.openView(id)` | Opens one of your views (your first, without `id`). |
 | `ui.openSettings()` | Opens Settings at your plugin's part. |
 
+### A process plugin's pages
+
+A process plugin (`"runtime": "process"`) may have pages too: `sidebar`
+views and composer buttons, each naming its page (a process plugin's own
+`entry` is its program, never a page). They run in the same frame, with
+the same calls for settings, files, the app and the composer, and one of
+their own:
+
+| Call | Does |
+|---|---|
+| `program.request(name, params)` | Asks the plugin's program (its `ui/request`, [protocol.md](protocol.md)) and answers what it answers. Refused for a JavaScript plugin, which has no program. Waits up to a minute. |
+
+Its chats and its network are its program's, which the daemon gates by the
+install record: from its pages, `chats.*` and `fetch` are refused. The
+Worktrunk plugin (`worktrunk` in
+[OpenRemote-plugins](https://github.com/morewebs/OpenRemote-plugins)) is a
+complete example.
+
 ## How it works
 
 For people working on OpenRemote itself:
@@ -283,7 +301,9 @@ For people working on OpenRemote itself:
   kind }`. The console (`src/plugins-host.jsx`) answers a message only
   from a frame it made: the message's source is that frame's window, its
   origin is the sandbox's opaque `"null"`, and its shape is the bridge's
-  (`frameOf`). Every call is checked against the install record
+  (`frameOf`). A process plugin's pages run here too; their
+  `program.request` goes to `POST /plugins/{id}/request`. Every call is
+  checked against the install record
   (`refusal` in `src/plugin-runtime.js`) and answered by
   `src/plugin-calls.js`, which also keeps the composer grants.
 - The console reads a plugin's files through the daemon with its own
