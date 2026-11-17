@@ -18,9 +18,10 @@ export default function BrowserBookmarksBar({ marks, onOpen, onMenu, onFolderMen
     const el = listRef.current
     if (!el) return undefined
     const measure = () => {
+      const { right } = el.getBoundingClientRect()
       let n = 0
       for (const child of el.children) {
-        if (child.offsetLeft + child.offsetWidth > el.clientWidth + 0.5) break
+        if (child.getBoundingClientRect().right > right) break
         n += 1
       }
       setFit(n)

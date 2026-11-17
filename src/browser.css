@@ -892,6 +892,13 @@ html[data-reduce-motion] .bw-btn {
 .bw-mark:hover {
   background: var(--bg-hover);
 }
+.bw-marks-list .bw-mark {
+  flex: none;
+}
+/* Keep the first bookmark clickable when its full title cannot fit. */
+.bw-marks-list .bw-mark:first-child {
+  max-width: min(200px, 100%);
+}
 .bw-mark-title {
   overflow: hidden;
   text-overflow: ellipsis;
