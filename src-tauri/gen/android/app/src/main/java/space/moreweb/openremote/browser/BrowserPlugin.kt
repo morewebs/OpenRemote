@@ -273,6 +273,13 @@ class BrowserPlugin(activity: Activity) : Plugin(activity) {
     null
   }
 
+  /** A small tap the hand feels: `tick` or `confirm`. */
+  @Command
+  fun haptic(invoke: Invoke) = answer(invoke) { args ->
+    browser.haptic(args.text("kind") == "confirm")
+    null
+  }
+
   /** One of the daemon's calls (openremote-browser's Call); answers {ok: its answer}. */
   @Command
   fun agent(invoke: Invoke) {

@@ -80,21 +80,43 @@ const RESTORABLE = /^(https?|file):/i
 
 // The tabs saved for the next start: every tab with an address, never a
 // private one, and which of them was showing.
-export function sessionOf(tabs, active) {
+export function sessionOf(tabs, active, groups = null) {
   const kept = (tabs ?? []).filter((t) => !t.private && t.url && RESTORABLE.test(t.url))
   const at = kept.findIndex((t) => t.key === active)
-  return { tabs: kept.map((t) => ({ url: t.url, title: t.title ?? '' })), active: Math.max(0, at) }
+  // A tab group comes back with its tabs (the phone's): a tab names its
+  // group, and the groups its tabs name are kept with their name and colour.
+  const used = {}
+  const rows = kept.map((t) => {
+    const group = t.group && groups?.[t.group]
+    if (!group) return { url: t.url, title: t.title ?? '' }
+    used[t.group] = { name: String(group.name ?? ''), color: String(group.color ?? '') }
+    return { url: t.url, title: t.title ?? '', group: t.group }
+  })
+  const session = { tabs: rows, active: Math.max(0, at) }
+  if (Object.keys(used).length) session.groups = used
+  return session
 }
 
 // A saved session as tabs again: entries with their address and title,
 // which open their pages when first shown. Anything malformed is dropped.
 export function restoredTabs(session) {
   const saved = Array.isArray(session?.tabs) ? session.tabs : []
+  const savedGroups = session?.groups && typeof session.groups === 'object' && !Array.isArray(session.groups) ? session.groups : {}
   const tabs = saved
     .filter((t) => t && typeof t.url === 'string' && RESTORABLE.test(t.url))
-    .map((t) => newTab({ url: t.url, title: typeof t.title === 'string' ? t.title : '' }))
+    .map((t) => {
+      const group = typeof t.group === 'string' && savedGroups[t.group] ? { group: t.group } : {}
+      return newTab({ url: t.url, title: typeof t.title === 'string' ? t.title : '', ...group })
+    })
   const at = Number.isInteger(session?.active) ? session.active : 0
-  return { tabs, active: Math.min(Math.max(0, at), Math.max(0, tabs.length - 1)) }
+  const restored = { tabs, active: Math.min(Math.max(0, at), Math.max(0, tabs.length - 1)) }
+  const used = Object.fromEntries(
+    Object.entries(savedGroups)
+      .filter(([id]) => tabs.some((t) => t.group === id))
+      .map(([id, g]) => [id, { id, name: typeof g?.name === 'string' ? g.name.slice(0, 60) : '', color: typeof g?.color === 'string' ? g.color : '' }]),
+  )
+  if (Object.keys(used).length) restored.groups = used
+  return restored
 }
 
 // The tab list once the last session is back: the restored tabs first, then

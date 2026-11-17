@@ -445,6 +445,19 @@ pub fn on_note(app: &Arc<App>, peer: PeerContext, note: Value) {
         }
         return;
     }
+    // The open tabs of the sender, as it describes itself: kept under the
+    // mesh's id and name for the peer, never the note's (browser/devices.rs).
+    if crate::browser::devices::is_tabs_note(&note) {
+        let from = peer.device_id.to_string();
+        let mut devices = lock_recovering(&app.browser.devices);
+        if let Err(refused) = devices.take(&from, &peer.name, &note, openremote_core::now_ms()) {
+            eprintln!(
+                "warning: an open-tabs note from {from} was refused: {}",
+                refused.reason()
+            );
+        }
+        return;
+    }
     let Some(id) = note["session"].as_str().and_then(SessionId::parse) else {
         return;
     };
@@ -595,6 +608,19 @@ fn browser_fingerprint(app: &App) -> u64 {
 async fn send_browser(app: &Arc<App>, mesh: &Mesh, peer: DeviceId) {
     let note = browser_note(app);
     let _ = mesh.note(peer, &note).await;
+    let tabs = tabs_note(app);
+    let _ = mesh.note(peer, &tabs).await;
+}
+
+/// This device's open tabs, for the user's other devices' Recent tabs: the
+/// saved session, which never holds a private tab, or an `off` note when the
+/// user turned sharing off.
+fn tabs_note(app: &App) -> Value {
+    crate::browser::devices::note(&lock_recovering(&app.browser.store))
+}
+
+fn tabs_fingerprint(app: &App) -> u64 {
+    crate::browser::devices::fingerprint(&lock_recovering(&app.browser.store))
 }
 
 /// The chats a lag must reconcile: every entry in the watcher map. An
@@ -631,6 +657,7 @@ pub fn start_pusher(app: &Arc<App>) {
     let watcher = Arc::downgrade(app);
     tokio::spawn(async move {
         let mut sent: Option<u64> = None;
+        let mut sent_tabs: Option<u64> = None;
         let mut at = Instant::now();
         loop {
             tokio::time::sleep(BROWSER_TICK).await;
@@ -638,7 +665,8 @@ pub fn start_pusher(app: &Arc<App>) {
                 return;
             };
             let now = browser_fingerprint(&app);
-            if sent == Some(now) || at.elapsed() < BROWSER_EVERY {
+            let now_tabs = tabs_fingerprint(&app);
+            if (sent == Some(now) && sent_tabs == Some(now_tabs)) || at.elapsed() < BROWSER_EVERY {
                 continue;
             }
             let Some(mesh) = app.cloud.mesh() else {
@@ -648,11 +676,20 @@ pub fn start_pusher(app: &Arc<App>) {
             if peers.is_empty() {
                 continue;
             }
-            let note = browser_note(&app);
+            // Each note goes only when its own part changed: a navigation
+            // sends the open tabs, not the whole bookmark tree.
+            let note = (sent != Some(now)).then(|| browser_note(&app));
+            let tabs = (sent_tabs != Some(now_tabs)).then(|| tabs_note(&app));
             for peer in peers {
-                let _ = mesh.note(peer, &note).await;
+                if let Some(note) = &note {
+                    let _ = mesh.note(peer, note).await;
+                }
+                if let Some(tabs) = &tabs {
+                    let _ = mesh.note(peer, tabs).await;
+                }
             }
             sent = Some(now);
+            sent_tabs = Some(now_tabs);
             at = Instant::now();
         }
     });

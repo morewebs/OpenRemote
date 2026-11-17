@@ -32,6 +32,7 @@
     "allow-browser-reveal",
     "allow-browser-desktop-site",
     "allow-browser-share-sheet",
-    "allow-browser-download"
+    "allow-browser-download",
+    "allow-browser-haptic"
   ]
 }

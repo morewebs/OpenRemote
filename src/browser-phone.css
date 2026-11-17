@@ -1026,3 +1026,192 @@ html[data-reduce-motion] .bp-button:active {
 html[data-reduce-motion] .bp-button.primary:active {
   box-shadow: none;
 }
+
+/* ---- the address bar at the bottom (Settings > Address bar) ---- */
+
+/* The bar sits under the page, its address row lowest so the thumb reaches
+   it; as the page scrolls it slides down out of view (barTransform). */
+.bp.bottom .bp-bar {
+  order: 10;
+  display: flex;
+  flex-direction: column-reverse;
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+}
+
+.bp.bottom .bp-agent {
+  border-top: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.bp.bottom .bp-progress,
+.bp.bottom .bp-read {
+  top: -1px;
+  bottom: auto;
+}
+
+/* How far down the page is: a quiet line where the load bar runs. */
+.bp-read {
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  background: var(--text-3);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* ---- tab groups ---- */
+
+[data-color='blue'] { --group: #6aa6ff; }
+[data-color='amber'] { --group: #dca24b; }
+[data-color='green'] { --group: #62c48a; }
+[data-color='red'] { --group: #f07167; }
+[data-color='purple'] { --group: #b38cff; }
+[data-color='teal'] { --group: #4fc6c0; }
+[data-color='pink'] { --group: #f28dc4; }
+[data-color='grey'] { --group: #9aa3ae; }
+
+.bp-group-card {
+  border-color: color-mix(in srgb, var(--group, var(--line)) 55%, transparent);
+}
+
+.bp-group-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--group, var(--text-3));
+}
+
+.bp-group-count {
+  flex: none;
+  margin-right: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.bp-group-shots {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 3px;
+  aspect-ratio: 3 / 4;
+  padding: 3px;
+  background: var(--bg-app);
+}
+
+.bp-group-shot {
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--bg-side);
+}
+
+.bp-group-shot img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+
+.bp-group-shot .bp-card-blank {
+  font-size: 16px;
+}
+
+.bp-group-page .bp-surface-head {
+  gap: 8px;
+}
+
+.bp-group-name {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  border: 0;
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  outline: none;
+}
+
+.bp-link-row.danger {
+  color: var(--text-2);
+}
+
+/* ---- Recent tabs ---- */
+
+.bp-device {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 8px;
+  padding: 0 16px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: none;
+  color: var(--text-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bp-device-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bp-device-when {
+  flex: none;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+/* ---- a setting that is on or off ---- */
+
+.bp-switch {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--line);
+  transition: background 0.15s;
+}
+
+.bp-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--text-2);
+  transition: transform 0.15s;
+}
+
+.bp-switch.on {
+  background: var(--accent);
+}
+
+.bp-switch.on::after {
+  background: var(--bg-app);
+  transform: translateX(16px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bp-switch,
+  .bp-switch::after {
+    transition: none;
+  }
+}

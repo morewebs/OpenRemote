@@ -38,6 +38,7 @@ pub fn routes() -> Router<Arc<App>> {
         .route("/browser/settings", get(settings).post(set_settings))
         .route("/browser/permissions", post(set_permission))
         .route("/browser/session", post(save_session))
+        .route("/browser/devices", get(devices))
         .route("/browser/tabs/{tab}/control", post(control))
         .route("/browser/import", get(import_sources).post(import_run))
         .route("/browser/tools", get(tool_list))
@@ -262,6 +263,13 @@ async fn set_permission(State(app): State<Arc<App>>, Json(body): Json<Permission
 async fn save_session(State(app): State<Arc<App>>, Json(body): Json<Value>) -> Response {
     lock(&app.browser.store).save_session(body);
     Json(json!({"ok": true})).into_response()
+}
+
+/// Open tabs shared by the user's other devices.
+async fn devices(State(app): State<Arc<App>>) -> Response {
+    let me = lock(&app.browser.store).device().to_string();
+    let list = lock(&app.browser.devices).list(&me, openremote_core::now_ms());
+    Json(json!({ "devices": list })).into_response()
 }
 
 /// The profiles of the other browsers on this computer, found in their own

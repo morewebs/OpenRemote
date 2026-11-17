@@ -16,7 +16,9 @@ import { SEARCH_ENGINES } from './browser-omnibox.js'
 //                  first open after a start) or 'new_tab'
 //   agent_tabs     every chat is told which tabs are open and gets every
 //                  browser tool; off, only a chat whose agent used the browser
-export const BROWSER_DEFAULTS = { search: 'google', bookmarks_bar: true, startup: 'continue', agent_tabs: false }
+export const BROWSER_DEFAULTS = {
+  search: 'google', bookmarks_bar: true, startup: 'continue', agent_tabs: false, bar_bottom: false, sync_tabs: false,
+}
 
 // What "On startup" offers, in Settings > Browser.
 export const STARTUP_CHOICES = [
@@ -30,7 +32,7 @@ export function browserSetting(settings, key) {
   const value = settings?.[key]
   if (value === undefined || value === null) return BROWSER_DEFAULTS[key]
   if (key === 'search' && !Object.hasOwn(SEARCH_ENGINES, value)) return BROWSER_DEFAULTS.search
-  if (key === 'bookmarks_bar' || key === 'agent_tabs') return value === true
+  if (['bookmarks_bar', 'agent_tabs', 'bar_bottom', 'sync_tabs'].includes(key)) return value === true
   if (key === 'startup' && !STARTUP_CHOICES.some((c) => c.id === value)) return BROWSER_DEFAULTS.startup
   return value
 }

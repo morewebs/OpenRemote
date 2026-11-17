@@ -12,6 +12,7 @@
 //! service) has no browser, and its tools say so.
 
 pub mod adblock;
+pub mod devices;
 pub mod import;
 pub mod routes;
 pub mod store;
@@ -86,6 +87,8 @@ pub struct BrowserService {
     /// told nothing).
     unsettled: Mutex<HashMap<String, Vec<NotedTab>>>,
     pub store: Mutex<store::BrowserStore>,
+    /// The tabs open on the user's other devices, as they last said.
+    pub devices: Mutex<devices::Devices>,
     /// Ad and tracker blocking: its lists and what the browser was told.
     pub adblock: adblock::Keeper,
 }
@@ -115,6 +118,7 @@ impl BrowserService {
             noted: Mutex::new(HashMap::new()),
             unsettled: Mutex::new(HashMap::new()),
             store: Mutex::new(store::BrowserStore::open(data_dir)),
+            devices: Mutex::new(devices::Devices::open(&data_dir.join("browser"))),
             adblock: adblock::Keeper::new(data_dir),
         }
     }

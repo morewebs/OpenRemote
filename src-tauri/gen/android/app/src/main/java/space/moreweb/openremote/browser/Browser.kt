@@ -26,6 +26,7 @@ import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -616,13 +617,14 @@ class Browser(activity: AppCompatActivity) {
       scale,
       bounds.optBoolean("still", false),
       bounds.optBoolean("back", true),
+      bounds.optString("edge", "top") == "bottom",
     )
   }
 
   fun setFrame(tab: Tab, frame: Frame?) {
     val before = tab.frame
     tab.frame = frame
-    if (tab === shown && (before?.bar != frame?.bar || frame?.parked == true)) resetBar(tab)
+    if (tab === shown && (before?.bar != frame?.bar || before?.bottom != frame?.bottom || frame?.parked == true)) resetBar(tab)
     place(tab)
     updateBack()
   }
@@ -881,6 +883,8 @@ class Browser(activity: AppCompatActivity) {
 
   private fun scrolled(tab: Tab, dy: Int) {
     if (tab !== shown || fullscreen != null) return
+    // The reading line moves with every scroll, the bar or not.
+    sendChrome(tab)
     val bar = tab.frame?.bar ?: 0
     if (bar <= 0 || tab.frame?.parked == true) return
     snap?.cancel()
@@ -904,7 +908,16 @@ class Browser(activity: AppCompatActivity) {
       place(tab)
     }
     offset = value
-    tab.view?.translationY = -value.toFloat()
+    val view = tab.view
+    if (tab.frame?.bottom == true) {
+      // The bar is below: the page stays put and shows as much more of
+      // itself as the bar has slid away, so it never covers the bar.
+      view?.translationY = 0f
+      view?.clipBounds = if (value > 0 && view != null) Rect(0, 0, view.width, (tab.frame?.height ?: view.height) + value) else null
+    } else {
+      view?.clipBounds = null
+      view?.translationY = -value.toFloat()
+    }
     sendChrome(tab)
   }
 
@@ -950,6 +963,7 @@ class Browser(activity: AppCompatActivity) {
     val moved = offset != 0
     offset = 0
     tab.view?.translationY = 0f
+    tab.view?.clipBounds = null
     if (grown) {
       grown = false
       place(tab)
@@ -967,8 +981,25 @@ class Browser(activity: AppCompatActivity) {
       emit("chrome", JSObject().apply {
         put("tab", tab.id)
         put("offset", offset / scale)
+        // How far down the page is, for the console's reading line.
+        put("read", (tab.page?.readFraction() ?: 0f).toDouble())
       })
     }
+  }
+
+  // ---- the hand ----
+
+  /** A small tap: a tick, or a firmer one for something kept. */
+  fun haptic(confirm: Boolean) {
+    val view = shown?.view ?: activity.window?.decorView ?: return
+    val kind = if (confirm && Build.VERSION.SDK_INT >= 30) {
+      HapticFeedbackConstants.CONFIRM
+    } else if (confirm) {
+      HapticFeedbackConstants.LONG_PRESS
+    } else {
+      HapticFeedbackConstants.CLOCK_TICK
+    }
+    view.performHapticFeedback(kind)
   }
 
   // ---- fullscreen ----

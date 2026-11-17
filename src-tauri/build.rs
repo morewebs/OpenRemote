@@ -45,6 +45,8 @@ const COMMANDS: &[&str] = &[
     "browser_desktop_site",
     "browser_share_sheet",
     "browser_download",
+    // A small tap the hand feels (a tab swipe, a bookmark kept).
+    "browser_haptic",
     "update_check",
     "update_install",
     "update_open_page",
