@@ -390,10 +390,8 @@ button:active,
   color: var(--text-3);
 }
 
-/* the Projects head: the title, the one way a folder becomes a project
-   (the +), and - per project - the unregister button. The section titles
-   stack with a little air: Projects, then the flat Chats list. */
-.sb-projects-head {
+.sb-projects-head,
+.sb-chats-title {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -406,7 +404,7 @@ button:active,
   flex: 1;
 }
 
-.sb-add-project {
+.sb-section-add {
   display: grid;
   place-items: center;
   width: 32px;
@@ -423,19 +421,18 @@ button:active,
   box-shadow: none;
 }
 
-.sb-add-project:hover {
+.sb-section-add:hover {
   background: var(--bg-hover);
   color: var(--text-1);
 }
 
-.sb-add-project:active {
+.sb-section-add:active {
   transform: none;
   background: transparent;
 }
 
 .sb-chats-title {
   margin-top: 14px;
-  padding-left: 8px;
 }
 
 /* The group of chats waiting on a person, above Projects. It takes no space
@@ -588,7 +585,7 @@ button:active,
   background: var(--bg-hover);
 }
 
-.sb-project-organize + .sb-add-project {
+.sb-project-organize + .sb-section-add {
   margin-left: 2px;
 }
 

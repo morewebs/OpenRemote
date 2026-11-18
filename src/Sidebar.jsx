@@ -1423,7 +1423,7 @@ export default function Sidebar({
           {!web && (
             <button
               type="button"
-              className="sb-add-project"
+              className="sb-section-add"
               onClick={onAddProject}
               title="Add a project"
               aria-label="Add a project"
@@ -1601,6 +1601,15 @@ export default function Sidebar({
           {...dropTarget(null, 'flat')}
         >
           Chats
+          <button
+            type="button"
+            className="sb-section-add"
+            onClick={() => onSelect('new')}
+            title={hintNew('New chat')}
+            aria-label="New chat"
+          >
+            <Plus size={20} weight="bold" />
+          </button>
         </div>
         {/* Only while there are chats to be outside a project: with every
             project at zero, the projects say it and this line would be a
