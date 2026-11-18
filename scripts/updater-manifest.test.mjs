@@ -106,9 +106,10 @@ test('the nightly names and the stable names do not overlap', () => {
 
 test('the nightly workflow stages every nightly name the manifest maps', () => {
   const wf = read('../.github/workflows/nightly.yml').replace(/\r\n/g, '\n')
+  const publisher = read('../scripts/publish-nightly.sh')
   for (const name of Object.keys(NIGHTLY_UPDATE_ASSETS)) {
     assert.ok(wf.includes(`staged/${name}`), `${name} is staged`)
-    assert.ok(wf.includes(`assets/${name}.sig`), `${name}.sig is read by the feed`)
+    assert.ok(publisher.split(/\s+/).includes(`${name}.sig`), `${name}.sig is published with the feed`)
   }
 })
 

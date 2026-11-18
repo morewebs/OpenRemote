@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import test from 'node:test'
 import {
+  androidNightlyConfig,
   mergeConfig,
   nightlyConfig,
   nightlyVersion,
@@ -201,4 +202,14 @@ test('the CLI plans a version and stamp, and writes the config to the path it is
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test('Android nightlies use the release stamp for an increasing version code', () => {
+  const version = '0.6.8-nightly.202611180447'
+  const config = androidNightlyConfig(version)
+  assert.equal(config.version, version)
+  assert.equal(config.bundle.android.versionCode, Date.parse('2026-11-18T04:47:00Z') / 60_000)
+  assert.equal(androidNightlyConfig('0.6.9-nightly.202611180448').bundle.android.versionCode,
+    config.bundle.android.versionCode + 1)
+  assert.throws(() => androidNightlyConfig('0.6.8-nightly.202602300447'), /invalid nightly stamp/)
 })

@@ -13,7 +13,8 @@
 //
 // Usage:
 //   node scripts/channel.mjs plan                      prints version= and stamp= lines
-//   node scripts/channel.mjs config <version> <out>    writes the full nightly config
+//   node scripts/channel.mjs config <version> <out>    writes the full desktop nightly config
+//   node scripts/channel.mjs android-config <version> <out>  writes the Android overrides
 //
 // The build is given one full config file rather than several --config
 // values. The file is what the build reads, so the config can be inspected
@@ -106,6 +107,19 @@ export function nightlyConfig({ base, overlay, version }) {
   }
 }
 
+// Android upgrades compare integers. UTC minutes keep successive nightly
+// APKs upgradable independently of the stable package's version code.
+export function androidNightlyConfig(version) {
+  const { stamp } = parseNightlyVersion(version)
+  const [, year, month, day, hour, minute] = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(stamp)
+  const time = new Date(`${year}-${month}-${day}T${hour}:${minute}:00Z`)
+  const versionCode = time.getTime() / 60_000
+  if (!Number.isInteger(versionCode) || versionCode <= 0 || versionCode > 2_100_000_000 || stampFor(time) !== stamp) {
+    throw new Error(`invalid nightly stamp for Android: ${stamp}`)
+  }
+  return { version, bundle: { android: { versionCode } } }
+}
+
 function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'))
 }
@@ -117,9 +131,9 @@ function main(argv) {
     process.stdout.write(`version=${version}\nstamp=${stamp}\n`)
     return
   }
-  if (command === 'config' && rest.length === 2) {
+  if ((command === 'config' || command === 'android-config') && rest.length === 2) {
     const [version, out] = rest
-    const config = nightlyConfig({
+    const config = command === 'android-config' ? androidNightlyConfig(version) : nightlyConfig({
       base: readJson(STABLE_CONFIG),
       overlay: readJson(NIGHTLY_OVERLAY),
       version,
@@ -129,7 +143,7 @@ function main(argv) {
     process.stdout.write(`wrote ${out} for ${version}\n`)
     return
   }
-  console.error('usage: node scripts/channel.mjs plan | node scripts/channel.mjs config <version> <out>')
+  console.error('usage: node scripts/channel.mjs plan | node scripts/channel.mjs {config|android-config} <version> <out>')
   process.exit(2)
 }
 

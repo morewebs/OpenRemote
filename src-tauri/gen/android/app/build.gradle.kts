@@ -24,6 +24,7 @@ val keystoreProperties = Properties().apply {
     }
 }
 val hasReleaseKey = keystoreProperties.containsKey("storeFile")
+val isNightly = providers.environmentVariable("OPENREMOTE_ANDROID_NIGHTLY").orNull == "1"
 
 android {
     compileSdk = 37
@@ -40,7 +41,11 @@ android {
     }
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "space.moreweb.openremote"
+        // Keep the Kotlin and Tauri JNI namespace while installing into
+        // a separate Android package and data directory for nightly.
+        applicationId = if (isNightly) "space.moreweb.openremote.nightly" else "space.moreweb.openremote"
+        manifestPlaceholders["appLabel"] = if (isNightly) "OpenRemote Nightly" else "@string/app_name"
+        manifestPlaceholders["activityLabel"] = if (isNightly) "OpenRemote Nightly" else "@string/main_activity_title"
         // API 26 (Android 8) is the release floor - decision D9 in
         // Documentation/openremote-android.md.
         minSdk = 26

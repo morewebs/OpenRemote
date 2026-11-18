@@ -124,7 +124,9 @@ still builds and carries its signatures.
 
 `.github/workflows/nightly.yml` builds after CI passes on a push to `main`, and on
 a manual run from `main`. It builds the Windows installer (NSIS) and the Linux
-AppImage, signed with the nightly key.
+AppImage, signed with the nightly updater key. It also builds signed Android
+APKs for universal, ARM64 and ARMv7. Download a newer nightly APK to update
+Android.
 
 - Version: `<base>-nightly.<stamp>`. The base is the `version` in
   `tauri.conf.json` with its patch number raised by one, and the stamp is the UTC

@@ -3,7 +3,7 @@ name: Nightly
 # The nightly channel. A build of main that passed CI is published as the
 # rolling `nightly` release, which the nightly app reads, and as a dated
 # `nightly-<stamp>` release; the newest 20 dated releases are kept. Windows
-# (NSIS) and Linux (AppImage) only.
+# (NSIS), Linux (AppImage), and Android (signed APKs).
 #
 # It runs after CI, not beside it. workflow_run starts it when the CI run for
 # a push to main completes, and it builds only when that run succeeded, so the
@@ -15,15 +15,15 @@ name: Nightly
 # NIGHTLY_TAURI_SIGNING_PRIVATE_KEY_PASSWORD. The build is refused without the
 # key: an unsigned build would publish a feed the app cannot verify.
 #
-# Nothing is published until both platforms have built. Their files travel to
+# Nothing is published until all platforms have built. Their files travel to
 # the publish job as this run's artifacts, and only that job writes a release,
 # so a failed build leaves the last nightly in place. The rolling release keeps
 # its page and its URLs; its tag and its files move to the new build.
 #
 # The build steps follow release.yml: the sidecar staged with the release
 # profile, the pinned Rust toolchain and cache, and the Linux webkit packages.
-# The glibc-pinned daemon download and the Android and macOS jobs are stable
-# only. A reusable workflow shared with release.yml would have changed stable's
+# The glibc-pinned daemon download and the macOS job are stable only.
+# A reusable workflow shared with release.yml would have changed stable's
 # job layout, so these steps are repeated here instead.
 #
 # Every action is pinned to the commit SHA release.yml pins. Bump a pin in both
@@ -252,8 +252,123 @@ jobs:
           path: staged/*
           if-no-files-found: error
 
+  android:
+    needs: plan
+    runs-on: ubuntu-latest
+    env:
+      OPENREMOTE_ANDROID_NIGHTLY: '1'
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: lts/*
+          cache: npm
+      # Gradle 9 / AGP 9 want JDK 17 at least; 21 is the LTS in play.
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: dtolnay/rust-toolchain@d124f86f28ff42855784ff3319f48ac182c248f8 # 1.99.1
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: |
+            daemon
+            src-tauri
+      # The runner image ships the SDK with the 37.0 platform (the
+      # minor-version scheme - there is no bare android-37 package) and
+      # build-tools preinstalled; setup-android's own update pass dies
+      # on Google's retirement of the legacy 'tools' package, so the SDK
+      # is used as it ships. Licenses are accepted so AGP can fetch
+      # anything the image lacks, and the 37.0 install is a no-op when
+      # the platform is already there. The tauri CLI locates the NDK
+      # through NDK_HOME (cargo-mobile2's contract, the same one
+      # scripts/android-env.sh uses), and AGP finds the SDK through
+      # local.properties.
+      - name: point the build at the SDK and its NDK
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$(ls -1 "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -n 1)"
+          # yes feeds every license prompt, then dies on SIGPIPE; its
+          # exit must not fail the step - only sdkmanager's own rc.
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses > /dev/null
+          set -o pipefail
+          "$SDKMANAGER" --install "platforms;android-37.0"
+          NDK="$(ls -d "$ANDROID_HOME"/ndk/* | sort -V | tail -n 1)"
+          test -n "$NDK"
+          echo "NDK_HOME=$NDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "sdk.dir=$ANDROID_HOME" > src-tauri/gen/android/local.properties
+      - run: npm ci
+      - run: node scripts/sync-daemon.mjs
+      # keystore.properties names the key for the gradle build
+      # (gitignored); the store path is relative to the app module.
+      - name: stage the release signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEYSTORE_ALIAS: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEYSTORE_ALIAS" ]; then
+            echo "::error::Android release signing secrets are incomplete"
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > src-tauri/gen/android/app/openremote-release.keystore.p12
+          printf 'storeFile=openremote-release.keystore.p12\npassword=%s\nkeyAlias=%s\n' "$KEYSTORE_PASSWORD" "$KEYSTORE_ALIAS" > src-tauri/gen/android/keystore.properties
+      - name: build the nightly APKs
+        run: |
+          set -euo pipefail
+          config=src-tauri/target/nightly-android.conf.json
+          node scripts/channel.mjs android-config "$VERSION" "$config"
+          npx tauri android build --apk --config "$config"
+          npx tauri android build --apk --split-per-abi --target aarch64 armv7 --config "$config"
+      # The signature is part of the release contract: the job fails if
+      # the APK does not verify, and the log carries the signer cert.
+      # AGP signs in the assemble when the release signing config is
+      # wired; the -unsigned sibling is the intermediate.
+      - name: verify signatures and architectures, then stage APKs
+        run: |
+          set -euo pipefail
+          tools="$(dirname "$(ls -1 "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)")"
+          version_code="$(node -p 'require("./src-tauri/target/nightly-android.conf.json").bundle.android.versionCode')"
+          mkdir -p staged
+          for entry in universal:universal arm64:arm64 arm:armv7; do
+            flavor="${entry%%:*}"
+            name="${entry##*:}"
+            APK="src-tauri/gen/android/app/build/outputs/apk/${flavor}/release/app-${flavor}-release.apk"
+            test -s "$APK"
+            "$tools/apksigner" verify --verbose --print-certs "$APK"
+            badging="$("$tools/aapt" dump badging "$APK")"
+            grep -F "package: name='space.moreweb.openremote.nightly' versionCode='$version_code' versionName='$VERSION'" <<< "$badging"
+            grep -Fx "application-label:'OpenRemote Nightly'" <<< "$badging"
+            abis="$(unzip -Z1 "$APK" | sed -n 's|^lib/\([^/]*\)/.*\.so$|\1|p' | sort -u)"
+            case "$name" in
+              arm64) expected=arm64-v8a ;;
+              armv7) expected=armeabi-v7a ;;
+              universal) expected="$(printf '%s\n' arm64-v8a armeabi-v7a x86 x86_64 | sort)" ;;
+            esac
+            if [ "$abis" != "$expected" ]; then
+              echo "::error::${name} APK contains unexpected native architectures: ${abis}"
+              exit 1
+            fi
+            cp "$APK" "staged/OpenRemote-Nightly-${name}.apk"
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nightly-android
+          path: staged/*.apk
+          if-no-files-found: error
+
   publish:
-    needs: [plan, windows, linux]
+    needs: [plan, windows, linux, android]
     runs-on: ubuntu-latest
     # `actions: read` lets `gh run download` pull this run's own artifacts.
     # The write is the publisher's alone; the builds above stay read-only.
@@ -282,6 +397,7 @@ jobs:
           mkdir -p assets
           gh run download "$GITHUB_RUN_ID" -n nightly-windows -D assets
           gh run download "$GITHUB_RUN_ID" -n nightly-linux -D assets
+          gh run download "$GITHUB_RUN_ID" -n nightly-android -D assets
           ls -la assets
       # The feed. It is written from the signatures the builds made, and names
       # only the installers this run carries. The delta's record is read from
@@ -303,9 +419,9 @@ jobs:
             echo
             echo "Built from \`main\` at \`${SHA:0:7}\` on $(date -u +'%Y-%m-%d %H:%M UTC')."
             echo
-            echo "A test build from main, replaced by the next one. The installers are not"
-            echo "code-signed, the same as the stable ones: SmartScreen shows More info, then"
-            echo "Run anyway. The nightly app updates from the rolling \`nightly\` release."
+            echo "Windows SmartScreen may prompt for More info, then Run anyway."
+            echo "Desktop apps use the rolling nightly update feed. Android updates are installed from the APK downloads."
+            echo "Android installs as OpenRemote Nightly alongside stable. If prompted during Cloud sign-in, choose the app that started sign-in."
             echo
             if [ -n "$previous" ]; then
               echo "## Since ${previous}"
@@ -318,64 +434,8 @@ jobs:
             fi
           } > nightly-notes.md
           cat nightly-notes.md
-      - name: the dated release
-        run: |
-          set -euo pipefail
-          # The delta files this run carries: none when the build made no delta.
-          delta=()
-          for name in OpenRemote-Nightly-Setup-x64.update.zst OpenRemote-Nightly-Setup-x64.update.zst.sig \
-                      OpenRemote-Nightly-Setup-x64.patch.zst OpenRemote-Nightly-Setup-x64.patch.zst.sig; do
-            if [ -f "assets/${name}" ]; then delta+=("assets/${name}"); fi
-          done
-          gh release create "nightly-${STAMP}" \
-            assets/OpenRemote-Nightly-Setup-x64.exe assets/OpenRemote-Nightly-Setup-x64.exe.sig \
-            assets/OpenRemote-Nightly-x86_64.AppImage assets/OpenRemote-Nightly-x86_64.AppImage.sig \
-            "${delta[@]}" \
-            --target "$SHA" --prerelease \
-            --title "OpenRemote nightly ${VERSION}" \
-            --notes-file nightly-notes.md
-      - name: the rolling nightly release
-        run: |
-          set -euo pipefail
-          repo="$GITHUB_REPOSITORY"
-          # The tag moves through the refs API. The release that holds it keeps
-          # its page, and its download URLs keep their names; the feed and the
-          # files follow the commit.
-          if gh api "repos/${repo}/git/ref/tags/nightly" > /dev/null 2>&1; then
-            gh api -X PATCH "repos/${repo}/git/refs/tags/nightly" -f sha="$SHA" -F force=true > /dev/null
-          else
-            gh api -X POST "repos/${repo}/git/refs" -f ref=refs/tags/nightly -f sha="$SHA" > /dev/null
-          fi
-          if gh release view nightly > /dev/null 2>&1; then
-            gh release edit nightly --title "OpenRemote nightly ${VERSION}" --notes-file nightly-notes.md --prerelease
-          else
-            gh release create nightly --verify-tag --prerelease \
-              --title "OpenRemote nightly ${VERSION}" --notes-file nightly-notes.md
-          fi
-          # The delta files this run carries, as in the dated release.
-          delta=()
-          for name in OpenRemote-Nightly-Setup-x64.update.zst OpenRemote-Nightly-Setup-x64.update.zst.sig \
-                      OpenRemote-Nightly-Setup-x64.patch.zst OpenRemote-Nightly-Setup-x64.patch.zst.sig; do
-            if [ -f "assets/${name}" ]; then delta+=("assets/${name}"); fi
-          done
-          gh release upload nightly --clobber \
-            assets/OpenRemote-Nightly-Setup-x64.exe assets/OpenRemote-Nightly-Setup-x64.exe.sig \
-            assets/OpenRemote-Nightly-x86_64.AppImage assets/OpenRemote-Nightly-x86_64.AppImage.sig \
-            "${delta[@]}"
-          # The feed goes last, so it never names a file that is not yet there.
-          gh release upload nightly --clobber latest.json
-          # What an older build left on the rolling release goes. The list is
-          # exactly what this build carries.
-          keep=" OpenRemote-Nightly-Setup-x64.exe OpenRemote-Nightly-Setup-x64.exe.sig OpenRemote-Nightly-x86_64.AppImage OpenRemote-Nightly-x86_64.AppImage.sig latest.json "
-          for file in "${delta[@]}"; do
-            keep="${keep}$(basename "$file") "
-          done
-          gh release view nightly --json assets --jq '.assets[].name' > rolling-assets.txt
-          while IFS= read -r name; do
-            if [ -n "$name" ] && [[ "$keep" != *" $name "* ]]; then
-              gh release delete-asset nightly "$name" --yes
-            fi
-          done < rolling-assets.txt
+      - name: publish the dated and rolling releases
+        run: bash scripts/publish-nightly.sh
       # The dated releases are kept to the newest 20 by stamp. The stamp is
       # fixed-width, so a reverse string sort is newest first. Only names of
       # the stamped form are touched.

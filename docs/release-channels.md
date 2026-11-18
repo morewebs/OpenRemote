@@ -120,12 +120,14 @@ branch.
 ## Nightly
 
 Built by `.github/workflows/nightly.yml` after CI passes on a push to `main`.
-Windows (an NSIS installer) and Linux (an AppImage) only; there is no MSI, deb,
-macOS or APK nightly.
+Nightlies ship a Windows NSIS installer, a Linux AppImage and signed Android APKs.
 
 ```
 https://github.com/morewebs/OpenRemote/releases/download/nightly/OpenRemote-Nightly-Setup-x64.exe
 https://github.com/morewebs/OpenRemote/releases/download/nightly/OpenRemote-Nightly-x86_64.AppImage
+https://github.com/morewebs/OpenRemote/releases/download/nightly/OpenRemote-Nightly-universal.apk
+https://github.com/morewebs/OpenRemote/releases/download/nightly/OpenRemote-Nightly-arm64.apk
+https://github.com/morewebs/OpenRemote/releases/download/nightly/OpenRemote-Nightly-armv7.apk
 ```
 
 - The version is `<base>-nightly.<stamp>`, described in `docs/releasing-updates.md`.
@@ -148,4 +150,7 @@ the same as a run after CI. Nightly runs are never scheduled; they follow CI.
 
 Each stable release's `bundle.android.versionCode` must strictly exceed the
 previous tag's, or Android refuses the update install. The release preflight
-checks it for stable tags. The nightly builds no APK.
+checks it for stable tags. The nightly APK uses minutes since the Unix epoch as
+its version code and installs alongside stable as OpenRemote Nightly. Download
+and install a newer APK to update. If Android prompts during Cloud sign-in,
+choose the app that started sign-in.
