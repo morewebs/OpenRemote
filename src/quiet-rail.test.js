@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { quietRail, toolHint, workLabel } from './quiet-rail.js'
+import { quietRail, toolHint, workLabel, workStep } from './quiet-rail.js'
 
 test('thinking and tools collapse into one row between the messages', () => {
   const rail = quietRail([
@@ -52,4 +52,41 @@ test('an opened step: a browser step in words with its output, a page read folde
   const plain = workStep({ kind: 'tool', id: 'w', name: 'webfetch', input: { url: 'https://docs.rs/serde' }, result: null })
   assert.equal(plain.hint, 'docs.rs/serde')
   assert.equal(plain.out, null)
+})
+
+const run = (id, command, result = 'out') => ({ kind: 'tool', id, name: 'commandExecution', input: { command }, result })
+
+test('a Codex command reads as the command it ran, never as the protocol item', () => {
+  assert.equal(workLabel([run('a', 'ls')], false), 'Ran a command')
+  assert.equal(workLabel([run('a', 'ls'), run('b', 'pwd'), run('c', 'id')], false), 'Ran 3 commands')
+  // Counted with the other tools of the row, not in place of them.
+  const mixed = [run('a', 'ls'), run('b', 'pwd'), { kind: 'tool', id: 'w', name: 'WebSearch', input: { query: 'x' }, result: 'r' }]
+  assert.equal(workLabel(mixed, false), 'Ran 2 commands, WebSearch')
+  for (const label of [workLabel(mixed, false), workStep(mixed[0]).label]) assert.ok(!label.includes('commandExecution'))
+})
+
+test('a running command names what it is running, without its shell wrapper', () => {
+  const running = { kind: 'tool', id: 'a', name: 'commandExecution', input: { command: "powershell.exe -Command 'rg -n x src'" }, result: null }
+  assert.equal(workLabel([running], true), 'Running rg -n x src')
+  assert.equal(workLabel([{ ...running, input: {} }], true), 'Running a command')
+  // Another harness's own tool name is its own word and stays.
+  assert.equal(workLabel([{ kind: 'tool', id: 'b', name: 'Bash', input: { command: 'ls' }, result: null }], true), 'Bash')
+})
+
+test('an opened command step shows the command that ran', () => {
+  const step = workStep(run('a', '/bin/bash -lc "git status --short"'))
+  assert.equal(step.label, 'Ran')
+  assert.equal(step.hint, 'git status --short')
+  assert.equal(toolHint(run('a', 'npm test')), 'npm test')
+})
+
+test('garbled characters in a command\'s output are repaired, and the received text is kept', () => {
+  const garbled = new TextDecoder('windows-1252').decode(Buffer.from('it\u2019s done \u2705', 'utf8'))
+  const step = workStep(run('a', 'Get-Content notes.md', garbled))
+  assert.equal(step.out, 'it\u2019s done \u2705')
+  assert.equal(step.repaired, true)
+  assert.equal(step.received, garbled)
+  // Clean output is untouched, and a tool that is not a command is not read.
+  assert.equal(workStep(run('a', 'ls', 'plain')).repaired, false)
+  assert.equal(workStep({ kind: 'tool', id: 'f', name: 'Read', input: { file_path: 'a.md' }, result: garbled }).out, garbled)
 })
