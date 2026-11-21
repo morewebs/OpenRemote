@@ -1,0 +1,493 @@
+.dv-apps-backdrop:not(.dv-hm-stack) {
+  background: rgb(0 0 0 / 32%);
+}
+
+.dv-modal.dv-apps {
+  --apps-surface: #222123;
+  --apps-nav: #1c1b1e;
+  --apps-selected: #322f38;
+  --apps-scroll: #514d56;
+  display: flex;
+  flex-direction: column;
+  width: 740px;
+  height: 510px;
+  max-height: 100%;
+  padding: 0;
+  overflow: hidden;
+  border-color: #3a373d;
+  border-radius: 16px;
+  background: var(--apps-surface);
+}
+
+.dv-apps .dv-apps-head {
+  flex: none;
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 62px;
+  padding: 10px 16px 10px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dv-apps-head .dv-modal-title {
+  margin-right: auto;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.dv-apps-machine {
+  min-width: 0;
+}
+
+.dv-apps .dv-apps-picker,
+.dv-apps-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 260px;
+  min-width: 0;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.dv-apps-picker span,
+.dv-apps-target span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dv-apps svg,
+.dv-apps-editor svg {
+  flex: none;
+}
+
+.dv-apps-message {
+  margin: 0;
+  padding: 24px;
+  color: var(--text-2);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.dv-apps-message p {
+  margin: 0 0 14px;
+}
+
+.dv-apps-layout {
+  display: grid;
+  grid-template-columns: 198px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+
+.dv-apps-nav,
+.dv-apps-pane-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--apps-scroll) transparent;
+}
+
+.dv-apps-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 10px;
+  border-right: 1px solid var(--line);
+  background: var(--apps-nav);
+}
+
+.dv-apps-nav-item {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  min-height: 41px;
+  padding: 7px 9px 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.dv-apps-nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+
+.dv-apps-nav-item[aria-current] {
+  background: var(--apps-selected);
+  box-shadow: inset 2px 0 var(--accent);
+  color: var(--text-1);
+}
+
+.dv-apps-nav-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.dv-apps-nav-copy > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dv-apps-nav-copy > small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-2);
+}
+
+.dv-apps-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dv-apps-app-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  margin: 0 24px;
+  padding: 21px 0 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dv-apps-app-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--apps-nav);
+}
+
+.dv-apps-app-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.dv-apps-app-title h3,
+.dv-apps-app-picker {
+  margin: 0;
+  color: var(--text-1);
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.dv-apps-app-picker {
+  display: none;
+}
+
+.dv-apps-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.dv-apps-status > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+
+.dv-apps-status.ready > span {
+  background: var(--green);
+}
+
+.dv-apps-pane-scroll {
+  flex: 1;
+  overflow-x: hidden;
+}
+
+.dv-apps-detail {
+  padding: 0 24px 20px;
+}
+
+.dv-apps-overview {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding-top: 16px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.dv-apps-overview > :is(p, .dv-error) {
+  margin: 0;
+}
+
+.dv-apps-detail .dv-install-more {
+  margin-top: 18px;
+}
+
+.dv-install-more > summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  min-height: 27px;
+  border-radius: 3px;
+  color: var(--text-2);
+  font-size: 12px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.dv-install-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.dv-install-more > summary:hover {
+  color: var(--text-1);
+}
+
+.dv-install-more[open] > summary svg {
+  rotate: 90deg;
+}
+
+.dv-apps-code {
+  display: block;
+  margin: 6px 0 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--apps-nav);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  user-select: text;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.dv-hm-caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.dv-hm-cap.off {
+  opacity: 0.8;
+  text-decoration: line-through;
+}
+
+.dv-hm-error pre {
+  max-height: 160px;
+  margin: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--apps-scroll) transparent;
+  font: 11px/1.5 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.dv-apps-account-head {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 0 10px;
+  background: var(--apps-surface);
+}
+
+.dv-apps-account-head h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.dv-act.dv-apps-primary {
+  border-color: transparent;
+  background: #dcd5e8;
+  color: #251e2e;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.dv-act.dv-apps-primary:hover:not(:disabled) {
+  background: #ebe4f5;
+  color: #251e2e;
+}
+
+.dv-act.dv-apps-primary svg {
+  color: inherit;
+}
+
+.dv-apps-account-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dv-apps-account-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 57px;
+  padding: 8px 0;
+  scroll-margin-top: 61px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dv-apps-account-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+
+.dv-apps-account-name {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+  min-width: 0;
+  color: var(--text-1);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.dv-apps-account-status {
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+
+.dv-apps-account-status.ready {
+  color: var(--green);
+}
+
+.dv-apps-account-controls,
+.dv-apps-account-error {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+}
+
+.dv-apps-account-error {
+  justify-content: space-between;
+}
+
+.dv-apps-icon-button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  scroll-margin-top: 65px;
+}
+
+.dv-apps-icon-button:hover,
+.dv-apps-icon-button[aria-expanded="true"] {
+  background: var(--bg-active);
+  color: var(--text-1);
+}
+
+.dv-apps :is(button, summary):focus-visible,
+.dv-apps-editor :is(button, input):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.dv-modal.dv-apps-editor {
+  width: 380px;
+  border-color: #48424f;
+  color-scheme: dark;
+  overflow-wrap: anywhere;
+}
+
+.dv-apps-editor .dv-host {
+  margin-top: 14px;
+}
+
+.dv-apps-editor .dv-actions {
+  justify-content: flex-end;
+}
+
+.dv-act.dv-apps-danger {
+  border-color: color-mix(in srgb, var(--red) 45%, transparent);
+  color: var(--red);
+}
+
+@media (max-width: 639px) {
+  .dv-apps .dv-apps-head {
+    min-height: 56px;
+    padding: 5px 8px 5px 14px;
+  }
+
+  .dv-apps-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dv-apps-nav,
+  .dv-apps-app-title h3 {
+    display: none;
+  }
+
+  .dv-apps-app-picker {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    max-width: 100%;
+    min-height: 36px;
+    margin: -7px 0 -4px -4px;
+    padding: 4px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .dv-apps-app-head {
+    margin-inline: 14px;
+    padding: 15px 0 12px;
+  }
+
+  .dv-apps-detail {
+    padding-inline: 14px;
+  }
+
+  .dv-apps .dv-act {
+    padding-inline: 9px;
+  }
+
+  .dv-apps-icon-button {
+    width: 40px;
+    height: 44px;
+  }
+}

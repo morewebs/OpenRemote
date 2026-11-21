@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { isMobile } from './platform.js'
 import { X } from '@phosphor-icons/react'
 import { useBack } from './use-back.js'
 import { useDialog } from './dialog-focus.js'
@@ -13,10 +15,9 @@ import { errorCopy } from './error-copy.js'
 // task" and the only other way to change it is the `/rename` command, which
 // nobody discovers; a name is how a chat is found again in a list of thirty.
 //
-// The shell is the shared modal family: focus lands in the field with the
-// current name selected, Esc / backdrop / X discard, Tab stays inside, and
-// the app behind goes inert (dialog-focus.js). Enter saves. The rules about
-// what counts as a name live in rename-chat.js, tested without a DOM.
+// The shell is the shared modal family: Esc / backdrop / X discard, Tab
+// stays inside, and the app behind goes inert (dialog-focus.js). Enter saves.
+// The naming rules live in rename-chat.js, tested without a DOM.
 //
 // The dialog closes only after the daemon accepted the name: a refused rename
 // stays open with the daemon's own sentence, because closing would pretend a
@@ -26,7 +27,9 @@ import { errorCopy } from './error-copy.js'
 // name, so "no name" means the chat's own one).
 export default function RenameChatModal({ title, original = null, synced = false, onRename, onClose }) {
   useBack(true, onClose)
+  const backdropRef = useRef(null)
   const panelRef = useRef(null)
+  const noteId = useId()
   useDialog(panelRef, onClose)
   const inputRef = useRef(null)
   const [text, setText] = useState(title ?? '')
@@ -37,17 +40,37 @@ export default function RenameChatModal({ title, original = null, synced = false
   // syncs, so the sentence says when it lands instead of promising it is
   // already there - the same rule the remove-a-device hint follows.
   const where = synced
-    ? 'Every device that has this chat shows the new name the next time it syncs.'
-    : 'This name stays on this computer.'
+    ? 'Updates on other devices when they sync.'
+    : 'Only on this device.'
 
-  // The current name is selected, so the first keystroke replaces it: the
-  // dialog asks for a new name, and making someone retype the old one to keep
-  // it would be busywork.
+  // Desktop is ready to type. On a phone, let the person see the whole sheet
+  // before they tap the name and bring up the keyboard.
   useEffect(() => {
     const input = inputRef.current
-    if (!input) return
+    if (isMobile || !input) return
     input.focus()
     input.select()
+  }, [])
+
+  // Some mobile browsers resize only the visual viewport for the keyboard.
+  // Keep the sheet in that viewport instead of under the keys.
+  useLayoutEffect(() => {
+    const viewport = window.visualViewport
+    const backdrop = backdropRef.current
+    if (!isMobile || !viewport || !backdrop) return
+    const fit = () => {
+      backdrop.style.setProperty('--rn-viewport-height', viewport.height + 'px')
+      backdrop.style.setProperty('--rn-viewport-width', viewport.width + 'px')
+      backdrop.style.setProperty('--rn-viewport-top', viewport.offsetTop + 'px')
+      backdrop.style.setProperty('--rn-viewport-left', viewport.offsetLeft + 'px')
+    }
+    fit()
+    viewport.addEventListener('resize', fit)
+    viewport.addEventListener('scroll', fit)
+    return () => {
+      viewport.removeEventListener('resize', fit)
+      viewport.removeEventListener('scroll', fit)
+    }
   }, [])
 
   const save = async () => {
@@ -70,9 +93,12 @@ export default function RenameChatModal({ title, original = null, synced = false
     }
   }
 
-  return (
+  const dialog = (
     <div
       className="dv-modal-backdrop"
+      data-rename-sheet={isMobile ? '' : undefined}
+      ref={backdropRef}
+      onPointerDown={isMobile ? (e) => e.stopPropagation() : undefined}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
@@ -87,46 +113,50 @@ export default function RenameChatModal({ title, original = null, synced = false
       >
         <div className="dv-modal-head">
           <h2 className="dv-modal-title">Rename this chat</h2>
-          <button className="dv-modal-close" onClick={onClose} title="Close">
+          <button type="button" className="dv-modal-close" onClick={onClose} aria-label="Close">
             <X size={14} weight="bold" />
           </button>
         </div>
-        <input
-          ref={inputRef}
-          className="rn-input"
-          value={text}
-          /* No maxLength: the attribute counts UTF-16 units while the name
-             rules count code points, so an emoji name would stop at half the
-             allowed length in the field and a paste could be cut mid-surrogate.
-             cleanName owns the cap and cuts by character, as the daemon does. */
-          aria-label="Chat name"
-          aria-invalid={verdict.state === 'empty' ? 'true' : undefined}
-          onChange={(e) => {
-            setText(e.target.value)
-            // A refused name is refused for what is in the field; typing
-            // again is the answer to it, so the old sentence goes.
-            setError(null)
-          }}
-          onKeyDown={(e) => {
-            if (e.key !== 'Enter') return
-            e.preventDefault()
-            save()
-          }}
-          spellCheck={false}
-          disabled={busy}
-        />
-        <p className={`rn-note${verdict.state === 'empty' ? ' is-bad' : ''}`}>
-          {verdict.state === 'empty' ? (
-            'A chat needs a name.'
-          ) : verdict.state === 'restore' ? (
-            <>
-              Saving it empty puts back the name from its first message: <span className="pv">{verdict.value}</span>
-            </>
-          ) : (
-            where
-          )}
-        </p>
-        {error && <p className="cv-error-line">{error}</p>}
+        <div className="rn-details">
+          <input
+            ref={inputRef}
+            className="rn-input"
+            value={text}
+            /* No maxLength: the attribute counts UTF-16 units while the name
+               rules count code points, so an emoji name would stop at half the
+               allowed length in the field and a paste could be cut mid-surrogate.
+               cleanName owns the cap and cuts by character, as the daemon does. */
+            aria-label="Chat name"
+            aria-describedby={noteId}
+            enterKeyHint="done"
+            aria-invalid={verdict.state === 'empty' ? 'true' : undefined}
+            onChange={(e) => {
+              setText(e.target.value)
+              // A refused name is refused for what is in the field; typing
+              // again is the answer to it, so the old sentence goes.
+              setError(null)
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' || e.nativeEvent.isComposing) return
+              e.preventDefault()
+              save()
+            }}
+            spellCheck={false}
+            disabled={busy}
+          />
+          <p id={noteId} className={`rn-note${verdict.state === 'empty' ? ' is-bad' : ''}`}>
+            {verdict.state === 'empty' ? (
+              'A chat needs a name.'
+            ) : verdict.state === 'restore' ? (
+              <>
+                Leave blank to restore the first-message name: <span className="pv">{verdict.value}</span>
+              </>
+            ) : (
+              where
+            )}
+          </p>
+          {error && <p className="cv-error-line" role="alert">{error}</p>}
+        </div>
         <div className="ctx-modal-actions">
           <button type="button" className="pn-btn" onClick={onClose} disabled={busy}>
             Cancel
@@ -143,4 +173,8 @@ export default function RenameChatModal({ title, original = null, synced = false
       </div>
     </div>
   )
+
+  // The phone drawer translates the whole app sheet and sits above it. A
+  // body portal keeps this editor full width and the drawer inert behind it.
+  return isMobile ? createPortal(dialog, document.body) : dialog
 }

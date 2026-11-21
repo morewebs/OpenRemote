@@ -347,7 +347,7 @@ fn timeout_for(method: &Method, rest: &str) -> std::time::Duration {
         && rest.ends_with("/harnesses")
     {
         900
-    } else if method == Method::POST && rest == "sessions" {
+    } else if method == Method::POST && matches!(rest, "sessions" | "sessions/with-app-account") {
         90
     } else {
         30
@@ -473,9 +473,14 @@ pub async fn create_remote(
     if let Err((status, message)) = check_device(&mesh, device) {
         return json_error(status, &message);
     }
+    let managed = body["app_account_id"].is_string();
     let request = openremote_cloud::rpc::Request {
         method: "POST".into(),
-        path: "/sessions".into(),
+        path: if managed {
+            "/sessions/with-app-account".into()
+        } else {
+            "/sessions".into()
+        },
         content_type: Some("application/json".into()),
         body: body.to_string().into_bytes(),
     };
@@ -483,6 +488,12 @@ pub async fn create_remote(
         .request(device, request, std::time::Duration::from_secs(90))
         .await;
     if let Ok(response) = &result {
+        if managed && matches!(response.status, 403 | 404) {
+            return json_error(
+                StatusCode::CONFLICT,
+                "Update OpenRemote on that machine to use an App account.",
+            );
+        }
         if response.status == 201 {
             let created: Value = serde_json::from_slice(&response.body).unwrap_or(Value::Null);
             if let Some(id) = created["id"]

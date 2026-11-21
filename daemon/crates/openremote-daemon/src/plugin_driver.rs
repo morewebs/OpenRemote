@@ -981,6 +981,7 @@ mod tests {
                 "mcp__github__list_issues".into(),
             ],
             state_dir: None,
+            codex_home: None,
         };
         let ids = |line: &Value| -> Vec<String> {
             line["mcp_servers"]

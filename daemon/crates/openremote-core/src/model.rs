@@ -77,6 +77,8 @@ pub struct Harness {
     /// Missing, never a guessed sign-in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signed_in: Option<bool>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub app_accounts_supported: bool,
     /// Running on an API key, with no browser login. The chat can start;
     /// sign-in stays optional.
     #[serde(default)]
@@ -384,6 +386,9 @@ impl ModelEndpoint {
 pub struct Session {
     pub id: SessionId,
     pub harness: String,
+    /// The provider account selected on the executor. None uses the App's usual configuration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_account_id: Option<String>,
     /// The folder the chat runs in - absent when it belongs to no project
     /// (it then spawns in the home folder). Absolute, validated at create
     /// time; the harness's own resolution replaces nothing here.
@@ -553,6 +558,8 @@ pub struct InstallSpec {
     /// The harness needs a runtime this machine doesn't have yet (pi on
     /// Node.js); the install waits for the human's go-ahead to set it up.
     pub needs_runtime: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub installing: bool,
 }
 
 /// One MCP server the user set up on a machine (Settings > MCP servers) -

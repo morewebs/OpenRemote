@@ -34,7 +34,7 @@ use std::io::{BufRead, Write};
 /// Append one line to a file in the working directory (the session's
 /// workspace): how a fixture tells the e2e suite what the real driver
 /// handed it - an argv, a start-time setting - without a wire of its own.
-pub fn record(file: &str, line: &str) {
+pub fn record(file: impl AsRef<std::path::Path>, line: &str) {
     use std::io::Write as _;
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
@@ -151,6 +151,12 @@ fn main() {
     // Not a harness: the desktop app's side of the daemon sidecar.
     if argv.first().is_some_and(|a| a == "sidecar-host") {
         sidecar::main_sidecar_host(&argv);
+        return;
+    }
+    if std::env::var_os("FIXTURE_CODEX_DEVICE_AUTH").is_some()
+        && argv.first().is_some_and(|arg| arg == "login")
+    {
+        codex::login_fixture(&argv);
         return;
     }
     if argv.iter().any(|a| a == "app-server") {

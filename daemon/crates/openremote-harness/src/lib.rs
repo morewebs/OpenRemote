@@ -202,6 +202,9 @@ pub struct SpawnOptions {
     /// transcripts). Each harness gets its own. None keeps a driver's older
     /// place, which is how a caller with no data folder still runs.
     pub state_dir: Option<PathBuf>,
+    /// The executor's private Codex home for an explicitly selected account.
+    /// None keeps the user's existing Codex configuration.
+    pub codex_home: Option<PathBuf>,
 }
 
 /// One MCP server a session should start, from an enabled plugin on the

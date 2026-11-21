@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CaretRight } from '@phosphor-icons/react'
 import { captureOpener, focusOpener } from './dialog-focus.js'
@@ -17,10 +17,11 @@ import './contextmenu.css'
  * items: [{ label, icon, onSelect, disabled, hint, danger }], a { header: 'Text' }
  * for a group label, { divider: true }, or { label, icon, submenu: [items] }:
  * a row whose own list opens beside the menu - on hover, a click or a tap,
- * or the right arrow (the left arrow or Esc goes back). The rules live in
- * context-menu.js.
+ * or the right arrow (the left arrow or Esc goes back). Four adjacent
+ * icon actions with inline: true share a row. The rules live in context-menu.js.
  */
 export default function ContextMenu({ x, y, items, onClose, compact = false, label = null }) {
+  const menuId = useId()
   const ref = useRef(null)
   const subRef = useRef(null)
   const rows = useRef([])
@@ -32,6 +33,7 @@ export default function ContextMenu({ x, y, items, onClose, compact = false, lab
   // On a phone, where a long press opens it, back closes it.
   useBack(true, onClose)
   const actions = menuActions(items)
+  const hasInlineActions = items.some((item) => item.inline)
   const [cursor, setCursor] = useState(actions[0]?.i ?? -1)
   // The row whose submenu is open, and the cursor inside that submenu.
   const [open, setOpen] = useState(null)
@@ -164,9 +166,15 @@ export default function ContextMenu({ x, y, items, onClose, compact = false, lab
     }
     if (actions.length === 0) return
     const at = actions.findIndex(({ i }) => i === cursor)
-    const next = stepCursor(actions, at, e.key)
+    let next = stepCursor(actions, at, e.key)
+    if (items[cursor]?.inline && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      const inlineActions = actions.filter(({ item }) => item.inline)
+      const inlineAt = inlineActions.findIndex(({ i }) => i === cursor)
+      next = stepCursor(inlineActions, inlineAt, e.key === 'ArrowLeft' ? 'ArrowUp' : 'ArrowDown')
+    }
     if (next != null) {
       e.preventDefault()
+      if (hasInlineActions) ref.current?.focus({ preventScroll: true })
       setCursor(next)
       if (next !== open) setOpen(null)
     } else if (e.key === 'ArrowRight' && items[cursor]?.submenu) {
@@ -200,7 +208,7 @@ export default function ContextMenu({ x, y, items, onClose, compact = false, lab
     }
   }
 
-  const row = (item, i, { current, onEnter, onClick, keep }) => {
+  const row = (item, i, { id, current, onEnter, onClick, onFocus, keep }) => {
     if (item.divider) return <div key={i} className="ctx-sep" role="separator" />
     if (item.header) {
       return (
@@ -212,20 +220,24 @@ export default function ContextMenu({ x, y, items, onClose, compact = false, lab
     return (
       <button
         key={i}
+        id={id}
         ref={keep}
         type="button"
         role="menuitem"
-        className={`nc-item${current ? ' cursor' : ''}${item.danger ? ' ctx-danger' : ''}`}
+        className={`nc-item${current ? ' cursor' : ''}${item.danger ? ' ctx-danger' : ''}${item.inline ? ' ctx-inline-action' : ''}`}
         disabled={item.disabled}
+        aria-label={item.inline ? item.label : undefined}
+        title={item.inline ? [item.label, item.hint].filter(Boolean).join(' · ') : undefined}
         aria-haspopup={item.submenu ? 'menu' : undefined}
         aria-expanded={item.submenu ? open === i : undefined}
         onClick={onClick}
+        onFocus={onFocus}
         onMouseEnter={onEnter}
       >
         <span className="nc-item-main">
-          {item.icon && <span className="ctx-icon">{item.icon}</span>}
+          {item.icon && <span className="ctx-icon" aria-hidden={item.inline || undefined}>{item.icon}</span>}
           <span className="nc-item-name">{item.label}</span>
-          {item.hint && <span className="ctx-hint">{item.hint}</span>}
+          {item.hint && !item.inline && <span className="ctx-hint">{item.hint}</span>}
           {item.submenu && (
             <span className="ctx-caret" aria-hidden="true">
               <CaretRight size={11} weight="bold" />
@@ -254,9 +266,10 @@ export default function ContextMenu({ x, y, items, onClose, compact = false, lab
       {createPortal(
         <div
           ref={ref}
-          className={`nc-menu ctx-menu${compact ? ' is-compact' : ''}${isMobile ? ' is-phone' : ''}`}
+          className={`nc-menu ctx-menu${compact ? ' is-compact' : ''}${isMobile ? ' is-phone' : ''}${hasInlineActions ? ' ctx-inline-actions' : ''}`}
           role="menu"
           aria-label={label}
+          aria-activedescendant={hasInlineActions && cursor >= 0 ? `${menuId}-${cursor}` : undefined}
           tabIndex={-1}
           style={{ left: x, top: y }}
           onKeyDown={onKeyDown}
@@ -265,10 +278,12 @@ export default function ContextMenu({ x, y, items, onClose, compact = false, lab
         >
           {items.map((item, i) =>
             row(item, i, {
+              id: hasInlineActions ? `${menuId}-${i}` : undefined,
               current: i === cursor,
               keep: (el) => {
                 rows.current[i] = el
               },
+              onFocus: hasInlineActions ? () => setCursor(i) : undefined,
               onEnter: () => {
                 if (item.disabled) return
                 setCursor(i)

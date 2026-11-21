@@ -178,6 +178,7 @@ fn installable_for(
         .filter_map(|(id, name)| {
             let recipe = recipe_for(id, os, arch, avx2)?;
             Some(InstallSpec {
+                installing: false,
                 harness_id: id.to_string(),
                 name: name.to_string(),
                 command: recipe.command,

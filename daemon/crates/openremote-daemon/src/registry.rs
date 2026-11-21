@@ -542,6 +542,7 @@ fn harness_from(id: &str, name: &str, resolution: &Resolution, version: Option<&
         fast_supported: fast_supported(id, version),
         honors: honors(id, version),
         signed_in: None,
+        app_accounts_supported: false,
         using_api_key: false,
         default_model: None,
         default_effort: None,
@@ -596,11 +597,12 @@ impl HarnessRegistry {
         // Sign-in is a separate fact from "the CLI is installed". Only a
         // harness with its own status command is asked; the others stay
         // unknown rather than guessed.
-        let (s_claude, s_codex, s_grok, s_opencode) = tokio::join!(
+        let (s_claude, s_codex, s_grok, s_opencode, codex_accounts) = tokio::join!(
             probe_signed_in(&claude, &["auth", "status"]),
             probe_signed_in(&codex, &["login", "status"]),
             probe_grok_signed_in(&grok),
             probe_signed_in(&opencode, &["providers", "list"]),
+            probe_codex_device_login(&codex, overrides.contains_key("codex")),
         );
 
         let mut entries = Vec::new();
@@ -629,6 +631,8 @@ impl HarnessRegistry {
         push("opencode", "OpenCode", opencode, v_opencode);
         push("agy", "Antigravity", agy, v_agy);
         for entry in &mut entries {
+            entry.harness.app_accounts_supported =
+                entry.harness.id == "codex" && entry.harness.available && codex_accounts;
             entry.harness.signed_in = match entry.harness.id.as_str() {
                 "claude" => s_claude,
                 "codex" => s_codex,
@@ -685,6 +689,7 @@ impl HarnessRegistry {
                     fast_supported: spec.traits.fast,
                     honors: plugin_honors(spec),
                     signed_in: answer.signed_in,
+                    app_accounts_supported: false,
                     using_api_key: false,
                     default_model: spec.default_model.clone(),
                     default_effort: None,
@@ -960,6 +965,17 @@ async fn probe_grok_signed_in(resolution: &Resolution) -> Option<bool> {
 /// `None` when the command cannot be asked (fixture binaries, a CLI that
 /// did not answer). A fixture must not be reported as signed out.
 async fn probe_signed_in(resolution: &Resolution, args: &[&str]) -> Option<bool> {
+    parse_signed_in(&probe_words(resolution, args).await?)
+}
+
+async fn probe_codex_device_login(resolution: &Resolution, fixture: bool) -> bool {
+    !fixture
+        && probe_words(resolution, &["login", "--help"])
+            .await
+            .is_some_and(|help| help.split_whitespace().any(|word| word == "--device-auth"))
+}
+
+async fn probe_words(resolution: &Resolution, args: &[&str]) -> Option<String> {
     let (program, mut argv): (PathBuf, Vec<std::ffi::OsString>) = match resolution {
         Resolution::Executable(path) => (path.clone(), Vec::new()),
         Resolution::NodeScript { node, script } => {
@@ -983,12 +999,11 @@ async fn probe_signed_in(resolution: &Resolution, args: &[&str]) -> Option<bool>
         .await
         .ok()?
         .ok()?;
-    let text = format!(
+    Some(format!(
         "{}{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
-    );
-    parse_signed_in(&text)
+    ))
 }
 
 /// The harness's own status words. Anything else - a fixture's usage

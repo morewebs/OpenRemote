@@ -7,6 +7,7 @@ import { useDialog } from './dialog-focus.js'
 import { errorCopy } from './error-copy.js'
 import { addressLabel, readSignInWords } from './signin-words.js'
 import { harnessName } from './harness-names.js'
+import { relayAppAccountSignIn } from './app-accounts.js'
 
 // The harness's own sign-in, relayed. The daemon runs the CLI's own
 // login command on the machine; the CLI's words stream in here (the
@@ -19,10 +20,11 @@ import { harnessName } from './harness-names.js'
 // thing a person acts on - open that address - and keeps every word the harness
 // said behind a press, verbatim, for the times the reading and the words
 // disagree.
-export default function SignInModal({ harnessId, onDone, deviceId = null }) {
+export default function SignInModal({ harnessId, onDone, deviceId = null, accountId = null, accountLabel = null, machineName = null }) {
   useBack(true, onDone)
-  const { signIn, feedSignIn, stopSignIn } = useConsole()
+  const { apiFor, devices, signIn, feedSignIn, stopSignIn } = useConsole()
   const panelRef = useRef(null)
+  const relayRef = useRef(null)
   const [view, setView] = useState(null)
   const [error, setError] = useState(null)
   const [answer, setAnswer] = useState('')
@@ -44,16 +46,21 @@ export default function SignInModal({ harnessId, onDone, deviceId = null }) {
   // banner).
   useEffect(() => {
     let cancelled = false
-    const relay = signIn(harnessId, { onBeat: (beat) => !cancelled && setView(beat), deviceId })
+    const onBeat = (beat) => { if (!cancelled) setView(beat) }
+    const relay = accountId
+      ? relayAppAccountSignIn(apiFor(deviceId), harnessId, accountId, onBeat)
+      : signIn(harnessId, { onBeat, deviceId })
+    relayRef.current = relay
     relay.promise.catch((err) => {
       if (!cancelled && !err?.cancelled) setError(errorCopy(err))
     })
     return () => {
       cancelled = true
       relay.cancel()
+      relayRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [harnessId])
+  }, [harnessId, deviceId, accountId])
 
   // The transcript follows its own tail - the newest word is on screen.
   useEffect(() => {
@@ -64,6 +71,8 @@ export default function SignInModal({ harnessId, onDone, deviceId = null }) {
   const running = view ? !view.done : true
   const read = readSignInWords(view?.lines)
   const wordsOpen = showWords ?? !read.address
+  const deviceCode = accountId ? read.words.find((line) => /^[A-Z0-9][A-Z0-9-]{5,15}$/.test(line)) : null
+  const where = machineName ?? devices?.find((device) => device.id === deviceId)?.name ?? 'This computer'
 
   // Opening the address in the person's own browser: the one the CLI already
   // tried to open, offered again for the case where it did not, and the system
@@ -79,10 +88,10 @@ export default function SignInModal({ harnessId, onDone, deviceId = null }) {
     }
   }
 
-  const copyAddress = async () => {
+  const copyValue = async (value) => {
     setCopied(null)
     try {
-      await navigator.clipboard.writeText(read.address)
+      await navigator.clipboard.writeText(value)
       setCopied('copied')
     } catch {
       // The clipboard is a permission, and a refusal is the person's to see.
@@ -104,7 +113,7 @@ export default function SignInModal({ harnessId, onDone, deviceId = null }) {
     setClosing(true)
     // Closing a running relay stops it - an abandoned browser flow
     // should not block the next attempt.
-    if (running && !stopping) {
+    if (!accountId && running && !stopping) {
       setStopping(true)
       stopSignIn(harnessId, deviceId).catch(() => {})
     }
@@ -134,6 +143,9 @@ export default function SignInModal({ harnessId, onDone, deviceId = null }) {
             <X size={14} weight="bold" />
           </button>
         </div>
+        {accountId && (
+          <p className="si-hint pv">{[accountLabel, where].filter(Boolean).join(' · ')}</p>
+        )}
 
         {error && (
           <>
@@ -149,11 +161,11 @@ export default function SignInModal({ harnessId, onDone, deviceId = null }) {
             <p className="si-hint">
               {settled
                 ? settled.ok
-                  ? 'The app answered with its own sign-in words.'
-                  : `The login command finished on its own: ${settled.text}`
+                  ? accountId ? 'Account ready.' : 'The app answered with its own sign-in words.'
+                  : accountId ? settled.text : `The login command finished on its own: ${settled.text}`
                 : read.address
-                  ? 'Finish this in your browser. The app opened a page; this button opens it again.'
-                  : 'The app’s own login command is running - its words appear below.'}
+                  ? accountId ? 'Open the sign-in page and enter the code below.' : 'Finish this in your browser. The app opened a page; this button opens it again.'
+                  : accountId ? 'Getting a sign-in code from Codex…' : 'The app’s own login command is running - its words appear below.'}
             </p>
 
             {read.address && (
@@ -166,18 +178,30 @@ export default function SignInModal({ harnessId, onDone, deviceId = null }) {
                   <span className="si-open-host" title={read.address}>
                     {addressLabel(read.address)}
                   </span>
-                  <button className="si-copy" onClick={copyAddress}>
-                    <Copy size={12} />
-                    {copied === 'copied' ? 'Copied' : copied === 'refused' ? 'Copy refused' : 'Copy link'}
-                  </button>
+                  {!accountId && (
+                    <button className="si-copy" onClick={() => copyValue(read.address)}>
+                      <Copy size={12} />
+                      {copied === 'copied' ? 'Copied' : copied === 'refused' ? 'Copy refused' : 'Copy link'}
+                    </button>
+                  )}
                 </div>
                 {openError && <p className="si-hint si-hint--error">{openError}</p>}
               </div>
             )}
 
+            {deviceCode && (
+              <div className="si-device-code">
+                <code>{deviceCode}</code>
+                <button type="button" className="si-copy" onClick={() => copyValue(deviceCode)}>
+                  <Copy size={12} />
+                  {copied === 'copied' ? 'Copied' : copied === 'refused' ? 'Copy refused' : 'Copy code'}
+                </button>
+              </div>
+            )}
+
             {read.aside && <p className="si-aside">{read.aside}</p>}
 
-            {read.words.length > 0 && (
+            {!accountId && read.words.length > 0 && (
               <button
                 type="button"
                 className="si-words-toggle"
@@ -190,7 +214,7 @@ export default function SignInModal({ harnessId, onDone, deviceId = null }) {
               </button>
             )}
 
-            {wordsOpen && (
+            {!accountId && wordsOpen && (
               <div className="si-transcript" ref={transcriptRef}>
                 {(view?.lines ?? []).map((line, i) => (
                   <div className="si-line" key={i}>{line}</div>
@@ -199,7 +223,7 @@ export default function SignInModal({ harnessId, onDone, deviceId = null }) {
               </div>
             )}
 
-            {running && (
+            {running && !accountId && (
               <div className="si-answer">
                 <input
                   className="si-input"
@@ -221,7 +245,7 @@ export default function SignInModal({ harnessId, onDone, deviceId = null }) {
                 </button>
               </div>
             )}
-            {running && (
+            {running && (!accountId || view?.run_id) && (
               <button
                 className="si-stop"
                 onClick={() => {
@@ -230,7 +254,8 @@ export default function SignInModal({ harnessId, onDone, deviceId = null }) {
                   // "Stopping" for the rest of the modal's life while the login
                   // command was still running, and the next attempt then met a
                   // sign-in already in progress with nothing explaining it.
-                  stopSignIn(harnessId, deviceId)
+                  const stopped = accountId ? relayRef.current?.stop() : stopSignIn(harnessId, deviceId)
+                  Promise.resolve(stopped)
                     .catch((err) => setError(errorCopy(err)))
                     .finally(() => setStopping(false))
                 }}

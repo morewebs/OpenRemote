@@ -46,3 +46,72 @@
 .rn-primary:hover:not(:disabled) {
   filter: brightness(1.08);
 }
+
+/* Keep the actions under the editor, not in its scrolling field and note. */
+.dv-modal-backdrop[data-rename-sheet] {
+  inset: auto;
+  top: var(--rn-viewport-top, 0px);
+  left: var(--rn-viewport-left, 0px);
+  width: var(--rn-viewport-width, 100vw);
+  height: var(--rn-viewport-height, 100dvh);
+  box-sizing: border-box;
+  align-items: end;
+  padding: max(8px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right))
+    max(8px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+}
+
+[data-rename-sheet] .dv-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 440px);
+  max-height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 12px 16px 16px;
+  border-radius: 20px;
+  overscroll-behavior: contain;
+}
+
+[data-rename-sheet] .dv-modal-head,
+[data-rename-sheet] .ctx-modal-actions {
+  flex: none;
+}
+
+[data-rename-sheet] .dv-modal-head {
+  margin-bottom: 8px;
+}
+
+[data-rename-sheet] .dv-modal-title {
+  font-size: 17px;
+}
+
+[data-rename-sheet] .dv-modal-close {
+  width: 44px;
+  height: 44px;
+  flex: none;
+}
+
+[data-rename-sheet] .rn-details {
+  min-height: min(48px, 100%);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
+}
+
+[data-rename-sheet] .rn-input {
+  height: 48px;
+  font-size: 16px;
+}
+
+[data-rename-sheet] .ctx-modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+[data-rename-sheet] .ctx-modal-actions .pn-btn {
+  min-height: 44px;
+}

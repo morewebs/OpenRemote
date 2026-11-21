@@ -1022,6 +1022,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("or-tombstone-{}", uuid::Uuid::new_v4()));
         let app = test_app(&dir);
         let session = |executor: Option<DeviceId>| openremote_core::Session {
+            app_account_id: None,
             id: SessionId::new(),
             harness: "claude".into(),
             workspace: None,

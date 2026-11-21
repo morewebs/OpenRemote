@@ -2084,6 +2084,7 @@ mod tests {
 
     fn session() -> Session {
         Session {
+            app_account_id: None,
             id: SessionId::new(),
             harness: "claude".into(),
             workspace: Some("/tmp/w".into()),

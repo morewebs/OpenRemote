@@ -40,6 +40,7 @@ export function chatFromSession(session) {
   const chat = {
     id: session.id,
     harness: session.harness,
+    appAccountId: session.app_account_id ?? null,
     status: chatStatus(session.status),
     workspace: session.workspace,
     project: workspaceName(session.workspace),

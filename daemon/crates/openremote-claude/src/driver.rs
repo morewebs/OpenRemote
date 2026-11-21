@@ -1021,6 +1021,7 @@ mod tests {
             // none. This test is about the argv shape, not the grants.
             allowed_tools: Vec::new(),
             state_dir: None,
+            codex_home: None,
         };
         let argv = build_argv(&opts).expect("argv builds");
         let joined = argv

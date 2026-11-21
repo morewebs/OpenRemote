@@ -134,6 +134,28 @@
   text-overflow: ellipsis;
 }
 
+.ctx-menu.ctx-inline-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-content: start;
+}
+
+.ctx-inline-actions > :not(.ctx-inline-action) {
+  grid-column: 1 / -1;
+}
+
+.ctx-inline-action .nc-item-main {
+  justify-content: center;
+}
+
+.ctx-inline-action .nc-item-name {
+  display: none;
+}
+
+.ctx-inline-action .ctx-icon {
+  color: var(--text-2);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ctx-menu {
     animation: none;

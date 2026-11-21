@@ -17,6 +17,7 @@ import {
   ArrowBendUpLeft,
   ImageSquare,
   GitBranch,
+  UserCircle,
 } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { chatAccess, deviceName, signedIn } from './cloud.js'
@@ -29,7 +30,7 @@ import { HarnessMark } from './brand-marks.jsx'
 import HarnessManagerModal from './HarnessManagerModal.jsx'
 import { pickable } from './harness-manager.js'
 import { appSelection } from './app-selection.js'
-import SignInModal from './SignInModal.jsx'
+import { useAppAccounts } from './use-app-accounts.js'
 import { isCommandRun } from './command-card.js'
 import { renderMarkdown } from './markdown.js'
 import { bodyPreview, MAX_RENDER_LINES, shouldRenderLive } from './render-budget.js'
@@ -614,10 +615,15 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
   const [endpointModels, setEndpointModels] = useState([])
   const [manageModels, setManageModels] = useState(false)
   const [managingHarnesses, setManagingHarnesses] = useState(false)
+  const accountState = useAppAccounts(
+    apiFor,
+    elsewhere ? chat.executor : null,
+    !web && !isMobile && reachable && chat.appAccountId ? chat.harness : null,
+  )
+  const boundAccount = accountState.accounts.find((account) => account.id === chat.appAccountId)
   const [appCaps, setAppCaps] = useState(null)
   const [appError, setAppError] = useState(null)
   const [appAttempt, setAppAttempt] = useState(0)
-  const [signInFor, setSignInFor] = useState(null)
   const [customDraft, setCustomDraft] = useState('')
   const scrollRef = useRef(null)
   const composerRef = useRef(null)
@@ -697,7 +703,8 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
   // The picker's custom rows, grouped under each endpoint's name. A
   // composite id carries the endpoint back out (model ids never hold a
   // newline - the daemon rejects control characters).
-  const customItems = endpointModels.map((m) => ({
+  const customEndpoints = !chat.appAccountId && Boolean(harness?.custom_endpoint_supported)
+  const customItems = (customEndpoints ? endpointModels : []).map((m) => ({
     id: `${m.endpoint_id}\n${m.model}`,
     name: prettyModelName(m.display_name ?? m.model),
     group: m.endpoint_name,
@@ -718,10 +725,10 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
   ]
   const endpointById = new Map(endpoints.map((e) => [e.id, e]))
   const chatEndpointName = chat.endpoint_id ? (endpointById.get(chat.endpoint_id)?.name ?? 'a custom endpoint') : null
-  const defaultEndpoint = endpoints.find((e) => e.is_default) ?? null
-  const canSwitchEndpoint = !chat.running && reachable && (harness?.custom_endpoint_supported ?? false)
+  const defaultEndpoint = chat.appAccountId ? null : endpoints.find((e) => e.is_default) ?? null
+  const canSwitchEndpoint = !chat.running && reachable && customEndpoints
   const reloadEndpoints = async () => {
-    if (!harness?.custom_endpoint_supported) return
+    if (!customEndpoints) return
     const rows = (await endpointsFor(chat.harness, elsewhere ? chat.executor : null).catch(() => [])) ?? []
     setEndpoints(rows)
     const live = rows.filter((e) => e.enabled)
@@ -890,7 +897,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
         setModelsPending(false)
       }
     })
-    if (harness?.custom_endpoint_supported) {
+    if (customEndpoints) {
       endpointsFor(chat.harness, elsewhere ? chat.executor : null).then((rows) => {
         if (cancelled) return
         setEndpoints(rows ?? [])
@@ -924,7 +931,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
     // machine kept the catalog of where it ran before. An empty answer is
     // not cached (modelsFor), so a retry is cheap.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chat.harness, connection.state, elsewhere ? chat.executor : null])
+  }, [chat.harness, connection.state, customEndpoints, elsewhere ? chat.executor : null])
 
   const boxSpot = (edge = 'left') => {
     const rect = composerRef.current?.querySelector('.cv-box')?.getBoundingClientRect()
@@ -1278,6 +1285,18 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
           )}
           <span className="cv-fact">{harnessText}</span>
           {elsewhere && <span className="cv-fact">on <span className="pv">{where}</span></span>}
+          {!web && !isMobile && reachable && chat.appAccountId && (
+            <button
+              type="button"
+              className="cv-fact-btn"
+              title="Manage the App account for this chat"
+              onClick={() => setManagingHarnesses(chat.harness)}
+            >
+              <UserCircle size={13} />
+              {boundAccount?.status === 'disconnected' && 'Reconnect '}
+              <span className="pv">{boundAccount?.label ?? 'App account'}</span>
+            </button>
+          )}
           {chat.model && (
             <span className="cv-fact" title={chat.model}>
               {modelDisplayName(models, chat.model)}
@@ -1687,7 +1706,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
                     m.group ? <span className="nc-item-sub">via {m.group}</span> : null
                   }
                   footer={
-                    harness?.custom_endpoint_supported ? (
+                    customEndpoints ? (
                       <button
                         type="button"
                         onClick={() => {
@@ -1704,7 +1723,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
               {(canChange.model ? modelItems.length > 0 : Boolean(chat.model)) && (
                 <span className="nc-via">via</span>
               )}
-              {harness?.custom_endpoint_supported && (chat.endpoint_id || endpoints.length > 0) && (
+              {customEndpoints && (chat.endpoint_id || endpoints.length > 0) && (
                 canSwitchEndpoint ? (
                   <button
                     type="button"
@@ -1784,7 +1803,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
                   onChooseApp({ seed, composerKey })
                 }}
                 footer={appError ? <button type="button" onClick={() => setAppAttempt(n => n + 1)}>Retry</button>
-                  : !web && !isMobile && !elsewhere ? <button type="button" onClick={() => { hidePicker(); setManagingHarnesses(true) }}>Manage apps…</button> : null}
+                  : !web && !isMobile && reachable ? <button type="button" onClick={() => { hidePicker(); setManagingHarnesses(true) }}>Manage apps…</button> : null}
               />}
               {canChange.effort && efforts.length > 0 && (
                 <div className="nc-effort-wrap">
@@ -1928,14 +1947,15 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
           onClose={() => setSlashDialog(null)} />}
         {managingHarnesses && !web && createPortal(
           <HarnessManagerModal
-            onClose={() => setManagingHarnesses(false)}
-            onSignIn={(id) => {
+            initialDeviceId={elsewhere ? chat.executor : null}
+            initialHarnessId={typeof managingHarnesses === 'string' ? managingHarnesses : null}
+            onClose={() => {
               setManagingHarnesses(false)
-              setSignInFor(id)
+              accountState.refresh()
+              if (elsewhere) setAppAttempt((attempt) => attempt + 1)
             }}
           />, document.body
         )}
-        {signInFor && createPortal(<SignInModal harnessId={signInFor} onDone={() => setSignInFor(null)} />, document.body)}
         {manageModels && createPortal(
           <EndpointManagerModal
             harness={chat.harness}

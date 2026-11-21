@@ -171,6 +171,7 @@ function Shell() {
   // The sidebar's docked-vs-overlay shape is the viewport's, not a mount-time
   // guess: crossing 640px live swaps the layout (the alternative - reading
   // innerWidth once at mount - left the sidebar overlaid after narrowing).
+  const [cloudNoticeTarget, setCloudNoticeTarget] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(() =>
     typeof window === 'undefined' ? true : window.matchMedia('(min-width: 640px)').matches,
   )
@@ -745,10 +746,10 @@ function Shell() {
     // one thing everywhere it can be started.
     const items = [
       ...(full ? [{ header: `${MAX_PANES} panes is the most` }] : []),
-      { label: 'Split right', icon: <ArrowRight size={14} />, hint: kb.label('split-right'), disabled: blocked('row', false), onSelect: split('row', false) },
-      { label: 'Split down', icon: <ArrowDown size={14} />, hint: kb.label('split-down'), disabled: blocked('col', false), onSelect: split('col', false) },
-      { label: 'Split left', icon: <ArrowLeft size={14} />, disabled: blocked('row', true), onSelect: split('row', true) },
-      { label: 'Split up', icon: <ArrowUp size={14} />, disabled: blocked('col', true), onSelect: split('col', true) },
+      { label: 'Split right', inline: true, icon: <ArrowRight size={14} />, hint: kb.label('split-right'), disabled: blocked('row', false), onSelect: split('row', false) },
+      { label: 'Split down', inline: true, icon: <ArrowDown size={14} />, hint: kb.label('split-down'), disabled: blocked('col', false), onSelect: split('col', false) },
+      { label: 'Split left', inline: true, icon: <ArrowLeft size={14} />, disabled: blocked('row', true), onSelect: split('row', true) },
+      { label: 'Split up', inline: true, icon: <ArrowUp size={14} />, disabled: blocked('col', true), onSelect: split('col', true) },
     ]
     const title = chats[v]?.title
     if (isChatView(v) && title) {
@@ -1293,6 +1294,7 @@ function Shell() {
       open={sidebarOpen}
       active={sidebarActive}
       mode={mode}
+      cloudNoticeSlot={sidebarOpen && !isMobile ? setCloudNoticeTarget : undefined}
       onMode={switchMode}
       onSelect={(id) => (POPUP_VIEWS.includes(id) ? showPopup(id) : openInFocus(id))}
       onSplit={openBeside}
@@ -1407,7 +1409,7 @@ function Shell() {
                 </div>
               </div>
             )}
-            <CloudNotices />
+            <CloudNotices reviewTarget={sidebarOpen && !isMobile ? cloudNoticeTarget : null} />
             <div className="main-row">
               {workspaceNotice && <div className="workspace-notice" role="status">{workspaceNotice}<button type="button" aria-label="Dismiss layout notice" onClick={() => setWorkspaceNotice(null)}><X size={16} /></button></div>}
               {/* One frame for the main area, split or not: with a single

@@ -99,6 +99,9 @@ async fn a_desktop_drives_a_machine_through_the_relay_and_nothing_more() {
     let refused = call(&a, "GET", &format!("/devices/{id_b}/capabilities"), None).await;
     assert_eq!(refused.status, 409, "{}", refused.raw);
     assert_eq!(refused.body["code"], "not_a_machine");
+    let accounts_path = format!("/devices/{id_b}/harnesses/codex/accounts");
+    let refused = call(&a, "GET", &accounts_path, None).await;
+    assert_eq!(refused.body["code"], "not_a_machine");
 
     // Made a machine from the other desktop, it answers with its own API.
     let made = call(
@@ -119,6 +122,44 @@ async fn a_desktop_drives_a_machine_through_the_relay_and_nothing_more() {
     let dirs = call(&a, "GET", &format!("/devices/{id_b}/fs/dirs"), None).await;
     assert_eq!(dirs.status, 200, "{}", dirs.raw);
     assert!(dirs.body["dirs"].is_array());
+    let accounts = call(&a, "GET", &accounts_path, None).await;
+    assert_eq!(accounts.status, 409, "fixture App: {}", accounts.raw);
+    assert!(
+        accounts.raw.contains("managed accounts"),
+        "{}",
+        accounts.raw
+    );
+    let update_account = call(
+        &a,
+        "PATCH",
+        &format!("{accounts_path}/{}", uuid::Uuid::new_v4()),
+        Some(json!({"request_id": "patch-foreign-app-account", "label": "Work"})),
+    )
+    .await;
+    assert_eq!(update_account.status, 409, "{}", update_account.raw);
+    assert!(
+        update_account.raw.contains("managed accounts"),
+        "{}",
+        update_account.raw
+    );
+    let foreign_account = call(
+        &a,
+        "POST",
+        "/sessions/with-app-account",
+        Some(json!({
+            "request_id": "foreign-app-account",
+            "device_id": id_b,
+            "harness": "claude",
+            "app_account_id": uuid::Uuid::new_v4().to_string()
+        })),
+    )
+    .await;
+    assert_eq!(foreign_account.status, 409, "{}", foreign_account.raw);
+    assert!(
+        foreign_account.raw.contains("managed accounts"),
+        "{}",
+        foreign_account.raw
+    );
 
     // Only what the allowlist names reaches a peer; Cloud's own routes
     // aren't even routed for one.

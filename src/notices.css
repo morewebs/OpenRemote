@@ -73,3 +73,234 @@
 .cn-stack + .cn-stack {
   padding-top: 6px;
 }
+
+.cn-sidebar-slot:empty {
+  display: none;
+}
+
+.cn-card {
+  anchor-name: --cloud-device-card;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  inline-size: min(100%, 320px);
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-app);
+}
+
+.cn-card-icon {
+  display: flex;
+  flex: none;
+  padding-block-start: 1px;
+  color: var(--accent);
+}
+
+.cn-card-title,
+.cn-panel h2,
+.cn-device-name {
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cn-review-trigger,
+.cn-panel-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cn-review-trigger:hover,
+.cn-panel-close:hover {
+  color: var(--text-1);
+}
+
+.cn-review-trigger:hover {
+  text-decoration: underline;
+}
+
+.cn-panel {
+  box-sizing: border-box;
+  inset: 96px auto auto 24px;
+  inline-size: min(320px, calc(100vw - 32px));
+  max-block-size: min(440px, 65dvh);
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid rgb(255 255 255 / 24%);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg-side), var(--text-1) 5%);
+  color: var(--text-1);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 50%);
+}
+
+.cn-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.cn-panel::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: var(--bg-active);
+}
+
+.cn-panel::-webkit-scrollbar-thumb:hover {
+  background: rgb(255 255 255 / 14%);
+}
+
+@supports (position-area: bottom span-right) {
+  .cn-panel {
+    position-anchor: --cloud-device-card;
+    position-area: bottom span-right;
+    position-try-fallbacks: flip-inline, flip-block;
+    inset: auto;
+    margin-block: 6px;
+  }
+}
+
+.cn-panel-header {
+  position: sticky;
+  z-index: 1;
+  inset-block-start: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: inherit;
+}
+
+.cn-panel h2,
+.cn-device-name {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cn-panel-close {
+  flex: none;
+  padding: 3px;
+}
+
+.cn-device-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cn-device + .cn-device {
+  border-top: 1px solid var(--line);
+}
+
+.cn-device-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.cn-device-toggle:focus-visible {
+  outline-offset: -2px;
+}
+
+.cn-device-toggle:hover:not(:disabled),
+.cn-device-toggle[aria-expanded='true'],
+.cn-device-details {
+  background: var(--bg-hover);
+}
+
+.cn-device-toggle svg {
+  flex: none;
+}
+
+.cn-device-toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+.cn-device-summary {
+  display: grid;
+  min-width: 0;
+}
+
+.cn-device-details {
+  padding: 0 12px 12px;
+}
+
+.cn-device-meta,
+.cn-confirm p {
+  margin: 3px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.cn-device-details > .cn-device-meta {
+  margin-top: 0;
+}
+
+.cn-device-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.cn-device-actions .cn-btn {
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 5px;
+}
+
+.cn-device-actions .cn-recognize {
+  background: var(--bg-active);
+  color: var(--text-1);
+}
+
+.cn-device-actions .cn-revoke:hover:not(:disabled) {
+  color: var(--red);
+}
+
+.cn-device-actions .cn-btn:not(:disabled) {
+  cursor: pointer;
+}
+
+.cn-device-actions .cn-btn:disabled {
+  opacity: 0.55;
+}
+
+.cn-device-actions .cn-danger,
+.cn-confirm .cn-device-error {
+  color: var(--red);
+}
+
+@media (max-width: 639px) {
+  .cn-panel {
+    position-area: none;
+    position-try-fallbacks: none;
+    inset: auto 0 0;
+    inline-size: 100%;
+    max-inline-size: none;
+    max-block-size: 75dvh;
+    margin: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+}

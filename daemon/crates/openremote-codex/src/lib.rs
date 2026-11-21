@@ -15,11 +15,15 @@
 //! for commands and file changes. Checked against the schema of codex 0.162.
 
 pub mod driver;
+mod managed_account;
 pub mod resolve;
 
 use std::path::Path;
 
 pub use driver::{Driver, commands, models};
+pub use managed_account::{
+    configure_managed_account, managed_identity, managed_identity_from_auth,
+};
 pub use openremote_harness::{DriverError, DriverEvent, Resolution, SpawnOptions};
 
 /// Find the Codex CLI. `override` wins (tests point it at the fixture

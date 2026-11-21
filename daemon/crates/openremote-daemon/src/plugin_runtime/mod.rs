@@ -661,6 +661,7 @@ impl PluginRuntime {
                         false,
                         None,
                         None,
+                        None,
                     )
                     .await
                     .map_err(failed)?;

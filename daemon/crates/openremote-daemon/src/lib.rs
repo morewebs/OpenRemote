@@ -5,6 +5,7 @@
 
 pub mod adapt;
 pub mod app;
+mod app_accounts;
 pub mod browser;
 pub mod cloud_http;
 pub mod command_watch;

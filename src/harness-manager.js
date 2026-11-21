@@ -36,6 +36,16 @@ export function capabilityWords(row) {
   return HONORS.map(([key, label]) => ({ key, label, on: honors[key] === true }))
 }
 
+// The response includes the device requested, even though its machine ID is
+// local to the daemon. Switching devices must hide another daemon's response.
+export function appsInventoryFor(inventory, deviceId, online) {
+  return online && inventory?.deviceId === deviceId ? inventory : null
+}
+
+export function selectedApp(rows, appId) {
+  return rows.find((row) => row.id === appId) ?? rows.find((row) => row.installed) ?? rows[0]
+}
+
 // One row per harness the daemon knows, always: the manager is the
 // inventory of all six, not just the installed ones. `installable` is
 // null while the machines list hasn't answered yet - a missing row then
@@ -56,17 +66,23 @@ export function harnessRows(capabilities, installable) {
       const probe = [h.version, h.path].filter(Boolean).join(' · ') || null
       const signedOut = h.signed_in === false
       const relayable = signedOut && SIGNIN_HARNESSES.has(h.id)
+      const usingApiKey = h.using_api_key && h.signed_in !== true
+      const defaultSignin = usingApiKey ? 'Using API key' : signedOut ? 'Not signed in' : 'Ready'
+      const supportsAccounts = h.app_accounts_supported === true
       return {
         id: h.id,
         name,
-        statusLabel: signedOut ? 'Not signed in' : 'Ready',
-        ready: !signedOut,
+        statusLabel: supportsAccounts ? 'Installed' : defaultSignin,
+        ready: !signedOut || usingApiKey,
+        installed: true,
+        defaultSignin,
+        canSignIn: relayable,
         // A harness the daemon cannot sign in for says how its own sign-in works,
         // in the note slot the missing rows use: the row states a fault, and it used
         // to offer nothing at all beside it.
         detail: signedOut && !relayable ? `${name} signs in through its own setup, in a terminal.` : probe,
         detailKind: signedOut && !relayable ? 'note' : 'mono',
-        action: relayable ? 'signin' : 'none',
+        action: supportsAccounts ? 'accounts' : relayable ? 'signin' : 'none',
         caps: capabilityWords(h),
       }
     }
@@ -75,8 +91,10 @@ export function harnessRows(capabilities, installable) {
       return {
         id: h.id,
         name,
-        statusLabel: 'Not installed',
+        statusLabel: spec.installing ? 'Installing…' : 'Not installed',
         ready: false,
+        installing: spec.installing === true,
+        installCommand: spec.command,
         detail: problem,
         detailKind: 'note',
         // A harness that needs a runtime set up first waits for the

@@ -799,10 +799,10 @@ export function ConsoleProvider({ children }) {
   const createChat = useCallback(
     async (
       text, workspace, harness, model, fast, effort, permissionMode,
-      { deviceId = null, synced = false, mentionedChats = [], endpointId = null, attachments = [], returnDelivery = false } = {},
+      { deviceId = null, synced = false, mentionedChats = [], endpointId = null, appAccountId = null, attachments = [], returnDelivery = false } = {},
     ) => {
       const session = await api.createSession({
-        harness, workspace, model, effort, fast, permissionMode, endpointId, deviceId, synced,
+        harness, workspace, model, effort, fast, permissionMode, endpointId, appAccountId, deviceId, synced,
       })
       ensureChat(session)
       // The prompt can take a moment. The caller opens the chat from the id
@@ -1344,10 +1344,9 @@ export function ConsoleProvider({ children }) {
   // Capabilities are re-read too: the picker, the settings list, and the
   // harness manager all read availability from there, not from machines.
   const installHarness = useCallback(
-    async (machineId, harnessId, options) => {
-      await api.installHarness(machineId, harnessId, options)
-      await refreshMachines()
-      await refreshCapabilities()
+    async (machineId, harnessId, { deviceId = null, ...options } = {}) => {
+      await api.device(deviceId).installHarness(machineId, harnessId, options)
+      if (!deviceId) await Promise.all([refreshMachines(), refreshCapabilities()])
     },
     [api, refreshMachines, refreshCapabilities],
   )

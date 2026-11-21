@@ -101,6 +101,106 @@ impl SignInRun {
     pub fn stopped(&self) -> impl std::future::Future<Output = ()> + '_ {
         self.stop.notified()
     }
+
+    pub fn finish_managed(&self, result: Result<(), String>) {
+        let mut state = self.state.lock().expect("signin state lock");
+        state.lines.clear();
+        state.running = false;
+        state.done = Some(match result {
+            Ok(()) => SignInDone {
+                ok: true,
+                text: "Signed in to Codex.".into(),
+            },
+            Err(text) => SignInDone { ok: false, text },
+        });
+    }
+}
+
+#[derive(Default)]
+struct ManagedPrompt {
+    saw_url: bool,
+    next_is_code: bool,
+}
+
+impl ManagedPrompt {
+    fn line(&mut self, line: &str) -> Option<String> {
+        const DEVICE_URL: &str = "https://auth.openai.com/codex/device";
+        let line = line.trim();
+        if line == DEVICE_URL {
+            self.saw_url = true;
+            return Some(DEVICE_URL.into());
+        }
+        if self.saw_url && line.starts_with("2. Enter this one-time code") {
+            self.next_is_code = true;
+            return None;
+        }
+        if std::mem::take(&mut self.next_is_code)
+            && (6..=16).contains(&line.len())
+            && line
+                .bytes()
+                .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'-')
+            && line
+                .as_bytes()
+                .first()
+                .is_some_and(u8::is_ascii_alphanumeric)
+        {
+            return Some(line.into());
+        }
+        None
+    }
+}
+
+/// The managed flow uses only Codex's public device verification challenge.
+/// Never retain raw stdout/stderr, which could contain provider diagnostics.
+pub fn spawn_managed_login(
+    resolution: &Resolution,
+    home: &std::path::Path,
+) -> Result<(std::sync::Arc<SignInRun>, tokio::process::Child), String> {
+    let mut command = match resolution {
+        Resolution::Executable(path) => tokio::process::Command::new(path),
+        Resolution::NodeScript { node, script } => {
+            let mut command = tokio::process::Command::new(node);
+            command.arg(script);
+            command
+        }
+        Resolution::Unavailable => return Err("Codex is not installed on this machine.".into()),
+    };
+    command
+        .args(["login", "--device-auth"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true);
+    openremote_codex::configure_managed_account(&mut command, home);
+    #[cfg(windows)]
+    command.creation_flags(openremote_harness::creation_flags());
+    let mut child = command
+        .spawn()
+        .map_err(|_| "Codex could not start its sign-in command.".to_string())?;
+    let stdout = child.stdout.take().expect("stdout piped");
+    let run = std::sync::Arc::new(SignInRun {
+        state: std::sync::Mutex::new(SignInView {
+            running: true,
+            ..Default::default()
+        }),
+        stdin: tokio::sync::mpsc::channel(1).0,
+        stop: tokio::sync::Notify::new(),
+    });
+    let reader = run.clone();
+    tokio::spawn(async move {
+        use tokio::io::{AsyncBufReadExt as _, AsyncReadExt as _};
+        let mut lines = tokio::io::BufReader::new(stdout.take(16 * 1024)).lines();
+        let mut prompt = ManagedPrompt::default();
+        while let Ok(Some(line)) = lines.next_line().await {
+            if let Some(line) = prompt.line(&strip_ansi(&line)) {
+                let mut state = reader.state.lock().expect("signin state lock");
+                if state.running && state.lines.len() < 2 {
+                    state.lines.push(line);
+                }
+            }
+        }
+    });
+    Ok((run, child))
 }
 
 /// Spawn the harness's own login command with piped stdio. The returned
@@ -264,6 +364,31 @@ fn strip_ansi(line: &str) -> String {
 /// How long a login may run before the daemon gives up on it.
 pub fn timeout() -> Duration {
     TIMEOUT
+}
+
+#[cfg(test)]
+mod managed_tests {
+    use super::*;
+
+    #[test]
+    fn managed_login_relays_only_the_provider_link_and_challenge() {
+        let mut prompt = ManagedPrompt::default();
+        assert_eq!(prompt.line("AUTH-TOKN"), None);
+        assert_eq!(
+            prompt.line("https://auth.openai.com/codex/device.example"),
+            None
+        );
+        assert_eq!(
+            prompt.line("   https://auth.openai.com/codex/device"),
+            Some("https://auth.openai.com/codex/device".into()),
+        );
+        assert_eq!(
+            prompt.line("2. Enter this one-time code (expires in 15 minutes)"),
+            None
+        );
+        assert_eq!(prompt.line("   ABCD-5678"), Some("ABCD-5678".into()));
+        assert_eq!(prompt.line("SECRET-123"), None);
+    }
 }
 
 #[cfg(test)]

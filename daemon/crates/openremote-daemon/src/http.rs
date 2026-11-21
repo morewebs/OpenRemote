@@ -129,8 +129,27 @@ const PEER_ROUTES: &[(&str, &str, Tier)] = &[
     ("GET", "/harnesses/{id}/signin", Tier::Machine),
     ("POST", "/harnesses/{id}/signin/input", Tier::Machine),
     ("POST", "/harnesses/{id}/signin/stop", Tier::Machine),
+    ("GET", "/harnesses/{id}/accounts", Tier::Machine),
+    ("POST", "/harnesses/{id}/accounts", Tier::Machine),
+    ("PATCH", "/harnesses/{id}/accounts/{account}", Tier::Machine),
+    (
+        "POST",
+        "/harnesses/{id}/accounts/{account}/signin",
+        Tier::Machine,
+    ),
+    (
+        "GET",
+        "/harnesses/{id}/accounts/{account}/signin/{run}",
+        Tier::Machine,
+    ),
+    (
+        "POST",
+        "/harnesses/{id}/accounts/{account}/signin/{run}/stop",
+        Tier::Machine,
+    ),
     ("POST", "/machines/{id}/harnesses", Tier::Machine),
     ("POST", "/sessions", Tier::Machine),
+    ("POST", "/sessions/with-app-account", Tier::Machine),
     // A project lives on the machine that owns its folder, so the phone
     // and every other device manage them there.
     ("GET", "/projects", Tier::Machine),
@@ -242,6 +261,26 @@ fn api_routes() -> Router<Arc<App>> {
         )
         .route("/harnesses/{id}/signin/input", post(sign_in_input))
         .route("/harnesses/{id}/signin/stop", post(stop_sign_in))
+        .route(
+            "/harnesses/{id}/accounts",
+            get(list_app_accounts).post(create_app_account),
+        )
+        .route(
+            "/harnesses/{id}/accounts/{account}",
+            axum::routing::patch(update_app_account),
+        )
+        .route(
+            "/harnesses/{id}/accounts/{account}/signin",
+            post(start_app_account_sign_in),
+        )
+        .route(
+            "/harnesses/{id}/accounts/{account}/signin/{run}",
+            get(app_account_sign_in),
+        )
+        .route(
+            "/harnesses/{id}/accounts/{account}/signin/{run}/stop",
+            post(stop_app_account_sign_in),
+        )
         .route("/machines", get(list_machines).post(create_machine))
         .route("/machines/{id}", get(get_machine).delete(remove_machine))
         .route("/machines/{id}/harnesses", post(install_harness))
@@ -293,6 +332,7 @@ fn api_routes() -> Router<Arc<App>> {
         .route("/projects", get(list_projects).post(save_project))
         .route("/projects/{id}", axum::routing::delete(remove_project))
         .route("/sessions", get(list_sessions).post(create_session))
+        .route("/sessions/with-app-account", post(create_account_session))
         .route("/sessions/{id}", get(get_session).delete(delete_session))
         .route("/sessions/{id}/events", get(session_events))
         .route("/sessions/{id}/decisions", get(list_decisions))
@@ -352,7 +392,7 @@ fn console_cors() -> CorsLayer {
                 "localhost" | "127.0.0.1" | "[::1]" | "tauri.localhost"
             )
         }))
-        .allow_methods([Method::GET, Method::POST, Method::DELETE])
+        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
 }
 
@@ -1038,6 +1078,114 @@ async fn stop_sign_in(
     };
     app.supervisor.record_receipt(receipt.clone());
     receipt_response(&receipt)
+}
+
+// ---- App accounts ----
+
+async fn list_app_accounts(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+) -> Response {
+    match app.supervisor.app_accounts(&id) {
+        Ok(accounts) => Json(json!({ "accounts": accounts })).into_response(),
+        Err(err) => supervisor_error(err),
+    }
+}
+
+#[derive(Deserialize)]
+struct CreateAppAccountBody {
+    request_id: String,
+    label: String,
+}
+
+async fn create_app_account(
+    State(app): State<Arc<App>>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<CreateAppAccountBody>,
+) -> Response {
+    app_account_mutation(&app, body.request_id, || {
+        app.supervisor.create_app_account(&id, &body.label)
+    })
+}
+
+#[derive(Deserialize)]
+struct UpdateAppAccountBody {
+    request_id: String,
+    label: Option<String>,
+    #[serde(default)]
+    disconnect: bool,
+}
+
+async fn update_app_account(
+    State(app): State<Arc<App>>,
+    AxumPath((id, account)): AxumPath<(String, String)>,
+    Json(body): Json<UpdateAppAccountBody>,
+) -> Response {
+    app_account_mutation(&app, body.request_id, || {
+        app.supervisor
+            .update_app_account(&id, &account, body.label.as_deref(), body.disconnect)
+    })
+}
+
+fn app_account_mutation(
+    app: &App,
+    request_id: String,
+    perform: impl FnOnce() -> Result<crate::app_accounts::AppAccountView, SupervisorError>,
+) -> Response {
+    let _guard = crate::supervisor::lock_recovering(&app.supervisor.account_mutations);
+    if let Some(receipt) = app.supervisor.receipt(&request_id) {
+        return receipt_response(&receipt);
+    }
+    match perform() {
+        Ok(account) => {
+            let receipt = Receipt {
+                request_id,
+                session_id: None,
+                status: ReceiptStatus::Completed,
+                result: Some(json!(account)),
+                error: None,
+                updated_at: openremote_core::now_ms(),
+            };
+            app.supervisor.record_receipt(receipt.clone());
+            receipt_response(&receipt)
+        }
+        Err(err) => supervisor_error(err),
+    }
+}
+
+async fn start_app_account_sign_in(
+    State(app): State<Arc<App>>,
+    AxumPath((id, account)): AxumPath<(String, String)>,
+    Json(body): Json<SignInBody>,
+) -> Response {
+    match app
+        .supervisor
+        .start_app_account_sign_in(&id, &account, body.request_id)
+    {
+        Ok(view) => Json(view).into_response(),
+        Err(err) => supervisor_error(err),
+    }
+}
+
+async fn app_account_sign_in(
+    State(app): State<Arc<App>>,
+    AxumPath((id, account, run)): AxumPath<(String, String, String)>,
+) -> Response {
+    account_sign_in_response(&app, &id, &account, &run, false)
+}
+
+async fn stop_app_account_sign_in(
+    State(app): State<Arc<App>>,
+    AxumPath((id, account, run)): AxumPath<(String, String, String)>,
+) -> Response {
+    account_sign_in_response(&app, &id, &account, &run, true)
+}
+
+fn account_sign_in_response(app: &App, id: &str, account: &str, run: &str, stop: bool) -> Response {
+    match app.supervisor.app_account_sign_in(id, account, run, stop) {
+        Ok(view) => Json(view).into_response(),
+        Err(err) => supervisor_error(err),
+    }
 }
 
 // ---- machines ----
@@ -2564,7 +2712,9 @@ async fn install_harness(
         error: None,
         updated_at: openremote_core::now_ms(),
     };
-    app.supervisor.record_receipt(accepted);
+    if !app.supervisor.record_receipt(accepted.clone()) {
+        return receipt_response(&app.supervisor.receipt(&body.request_id).unwrap_or(accepted));
+    }
     match app
         .supervisor
         .install_harness(&machine_id, &body.harness, body.with_runtime)
@@ -2622,12 +2772,31 @@ struct CreateSessionBody {
     /// machine default.
     #[serde(default)]
     endpoint_id: Option<String>,
+    #[serde(default)]
+    app_account_id: Option<String>,
     /// Cloud: run the chat on another of the user's devices.
     #[serde(default)]
     pub(crate) device_id: Option<String>,
     /// Cloud: sync the chat to the user's other devices.
     #[serde(default)]
     synced: bool,
+}
+
+/// Older daemons cannot understand a selected App account, so an account-bearing
+/// create has its own route and cannot be mistaken for a legacy request.
+async fn create_account_session(
+    state: State<Arc<App>>,
+    peer: Option<axum::Extension<crate::host::PeerOrigin>>,
+    body: Json<CreateSessionBody>,
+) -> Response {
+    if body
+        .app_account_id
+        .as_deref()
+        .is_none_or(|id| id.trim().is_empty())
+    {
+        return error(StatusCode::BAD_REQUEST, "choose an App account");
+    }
+    create_session(state, peer, body).await
 }
 
 async fn create_session(
@@ -2706,6 +2875,7 @@ async fn create_session(
             body.fast,
             executor,
             body.endpoint_id.clone(),
+            body.app_account_id.clone(),
         )
         .await
     {
@@ -2747,6 +2917,7 @@ impl CreateSessionBody {
             "permission_mode": self.permission_mode,
             "fast": self.fast,
             "endpoint_id": self.endpoint_id,
+            "app_account_id": self.app_account_id,
         });
         // An absent workspace is omitted, never named null - the peer's
         // own deserializer treats missing and null alike, and a named null

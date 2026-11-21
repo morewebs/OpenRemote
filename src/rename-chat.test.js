@@ -79,7 +79,7 @@ test('the dialog is in the modal family and saves on Enter', () => {
   // the daemon's words quoted by error-copy, never adopted as the app's own.
   assert.match(modal, /disabled=\{busy \|\| verdict\.state === 'empty'\}/)
   assert.match(modal, /setError\(errorCopy\(err\)\)/)
-  assert.match(modal, /<p className="cv-error-line">\{error\}<\/p>/)
+  assert.match(modal, /<p className="cv-error-line" role="alert">\{error\}<\/p>/)
   // The limit is the rule's, not a second number in the field: the attribute
   // counts UTF-16 units while cleanName counts code points, so it halved an
   // emoji name and could cut a paste mid-surrogate. The comment explains the
@@ -190,4 +190,19 @@ test("a double click on a chat row's name opens the rename dialog, on the deskto
     sidebar,
     /const renameOnDoubleClick = \(id\) =>\s+onRenameChat && !isMobile && !web\s+\? \(e\) => \{\s+e\.preventDefault\(\)\s+onRenameChat\(id\)/,
   )
+})
+
+test('the phone sheet escapes the drawer transform and follows the visible keyboard area', () => {
+  const modal = source('RenameChatModal.jsx')
+  assert.match(modal, /isMobile \? createPortal\(dialog, document\.body\) : dialog/)
+  assert.match(modal, /visualViewport/)
+  assert.match(modal, /enterKeyHint="done"/)
+  const css = source('rename-chat.css')
+  assert.match(css, /height: var\(--rn-viewport-height, 100dvh\)/)
+  assert.match(css, /overflow-wrap: anywhere/)
+})
+
+test('phone chat actions are visible without hover and have a touch target', () => {
+  const css = source('sidebar.css')
+  assert.match(css, /\.app-frame\.is-mobile \.chat-item > \.chat-more \{[^}]*width: 44px;[^}]*height: 44px;[^}]*opacity: 1;[^}]*pointer-events: auto;/)
 })

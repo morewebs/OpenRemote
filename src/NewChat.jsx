@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowRight, ArrowUp, House, FolderOpen, Lightning, Plus, SlidersHorizontal, Star, X } from '@phosphor-icons/react'
+import { ArrowRight, ArrowUp, House, FolderOpen, Lightning, Plus, SlidersHorizontal, Star, UserCircle, X } from '@phosphor-icons/react'
 import PickerMenu from './PickerMenu.jsx'
 import { usePrivacyMode } from './privacy.js'
 import { useHint, useModelSwitches, usePaletteSource, useShortcut } from './keyboard.jsx'
@@ -61,6 +61,8 @@ import './newchat.css'
 import './composer.css'
 import { errorCopy } from './error-copy.js'
 import { mobileHomeState } from './mobile-home.js'
+import { accountChoice, accountScope, rememberAppAccount, rememberedAppAccount } from './app-accounts.js'
+import { useAppAccounts } from './use-app-accounts.js'
 
 
 // The harness's own effort word, exactly as the harness spells it: `xhigh`
@@ -269,7 +271,9 @@ export default function NewChat({
   // In Cloud a chat can run on this computer or one of the account's
   // machines; in Local it always runs here.
   const [target, setTarget] = useState(() => setupSeed?.target ?? null)
-  const [targetCaps, setTargetCaps] = useState(null)
+  const [targetInventory, setTargetInventory] = useState(null)
+  const [targetRevision, setTargetRevision] = useState(0)
+  const targetCaps = targetInventory?.deviceId === target ? targetInventory?.capabilities : null
   const [picking, setPicking] = useState(false)
   const [addProjectError, setAddProjectError] = useState(null)
   const cloudMode = mode === 'cloud'
@@ -488,7 +492,7 @@ export default function NewChat({
     let cancelled = false
     let timer = null
     let wait = 1500
-    setTargetCaps(null)
+    setTargetInventory(null)
     if (!target || connection.state !== 'connected' || !targetOnline) return
     const attempt = async () => {
       let caps = null
@@ -498,7 +502,7 @@ export default function NewChat({
         caps = null
       }
       if (cancelled) return
-      if (caps) setTargetCaps(caps)
+      if (caps) setTargetInventory({ deviceId: target, capabilities: caps })
       if (!(caps?.harnesses ?? []).some((h) => h.available)) {
         timer = setTimeout(attempt, wait)
         wait = Math.min(wait * 2, 15000)
@@ -510,7 +514,7 @@ export default function NewChat({
       clearTimeout(timer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target, targetOnline, connection.state])
+  }, [target, targetOnline, connection.state, targetRevision])
 
   // Every harness the daemon reports, installed or not: a preset or a saved
   // default still names its harness, and a plugin's harness has a name that
@@ -532,8 +536,36 @@ export default function NewChat({
   }) : null
   // The picked harness's own sign-in fact: a harness that isn't signed in
   // says so right here - the task is about to run on it.
-  const usingApiKey = currentHarness?.using_api_key === true && currentHarness.signed_in !== true
-  const needsSignIn = currentHarness && currentHarness.signed_in === false && !usingApiKey
+  const existingUsesApiKey = currentHarness?.using_api_key === true && currentHarness.signed_in !== true
+  const usesCustomEndpoint = currentHarness?.custom_endpoint_supported
+    && (endpointId || endpoints.some((endpoint) => endpoint.is_default))
+  const providerAccounts = Boolean(
+    !web && !isMobile && !usesCustomEndpoint
+      && currentHarness?.app_accounts_supported && connection.state === 'connected' && !targetOffline,
+  )
+  const accountState = useAppAccounts(apiFor, target, providerAccounts ? currentHarness.id : null)
+  const accountKey = accountScope(target ?? thisDevice, currentHarness?.id)
+  const [accountSelection, setAccountSelection] = useState(null)
+  const preferredAccount = accountSelection?.key === accountKey
+    ? accountSelection.id
+    : rememberedAppAccount(accountKey)
+  const chosenAccount = accountChoice(
+    accountState.accounts,
+    providerAccounts ? preferredAccount : null,
+    currentHarness?.signed_in !== false || existingUsesApiKey,
+  )
+  const managedAccountId = providerAccounts ? chosenAccount.accountId : null
+  const usingApiKey = existingUsesApiKey && !managedAccountId
+  const accountsBlocked = providerAccounts && (accountState.loading || accountState.error || chosenAccount.blocked)
+  const needsSignIn = currentHarness && currentHarness.signed_in === false && !usingApiKey && !managedAccountId
+  const reloadAppSetup = () => {
+    accountState.refresh()
+    if (target) setTargetRevision((revision) => revision + 1)
+  }
+  const openAccounts = () => {
+    setPicker(null)
+    setManagingHarnesses(currentHarness.id)
+  }
 
   // The model slot: filled where the harness advertises, reserved
   // (not rendered) where it doesn't. Every one of these choices belongs to a
@@ -708,14 +740,16 @@ export default function NewChat({
   const bound = outgoing(text, attached, { images: takesImages, app: harnessLabel(currentHarness) ?? 'This App', remote: Boolean(target) && target !== thisDevice }).error
   const canSend =
     (text.trim().length > 0 || attached.length > 0) && !busy && currentHarness && connection.state === 'connected'
-    && !needsSignIn && !targetOffline && !bound && (!isMobile || Boolean(targetItem))
+    && !needsSignIn && !accountsBlocked && !targetOffline && !bound && (!isMobile || Boolean(targetItem))
   // A disabled send says why, the way the rule composer's does; the enabled one
   // names the key.
   const sendWhy = !currentHarness
     ? 'Pick an App first.'
     : connection.state !== 'connected'
       ? 'Not connected.'
-      : needsSignIn
+      : accountsBlocked
+        ? 'Check the App account first.'
+        : needsSignIn
         ? `Sign in to ${harnessLabel(currentHarness)} first.`
         : targetOffline
           ? 'That machine is offline.'
@@ -1349,7 +1383,7 @@ export default function NewChat({
         payload.text,
         workspace,
         currentHarness.id,
-        picked.model ?? startModel ?? undefined,
+        picked.model ?? (managedAccountId ? model : startModel) ?? undefined,
         fastPicked || undefined,
         picked.effort ?? chosenEffort ?? undefined,
         picked.permissions ?? chosenPermission ?? undefined,
@@ -1358,11 +1392,15 @@ export default function NewChat({
           synced: cloudMode || 'sync' in picked || 'cloud' in picked,
           mentionedChats: mentionedChats(message, chats),
           endpointId: endpointId ?? undefined,
+          appAccountId: managedAccountId,
           attachments: payload.attachments,
           returnDelivery: true,
         },
       )
       const id = typeof created === 'string' ? created : created.id
+      if (providerAccounts && chosenAccount.selected) {
+        rememberAppAccount(accountKey, chosenAccount.selected.id)
+      }
       created.delivery?.catch(() => recoverDraft(scopedComposerKey(id, composerScope), message, sent))
       // A page or element shared from the browser before the chat existed.
       chatMade(id, tellDaemon, composerKey)
@@ -1578,12 +1616,7 @@ export default function NewChat({
           onClose={() => leaveHarness('close')}
           anchor={{ left: picker.x, top: picker.y }}
           footer={
-            // The way in to the harness manager - the only row in
-            // the empty state, and the honest answer when the list
-            // is missing something. It manages this computer's
-            // harnesses; a phone has none (a machine's are in
-            // Machines).
-            isMobile ? null : <button
+            web || isMobile ? null : <button
               type="button"
               onClick={() => leaveHarness('manage')}
             >
@@ -1929,7 +1962,22 @@ export default function NewChat({
       <div className="nc-under">
         {/* The picked harness isn't signed in: one quiet row under the
             chatbox - its mark, the fact, and the way in. Not a card. */}
-        {usingApiKey && (
+        {providerAccounts && accountState.loading && (
+          <p className="nc-auth-note" role="status">Checking App accounts…</p>
+        )}
+        {providerAccounts && accountState.error && (
+          <div className="nc-auth">
+            <p className="nc-auth-note">Couldn’t load App accounts.</p>
+            <button type="button" className="nc-auth-btn" onClick={accountState.refresh}>Retry</button>
+          </div>
+        )}
+        {providerAccounts && !accountState.loading && !accountState.error && chosenAccount.blocked && (
+          <div className="nc-auth">
+            <p className="nc-auth-note">Reconnect or choose another App account.</p>
+            <button type="button" className="nc-auth-btn" onClick={openAccounts}>Manage accounts</button>
+          </div>
+        )}
+        {usingApiKey && !accountsBlocked && (
           <div className="nc-auth nc-auth--key">
             <p className="nc-auth-note">{harnessLabel(currentHarness)} is using an API key</p>
             {SIGNIN_HARNESSES.has(currentHarness.id) && (
@@ -1939,7 +1987,7 @@ export default function NewChat({
             )}
           </div>
         )}
-        {needsSignIn && (
+        {needsSignIn && !accountsBlocked && (
           <div className="nc-auth">
             <HarnessMark harness={currentHarness.id} size={16} />
             <p className="nc-auth-note">
@@ -1951,13 +1999,59 @@ export default function NewChat({
               )}
             </p>
             {SIGNIN_HARNESSES.has(currentHarness.id) && (
-              <button type="button" className="nc-auth-btn" onClick={() => setSignInFor(currentHarness.id)}>
-                Sign in <ArrowRight size={13} />
+              <button type="button" className="nc-auth-btn" onClick={providerAccounts ? openAccounts : () => setSignInFor(currentHarness.id)}>
+                {providerAccounts ? 'Add account' : 'Sign in'} <ArrowRight size={13} />
               </button>
             )}
           </div>
         )}
         <div className="nc-below">
+          {providerAccounts && !accountState.loading && !accountState.error && (
+            chosenAccount.choices.length > 1 || (chosenAccount.blocked && chosenAccount.choices.length > 0)
+              ? (
+                <div className="nc-device">
+                  <button
+                    type="button"
+                    className="nc-meta nc-account-chip"
+                    aria-label={`App account: ${chosenAccount.selected?.label ?? 'Choose account'}`}
+                    aria-haspopup="listbox"
+                    aria-expanded={picker?.kind === 'account'}
+                    data-picker="account"
+                    title="Which App account runs this chat"
+                    onClick={(event) => {
+                      const anchor = event.currentTarget.getBoundingClientRect()
+                      setPicker(picker?.kind === 'account' ? null : { kind: 'account', x: anchor.left, y: anchor.bottom + 8 })
+                    }}
+                  >
+                    <UserCircle size={15} />
+                    <span className="pv">{chosenAccount.selected?.label ?? 'Choose account'}</span>
+                  </button>
+                  {picker?.kind === 'account' && (
+                    <PickerMenu
+                      label="App account"
+                      portal
+                      hideSearch={chosenAccount.choices.length < 6}
+                      items={chosenAccount.choices.map(({ id, label }) => ({ id, name: label, veiled: true }))}
+                      selectedId={chosenAccount.selected?.id ?? ''}
+                      anchor={{ left: picker.x, top: picker.y }}
+                      onChoose={(id) => {
+                        setAccountSelection({ key: accountKey, id })
+                        rememberAppAccount(accountKey, id)
+                        setPicker(null)
+                      }}
+                      onClose={() => setPicker(null)}
+                      footer={<button type="button" onClick={openAccounts}>Manage accounts…</button>}
+                    />
+                  )}
+                </div>
+              )
+              : managedAccountId && (
+                <span className="nc-meta nc-account-chip" title="App account">
+                  <UserCircle size={15} />
+                  <span className="pv">{chosenAccount.selected.label}</span>
+                </span>
+              )
+          )}
           {/* The project is picked, never typed: the registered projects
               on the machine the chat runs on, "No project" for a chat
               that belongs to none, and the one way to add - the picker's
@@ -2093,15 +2187,20 @@ export default function NewChat({
         {signInFor && createPortal(
           <SignInModal
             harnessId={signInFor}
-            onDone={() => setSignInFor(null)}
+            deviceId={target}
+            onDone={() => {
+              setSignInFor(null)
+              reloadAppSetup()
+            }}
           />, document.body
         )}
         {managingHarnesses && !web && createPortal(
           <HarnessManagerModal
-            onClose={() => setManagingHarnesses(false)}
-            onSignIn={(id) => {
+            initialDeviceId={target}
+            initialHarnessId={typeof managingHarnesses === 'string' ? managingHarnesses : null}
+            onClose={() => {
               setManagingHarnesses(false)
-              setSignInFor(id)
+              reloadAppSetup()
             }}
           />, document.body
         )}

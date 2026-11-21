@@ -24,6 +24,7 @@ use serde_json::json;
 /// `None` means this device, `Some(other)` is the copy shape.
 fn chat(executor: Option<DeviceId>) -> Session {
     Session {
+        app_account_id: None,
         id: SessionId::new(),
         harness: "claude".into(),
         workspace: None,

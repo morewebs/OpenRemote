@@ -35,7 +35,7 @@ from a peer's client. That is a property of the design, not an oversight to patc
 
 ## The rows
 
-36 rows: 4 Sync, 17 Machine, 14 Chat, 1 Read. "Sessions" and "chats" are the same thing; the API calls them
+43 rows: 4 Sync, 24 Machine, 14 Chat, 1 Read. "Sessions" and "chats" are the same thing; the API calls them
 sessions.
 
 ### Sync tier (4)
@@ -47,7 +47,7 @@ sessions.
 | `GET /sync/plugins` | Sync | list the account's Global plugin records this computer holds: name, marketplace, version, runtime, the powers the installing device approved, the content hash, removed or not (`plugin_runtime/global.rs`) | install anything, here or on the caller: a record is shown to the user on the caller for review |
 | `GET /sync/plugins/{id}/archive` | Sync | copy the files of a plugin installed here for every device, in slices, only while they are exactly the bytes the caller names. The receiver checks the whole archive against the record's sha256 before unpacking it, takes only a .tar.gz, and unpacks within a size cap | copy a plugin installed for this machine or a project (404), another version (409), its settings or secrets (kept outside the plugin's folder) |
 
-### Machine tier (17)
+### Machine tier (24)
 
 | route | tier | what a peer can do | what it cannot |
 |---|---|---|---|
@@ -61,8 +61,15 @@ sessions.
 | `GET /harnesses/{id}/signin` | Machine | poll that login's view, including the vendor's words and any URL or code it shows | - |
 | `POST /harnesses/{id}/signin/input` | Machine | type answers into that login prompt, so the harness on this computer ends up authenticated as whatever the peer chose | get at an existing credential: that is a fresh login |
 | `POST /harnesses/{id}/signin/stop` | Machine | abandon that login | - |
+| `GET /harnesses/{id}/accounts` | Machine | list the machine's managed App account IDs, labels and sign-in status | read provider credentials, identities or local configuration paths |
+| `POST /harnesses/{id}/accounts` | Machine | create an account record for an App that supports it | sign in or change the App's existing login |
+| `PATCH /harnesses/{id}/accounts/{account}` | Machine | rename or disconnect a managed account | remove its chats, rename the default provider sign-in, or disconnect an account while it is signing in |
+| `POST /harnesses/{id}/accounts/{account}/signin` | Machine | start Codex's device authorization in a separate configuration | complete provider approval or reconnect to a different provider identity |
+| `GET /harnesses/{id}/accounts/{account}/signin/{run}` | Machine | poll the matching run's provider verification link, one-time code and result | read the CLI's raw diagnostics or the saved credentials |
+| `POST /harnesses/{id}/accounts/{account}/signin/{run}/stop` | Machine | stop the matching sign-in run | stop a different or newer run |
 | `POST /machines/{id}/harnesses` | Machine | install a harness CLI on this computer, running its owner's installer (and, with `with_runtime`, a Node runtime first) | install something that is not a known harness, or install one already present (409) |
 | `POST /sessions` | Machine | create a chat here: harness, folder, model, effort, model endpoint, and the harness's permission word. A chat a peer creates is synced | name another device (400, a chat runs where it is created), create on a phone (409), use a folder that is not an existing absolute path (422), or create a private chat |
+| `POST /sessions/with-app-account` | Machine | create a synced chat on this machine with a ready managed account for its App. The executor stores the account ID with the chat | use another machine's account, combine a managed account with a custom endpoint, or fall back to the App's existing login |
 | `GET /projects` | Machine | list this machine's projects | - |
 | `POST /projects` | Machine | add or update a project entry (store metadata only) | point a project at a folder that is not an absolute existing directory |
 | `DELETE /projects/{id}` | Machine | delete a project entry | delete the folder on disk |
@@ -90,7 +97,7 @@ registered as a project, or read a log through these paths (the Sync tier reads 
 | `POST /sessions/{id}/queue/{item}/steer` | Chat | move a queued message into the running turn | - |
 | `POST /sessions/{id}/steer` | Chat | inject a message straight into the running turn | - |
 | `POST /sessions/{id}/settings` | Chat | change model, effort, fast, and the harness's permission word. Permission is start-time only: on a live chat it is refused (409), on a stopped chat it is stored and the next resume starts the harness with it | apply a permission word to a running harness; that is the point of the 409, and it is not a protection against a peer who is willing to stop the chat first |
-| `POST /sessions/{id}/endpoint` | Chat | point a stopped chat at one of the custom endpoints already stored on this machine, or back at the harness's own provider | invent an endpoint: `POST /model-endpoints` is not a peer route |
+| `POST /sessions/{id}/endpoint` | Chat | point a stopped chat at one of the custom endpoints already stored on this machine, or back at the harness's own provider | invent an endpoint or switch a chat bound to a managed account to an endpoint |
 | `POST /sessions/{id}/interrupt` | Chat | interrupt the running turn, keeping the chat alive | - |
 | `POST /sessions/{id}/stop` | Chat | stop the chat's process | - |
 | `POST /sessions/{id}/resume` | Chat | start the chat again, which re-passes its stored model and permission word | choose new settings as part of the resume |

@@ -53,6 +53,8 @@ html[data-reduce-motion] .sb-mode-fade {
 }
 
 .sidebar {
+  --sb-action-size: 24px;
+  --sb-action-icon-size: 16px;
   position: relative;
   z-index: 5;
   display: flex;
@@ -92,10 +94,7 @@ html[data-reduce-motion] .sb-mode-fade {
     visibility 0s 0.34s;
 }
 
-/* widen only while the search field itself holds focus; any other
-   focus inside the sidebar must not trigger it. the matching negative
-   margin keeps the flex layout slot at 264px so the main area never
-   reflows - the extra 56px paints over it as an overlay */
+/* Focused search borrows space from the main pane without changing its layout. */
 .sidebar:has(.search:focus-within) {
   width: 320px;
   margin-right: -56px;
@@ -316,7 +315,7 @@ button:active,
   align-items: center;
   gap: 6px;
   width: 100%;
-  height: 36px;
+  height: var(--sb-project-height);
   padding: 0 8px;
   margin-top: 6px;
   border: 0;
@@ -394,25 +393,31 @@ button:active,
 .sb-chats-title {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   padding-left: 8px;
-  padding-right: 0;
+  padding-right: 2px;
 }
 
-.sb-projects-head .section-title-text,
 .sb-projects-head {
   flex: 1;
 }
 
-.sb-section-add {
+.sb-section-add,
+.sb-project-organize {
+  margin-left: auto;
+}
+
+.sb-project-organize + .sb-section-add {
+  margin-left: 0;
+}
+
+:is(.sb-section-add, .sb-project-organize, .sb-project-new, .sb-project-more, .chat-more) {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: var(--sb-action-size);
+  height: var(--sb-action-size);
   flex: none;
   padding: 0;
-  margin-left: auto;
-  margin-right: 0;
   border: 0;
   border-radius: 5px;
   background: transparent;
@@ -421,18 +426,23 @@ button:active,
   box-shadow: none;
 }
 
-.sb-section-add:hover {
+:is(.sb-section-add, .sb-project-organize, .sb-project-new, .sb-project-more, .chat-more) svg {
+  width: var(--sb-action-icon-size);
+  height: var(--sb-action-icon-size);
+}
+
+:is(.sb-section-add, .sb-project-organize, .sb-project-new, .sb-project-more, .chat-more):hover {
   background: var(--bg-hover);
   color: var(--text-1);
 }
 
-.sb-section-add:active {
-  transform: none;
-  background: transparent;
+:is(.sb-section-add, .sb-project-organize, .sb-project-new, .sb-project-more, .chat-more):focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .sb-chats-title {
-  margin-top: 14px;
+  margin-top: 8px;
 }
 
 /* The group of chats waiting on a person, above Projects. It takes no space
@@ -469,124 +479,64 @@ button:active,
 
 .project {
   position: relative;
+  --sb-project-height: 36px;
 }
 
-/* Project actions appear on hover or keyboard focus. Touch screens keep
-   them visible because they have no hover. */
-.project:hover .project-head,
-.project[data-menu-open='true'] .project-head,
-.project:has(:focus-visible) .project-head {
-  padding-right: 74px;
+/* Chat rows inside a project have their own actions. Only the heading
+   and its controls reveal the project actions. */
+.project:where(:not(.armed)):is(
+  [data-menu-open='true'],
+  :has(> :is(.project-head, .sb-project-new, .sb-project-more):is(:hover, :focus-visible))
+) {
+  .project-head {
+    padding-right: calc(2 * var(--sb-action-size) + 6px);
+  }
+
+  .project-count {
+    display: none;
+  }
+
+  :is(.sb-project-new, .sb-project-more) {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
-.project:hover .project-count,
-.project[data-menu-open='true'] .project-count,
-.project:has(:focus-visible) .project-count {
-  visibility: hidden;
-}
-
-.sb-project-new {
+.sb-project-new,
+.sb-project-more {
   position: absolute;
-  top: 2px;
+  top: calc((var(--sb-project-height) - var(--sb-action-size)) / 2);
   right: 2px;
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-2);
   opacity: 0;
   pointer-events: none;
-  cursor: pointer;
   transition: opacity 0.12s ease;
 }
 
-.project:hover .sb-project-new,
-.project[data-menu-open='true'] .sb-project-new,
-.project[data-menu-open='true'] .sb-project-more,
-.project:has(:focus-visible) .sb-project-new,
-.project:has(:focus-visible) .sb-project-more {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.sb-project-new:hover {
-  background: var(--bg-active);
-  color: var(--text-1);
+/* Keep the menu immediately to the left of the new-chat shortcut. */
+.sb-project-more {
+  right: calc(var(--sb-action-size) + 4px);
 }
 
 @media (hover: none) {
+  .sidebar {
+    --sb-action-size: 32px;
+    --sb-action-icon-size: 20px;
+  }
+
   .sidebar .sb-project-new,
   .sidebar .sb-project-more {
     opacity: 1;
     pointer-events: auto;
   }
 
-  .sidebar .project .project-head {
-    padding-right: 74px;
+  .project .project-head {
+    padding-right: calc(2 * var(--sb-action-size) + 6px);
   }
-}
-
-/* The menu sits to the left of the far-right new-chat shortcut. */
-.sb-project-more {
-  position: absolute;
-  top: 2px;
-  right: 36px;
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-3);
-  opacity: 0;
-  pointer-events: none;
-  cursor: pointer;
-  transition: opacity 0.12s ease;
-}
-
-.project:hover .sb-project-more {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.sb-project-more:hover {
-  background: var(--bg-active);
-  color: var(--text-1);
 }
 
 .sb-project-pin {
   flex: none;
   color: var(--text-3);
-}
-
-.sb-project-organize {
-  display: grid;
-  place-items: center;
-  margin-left: auto;
-  width: 32px;
-  height: 32px;
-  flex: none;
-  padding: 0;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-3);
-  cursor: pointer;
-}
-
-.sb-project-organize:hover {
-  color: var(--text-1);
-  background: var(--bg-hover);
-}
-
-.sb-project-organize + .sb-section-add {
-  margin-left: 2px;
 }
 
 .sb-project-filter {
@@ -624,12 +574,12 @@ button:active,
    for it with the count hidden - a destructive decision is not the moment to
    show a number under the cursor. Red is the console's own destructive colour
    (a failed tool card's), with no fill and no shadow. */
-.project.armed .project-head {
+.project.armed > .project-head {
   padding-right: 96px;
 }
 
 .project.armed .project-count {
-  visibility: hidden;
+  display: none;
 }
 
 .sb-unregister {
@@ -916,8 +866,7 @@ html[data-reduce-motion] .sidebar,
 html[data-reduce-motion] .sidebar.collapsed,
 html[data-reduce-motion] .machines-reveal,
 html[data-reduce-motion] .machines-reveal > *,
-html[data-reduce-motion] .sb-project-new,
-html[data-reduce-motion] .sb-project-remove {
+html[data-reduce-motion] :is(.sb-project-new, .sb-project-more, .chat-more) {
   transition: none;
 }
 
@@ -938,8 +887,7 @@ button:focus-visible {
   .mode-switch-thumb,
   .machines-reveal,
   .machines-reveal > *,
-  .sb-project-new,
-  .sb-project-remove {
+  :is(.sb-project-new, .sb-project-more, .chat-more) {
     transition: none;
   }
 }
@@ -1144,8 +1092,7 @@ of the list rather than as a banner that arrived from somewhere else. */
   color: var(--text-1);
 }
 
-/* a chat row plus its archive control: the control sits over the status
-   dot while the row is hovered or focused, so the column never shifts */
+/* Chat text uses the full row until its actions are revealed. */
 .chat-item {
   position: relative;
 }
@@ -1157,50 +1104,33 @@ of the list rather than as a banner that arrived from somewhere else. */
   bottom: 0;
   margin-block: auto;
   right: 2px;
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-3);
   opacity: 0;
   pointer-events: none;
-  cursor: pointer;
   transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
 
-.chat-item:hover .chat-more,
-.chat-item[data-menu-open='true'] .chat-more,
-.chat-item:focus-within .chat-more {
-  opacity: 1;
-  pointer-events: auto;
-}
+.chat-item:is(:hover, :focus-within, [data-menu-open='true']) {
+  > .chat-row {
+    padding-right: calc(var(--sb-action-size) + 6px);
+  }
 
-.chat-more:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-1);
-}
-
-.chat-more:focus,
-.chat-more:focus-visible {
-  outline: none;
-}
-
-.chat-archive:hover {
-  color: var(--text-1);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chat-archive {
-    transition: none;
+  > .chat-more {
+    opacity: 1;
+    pointer-events: auto;
   }
 }
 
-html[data-reduce-motion] .chat-archive {
-  transition: none;
+/* Touch has no hover. Leave room for the actions instead of covering the title. */
+.app-frame.is-mobile .chat-item > .chat-row {
+  min-height: 44px;
+  padding-right: 50px;
+}
+
+.app-frame.is-mobile .chat-item > .chat-more {
+  width: 44px;
+  height: 44px;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* A picker with nothing chosen yet carries a small chevron, always on
@@ -1275,8 +1205,11 @@ html[data-reduce-motion] .chat-archive {
   font-size: 15px;
 }
 
+.app-frame.is-mobile .project {
+  --sb-project-height: 48px;
+}
+
 .app-frame.is-mobile .project-head {
-  height: 48px;
   font-size: 16px;
 }
 

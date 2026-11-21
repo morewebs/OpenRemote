@@ -376,10 +376,10 @@ export class DaemonApi {
 
   // Creating the chat boots the harness (up to 60 s of CLI cold start
   // daemon-side) - the boot budget, not the normal one.
-  createSession({ harness, workspace, model, effort, permissionMode, fast, endpointId, deviceId, synced }) {
+  createSession({ harness, workspace, model, effort, permissionMode, fast, endpointId, appAccountId, deviceId, synced }) {
     return this.call(
       'POST',
-      '/sessions',
+      appAccountId ? '/sessions/with-app-account' : '/sessions',
       {
         request_id: newRequestId(),
         harness,
@@ -389,6 +389,7 @@ export class DaemonApi {
         ...(permissionMode ? { permission_mode: permissionMode } : {}),
         ...(fast ? { fast: true } : {}),
         ...(endpointId ? { endpoint_id: endpointId } : {}),
+        ...(appAccountId ? { app_account_id: appAccountId } : {}),
         ...(deviceId ? { device_id: deviceId } : {}),
         ...(synced ? { synced: true } : {}),
       },
@@ -1043,6 +1044,41 @@ export class DaemonApi {
   }
 
   // ---- harness sign-in ----
+
+  appAccounts(harnessId, signal = null) {
+    return this.call('GET', `/harnesses/${seg(harnessId)}/accounts`, null, { signal })
+  }
+
+  createAppAccount(harnessId, label) {
+    return this.call('POST', `/harnesses/${seg(harnessId)}/accounts`, {
+      request_id: newRequestId(),
+      label,
+    })
+  }
+
+  updateAppAccount(harnessId, accountId, { label, disconnect } = {}) {
+    return this.call('PATCH', `/harnesses/${seg(harnessId)}/accounts/${seg(accountId)}`, {
+      request_id: newRequestId(),
+      label,
+      disconnect,
+    })
+  }
+
+  startAppAccountSignIn(harnessId, accountId) {
+    return this.call('POST', `/harnesses/${seg(harnessId)}/accounts/${seg(accountId)}/signin`, {
+      request_id: newRequestId(),
+    })
+  }
+
+  appAccountSignInView(harnessId, accountId, runId, signal = null) {
+    return this.call('GET', `/harnesses/${seg(harnessId)}/accounts/${seg(accountId)}/signin/${seg(runId)}`, null, { signal })
+  }
+
+  stopAppAccountSignIn(harnessId, accountId, runId) {
+    return this.call('POST', `/harnesses/${seg(harnessId)}/accounts/${seg(accountId)}/signin/${seg(runId)}/stop`, {
+      request_id: newRequestId(),
+    })
+  }
 
   // Start the harness's own login command, relayed: the returned view is
   // the first beat; poll signInView for the CLI's words, feed the human's

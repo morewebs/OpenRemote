@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-const { harnessRows, capabilityWords } = await import('./harness-manager.js')
+const { harnessRows, capabilityWords, appsInventoryFor, selectedApp } = await import('./harness-manager.js')
 
 const cap = (harnesses) => ({ harnesses })
 const spec = (harnessId, extra = {}) => ({
@@ -60,6 +60,36 @@ test('an available signed-in harness is Ready with the daemon probe words', () =
   assert.equal(row.detail, '2.1.287 · /usr/local/bin/claude')
 })
 
+test('a response for a previous machine never becomes the selected inventory', () => {
+  const inventory = { deviceId: 'server', machine: { id: 'machine-1', this_machine: true } }
+  assert.equal(appsInventoryFor(inventory, 'server', true), inventory)
+  assert.equal(appsInventoryFor(inventory, 'laptop', true), null)
+  assert.equal(appsInventoryFor(inventory, null, true), null)
+  assert.equal(appsInventoryFor(inventory, 'server', false), null)
+})
+
+test('Apps keeps the chosen app across machines, including when it needs installing', () => {
+  const claude = { id: 'claude', installed: true }
+  const codex = { id: 'codex', installed: false }
+  assert.equal(selectedApp([claude, codex], 'codex'), codex)
+  assert.equal(selectedApp([codex, claude], 'missing-plugin'), claude)
+  assert.equal(selectedApp([codex], null), codex)
+  assert.equal(selectedApp([], 'codex'), undefined)
+})
+
+test('account management is offered only when the installed App supports it', () => {
+  const [codex, claude, grok] = harnessRows(cap([
+    { id: 'codex', available: true, signed_in: false, app_accounts_supported: true },
+    { id: 'claude', available: true, signed_in: true },
+    { id: 'grok', available: false, app_accounts_supported: true },
+  ]), [spec('grok')])
+  assert.equal(codex.action, 'accounts')
+  assert.equal(codex.defaultSignin, 'Not signed in')
+  assert.equal(claude.action, 'none')
+  assert.equal(grok.action, 'install')
+  assert.equal(grok.installCommand, spec('grok').command)
+})
+
 test('a signed-out harness offers sign-in only where the daemon can relay it', () => {
   const rows = harnessRows(
     cap([
@@ -98,6 +128,12 @@ test('a spec that needs a runtime waits for the go-ahead', () => {
   assert.equal(pi.action, 'install-runtime')
   assert.equal(opencode.action, 'install')
   assert.equal(opencode.detail, null)
+})
+
+test('the machine can report an install started by another controller', () => {
+  const [row] = harnessRows(cap([{ id: 'pi', available: false }]), [spec('pi', { installing: true })])
+  assert.equal(row.installing, true)
+  assert.equal(row.statusLabel, 'Installing…')
 })
 
 test('a missing harness with no spec says so, once the machine has answered', () => {

@@ -31,6 +31,48 @@ pub fn main_codex() {
     server.run();
 }
 
+/// The test writes a credential fixture after receiving the public
+/// challenge, playing the role of the provider's browser flow.
+pub fn login_fixture(argv: &[String]) {
+    if argv.iter().any(|arg| arg == "--help") {
+        println!("Usage: codex login\n    --device-auth");
+        return;
+    }
+    if argv.iter().any(|arg| arg == "status") {
+        println!("Not logged in");
+        return;
+    }
+    assert!(argv.iter().any(|arg| arg == "--device-auth"));
+    let auth = managed_home().join("auth.json");
+    println!(" https://auth.openai.com/codex/device");
+    println!("2. Enter this one-time code");
+    println!(" FIXT-URE8");
+    std::io::stdout().flush().unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    while std::time::Instant::now() < deadline {
+        if auth.is_file() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    panic!("fixture auth was not written");
+}
+
+fn managed_home() -> std::path::PathBuf {
+    let home = std::env::var_os("CODEX_HOME").expect("managed Codex home");
+    assert_eq!(std::env::var_os("CODEX_SQLITE_HOME").as_ref(), Some(&home));
+    assert!(std::env::var_os("OPENAI_API_KEY").is_none());
+    std::path::PathBuf::from(home)
+}
+
+fn record_managed_call(method: &str) {
+    if std::env::var_os("FIXTURE_CODEX_DEVICE_AUTH").is_some()
+        && std::env::args().any(|arg| arg == "forced_login_method=\"chatgpt\"")
+    {
+        crate::record(managed_home().join("fixture-managed-calls"), method);
+    }
+}
+
 struct CodexFixture {
     scenario: String,
     turn_count: u64,
@@ -125,6 +167,7 @@ impl CodexFixture {
             ),
             ("initialized", _) => {}
             ("thread/start", Some(id)) => {
+                record_managed_call("thread/start");
                 crate::record(
                     "fixture-codex-starts",
                     &format!("thread/start effort={}", start_effort(&params)),
@@ -155,6 +198,7 @@ impl CodexFixture {
                 );
             }
             ("thread/resume", Some(id)) => {
+                record_managed_call("thread/resume");
                 crate::record(
                     "fixture-codex-starts",
                     &format!("thread/resume effort={}", start_effort(&params)),

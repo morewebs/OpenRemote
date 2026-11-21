@@ -10,7 +10,7 @@
 //! death (StdoutClosed) is applied by the pump alone - the single writer
 //! for terminal statuses - so a stop can never race a failure into a lie.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::{Arc, Mutex as StdMutex, RwLock as StdRwLock};
 use std::time::{Duration, Instant};
@@ -31,6 +31,7 @@ use crate::images::NewImage;
 use crate::registry::{Backend, HarnessRegistry, SessionDriver};
 use crate::slash;
 
+mod accounts;
 mod carry;
 mod composer;
 pub use composer::{AgentEntry, CommandEntry, CommandsView, McpServerName};
@@ -219,6 +220,7 @@ fn machine_view(
     harnesses: &[Harness],
     node_ready: bool,
     machine: &Machine,
+    installing: &HashSet<String>,
 ) -> MachineView {
     let mut view = MachineView {
         machine: machine.clone(),
@@ -238,6 +240,9 @@ fn machine_view(
             .map(|h| h.id.clone())
             .collect();
         view.installable = crate::install::installable(&installed, node_ready);
+        for spec in &mut view.installable {
+            spec.installing = installing.contains(&spec.harness_id);
+        }
     } else {
         view.install_command = Some(match machine.platform.as_str() {
             "windows" => "irm openremote.space/install.ps1 | iex".to_string(),
@@ -403,6 +408,10 @@ pub struct Supervisor {
     /// Live sign-in relays, one per harness: the console polls their view
     /// and feeds the human's answers through.
     signins: StdMutex<HashMap<String, Arc<crate::signin::SignInRun>>>,
+    app_accounts: crate::app_accounts::AppAccounts,
+    app_signins: StdMutex<HashMap<String, accounts::AccountLogin>>,
+    pub(crate) account_mutations: StdMutex<()>,
+    installing: StdMutex<HashSet<String>>,
     /// The clock's arming memory: the minute each schedule rule last fired
     /// in, so a rule fires once per day. Shared with rule removal - a
     /// deleted rule's entry must go with it - and pruned to the current
@@ -513,6 +522,10 @@ impl Supervisor {
             events: broadcast::channel(1024).0,
             registry: StdRwLock::new(registry),
             signins: StdMutex::new(HashMap::new()),
+            app_accounts: crate::app_accounts::AppAccounts::open(&data_dir),
+            app_signins: StdMutex::new(HashMap::new()),
+            account_mutations: StdMutex::new(()),
+            installing: StdMutex::new(HashSet::new()),
             fired: StdMutex::new(HashMap::new()),
             webhooks: StdMutex::new(WebhookMemory::default()),
             stderr_ring: StdMutex::new(HashMap::new()),
@@ -712,19 +725,21 @@ impl Supervisor {
     /// runs there, and - for this machine - what could be installed.
     pub fn machines(&self) -> Vec<MachineView> {
         let (harnesses, node_ready) = self.inventory();
+        let installing = lock_recovering(&self.installing).clone();
         self.with_store(|s| {
             s.machines()
                 .iter()
-                .map(|machine| machine_view(s, &harnesses, node_ready, machine))
+                .map(|machine| machine_view(s, &harnesses, node_ready, machine, &installing))
                 .collect()
         })
     }
 
     pub fn machine(&self, id: &MachineId) -> Result<MachineView, SupervisorError> {
         let (harnesses, node_ready) = self.inventory();
+        let installing = lock_recovering(&self.installing).clone();
         self.with_store(|s| {
             s.machine(id)
-                .map(|m| machine_view(s, &harnesses, node_ready, m))
+                .map(|m| machine_view(s, &harnesses, node_ready, m, &installing))
         })
         .map_err(store_error)
     }
@@ -768,6 +783,18 @@ impl Supervisor {
                 machine.name
             )));
         }
+        if !lock_recovering(&self.installing).insert(harness_id.to_string()) {
+            return Err(SupervisorError::Conflict(
+                "this App is already installing on this machine".into(),
+            ));
+        }
+        struct InstallLease<'a>(&'a StdMutex<HashSet<String>>, &'a str);
+        impl Drop for InstallLease<'_> {
+            fn drop(&mut self) {
+                lock_recovering(self.0).remove(self.1);
+            }
+        }
+        let _lease = InstallLease(&self.installing, harness_id);
         let entry = self
             .registry
             .read()
@@ -1461,6 +1488,7 @@ impl Supervisor {
                 false,
                 None,
                 None,
+                None,
             )
             .await?;
         let chat = session.id;
@@ -1570,6 +1598,7 @@ impl Supervisor {
         fast: bool,
         executor: Option<openremote_core::DeviceId>,
         endpoint_id: Option<String>,
+        app_account_id: Option<String>,
     ) -> Result<Session, SupervisorError> {
         self.create_session_in(
             harness,
@@ -1580,6 +1609,7 @@ impl Supervisor {
             fast,
             executor,
             endpoint_id,
+            app_account_id,
             None,
             None,
         )
@@ -1600,6 +1630,7 @@ impl Supervisor {
         fast: bool,
         executor: Option<openremote_core::DeviceId>,
         endpoint_id: Option<String>,
+        app_account_id: Option<String>,
         parent: Option<ParentLink>,
         title: Option<String>,
     ) -> Result<Session, SupervisorError> {
@@ -1614,6 +1645,8 @@ impl Supervisor {
             }
             None => None,
         };
+        let codex_home =
+            self.account_home(harness, app_account_id.as_deref(), endpoint_id.as_deref())?;
         let Some(backend) = self.backend(harness) else {
             return Err(SupervisorError::Harness(format!(
                 "harness '{harness}' is not available"
@@ -1628,7 +1661,7 @@ impl Supervisor {
         // when given, the harness's own pairing otherwise.
         let (model, effort) = match (model, effort) {
             (Some(picked), user_effort) => (Some(picked), user_effort),
-            (None, user_effort) if !self.is_fixture(harness) => {
+            (None, user_effort) if codex_home.is_none() && !self.is_fixture(harness) => {
                 // The harness's own default pairing - a real backend's
                 // default_model() names its model, a fixture's absence
                 // leaves both unpicked.
@@ -1639,10 +1672,15 @@ impl Supervisor {
             }
             (None, user_effort) => (None, user_effort),
         };
-        let binding = self.endpoint_binding(harness, endpoint_id.as_deref())?;
+        let binding = if codex_home.is_some() {
+            None
+        } else {
+            self.endpoint_binding(harness, endpoint_id.as_deref())?
+        };
         let session = Session {
             id: SessionId::new(),
             harness: harness.to_string(),
+            app_account_id,
             workspace,
             status: SessionStatus::Starting,
             model,
@@ -1691,6 +1729,7 @@ impl Supervisor {
             plugin_dirs: self.plugin_dirs(current.workspace.as_deref()),
             allowed_tools: self.allowed_tools(&current.harness),
             state_dir: Some(self.harness_state_dir(&current.harness)),
+            codex_home,
         };
         match backend.spawn(opts).await {
             Ok((driver, rx)) => {
@@ -2334,6 +2373,11 @@ impl Supervisor {
             ));
         }
         self.ensure_here(id)?;
+        if cleaned.is_some() && self.session(id)?.app_account_id.is_some() {
+            return Err(SupervisorError::Conflict(
+                "this chat uses an App account. Start a new chat to use a custom endpoint.".into(),
+            ));
+        }
         let updated = self
             .with_store(|s| s.set_session_endpoint(id, cleaned))
             .map_err(store_error)?;
@@ -2649,8 +2693,17 @@ impl Supervisor {
                 session.harness
             )));
         };
+        let codex_home = self.account_home(
+            &session.harness,
+            session.app_account_id.as_deref(),
+            session.endpoint_id.as_deref(),
+        )?;
         let notes = self.rerun_plugin_commands(&session.harness).await;
-        let binding = self.endpoint_binding(&session.harness, session.endpoint_id.as_deref())?;
+        let binding = if codex_home.is_some() {
+            None
+        } else {
+            self.endpoint_binding(&session.harness, session.endpoint_id.as_deref())?
+        };
         let opts = openremote_harness::SpawnOptions {
             cwd: session.workspace.clone().unwrap_or_else(Self::home_dir),
             model: session.model.clone(),
@@ -2664,6 +2717,7 @@ impl Supervisor {
             plugin_dirs: self.plugin_dirs(session.workspace.as_deref()),
             allowed_tools: self.allowed_tools(&session.harness),
             state_dir: Some(self.harness_state_dir(&session.harness)),
+            codex_home,
         };
         let (driver, rx) = match backend.spawn(opts).await {
             Ok(pair) => pair,
@@ -3695,6 +3749,7 @@ mod tests {
     #[test]
     fn a_chat_spawning_is_refused_and_one_waiting_for_its_first_message_is_not() {
         let session = |status: SessionStatus| Session {
+            app_account_id: None,
             id: SessionId::new(),
             harness: "claude".into(),
             workspace: None,
@@ -3908,6 +3963,7 @@ mod tests {
     async fn lifecycle_supervisor() -> (Arc<Supervisor>, SessionId) {
         let supervisor = supervisor();
         let session = Session {
+            app_account_id: None,
             id: SessionId::new(),
             harness: "claude".into(),
             workspace: None,
@@ -3951,6 +4007,7 @@ mod tests {
     async fn a_resume_or_steer_mid_move_is_refused_and_the_slot_freed_lets_it_through() {
         let supervisor = supervisor();
         let session = Session {
+            app_account_id: None,
             id: SessionId::new(),
             harness: "claude".into(),
             workspace: None,

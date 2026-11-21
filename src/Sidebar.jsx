@@ -132,6 +132,7 @@ function nestTeams(list) {
 }
 
 export default function Sidebar({
+  cloudNoticeSlot,
   open,
   active,
   mode,
@@ -882,10 +883,10 @@ export default function Sidebar({
       ...(onSplit && !isMobile
         ? [
             { divider: true },
-            { label: 'Split right', icon: <ArrowRight size={14} />, disabled: canSplitChat && !canSplitChat(item.key, 'row', false), onSelect: split('row', false) },
-            { label: 'Split down', icon: <ArrowDown size={14} />, disabled: canSplitChat && !canSplitChat(item.key, 'col', false), onSelect: split('col', false) },
-            { label: 'Split left', icon: <ArrowLeft size={14} />, disabled: canSplitChat && !canSplitChat(item.key, 'row', true), onSelect: split('row', true) },
-            { label: 'Split up', icon: <ArrowUp size={14} />, disabled: canSplitChat && !canSplitChat(item.key, 'col', true), onSelect: split('col', true) },
+            { label: 'Split right', inline: true, icon: <ArrowRight size={14} />, disabled: canSplitChat && !canSplitChat(item.key, 'row', false), onSelect: split('row', false) },
+            { label: 'Split down', inline: true, icon: <ArrowDown size={14} />, disabled: canSplitChat && !canSplitChat(item.key, 'col', false), onSelect: split('col', false) },
+            { label: 'Split left', inline: true, icon: <ArrowLeft size={14} />, disabled: canSplitChat && !canSplitChat(item.key, 'row', true), onSelect: split('row', true) },
+            { label: 'Split up', inline: true, icon: <ArrowUp size={14} />, disabled: canSplitChat && !canSplitChat(item.key, 'col', true), onSelect: split('col', true) },
           ]
         : []),
     ]
@@ -967,10 +968,10 @@ export default function Sidebar({
       ...(canSplit
         ? [
             { divider: true },
-            { label: 'Split right', icon: <ArrowRight size={14} />, disabled: canSplitChat && !canSplitChat(row.id, 'row', false), onSelect: split('row', false) },
-            { label: 'Split down', icon: <ArrowDown size={14} />, disabled: canSplitChat && !canSplitChat(row.id, 'col', false), onSelect: split('col', false) },
-            { label: 'Split left', icon: <ArrowLeft size={14} />, disabled: canSplitChat && !canSplitChat(row.id, 'row', true), onSelect: split('row', true) },
-            { label: 'Split up', icon: <ArrowUp size={14} />, disabled: canSplitChat && !canSplitChat(row.id, 'col', true), onSelect: split('col', true) },
+            { label: 'Split right', inline: true, icon: <ArrowRight size={14} />, disabled: canSplitChat && !canSplitChat(row.id, 'row', false), onSelect: split('row', false) },
+            { label: 'Split down', inline: true, icon: <ArrowDown size={14} />, disabled: canSplitChat && !canSplitChat(row.id, 'col', false), onSelect: split('col', false) },
+            { label: 'Split left', inline: true, icon: <ArrowLeft size={14} />, disabled: canSplitChat && !canSplitChat(row.id, 'row', true), onSelect: split('row', true) },
+            { label: 'Split up', inline: true, icon: <ArrowUp size={14} />, disabled: canSplitChat && !canSplitChat(row.id, 'col', true), onSelect: split('col', true) },
           ]
         : []),
       { divider: true },
@@ -1247,6 +1248,7 @@ export default function Sidebar({
           </button>
         </div>
         )}
+        {cloudNoticeSlot && <div className="cn-sidebar-slot" ref={cloudNoticeSlot} />}
         <button className="side-tile" onClick={() => onSelect('new')} title={hintNew('New chat')}>
           <Plus size={20} weight="bold" />
           New chat

@@ -649,6 +649,7 @@ impl Supervisor {
                 // A worker never borrows its lead's model endpoint: it runs
                 // on the harness the lead named, with that harness's own login.
                 None,
+                None,
                 Some(parent),
                 Some(title.clone()),
             )

@@ -93,18 +93,21 @@ impl PendingCalls {
         rx: oneshot::Receiver<Value>,
         method: &str,
         timeout: Duration,
+        managed_account: bool,
     ) -> Result<Value, DriverError> {
         match tokio::time::timeout(timeout, rx).await {
             Ok(Ok(value)) => {
                 if let Some(error) = value.get("error") {
-                    Err(DriverError::Harness(format!(
-                        "codex rejected {method} (code {}): {}",
-                        error.get("code").and_then(|c| c.as_i64()).unwrap_or(0),
-                        error
-                            .get("message")
-                            .and_then(|m| m.as_str())
-                            .unwrap_or("no message")
-                    )))
+                    let code = error.get("code").and_then(Value::as_i64).unwrap_or(0);
+                    let message = format!("codex rejected {method} (code {code})");
+                    if managed_account {
+                        return Err(DriverError::Harness(message));
+                    }
+                    let diagnostic = error
+                        .get("message")
+                        .and_then(Value::as_str)
+                        .unwrap_or("no message");
+                    Err(DriverError::Harness(format!("{message}: {diagnostic}")))
                 } else {
                     Ok(value.get("result").cloned().unwrap_or(Value::Null))
                 }
@@ -131,6 +134,9 @@ struct Shared {
     stdin: AsyncMutex<tokio::process::ChildStdin>,
     /// Host calls in flight, keyed by call id.
     pending: PendingCalls,
+    /// Provider diagnostics for a managed account can contain private
+    /// profile paths. Only structured error codes are forwarded.
+    managed_account: bool,
     /// The turn Codex reports as running (turn/started … turn/completed).
     active_turn: StdMutex<Option<String>>,
 }
@@ -170,13 +176,21 @@ impl Driver {
         }
         argv.extend(["app-server".into(), "--listen".into(), "stdio://".into()]);
 
+        let managed_account = opts.codex_home.is_some();
         let mut command = Command::new(&program);
         command
             .args(&argv)
             .current_dir(&opts.cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stderr(if managed_account {
+                Stdio::null()
+            } else {
+                Stdio::piped()
+            });
+        if let Some(home) = opts.codex_home.as_deref() {
+            crate::configure_managed_account(&mut command, home);
+        }
         // Windows: no console flash, no Ctrl-C from a shared console; the
         // why lives on openremote_harness::creation_flags.
         #[cfg(windows)]
@@ -192,16 +206,14 @@ impl Driver {
             .stdout
             .take()
             .ok_or_else(|| DriverError::Spawn("stdout not piped".into()))?;
-        let stderr = child
-            .stderr
-            .take()
-            .ok_or_else(|| DriverError::Spawn("stderr not piped".into()))?;
+        let stderr = child.stderr.take();
 
         let (tx, mut rx) = mpsc::channel(256);
         let shared = Arc::new(Shared {
             child: Arc::new(AsyncMutex::new(child)),
             stdin: AsyncMutex::new(stdin),
             pending: PendingCalls::new(),
+            managed_account,
             active_turn: StdMutex::new(None),
         });
         tokio::spawn(read_stdout(
@@ -209,10 +221,12 @@ impl Driver {
             tx.clone(),
             Arc::clone(&shared),
         ));
-        tokio::spawn(read_stderr(
-            openremote_harness::LineReader::new(BufReader::new(stderr)),
-            tx.clone(),
-        ));
+        if let Some(stderr) = stderr {
+            tokio::spawn(read_stderr(
+                openremote_harness::LineReader::new(BufReader::new(stderr)),
+                tx.clone(),
+            ));
+        }
 
         let mut driver = Self {
             shared: Arc::clone(&shared),
@@ -277,6 +291,10 @@ impl Driver {
             // failure so a broken install explains itself, and a child
             // that survived a rejected handshake must
             // not outlive the session that never was.
+            if managed_account {
+                discard_child(&shared).await;
+                return Err(e);
+            }
             let tail = stderr_tail(&mut rx).await;
             discard_child(&shared).await;
             return Err(splice_tail(e, &tail));
@@ -479,7 +497,7 @@ impl Driver {
         }
         self.shared
             .pending
-            .await_response(id, rx, method, CALL_TIMEOUT)
+            .await_response(id, rx, method, CALL_TIMEOUT, self.shared.managed_account)
             .await
     }
 
@@ -1423,14 +1441,20 @@ fn notification(method: &str, params: &Value, shared: &Shared) -> Option<DriverE
                 .and_then(Value::as_str)
                 .unwrap_or("failed")
                 .to_string();
-            let error_message = params
-                .pointer("/turn/error/message")
-                .and_then(Value::as_str)
-                .map(String::from);
+            let is_error = params.pointer("/turn/error").is_some();
+            let error_message = if shared.managed_account {
+                is_error.then(|| {
+                    "Codex reported a turn error. Check the account on this machine.".into()
+                })
+            } else {
+                params
+                    .pointer("/turn/error/message")
+                    .and_then(Value::as_str)
+                    .map(String::from)
+            };
             if let Some(message) = &error_message {
                 eprintln!("codex turn error: {message}");
             }
-            let is_error = params.pointer("/turn/error").is_some();
             Some(DriverEvent::TurnCompleted {
                 subtype: status.clone(),
                 coarse: coarse_outcome(&status),
@@ -2133,10 +2157,32 @@ mod tests {
                 rx,
                 "model/list",
                 Duration::from_millis(50),
+                false,
             )
             .await;
         assert!(result.is_err());
         assert!(pending.is_empty(), "the timed-out call leaked its waiter");
+    }
+
+    #[tokio::test]
+    async fn a_managed_rpc_error_keeps_its_method_and_code_without_provider_diagnostics() {
+        let pending = PendingCalls::new();
+        for managed in [false, true] {
+            let (tx, rx) = oneshot::channel();
+            pending.register(HOST_CALL_ID_BASE, tx);
+            pending.deliver(
+                HOST_CALL_ID_BASE,
+                json!({"id": HOST_CALL_ID_BASE,
+                       "error": {"code": -32603, "message": "could not read profile/auth.json"}}),
+            );
+            let error = pending
+                .await_response(HOST_CALL_ID_BASE, rx, "thread/start", CALL_TIMEOUT, managed)
+                .await
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("thread/start (code -32603)"));
+            assert_eq!(error.contains("profile/auth.json"), !managed);
+        }
     }
 
     #[test]
