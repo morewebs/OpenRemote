@@ -26,6 +26,13 @@ function escapeHtml(text) {
 /// A safe href: http(s) only - javascript:, data:, and everything else
 /// never render as links. Every link shape the renderer emits goes
 /// through here, so the rule holds even if a URL regex widens later.
+/// A path, as an agent writes one to point at a file: a drive letter
+/// (C:/x), a rooted or relative path, a UNC share. No URL scheme - the one
+/// letter before the colon of a drive is not one.
+function isPathAddress(address) {
+  return !/^[a-z][a-z0-9+.-]+:/i.test(address)
+}
+
 function safeHref(url) {
   return /^https?:\/\//i.test(url) ? url : null
 }
@@ -45,9 +52,12 @@ function inline(text) {
   })
   // Inline math: $…$ - only when the content actually looks like TeX (a
   // backslash, superscript, subscript, or brace). "$5 and $10" is prose,
-  // never math. KaTeX renders the raw source; a parse error keeps the
-  // original as plain text.
-  out = out.replace(/(?<![\\$])\$([^$\n]*[\\^_{}][^$\n]*)\$(?!\$)/g, (m, tex) => {
+  // never math. The usual TeX-in-markdown rules apply too: the opening $ has
+  // a non-space after it, the closing $ a non-space before it and no digit
+  // after it, so two shell variables in one line ("$_.IPAddress ... $_.Name")
+  // are not a formula, and "${" is shell, not TeX. KaTeX renders the raw
+  // source; a parse error keeps the original as plain text.
+  out = out.replace(/(?<![\\$])\$(?![\s{])([^$\n]*[\\^_{}][^$\n]*?)(?<=\S)\$(?![$\d])/g, (m, tex) => {
     try {
       maths.push(katex.renderToString(tex, { throwOnError: false }))
       return `\u0001${maths.length - 1}\u0001`
@@ -73,15 +83,20 @@ function inline(text) {
     },
   )
   // Links, optional title in the parens - parsed before autolinking so a
-  // titled link's URL isn't autolinked inside its own parens. Same
-  // safeHref gate on the way out.
+  // titled link's URL isn't autolinked inside its own parens. The address may
+  // sit in angle brackets (a path with spaces). Same safeHref gate on the way
+  // out: a web address links; anything else (a file the agent points at, a
+  // relative path) is a reference - its label reads in place, the address on
+  // hover, and nothing here opens it, so no raw `[label](path)` shows.
   out = out.replace(
-    /\[([^\]]+)\]\((https?:\/\/[^)\s]+)(?:\s+&quot;[^&]*&quot;)?\)/g,
-    (match, label, url) => {
-      const href = safeHref(url)
-      return href == null
-        ? match
-        : `<a class="md-link" href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`
+    /(?<!!)\[([^\]]+)\]\((?:&lt;([^\n]*?)&gt;|([^)\s]+))(?:\s+&quot;[^&]*&quot;)?\)/g,
+    (match, label, angled, bare) => {
+      const address = angled ?? bare
+      const href = safeHref(address)
+      if (href != null) return `<a class="md-link" href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`
+      // Only a path is a reference. An address with any other scheme
+      // (javascript:, data:, file:) stays as the text it was, in plain view.
+      return isPathAddress(address) ? `<span class="md-ref" title="${address}">${label}</span>` : match
     },
   )
   // Bare http(s) URLs autolink - trailing sentence punctuation stays out
