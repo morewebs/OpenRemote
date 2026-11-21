@@ -112,6 +112,18 @@ test('a failed session keeps its reason and the title truncates', () => {
   assert.ok(titleFrom('a'.repeat(60)).endsWith('…'))
 })
 
+test('a long first line is cut where a word ends, not through one', () => {
+  assert.equal(
+    titleFrom("we're having some issues, there's a bottleneck causing throttle of users' traffic"),
+    "we're having some issues, there's a…",
+  )
+  // A comma where the cut falls does not sit in front of the ellipsis.
+  assert.equal(titleFrom('please fix the failing login test now, supercalifragilistic'), 'please fix the failing login test now…')
+  // One long word has no break to use: it is cut where it stands.
+  assert.equal(titleFrom('a'.repeat(60)), `${'a'.repeat(44)}…`)
+  assert.equal(titleFrom('short'), 'short')
+})
+
 test('daemon errors land as notes in the transcript', () => {
   let chat = chatFromSession(session())
   chat = foldEvent(chat, event(7, { type: 'daemon.error', message: 'boom' }))
@@ -391,6 +403,37 @@ test('parallel same-name tools in one turn pair, out-of-order completion include
   rail = railItems(chat)
   assert.equal(rail[0].result, 'A ran')
   assert.equal(rail[1].result, 'B ran')
+})
+
+test('with call ids, parallel same-name results land on their own card in either order', () => {
+  // Without an id the first result to land goes to the last call started, so
+  // a result that arrives in start order sat on the wrong card.
+  for (const order of [['a', 'b'], ['b', 'a']]) {
+    const chat = chatFromSession(session())
+    foldEvent(chat, event(2, { type: 'tool.started', turn: 1, name: 'commandExecution', call_id: 'a', input: { command: 'cat GLOSSARY.md' } }))
+    foldEvent(chat, event(3, { type: 'tool.started', turn: 1, name: 'commandExecution', call_id: 'b', input: { command: 'cat est.ps1' } }))
+    order.forEach((id, n) => {
+      foldEvent(chat, event(4 + n, { type: 'tool.result', turn: 1, name: 'commandExecution', call_id: id, output: `result of ${id}`, is_error: false }))
+    })
+    const rail = railItems(chat)
+    assert.equal(rail[0].result, 'result of a', `order ${order}`)
+    assert.equal(rail[1].result, 'result of b', `order ${order}`)
+  }
+})
+
+test('a result whose call id matches nothing still completes a call, as it did without ids', () => {
+  const chat = chatFromSession(session())
+  foldEvent(chat, event(2, { type: 'tool.started', turn: 1, name: 'Bash', call_id: 'x', input: { command: 'ls' } }))
+  // A driver whose result id differs from its start id must not leave the
+  // card running forever.
+  foldEvent(chat, event(3, { type: 'tool.result', turn: 1, name: 'Bash', call_id: 'other', output: 'listed', is_error: false }))
+  assert.equal(railItems(chat)[0].result, 'listed')
+  // Events from a daemon that sends no ids at all pair by name, as before.
+  const old = chatFromSession(session())
+  foldEvent(old, event(2, { type: 'tool.started', turn: 1, name: 'Bash', input: { command: 'ls' } }))
+  foldEvent(old, event(3, { type: 'tool.result', turn: 1, name: 'Bash', output: 'listed', is_error: false }))
+  assert.equal(railItems(old)[0].result, 'listed')
+  assert.equal(railItems(old)[0].callId, null)
 })
 
 test('a late result never completes another turn\'s same-name tool', () => {

@@ -174,6 +174,28 @@ async fn codex_approvals_flow_through_decisions_with_codex_words() {
         .expect("tool.result");
     assert_eq!(tool.1["name"], "commandExecution");
     assert_eq!(tool.1["is_error"], false);
+    // The result answers the call that started it, by the harness's own id.
+    let started = events
+        .iter()
+        .find(|(_, p)| kind(p) == "tool.started")
+        .expect("tool.started");
+    assert!(
+        started.1["call_id"]
+            .as_str()
+            .is_some_and(|id| !id.is_empty()),
+        "the start carries the harness's id: {}",
+        started.1
+    );
+    assert_eq!(started.1["call_id"], tool.1["call_id"]);
+    // A running command's output is the card's, never the assistant's words:
+    // it used to ride the reply stream, so raw stdout showed as agent text.
+    assert!(
+        !events.iter().any(|(_, p)| kind(p) == "message.delta"
+            && p["text"]
+                .as_str()
+                .is_some_and(|t| t.contains("fixture output"))),
+        "command output leaked into the reply stream: {events:?}"
+    );
     let completed = events
         .iter()
         .find(|(_, p)| kind(p) == "turn.completed")

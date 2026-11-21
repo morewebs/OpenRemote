@@ -252,16 +252,12 @@ function WorkCluster({ items, running, chat }) {
                 <span className="cv-work-name" title={step.browser || team ? item.name : undefined}>
                   {team ? team.label : step.label}
                 </span>
-                {step.hint && !team && <span className="cv-work-hint pv">{step.hint}</span>}
+                {step.hint && !team && <span className="cv-work-hint pv" title={step.hint}>{step.hint}</span>}
                 {(step.browser || team || step.out) && (
                   <div className="cv-work-body">
                     {step.browser && <BrowserFacts facts={step.browser} />}
                     {team && <TeamFacts facts={team} />}
-                    {step.out && (
-                      <div className="cv-io pv">
-                        <OutRow raw={step.out} fold={step.fold} />
-                      </div>
-                    )}
+                    {step.out && <StepOut step={step} />}
                   </div>
                 )}
                 {/* What the tool answered with besides words - an agent's
@@ -287,6 +283,23 @@ function ReasoningBlock({ text, live }) {
       </button>
       {open && (
         <MarkdownBody text={text} live={live} className={`cv-reasoning-body pv${live ? ' live' : ''}`} />
+      )}
+    </div>
+  )
+}
+
+/// One step's Out in an opened work row. A command's output that a Windows
+/// shell printed through the wrong code page is repaired for reading; the
+/// text as received stays one click away.
+function StepOut({ step }) {
+  const [received, setReceived] = useState(false)
+  return (
+    <div className="cv-io pv">
+      <OutRow raw={received && step.received != null ? step.received : step.out} fold={step.fold} />
+      {step.repaired && (
+        <button type="button" className="cv-fold cv-fold--under" onClick={() => setReceived(!received)} aria-pressed={received}>
+          {received ? 'Show repaired text' : 'Garbled characters repaired. Show as received'}
+        </button>
       )}
     </div>
   )

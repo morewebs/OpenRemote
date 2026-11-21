@@ -1470,14 +1470,14 @@ fn notification(method: &str, params: &Value, shared: &Shared) -> Option<DriverE
                     text: text.to_string(),
                 })
         }
-        "item/commandExecution/outputDelta" => {
-            params
-                .get("delta")
-                .and_then(Value::as_str)
-                .map(|text| DriverEvent::TextDelta {
-                    text: format!("\n{text}"),
-                })
-        }
+        // A running command's output is not the assistant's words. It used
+        // to ride the reply stream as text, so the console showed raw stdout
+        // as agent messages (rendered as markdown, chunks interleaved across
+        // parallel commands, a break inserted at every chunk boundary). The
+        // finished command carries its whole output in `item/completed`
+        // (`aggregatedOutput`), which becomes the tool result of the card
+        // that started it.
+        "item/commandExecution/outputDelta" => None,
         // The thread's own context numbers: total tokens against the
         // model's window, both reported by the harness itself.
         "thread/tokenUsage/updated" => {

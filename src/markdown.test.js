@@ -152,3 +152,44 @@ test('math renders through KaTeX - inline, display, and dollars stay prose', () 
   const code = renderMarkdown('`$not math$`')
   assert.ok(!code.includes('katex'), 'code spans beat math')
 })
+
+test('shell code in prose is not typeset as math', () => {
+  // Two shell variables on one line used to read as one formula, because the
+  // text between the dollars held an underscore.
+  const powershell = renderMarkdown("Where-Object { $_.IPAddress -notlike '169.254.*' -and $_.AddressState -eq 'Preferred' }")
+  assert.ok(!powershell.includes('katex'), 'two $_ are not a formula')
+  assert.ok(powershell.includes('$_.IPAddress'), 'the words are all there')
+  const bash = renderMarkdown('NET="${ME%.*}.$(( ${ME##*.} / 4 * 4 ))"')
+  assert.ok(!bash.includes('katex'), '${...} is shell')
+  // Real formulas still render, including with a subscript.
+  assert.ok(renderMarkdown('so $a_i + b_i$ holds').includes('katex'))
+  assert.ok(renderMarkdown('so $\\frac{1}{2}$ holds').includes('katex'))
+  // The opening dollar needs a non-space after it, the closing one a non-space before it.
+  assert.ok(!renderMarkdown('so $ a_i + b_i $ holds').includes('katex'))
+})
+
+test('a link to a file reads as its label with the path on hover, never as raw markdown', () => {
+  const html = renderMarkdown('See [Incident record and rollback](<C:/Users/me/My Docs/472-peak-traffic.md>) for the record.')
+  assert.ok(!html.includes('[Incident'), 'the markdown syntax is consumed')
+  assert.ok(!html.includes('](')) 
+  assert.ok(html.includes('>Incident record and rollback</span>'), 'the label reads in place')
+  assert.ok(html.includes('title="C:/Users/me/My Docs/472-peak-traffic.md"'), 'the path is on hover')
+  assert.ok(!html.includes('href='), 'a local path is never a link')
+  // A bare relative path, with a title, the same way.
+  const rel = renderMarkdown('[the spec](docs/spec.md "Open it")')
+  assert.ok(rel.includes('>the spec</span>') && !rel.includes('href='))
+})
+
+test('web links still link, with or without angle brackets, and nothing unsafe becomes one', () => {
+  assert.ok(renderMarkdown('[site](https://example.com/a)').includes('href="https://example.com/a"'))
+  assert.ok(renderMarkdown('[site](<https://example.com/a b>)').includes('href="https://example.com/a b"'))
+  // Any other scheme stays the text it was, in plain view, and never links.
+  for (const hostile of ['[click](javascript:alert(1))', '[click](data:text/html,x)', '[click](file:///C:/x.md)']) {
+    const out = renderMarkdown(hostile)
+    assert.ok(!out.includes('href='), `${hostile} is never a link`)
+    assert.ok(!out.includes('md-ref'), `${hostile} is not read as a path`)
+    assert.ok(out.includes('[click]('), `${hostile} stays visible`)
+  }
+  // An image keeps its own rule: no stray "!" in front of a label.
+  assert.ok(!renderMarkdown('![shot](docs/shot.png)').includes('class="md-ref"'))
+})

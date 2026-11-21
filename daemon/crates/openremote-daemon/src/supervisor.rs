@@ -134,6 +134,16 @@ fn refuse_busy(session: &Session, live: bool) -> Result<(), SupervisorError> {
 }
 
 /// A folder as the UI names a project: its last part.
+/// The call id a tool event carries: the driver's own, or none when it has
+/// none (a driver that cannot name its calls sends an empty string).
+fn call_id_of(tool_use_id: String) -> Option<String> {
+    if tool_use_id.is_empty() {
+        None
+    } else {
+        Some(tool_use_id)
+    }
+}
+
 fn folder_name(folder: &std::path::Path) -> String {
     folder
         .file_name()
@@ -3431,16 +3441,28 @@ impl Supervisor {
                 let turn = Some(self.current_turn(id));
                 self.emit_all(id, vec![EventPayload::ThinkingTokens { tokens, turn }])?;
             }
-            DriverEvent::ToolStarted { name, input, .. } => {
+            DriverEvent::ToolStarted {
+                name,
+                input,
+                tool_use_id,
+            } => {
                 let turn = self.current_turn(id);
-                self.emit_all(id, vec![EventPayload::ToolStarted { turn, name, input }])?;
+                self.emit_all(
+                    id,
+                    vec![EventPayload::ToolStarted {
+                        turn,
+                        name,
+                        input,
+                        call_id: call_id_of(tool_use_id),
+                    }],
+                )?;
             }
             DriverEvent::ToolResult {
+                tool_use_id,
                 name,
                 text,
                 is_error,
                 images,
-                ..
             } => {
                 let turn = self.current_turn(id);
                 // A screenshot's bytes go to the blob store; the event
@@ -3454,6 +3476,7 @@ impl Supervisor {
                         output: Value::String(text),
                         is_error,
                         images,
+                        call_id: call_id_of(tool_use_id),
                     }],
                 )?;
             }
@@ -3683,6 +3706,12 @@ impl Supervisor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_call_id_rides_the_wire_only_when_the_driver_has_one() {
+        assert_eq!(call_id_of("item-7".into()), Some("item-7".to_string()));
+        assert_eq!(call_id_of(String::new()), None);
+    }
 
     /// A supervisor over a throwaway store with no harnesses: enough for
     /// the maps and rule removal - nothing here spawns a session.

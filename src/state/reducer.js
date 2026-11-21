@@ -22,7 +22,12 @@ export function workspaceName(path) {
 
 export function titleFrom(text) {
   const first = String(text ?? '').trim().split('\n')[0]
-  return first.length > 44 ? `${first.slice(0, 44).trimEnd()}…` : first
+  if (first.length <= 44) return first
+  // Cut where a word ends, not through one ("a bottlene…"). One long word
+  // with no break in the last stretch is still cut where it stands.
+  const atBreak = first[44] === ' ' ? 44 : first.lastIndexOf(' ', 44)
+  const end = atBreak >= 24 ? atBreak : 44
+  return `${first.slice(0, end).trimEnd().replace(/[,;:]+$/, '')}…`
 }
 
 /// The words a chat's generated name comes from: the first user message that
@@ -400,6 +405,10 @@ export function foldEvent(chat, event) {
         // tool.started and tool.result, so results pair within the
         // right turn instead of the nearest same-name tool anywhere.
         turn: payload.turn,
+        // The harness's own id for the call, when the daemon sends one: it
+        // is what pairs a result with this card when two calls of one tool
+        // run at once. Older daemons and drivers without ids send none.
+        callId: typeof payload.call_id === 'string' && payload.call_id ? payload.call_id : null,
         input: payload.input,
         state: 'ok',
         result: null,
@@ -475,21 +484,30 @@ export function foldEvent(chat, event) {
       break
     }
     case 'tool.result': {
-      // The result completes the most recent unanswered tool of that
-      // name in that turn - never one of another turn, so a result
-      // that lands after an interrupt cannot complete the next turn's
-      // call. Two parallel same-name calls within one turn still need
-      // a daemon-side call id to pair perfectly.
-      for (let i = chat.timeline.length - 1; i >= 0; i--) {
-        const item = chat.timeline[i]
-        if (item.kind === 'tool' && item.turn === payload.turn && item.name === payload.name && item.result == null) {
-          item.result = typeof payload.output === 'string' ? payload.output : JSON.stringify(payload.output)
-          item.state = payload.is_error ? 'failed' : 'ok'
-          // What the tool answered with besides words (an agent's
-          // screenshot of a page), named in the blob store.
-          item.images = Array.isArray(payload.images) ? payload.images : []
-          break
+      // The result completes the unanswered tool it names by call id. With
+      // no id (an older daemon, a driver that has none), or none that
+      // matches, it completes the most recent unanswered tool of that name
+      // in that turn - never one of another turn, so a result that lands
+      // after an interrupt cannot complete the next turn's call. By name
+      // alone, parallel same-name calls pair backwards (the first result to
+      // land goes to the last call started), which is why the id comes first.
+      const unanswered = item =>
+        item.kind === 'tool' && item.turn === payload.turn && item.name === payload.name && item.result == null
+      let target = null
+      if (typeof payload.call_id === 'string' && payload.call_id) {
+        target = chat.timeline.find(item => unanswered(item) && item.callId === payload.call_id) ?? null
+      }
+      if (!target) {
+        for (let i = chat.timeline.length - 1; i >= 0; i--) {
+          if (unanswered(chat.timeline[i])) { target = chat.timeline[i]; break }
         }
+      }
+      if (target) {
+        target.result = typeof payload.output === 'string' ? payload.output : JSON.stringify(payload.output)
+        target.state = payload.is_error ? 'failed' : 'ok'
+        // What the tool answered with besides words (an agent's
+        // screenshot of a page), named in the blob store.
+        target.images = Array.isArray(payload.images) ? payload.images : []
       }
       break
     }

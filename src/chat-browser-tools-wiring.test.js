@@ -24,7 +24,9 @@ test('a browser or team step shows its facts, and every step its Out through Out
   assert.match(cluster, /\{step\.browser && <BrowserFacts facts=\{step\.browser\} \/>\}/)
   assert.match(cluster, /teamTool\(item\.name, item\.input, \{ sessions, chatId: chat\.id, result: item\.result \}\)/)
   assert.match(cluster, /\{team && <TeamFacts facts=\{team\} \/>\}/)
-  assert.match(cluster, /<OutRow raw=\{step\.out\} fold=\{step\.fold\} \/>/)
+  // Every step's Out is StepOut, which reads it through OutRow.
+  assert.match(cluster, /\{step\.out && <StepOut step=\{step\} \/>\}/)
+  assert.match(view, /function StepOut\(\{ step \}\)[\s\S]*?<OutRow raw=\{[^}]*\} fold=\{step\.fold\} \/>/)
   // The open Out row reads through ToolIo (fields, or text behind its size).
   assert.match(view, /function OutRow\(\{ raw, fold \}\)[\s\S]*?<ToolIo label="Out" raw=\{raw\} \/>/)
 })

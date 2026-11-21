@@ -3,11 +3,18 @@
 // the person has to answer them.
 
 import { browserTool, foldsResult, isBrowserTool } from './browser-tools.js'
+import { commandSummary, isCommandRun, shellInner } from './command-card.js'
+import { repairMojibake } from './text-repair.js'
+
+/// Codex names its shell tool after the protocol item it comes from. A person
+/// reads that step as the command it ran, never as the protocol's word.
+const isCommandExecution = (tool) => tool?.name === 'commandExecution'
 
 /// How one tool call reads in that row. The browser's tools say what they did to a page
 /// ("Browser · read page") rather than the MCP name they arrive under, which is the one
 /// place a person meets the agent's browser work.
 export function toolLabel(tool) {
+  if (isCommandExecution(tool)) return 'Ran'
   if (!isBrowserTool(tool?.name)) return tool?.name
   return browserTool(tool.name, tool.input).label
 }
@@ -43,16 +50,26 @@ export function workLabel(items, live) {
   const thinking = items.some((item) => item.kind === 'reasoning' || item.kind === 'reasoning-stream')
   if (live) {
     const running = tools.find((item) => item.result == null)
+    if (running && isCommandExecution(running)) {
+      const what = commandSummary(running.input?.command, 56)
+      return what ? `Running ${what}` : 'Running a command'
+    }
     if (running) return toolLabel(running)
     if (thinking) return 'Thinking…'
     return 'Working…'
   }
   if (tools.length === 0) return 'Thought'
   const names = []
+  let commands = 0
   for (const tool of tools) {
+    if (isCommandExecution(tool)) {
+      commands += 1
+      continue
+    }
     const name = toolLabel(tool)
     if (!names.includes(name)) names.push(name)
   }
+  if (commands > 0) names.unshift(commands === 1 ? 'Ran a command' : `Ran ${commands} commands`)
   if (names.length <= 3) return names.join(', ')
   return `${tools.length} steps`
 }
@@ -63,11 +80,17 @@ export function workLabel(items, live) {
 /// text (the browser's snapshot) keeps folded until asked for.
 export function workStep(item) {
   const browser = isBrowserTool(item?.name) ? browserTool(item.name, item.input) : null
+  // A command's output is what the shell printed, and a Windows shell prints a
+  // UTF-8 file's words through the wrong code page. Put them back for display,
+  // and keep the text as received for the person who wants it.
+  const fixed = isCommandRun(item?.input) && typeof item?.result === 'string' ? repairMojibake(item.result) : null
   return {
     label: toolLabel(item),
     hint: browser ? null : toolHint(item),
     browser,
-    out: item?.result ?? null,
+    out: fixed?.repaired ? fixed.text : (item?.result ?? null),
+    received: fixed?.repaired ? item.result : null,
+    repaired: Boolean(fixed?.repaired),
     fold: Boolean(browser) && foldsResult(item.name),
   }
 }
@@ -85,7 +108,7 @@ export function toolHint(item) {
   if (!input || typeof input !== 'object') return null
   if (typeof input.url === 'string') return urlLabel(input.url)
   if (typeof input.file_path === 'string') return input.file_path
-  if (typeof input.command === 'string') return input.command
+  if (typeof input.command === 'string') return shellInner(input.command)
   if (typeof input.id === 'string' && input.id.length < 80) return input.id
   if (typeof input.query === 'string') return clip(input.query)
   if (typeof input.code === 'string') return clip(input.code)
