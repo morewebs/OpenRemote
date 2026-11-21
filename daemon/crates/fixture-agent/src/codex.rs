@@ -341,6 +341,19 @@ impl CodexFixture {
             return;
         };
         let allowed = decision == "accept" || decision == "acceptForSession";
+        if allowed {
+            // The live output of the running command, as the real app-server
+            // streams it before the item completes.
+            self.notify(
+                "item/commandExecution/outputDelta",
+                json!({
+                    "threadId": self.thread(),
+                    "turnId": pending.turn,
+                    "itemId": pending.item_id,
+                    "delta": "fixture output"
+                }),
+            );
+        }
         self.notify(
             "item/completed",
             json!({

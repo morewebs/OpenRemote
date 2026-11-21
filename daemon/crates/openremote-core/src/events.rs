@@ -73,6 +73,11 @@ pub enum EventPayload {
         turn: u64,
         name: String,
         input: serde_json::Value,
+        /// The harness's own id for this call, so its result finds its card
+        /// when two calls of one tool run at once. Events written before
+        /// calls carried an id (and drivers with none) have none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        call_id: Option<String>,
     },
     #[serde(rename = "tool.result")]
     ToolResult {
@@ -85,6 +90,9 @@ pub enum EventPayload {
         /// were kept have none.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         images: Vec<ImageRef>,
+        /// The id of the call this answers, as on its `tool.started`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        call_id: Option<String>,
     },
     /// The harness reported the conversation's context size - its own
     /// numbers, never ours. The window only rides where the harness
@@ -229,5 +237,47 @@ mod tests {
         };
         assert_eq!(turn_of(&round_trip(&first_turn)), Some(0));
         assert_ne!(turn_of(&round_trip(&first_turn)), turn_of(&thinking));
+    }
+
+    #[test]
+    fn a_tool_call_carries_its_id_so_a_parallel_result_finds_its_card() {
+        // Two calls of one tool can run at once, and the console used to pair
+        // a result with "the latest unanswered call of that name", so the
+        // first result to land went to the wrong card.
+        let started = EventPayload::ToolStarted {
+            turn: 1,
+            name: "commandExecution".into(),
+            input: serde_json::json!({"command": "ls"}),
+            call_id: Some("item-7".into()),
+        };
+        let wire = serde_json::to_value(&started).unwrap();
+        assert_eq!(wire["call_id"], "item-7");
+        assert_eq!(serde_json::to_value(round_trip(&started)).unwrap(), wire);
+
+        // No id (a driver with none) leaves the key off the wire, and events
+        // stored before ids existed still decode, with `None`.
+        let bare = EventPayload::ToolResult {
+            turn: 1,
+            name: "Bash".into(),
+            output: serde_json::json!("ok"),
+            is_error: false,
+            images: vec![],
+            call_id: None,
+        };
+        assert!(
+            serde_json::to_value(&bare)
+                .unwrap()
+                .get("call_id")
+                .is_none()
+        );
+        let old: EventPayload = serde_json::from_value(serde_json::json!({
+            "type": "tool.result", "turn": 1, "name": "Bash",
+            "output": "ok", "is_error": false,
+        }))
+        .expect("a result from before ids still decodes");
+        assert_eq!(
+            serde_json::to_value(&old).unwrap(),
+            serde_json::to_value(&bare).unwrap()
+        );
     }
 }
