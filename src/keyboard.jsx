@@ -201,10 +201,14 @@ export function usePaletteSource(kind, get, enabled = true) {
   useRegistration('registerSource', kind, get, enabled)
 }
 
+export function useKeyLabel(id) {
+  const ctx = useContext(KeyboardContext)
+  return ctx && !isMobile ? ctx.label(id) : ''
+}
+
 // "Title (Ctrl+N)" when the action has a key, the plain title when not.
 export function useHint(id) {
-  const ctx = useContext(KeyboardContext)
-  const label = ctx && !isMobile ? ctx.label(id) : ''
+  const label = useKeyLabel(id)
   return (title) => (label ? `${title} (${label})` : title)
 }
 

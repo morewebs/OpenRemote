@@ -19,8 +19,9 @@ import './contextmenu.css'
  * a row whose own list opens beside the menu - on hover, a click or a tap,
  * or the right arrow (the left arrow or Esc goes back). Four adjacent
  * icon actions with inline: true share a row. The rules live in context-menu.js.
+ * Pass x/y for a pointer menu or anchor for a button that toggles this menu.
  */
-export default function ContextMenu({ x, y, items, onClose, compact = false, label = null }) {
+export default function ContextMenu({ x, y, anchor = null, anchorSide = 'below', items, onClose, compact = false, label = null }) {
   const menuId = useId()
   const ref = useRef(null)
   const subRef = useRef(null)
@@ -60,7 +61,7 @@ export default function ContextMenu({ x, y, items, onClose, compact = false, lab
   useEffect(() => {
     const inside = (target) => ref.current?.contains(target) || subRef.current?.contains(target)
     const away = (e) => {
-      if (!inside(e.target)) close.current()
+      if (!inside(e.target) && !anchor?.contains(e.target)) close.current()
     }
     const shut = () => close.current()
     // Anything that moves the page under the cursor strands the menu - but a
@@ -85,10 +86,10 @@ export default function ContextMenu({ x, y, items, onClose, compact = false, lab
       clearTimeout(linger.current)
       for (const [type, fn] of listeners) window.removeEventListener(type, fn)
     }
-  }, [])
+  }, [anchor])
 
-  // Open at the press, within the visible viewport even with a phone keyboard.
-  // Both lists can outgrow the screen, so constrain them before measuring.
+  // A button menu aligns to its right edge, so it stays under the trigger
+  // whether that button is at the window edge or inside a split pane.
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
@@ -99,7 +100,13 @@ export default function ContextMenu({ x, y, items, onClose, compact = false, lab
       const height = viewport?.height ?? window.innerHeight
       const offsetTop = viewport?.offsetTop ?? 0
       el.style.maxHeight = `${Math.max(0, height - 16)}px`
-      const at = fitPicker({ left: x, top: y }, el.getBoundingClientRect(), { width, height, offsetTop })
+      const size = el.getBoundingClientRect()
+      const trigger = anchor?.getBoundingClientRect()
+      const spot = trigger ? {
+        left: trigger.right - size.width,
+        top: anchorSide === 'above' ? trigger.top - size.height - 6 : trigger.bottom + 6,
+      } : { left: x, top: y }
+      const at = fitPicker(spot, size, { width, height, offsetTop })
       el.style.left = `${at.left}px`
       el.style.top = `${at.top}px`
       const row = rows.current[open]
@@ -132,7 +139,7 @@ export default function ContextMenu({ x, y, items, onClose, compact = false, lab
       window.visualViewport?.removeEventListener('resize', fit)
       window.visualViewport?.removeEventListener('scroll', fit)
     }
-  }, [x, y, open])
+  }, [x, y, anchor, anchorSide, open])
 
   const run = (item) => {
     if (item.disabled) return
