@@ -263,6 +263,54 @@ test('stream deltas grow a live item, and the settled message replaces it whole'
   assert.equal(rail.at(-1).text, 'Done. ')
 })
 
+test('a final reply after turn completion replaces its retired streaming preview', () => {
+  const chat = chatFromSession(session({ harness: 'opencode', status: 'working' }))
+  foldEvents(chat, [
+    event(1, { type: 'message.delta', turn: 0, text: 'Hello. ' }),
+    event(2, { type: 'message.delta', turn: 0, text: 'How can I help?' }),
+    event(3, { type: 'turn.completed', turn: 0, outcome: 'success', coarse: 'completed' }),
+    event(4, { type: 'session.status_changed', status: 'idle' }),
+  ])
+  assert.deepEqual(railItems(chat).map(({ kind, text }) => [kind, text]), [
+    ['message', 'Hello. How can I help?'],
+  ], 'the preview is still readable, without a live caret')
+
+  foldEvent(chat, event(5, {
+    type: 'message.added',
+    message: { id: 'reply', turn: 0, role: 'assistant', text: 'Hello. How can I help?' },
+  }))
+  assert.deepEqual(railItems(chat).map(({ id, text }) => [id, text]), [
+    ['reply', 'Hello. How can I help?'],
+  ])
+})
+
+test('a final reply after an idle poll replaces its retired streaming preview', () => {
+  const chat = chatFromSession(session({ status: 'working', updated_at: 1000 }))
+  foldEvent(chat, event(1, { type: 'message.delta', turn: 2, text: 'Done.' }))
+  const idle = mergeSessionIntoChat(chat, session({ status: 'idle', updated_at: 1200 }))
+  assert.equal(railItems(idle)[0].kind, 'message')
+
+  foldEvent(idle, event(2, {
+    type: 'message.added',
+    message: { id: 'reply', turn: 2, role: 'assistant', text: 'Done.' },
+  }))
+  assert.deepEqual(railItems(idle).map(({ id }) => id), ['reply'])
+  assert.equal(railItems(chat)[0].kind, 'stream', 'polling did not mutate the prior record')
+})
+
+test('settlement keeps distinct partial replies and never deduplicates settled messages by text', () => {
+  const chat = chatFromSession(session({ status: 'working' }))
+  foldEvents(chat, [
+    event(1, { type: 'message.delta', turn: 0, text: 'Done.' }),
+    event(2, { type: 'turn.completed', turn: 0, outcome: 'interrupted', coarse: 'stopped' }),
+    event(3, { type: 'message.delta', turn: 1, text: 'Starting over.' }),
+    event(4, { type: 'turn.completed', turn: 1, outcome: 'success', coarse: 'completed' }),
+    event(5, { type: 'message.added', message: { id: 'reply-1', turn: 1, role: 'assistant', text: 'Done.' } }),
+    event(6, { type: 'message.added', message: { id: 'reply-2', turn: 1, role: 'assistant', text: 'Done.' } }),
+  ])
+  assert.deepEqual(railItems(chat).map(({ id }) => id), ['stream-0', 'stream-1', 'reply-1', 'reply-2'])
+})
+
 test('reasoning streams and settles as its own block, thinking tokens sum', () => {
   const chat = chatFromSession(session())
   // The thinking stream grows its own live item.

@@ -239,9 +239,9 @@ function retireLiveItems(chat, turn) {
     const item = chat.timeline[i]
     if (turn != null && item.turn !== turn) continue
     if (item.kind === 'stream') {
-      // The settled shape message.added pushes, so nothing downstream has
-      // to know this reply arrived in fragments.
-      chat.timeline[i] = { kind: 'message', id: item.id, role: 'agent', text: item.text }
+      // Show the partial reply without a caret, but keep its provenance:
+      // an App can announce the turn is over before its final message arrives.
+      chat.timeline[i] = { kind: 'message', id: item.id, role: 'agent', text: item.text, streamTurn: item.turn }
     } else if (item.kind === 'reasoning-stream') {
       chat.timeline[i] = { kind: 'reasoning', id: item.id, turn: item.turn, text: item.text }
     }
@@ -305,9 +305,9 @@ export function foldEvent(chat, event) {
       if (payload.reason != null) chat.lastError = payload.reason
       else if (payload.status !== 'failed') chat.lastError = null
       chat.running = isActive(payload.status)
-      // A stop or a failure ends the turn with no settled message ever
-      // coming; a turn that is working or waiting on an answer is still
-      // speaking, and its live block stays honest.
+      // A stop or a failure can end the turn without a settled message.
+      // Keep the partial text, but only show the live caret while the
+      // turn is still working or waiting on an answer.
       if (payload.status === 'failed' || payload.status === 'stopped') {
         retireLiveItems(chat, null)
       }
@@ -354,18 +354,25 @@ export function foldEvent(chat, event) {
     }
     case 'message.added': {
       const message = payload.message
+      let retiredPreview = -1
       // The settled agent message replaces the stream item it settles -
       // the stream was its preview, never a second transcript entry.
       if (message.role === 'assistant') {
         for (let i = chat.timeline.length - 1; i >= 0; i--) {
           const item = chat.timeline[i]
-          if (item.kind === 'stream') {
-            if (item.turn === message.turn) chat.timeline.splice(i, 1)
+          if (item.kind === 'stream' && item.turn === message.turn) {
+            chat.timeline.splice(i, 1)
+            break
+          }
+          // After retirement, only an exact match in the same turn can
+          // replace the preview: distinct partial replies still belong here.
+          if (item.streamTurn != null && item.streamTurn === message.turn && item.text === message.text) {
+            retiredPreview = i
             break
           }
         }
       }
-      chat.timeline.push({
+      const settled = {
         kind: 'message',
         id: message.id,
         role: message.role === 'user' ? 'user' : 'agent',
@@ -377,7 +384,9 @@ export function foldEvent(chat, event) {
         // sent with its brief or report - as the blob store names them
         // ({ blob, mime }); the bytes are fetched when the message shows.
         images: Array.isArray(message.images) ? message.images : [],
-      })
+      }
+      if (retiredPreview >= 0) chat.timeline[retiredPreview] = settled
+      else chat.timeline.push(settled)
       // A message of pictures alone does not name the chat.
       if (message.role === 'user' && !chat.title && message.text?.trim()) chat.title = titleFrom(message.text)
       break
@@ -566,9 +575,8 @@ export function foldEvent(chat, event) {
     case 'turn.started':
       break
     case 'turn.completed':
-      // A turn that succeeded was settled by its message.added, so there is
-      // nothing left to retire. One that was interrupted or failed was not,
-      // and the partial reply is all the user is left with.
+      // Stop showing a live reply even if the final message is late or
+      // never comes. Keep any partial reply visible in the meantime.
       retireLiveItems(chat, payload.turn ?? null)
       break
     case 'message.delta':
