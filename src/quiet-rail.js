@@ -5,6 +5,7 @@
 import { browserTool, foldsResult, isBrowserTool } from './browser-tools.js'
 import { commandSummary, isCommandRun, shellInner } from './command-card.js'
 import { repairMojibake } from './text-repair.js'
+import { canonical } from './status-words.js'
 
 /// Codex names its shell tool after the protocol item it comes from. A person
 /// reads that step as the command it ran, never as the protocol's word.
@@ -100,6 +101,38 @@ export function workIsLive(items, running) {
   return items.some(
     (item) => item.kind === 'reasoning-stream' || (item.kind === 'tool' && item.result == null),
   )
+}
+
+const WAIT_LABELS = ['Untangling...', 'Thinking it through...', 'Putting it together...', 'Working it out...']
+
+// Put the activity on one live work row or at the end of the rail. A reply
+// already has the reader's attention, as does an unanswered question.
+export function railActivity(items, status, { reachable = true } = {}) {
+  const phase = canonical(status)
+  if (!reachable || !['starting', 'working'].includes(phase) || items.some((item) => item.kind === 'decision' && item.pending)) return null
+  let promptId = ''
+  let hasReply = false
+  let workId = null
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i]
+    // An interrupted tool can be left without a result in the transcript.
+    // It should not light up again when the next prompt starts running.
+    if (item.kind === 'message' && item.role === 'user') {
+      promptId = item.id ?? ''
+      break
+    }
+    if (item.kind === 'stream') return null
+    if (item.kind === 'message' && item.role === 'agent') hasReply = true
+    if (!hasReply && workId == null && item.kind === 'work' && workIsLive(item.items, true)) workId = item.id
+  }
+  if (workId != null) return { workId }
+  if (phase === 'starting') return { label: 'Starting the App...', waitKey: 'starting' }
+  if (hasReply) return null
+  // Use the prompt instead of a ticker or random render so a turn keeps
+  // its phrase across stream updates, reopening the chat, and split panes.
+  let hash = 0
+  for (let i = 0; i < promptId.length; i++) hash = (31 * hash + promptId.charCodeAt(i)) >>> 0
+  return { label: WAIT_LABELS[hash % WAIT_LABELS.length], waitKey: `reply-${promptId}` }
 }
 
 /// One short hint for an expanded step. Never the JSON body.

@@ -29,7 +29,7 @@ test("a user's message and another agent's both show their pictures; the origin 
   )
   // A tool's screenshot rides its line in the work row.
   assert.match(view, /<ChatImages images=\{item\.images\} chat=\{chat\} label="Screenshot" \/>/)
-  assert.match(view, /<WorkCluster key=\{item\.id\} items=\{item\.items\} running=\{chat\.running\} chat=\{chat\} \/>/)
+  assert.match(view, /<WorkCluster key=\{item\.id\} items=\{item\.items\} [^\n]* chat=\{chat\} \/>/)
 })
 
 test('both composers take paste, drop and the attach button, and show the chips', () => {

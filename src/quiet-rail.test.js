@@ -1,6 +1,47 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { quietRail, toolHint, workLabel, workStep } from './quiet-rail.js'
+import { quietRail, railActivity, toolHint, workLabel, workStep } from './quiet-rail.js'
+
+const prompt = { kind: 'message', id: 'prompt', role: 'user' }
+const activeStep = { kind: 'tool', id: 'step', name: 'Read', result: null }
+const currentActivity = (status, items, options) => railActivity(quietRail(items), status, options)
+
+test('quiet active turns distinguish App startup from waiting on its response', () => {
+  assert.deepEqual(currentActivity('starting', []), { label: 'Starting the App...', waitKey: 'starting' })
+  const first = currentActivity('working', [prompt])
+  assert.deepEqual(first, { label: 'Untangling...', waitKey: 'reply-prompt' })
+  assert.deepEqual(currentActivity('running', [prompt, { ...activeStep, result: 'done' }]), first)
+  assert.deepEqual(currentActivity('working', [prompt, { ...prompt, id: 'prompt-2' }]), {
+    label: 'Thinking it through...', waitKey: 'reply-prompt-2',
+  })
+})
+
+test('the activity marks the latest live work in this turn, not a historical unfinished step', () => {
+  assert.deepEqual(currentActivity('running', [activeStep, prompt]), currentActivity('running', [prompt]))
+  const thinking = { kind: 'reasoning-stream', id: 'thinking' }
+  const preamble = { kind: 'message', id: 'preamble', role: 'agent' }
+  assert.deepEqual(currentActivity('running', [prompt, thinking]), { workId: 'work-thinking' })
+  assert.deepEqual(currentActivity('running', [prompt, thinking, preamble, activeStep]), { workId: 'work-step' })
+})
+
+test('a reply, a decision, or an inactive or unreachable chat needs no wait line', () => {
+  const stream = { kind: 'stream', id: 'reply' }
+  assert.equal(currentActivity('working', [prompt, stream, activeStep]), null)
+  const settled = { kind: 'message', id: 'settled', role: 'agent' }
+  assert.equal(currentActivity('working', [prompt, activeStep, settled]), null)
+  assert.ok(currentActivity('working', [settled, prompt])?.label, 'the next prompt gets a wait line')
+  assert.equal(currentActivity('working', [prompt, activeStep, { kind: 'decision', pending: true }]), null)
+  for (const status of ['waiting', 'idle', 'stopped', 'failed']) {
+    assert.equal(currentActivity(status, [prompt, activeStep]), null, status)
+  }
+  assert.equal(currentActivity('working', [prompt], { reachable: false }), null)
+})
+
+test('the text sweep opts in only when both motion preferences allow it', () => {
+  const css = readFileSync(new URL('./chatview.css', import.meta.url), 'utf8')
+  assert.match(css, /@media \(prefers-reduced-motion: no-preference\) and \(forced-colors: none\) \{\s*html:not\(\[data-reduce-motion\]\) \.cv-activity-ink\s*\{[^}]*animation: cv-activity-light/)
+})
 
 test('thinking and tools collapse into one row between the messages', () => {
   const rail = quietRail([

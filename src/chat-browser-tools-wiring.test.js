@@ -14,7 +14,7 @@ const cluster = /function WorkCluster\([\s\S]*?\n\}\r?\n/.exec(view)?.[0] ?? ''
 
 test('the opened work row shows each step through workStep', () => {
   assert.ok(cluster, 'WorkCluster is in the view')
-  assert.match(view, /import \{ quietRail, workIsLive, workLabel, workStep \} from '\.\/quiet-rail\.js'/)
+  assert.match(view, /import \{ [^}]*\bworkStep \} from '\.\/quiet-rail\.js'/)
   assert.match(cluster, /const step = workStep\(item\)/)
   assert.match(cluster, /title=\{step\.browser \|\| team \? item\.name : undefined\}/)
   assert.match(cluster, /\{team \? team\.label : step\.label\}/)

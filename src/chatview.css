@@ -114,14 +114,54 @@
   background: var(--green);
 }
 
-.cv-node--pending::before,
-.cv-node--run::before {
+.cv-node--pending::before {
   background: var(--accent);
 }
 
-.cv-node--run::before {
+.cv-activity-note::before,
+.cv-work--active::before {
   background: var(--green);
-  animation: cv-breathe 2.4s ease-in-out infinite;
+}
+
+.cv-activity-note {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.cv-activity-ink {
+  min-width: 0;
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+
+.cv-activity-time {
+  flex: none;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+/* Leave plain, readable text behind when motion or text clipping isn't
+   available. The moving light rests off the letters between passes. */
+@supports (background-clip: text) {
+  @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+    html:not([data-reduce-motion]) .cv-activity-ink {
+      color: transparent;
+      background: linear-gradient(105deg, var(--accent) 40%, var(--text-1) 50%, var(--accent) 60%) 100% 50% / 280% 100%;
+      background-clip: text;
+      animation: cv-activity-light 2.3s ease-in-out infinite;
+    }
+  }
+}
+
+@keyframes cv-activity-light {
+  65%, 100% { background-position: 0% 50%; }
 }
 
 .cv-agent {
@@ -164,6 +204,11 @@
 .cv-reasoning-head:hover {
   background: var(--bg-hover);
   color: var(--text-2);
+}
+
+.cv-work--active .cv-reasoning-head {
+  max-width: calc(100% + 8px);
+  text-align: left;
 }
 
 .cv-work-list {
@@ -458,12 +503,6 @@
   font-size: 0.92em;
 }
 
-.cv-running {
-  color: var(--text-3);
-  font-size: 13px;
-  line-height: 1.4;
-}
-
 @keyframes cv-breathe {
   0%,
   100% {
@@ -690,16 +729,6 @@ html[data-reduce-motion] .cv-stop-group > .cv-run-button {
 
 .cv-node--done .cv-tool-state {
   color: var(--green);
-}
-
-/* The breathing dot of agent work: a work row while a step runs. */
-.cv-tool-status-dot {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--green);
-  animation: cv-breathe 2.4s ease-in-out infinite;
 }
 
 .cv-io {
@@ -1030,15 +1059,14 @@ html[data-reduce-motion] .cv-stop-group > .cv-run-button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cv-browsing-dot {
+  .cv-browsing-dot,
+  .cv-caret {
     animation: none;
   }
 }
 
 html[data-reduce-motion] .cv-browsing-dot,
-html[data-reduce-motion] .cv-caret,
-html[data-reduce-motion] .cv-tool-status-dot,
-html[data-reduce-motion] .cv-node--run::before {
+html[data-reduce-motion] .cv-caret {
   animation: none;
 }
 

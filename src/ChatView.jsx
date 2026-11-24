@@ -14,7 +14,7 @@ import {
 import { useConsole } from './state/console.jsx'
 import { chatAccess, deviceName, signedIn } from './cloud.js'
 import { railItems } from './state/reducer.js'
-import { quietRail, workIsLive, workLabel, workStep } from './quiet-rail.js'
+import { quietRail, railActivity, workIsLive, workLabel, workStep } from './quiet-rail.js'
 import { browserTool, isBrowserTool } from './browser-tools.js'
 import { harnessLabel } from './harness-names.js'
 import { findModel, modelDisplayName, prettyModelName } from './model-display.js'
@@ -200,6 +200,26 @@ function MarkdownBody({ text, live = false, className, tail = '' }) {
   return <p className={className} dangerouslySetInnerHTML={{ __html: html + tail }} />
 }
 
+function ChatWait({ label }) {
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    // This times the visible wait, not the App's runtime. Keep it local to
+    // this row so a clock tick doesn't render the rest of the transcript.
+    const start = performance.now()
+    const clock = setInterval(() => {
+      const seconds = Math.floor((performance.now() - start) / 1000)
+      if (seconds >= 5) setElapsed(seconds)
+    }, 1000)
+    return () => clearInterval(clock)
+  }, [])
+  return (
+    <p className="cv-node cv-activity-note">
+      <span role="status" className="cv-activity-ink">{label}</span>
+      {elapsed > 0 && <span className="cv-activity-time">{elapsed}s</span>}
+    </p>
+  )
+}
+
 /// The harness's own reasoning, dim and collapsible. The pill is the
 /// whole mark while it runs and after it settles. The words stay hidden
 /// until the reader asks - a live stream was a wall of text.
@@ -209,18 +229,17 @@ function MarkdownBody({ text, live = false, className, tail = '' }) {
 /// (Out, through OutRow: fields, text folded behind its size, a page read
 /// as text folded whole) - never a JSON dump of its input.
 // Work row for a turn. Named at module scope so the rail can render it.
-function WorkCluster({ items, running, chat }) {
+function WorkCluster({ items, active, chat }) {
   const { sessions } = useConsole()
   const [open, setOpen] = useState(false)
   const files = items.filter(item => item.kind === 'tool').flatMap(item => fileChangeCards(item).map(file => ({ file, item })))
   const ordinary = items.filter(item => item.kind !== 'tool' || fileChangeCards(item).length === 0)
-  const live = workIsLive(ordinary, running)
+  const live = workIsLive(ordinary, active)
   const tools = ordinary.filter((item) => item.kind === 'tool')
   return (
-    <div className="cv-node cv-work">
+    <div className={`cv-node cv-work${active ? ' cv-work--active' : ''}`}>
       {ordinary.length > 0 && <button type="button" className="cv-reasoning-head" onClick={() => setOpen(!open)} aria-expanded={open}>
-        {live && <span className="cv-tool-status-dot" />}
-        {workLabel(ordinary, live)}
+        <span className={live ? 'cv-activity-ink pv' : undefined}>{workLabel(ordinary, live)}</span>
       </button>}
       {files.map(({ file, item }, i) => <FileChangeCard key={`${item.id}-${i}`} file={file} result={item.result} />)}
       {open && tools.length > 0 && (
@@ -631,6 +650,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
   const inputRef = useRef(null)
   const rail = railItems(chat)
   const quiet = quietRail(rail)
+  const activity = railActivity(quiet, chat.status, { reachable })
   // A worker's first message is the brief its lead gave it.
   const firstBrief = chat.parent
     ? (rail.find((item) => item.kind === 'message' && item.role === 'user')?.id ?? null)
@@ -1314,10 +1334,10 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
       <TeamBar chat={chat} canAct={reachable} />
       <div className="cv-scroll" ref={scrollRef}>
         <div className="cv-thread">
-          {rail.length === 0 && <p className="cv-node cv-note">The transcript will appear here.</p>}
+          {rail.length === 0 && !activity?.label && <p className="cv-node cv-note">The transcript will appear here.</p>}
           {quiet.map((item) => {
             if (item.kind === 'work') {
-              return <WorkCluster key={item.id} items={item.items} running={chat.running} chat={chat} />
+              return <WorkCluster key={item.id} items={item.items} active={activity?.workId === item.id} chat={chat} />
             }
             if (item.kind === 'reasoning' || item.kind === 'reasoning-stream') {
               // The harness's own thinking, dim and collapsible - never
@@ -1429,11 +1449,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
               </div>
             )
           })}
-          {chat.running && !pendingDecision && !quiet.some((item) => item.kind === 'work' && workIsLive(item.items, true)) && !quiet.some((item) => item.kind === 'stream') && (
-            <p className="cv-node cv-node--run cv-running">
-              Working...
-            </p>
-          )}
+          {activity?.label && <ChatWait key={activity.waitKey} label={activity.label} />}
         </div>
       </div>
 
