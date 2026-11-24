@@ -51,7 +51,7 @@ import './move.css'
 import { armRow, clearRow, rowIsArmed } from './row-confirm.js'
 import { listHasUnread, loadSeen, markSeen, recordSeen, seedSeen, storeSeen, unreadIds } from './unread.js'
 import { lineFor, missingLines, pruneLines, questionKey, questionLine, rememberLine, wantedKeys } from './question-line.js'
-import { HarnessMark } from './brand-marks.jsx'
+import AgentAvatar from './AgentAvatar.jsx'
 import ContextMenu from './ContextMenu.jsx'
 import DeleteChatModal from './DeleteChatModal.jsx'
 import { shownTitle } from './rename-chat.js'
@@ -1146,12 +1146,7 @@ export default function Sidebar({
         }}
         onClick={() => onSelect(row.id)}
       >
-        {/* the harness's mark leads - every harness, one
-            sidebar, the at-a-glance signal of which agent owns
-            each chat - sized to read from afar, then the title. The
-            row's actions button sits at the right edge, beside the row
-            rather than inside it, so it stays out of the row's Tab stop. */}
-        {row.harness && <HarnessMark harness={row.harness} size={15} />}
+        <AgentAvatar agent={row} size={isMobile ? 36 : 30} showAppBadge />
         <div className="chat-titles">
           <span className="chat-title pv" onDoubleClick={renameOnDoubleClick(row.id)}>{row.title}</span>
           {/* The visible mark a pinned row wears, in the title line so the

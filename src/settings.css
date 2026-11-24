@@ -531,6 +531,10 @@ html[data-density='compact'] .chat-row {
   padding-bottom: 6px;
 }
 
+html[data-density='compact'] :not(.is-mobile) > .sidebar .chat-row .agent-avatar {
+  --avatar-size: 24px;
+}
+
 html[data-density='compact'] .am-rule {
   padding-top: 8px;
   padding-bottom: 8px;

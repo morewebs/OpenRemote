@@ -8,6 +8,7 @@
 
 import { useRef, useState } from 'react'
 import { Trash, X } from '@phosphor-icons/react'
+import AgentAvatar from './AgentAvatar.jsx'
 import HarnessManagerModal from './HarnessManagerModal.jsx'
 import { useConsole } from './state/console.jsx'
 import { harnessName } from './harness-names.js'
@@ -107,6 +108,7 @@ export default function MachineModal({ device, onOpenChat, onClose }) {
                 onOpenChat(s.id)
               }}
             >
+              <AgentAvatar agent={s} size={26} />
               <span className={`dv-agent-dot${LIVE.includes(s.status) ? '' : ' idle'}`} />
               <div className="dv-agent-body">
                 <div className="dv-agent-top">

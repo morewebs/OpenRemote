@@ -3,7 +3,7 @@ import { CaretDown, CaretRight, Stop } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { errorCopy } from './error-copy.js'
 import { chatStatus } from './state/reducer.js'
-import { HarnessMark } from './brand-marks.jsx'
+import AgentAvatar from './AgentAvatar.jsx'
 import { descendantsOf, isAlive, nameOf, stateWord, teamDot, teamSummary } from './team.js'
 import { requestBeside } from './team-placement.js'
 import './team.css'
@@ -65,7 +65,7 @@ export default function TeamBar({ chat, canAct }) {
               className="cv-team-row"
               style={depth > 1 ? { paddingLeft: 6 + (depth - 1) * 16 } : undefined}
             >
-              <HarnessMark harness={session.harness} size={13} />
+              <AgentAvatar agent={session} size={22} showAppBadge />
               <button
                 type="button"
                 className="cv-team-name pv"
