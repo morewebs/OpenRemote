@@ -94,15 +94,15 @@ test('the header wears the sidebar dot and the sidebar harness mark, one line', 
   assert.match(area, /className=\{`dot dot--\$\{head\.status\}`\}/)
   assert.match(area, /<HarnessMark harness=\{head\.harness\} size=\{16\} \/>/)
   // The title truncates while the controls keep their width.
-  assert.match(area, /<span className="split-title">\{head\.title\}<\/span>/)
-  assert.match(area, /<span className="split-project">\{head\.project\}<\/span>/)
+  assert.match(area, /<span className=\{head\.chat \? 'split-title pv' : 'split-title'\}>\{head\.title\}<\/span>/)
+  assert.match(area, /<span className="split-project pv">\{head\.project\}<\/span>/)
   assert.match(css, /\.split-title \{[\s\S]{0,140}text-overflow: ellipsis/)
   assert.match(css, /\.split-project \{[\s\S]{0,200}text-overflow: ellipsis/)
   assert.match(css, /\.split-actions \{\s*flex: none/, 'the actions never give ground to the title')
   // A role pane renders none of the chat parts: no dot, no mark, no project.
   assert.match(area, /\{head\.chat && <span className=\{`dot dot--/)
   assert.match(area, /\{head\.chat && head\.harness && <HarnessMark/)
-  assert.match(area, /\{head\.project && <span className="split-project">/)
+  assert.match(area, /\{head\.project && <span className="split-project pv">/)
 })
 
 test('a pane whose stream is between attempts says reconnecting beside the title', () => {

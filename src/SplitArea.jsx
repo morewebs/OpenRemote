@@ -6,6 +6,7 @@ import { HarnessMark } from './brand-marks.jsx'
 import { useKeyboard } from './keyboard.jsx'
 import { useEscLayer } from './esc-layer.js'
 import { RECONNECTING, paneChatId, paneHeader } from './pane-header.js'
+import { usePrivacyMode } from './privacy.js'
 import { projectFor } from './projects.js'
 import { useConsole } from './state/console.jsx'
 import { acceptsChatDrop, balanceSplit, draggedChat, dropZone, focusLeaf, leafById, leaves, MAX_PANES, splitLeaf } from './split.js'
@@ -20,11 +21,13 @@ function Pane({ node, rect, focused, hidden, zoomed, showHeader, labelFor, rende
   const dropRef = useRef(null)
   const label = labelFor(node)
   const { chats, projects, reconnecting } = useConsole()
+  const privacy = usePrivacyMode()
   const chatId = paneChatId(node.view, currentChat)
   const chat = chatId ? (chats?.[chatId] ?? null) : null
   const head = paneHeader({ label, chat, project: chat ? projectFor(projects ?? [], chat.workspace) : null,
     reconnecting: chatId ? Boolean(reconnecting?.[chatId]) : false,
   })
+  const paneName = privacy && head.chat ? 'Chat' : head.title
   const kb = useKeyboard()
   const over = e => {
     if (!onDropInPane || !acceptsChatDrop(e.dataTransfer.types)) return
@@ -73,18 +76,18 @@ function Pane({ node, rect, focused, hidden, zoomed, showHeader, labelFor, rende
   ]
   return <section className={`split-pane${focused ? ' focused' : ''}${zoomed ? ' is-maximized' : ''}${menu ? ' has-menu' : ''}`}
     data-leaf-id={node.id} style={{ ...position(rect), display: hidden ? 'none' : undefined }} inert={hidden || undefined}
-    onPointerDownCapture={onFocus} onFocusCapture={onFocus} aria-label={label}>
+    onPointerDownCapture={onFocus} onFocusCapture={onFocus} aria-label={paneName}>
     {showHeader && <header className="split-bar">
-      <div className="split-label" title={`${head.title} - drag to dock or swap; double-click to maximize`}
-        tabIndex={0} role="button" aria-label={`Move ${head.title}`} onPointerDown={e => onStartDrag(e, node.id)} onDoubleClick={onZoom}
+      <div className="split-label" title={`${paneName} - drag to dock or swap; double-click to maximize`}
+        tabIndex={0} role="button" aria-label={`Move ${paneName}`} onPointerDown={e => onStartDrag(e, node.id)} onDoubleClick={onZoom}
         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); onZoom() } }}
         onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY }) }}>
         <DotsSixVertical size={14} className="split-grip" />
         {head.chat && <span className={`dot dot--${head.status}`} aria-hidden="true" />}
         {head.chat && head.harness && <HarnessMark harness={head.harness} size={16} />}
-        <span className="split-title">{head.title}</span>
+        <span className={head.chat ? 'split-title pv' : 'split-title'}>{head.title}</span>
         {head.reconnecting && <span className="split-reconnecting">{RECONNECTING}</span>}
-        {head.project && <span className="split-project">{head.project}</span>}
+        {head.project && <span className="split-project pv">{head.project}</span>}
       </div>
       <div className="split-actions">
         <button type="button" className="split-btn" title={zoomed ? 'Restore panes' : 'Maximize pane'} aria-label={zoomed ? 'Restore panes' : 'Maximize pane'} onClick={onZoom}>{zoomed ? <ArrowsIn size={18} /> : <ArrowsOut size={18} />}</button>
