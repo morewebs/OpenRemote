@@ -4,11 +4,13 @@
 // OpenRemote knows about the chat.
 
 import { useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from '@phosphor-icons/react'
 import './devices.css'
 import './slash.css'
 import { useBack } from './use-back.js'
 import { useDialog } from './dialog-focus.js'
+import { useEscLayer } from './esc-layer.js'
 import { filterHelp, helpGroups, statusRows } from './slash-actions.js'
 
 export function HelpModal({ app, own, commands, onClose }) {
@@ -68,10 +70,13 @@ const PRIVATE_STATUS_ROWS = new Set(['Folder', 'Runs on', 'Allowed for this chat
 
 export function StatusModal({ chat, app, permissionLabel, modelLabel, device, onClose }) {
   useBack(true, onClose)
+  useEscLayer(true, onClose)
   const panelRef = useRef(null)
   useDialog(panelRef, onClose)
   const rows = statusRows(chat, { app, permissionLabel, modelLabel, device })
-  return (
+  // The composer lets clicks through its outer layer. The dialog must be
+  // outside that layer and the pane so its backdrop and controls take clicks.
+  return createPortal(
     <div
       className="dv-modal-backdrop"
       onMouseDown={(e) => {
@@ -94,6 +99,7 @@ export function StatusModal({ chat, app, permissionLabel, modelLabel, device, on
           ))}
         </dl>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

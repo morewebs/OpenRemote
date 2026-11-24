@@ -1,0 +1,176 @@
+.ch {
+  flex: none;
+  display: grid;
+  grid-template: "title actions" auto "meta meta" auto / minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 3px;
+  padding: 12px var(--cv-gutter) 11px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ch-title {
+  grid-area: title;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-1);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.ch-title-button {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 30px;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.ch-title-button svg {
+  flex: none;
+  color: var(--text-3);
+}
+
+.ch-title-button:hover svg,
+.ch-title-button:focus-visible svg {
+  color: var(--text-1);
+}
+
+.ch-title-text,
+.ch-meta-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ch-meta {
+  grid-area: meta;
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 1.35vw, 16px);
+  min-width: 0;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.ch-meta-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+}
+
+/* A long path, branch or device must not outbid the state for space. */
+.ch-meta-folder { max-width: 43%; }
+.ch-meta-branch { max-width: 35%; }
+.ch-meta-app { flex: none; max-width: min(35%, 24ch); }
+.ch-meta-app.has-device { max-width: min(48%, 32ch); }
+.ch-meta-status { flex: none; }
+
+.ch-meta-item svg {
+  flex: none;
+  color: var(--text-3);
+}
+
+.ch-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dot-idle);
+}
+
+.ch-dot--starting,
+.ch-dot--waiting { background: var(--accent); }
+.ch-dot--running { background: var(--green); }
+.ch-dot--failed { background: var(--red); }
+
+.ch-actions,
+.ch-notice-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ch-actions {
+  grid-area: actions;
+}
+
+.ch-action {
+  display: inline-flex;
+  min-height: 30px;
+  min-width: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-1);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ch-action:hover:not(:disabled),
+.ch-action[aria-expanded="true"] {
+  background: var(--bg-hover);
+}
+
+.ch-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ch-more {
+  padding: 0;
+  border-color: transparent;
+  color: var(--text-2);
+}
+
+.ch-notice {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 10px;
+  padding: 6px 0 1px;
+  color: var(--text-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.ch-notice > span { min-width: 0; }
+.ch-notice > .ch-action { max-width: 100%; }
+.ch-notice--error,
+.ch-notice--failure,
+.ch-danger { color: var(--red); }
+
+/* The pane itself already names the chat, so its header needs just one row. */
+.split-area.is-split .ch {
+  grid-template: "meta actions" auto / minmax(0, 1fr) auto;
+  padding-block: 4px;
+}
+
+.split-area.is-split .ch-title { display: none; }
+
+.is-mobile .ch-title-button,
+.is-mobile .ch-action {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+@media (max-width: 640px) {
+  .ch { padding-block: 7px 9px; }
+}

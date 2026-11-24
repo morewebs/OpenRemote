@@ -1,14 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  ArrowUp,
   ArrowUpRight,
-  Stop,
-  Play,
-  HandPalm,
   Brain,
-  Trash,
-  CloudArrowUp,
   Globe,
   CaretDown,
   CaretRight,
@@ -16,8 +10,6 @@ import {
   X,
   ArrowBendUpLeft,
   ImageSquare,
-  GitBranch,
-  UserCircle,
 } from '@phosphor-icons/react'
 import { useConsole } from './state/console.jsx'
 import { chatAccess, deviceName, signedIn } from './cloud.js'
@@ -36,6 +28,9 @@ import { renderMarkdown } from './markdown.js'
 import { bodyPreview, MAX_RENDER_LINES, shouldRenderLive } from './render-budget.js'
 import { jsonCaption, jsonIsLarge, jsonShape, readJson } from './json-card.js'
 import ContextRing from './ContextRing.jsx'
+import ChatHeader from './ChatHeader.jsx'
+import ChatSendActions from './ChatSendActions.jsx'
+import { chatSendActions } from './chat-send.js'
 import PickerMenu from './PickerMenu.jsx'
 import ComposerOptions from './ComposerOptions.jsx'
 import { EffortSlider, EffortLabel, effortLabel } from './NewChat.jsx'
@@ -133,15 +128,6 @@ function BrowserFacts({ facts }) {
         ))}
     </>
   )
-}
-
-const STATUS_LABEL = {
-  starting: 'Starting',
-  running: 'Running',
-  waiting: 'Needs your decision',
-  idle: 'Idle',
-  stopped: 'Stopped',
-  failed: 'Failed',
 }
 
 /// The choice the harness's own words gave the answered decision - the
@@ -556,8 +542,9 @@ const LIVE_SETTINGS = {
   opencode: { model: true, effort: false, fast: false },
 }
 
-export default function ChatView({ chat, onBack, focused = true, web = false, onOpenPlugins = null, composerScope = null, compact = false, onChooseApp = null }) {
+export default function ChatView({ chat, onBack, focused = true, web = false, onOpenPlugins = null, composerScope = null, compact = false, onChooseApp = null, onRename = null }) {
   const privacy = usePrivacyMode()
+  const compactControls = compact || isMobile
   const {
     capabilities,
     capabilitiesFor,
@@ -589,8 +576,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
     sessions,
     apiFor,
   } = useConsole()
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  const [confirmSync, setConfirmSync] = useState(false)
+  const [headerError, setHeaderError] = useState(null)
   // /help and /status open the console's own dialogs; /copy and /export say
   // what they did on the line under the composer.
   const [slashDialog, setSlashDialog] = useState(null)
@@ -604,16 +590,18 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
   // on this computer only (another device's folder is there).
   const placeOf = useGitPlaces(apiFor(null), elsewhere || !chat.workspace ? [] : [chat.workspace])
   const gitPlace = !elsewhere && chat.workspace ? placeWords(placeOf(chat.workspace)) : null
+  const blockedDevice = privacy ? 'The other device' : where
   const blocked = {
-    offline: `${where} is offline - this copy is read-only until it is back`,
-    'not-machine': `${where} can't run chats for your other devices yet - turn that on to continue here`,
+    offline: `${blockedDevice} is offline - this copy is read-only until it is back`,
+    'not-machine': `${blockedDevice} can't run chats for your other devices yet - turn that on to continue here`,
     'signed-out': 'Sign in to Cloud to continue this chat',
-    gone: `${where} left your Cloud - this copy is read-only`,
+    gone: `${blockedDevice} left your Cloud - this copy is read-only`,
   }[access]
   const composerKey = scopedComposerKey(chat.id, composerScope)
   const [text, setText, captureDraft] = useComposerDraft(composerKey)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const [runError, setRunError] = useState(null)
   const [picker, setPicker] = useState(null)
   const [pickerLeaving, setPickerLeaving] = useState(false)
   const pickerLeavingRef = useRef(false)
@@ -691,7 +679,9 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
   // else the id the chat carries.
   const harnessText = harnessLabel(harness ?? chat.harness)
   const bound = outgoing(text, attached, { images: takesImages, app: harnessText ?? 'This App', remote: Boolean(elsewhere) }).error
-  const canSend = (text.trim().length > 0 || attached.length > 0) && alive && !busy && reachable && !bound
+  const hasDraft = text.trim().length > 0 || attached.length > 0
+  const canSend = hasDraft && alive && !busy && reachable && !bound
+  const { runAction, showSend } = chatSendActions(chat, { reachable, hasDraft })
   // A harness that takes a setting while a turn works: the built-ins whose
   // drivers do, and any installed plugin whose own row says its settings are
   // live. The row's word is the fact; this map is not the list of harnesses
@@ -818,6 +808,14 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
     onPlugins: onOpenPlugins,
   })
 
+  const copyConversation = async () => {
+    const copy = chatMarkdown(chat, { harnesses: capabilities?.harnesses })
+    if (!copy) throw new Error('Nothing to copy in this chat.')
+    if (!navigator.clipboard?.writeText) throw new Error('Could not copy: this window has no clipboard.')
+    await navigator.clipboard.writeText(copy.text)
+    setSlashNote(copiedLine(copy))
+  }
+
   // An OpenRemote command from the composer, run here before the rest of
   // the message goes: the same paths the pickers and buttons take.
   const runCommand = async ({ name: typed, action, arg }) => {
@@ -842,12 +840,13 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
       else openPopup('settings', { section: target.settings })
       return
     }
-    if (name === 'copy' || name === 'export') {
-      const words = name === 'copy' ? lastAnswer(chat) : chatMarkdown(chat, { harnesses: capabilities?.harnesses })?.text
-      if (!words) throw new Error(name === 'copy' ? 'There is no answer to copy yet.' : 'Nothing to copy in this chat.')
+    if (name === 'export') return copyConversation()
+    if (name === 'copy') {
+      const words = lastAnswer(chat)
+      if (!words) throw new Error('There is no answer to copy yet.')
       if (!navigator.clipboard?.writeText) throw new Error('Could not copy: this window has no clipboard.')
       await navigator.clipboard.writeText(words)
-      setSlashNote(name === 'copy' ? 'Copied the last answer.' : copiedLine({ lines: words.split(/\n/).length - 1 }))
+      setSlashNote('Copied the last answer.')
       return
     }
     if (name === 'model' || name === 'effort' || name === 'permissions') {
@@ -1111,17 +1110,25 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
     }
   }
 
-  const control = async (action) => {
-    setBusy(true)
-    setError(null)
+  const control = async (action, { report = setError, lockComposer = true } = {}) => {
+    // Run controls can settle while a send is still pending. They must not
+    // change the composer's busy flag or hide a send error.
+    if (lockComposer) setBusy(true)
+    report(null)
     try {
       await action()
+      return true
     } catch (err) {
-      setError(err.message ?? String(err))
+      report(err?.message ?? String(err))
+      return false
     } finally {
-      setBusy(false)
+      if (lockComposer) setBusy(false)
     }
   }
+  const headerControl = (action) => control(action, { report: setHeaderError, lockComposer: false })
+  const runControl = (action) => control(action, { report: setRunError, lockComposer: false })
+  const interruptReply = () => runControl(() => interruptChat(chat.id))
+  const endRun = () => runControl(() => stopChat(chat.id))
 
   // The keyboard acts on the focused pane's chat (keyboard.jsx). A key
   // whose action can't happen here - no running turn to interrupt, no
@@ -1151,16 +1158,16 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
   useShortcut(
     'interrupt',
     () => {
-      if (!reachable || !chat.running) return false
-      control(() => interruptChat(chat.id))
+      if (runAction !== 'interrupt') return false
+      interruptReply()
     },
     focused,
   )
   useShortcut(
     'stop',
     () => {
-      if (!reachable || !chat.running) return false
-      control(() => stopChat(chat.id))
+      if (runAction !== 'interrupt') return false
+      endRun()
     },
     focused,
   )
@@ -1277,153 +1284,31 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
   // send (one process per prompt), or simply send when nothing runs.
   const steerButton = turnOpen ? (INTERRUPT_STEER.has(chat.harness) ? 'Interrupt + send' : 'Steer') : 'Send now'
   const hintSteer = useHint('steer')
-  const hintInterrupt = useHint('interrupt')
-  const hintStop = useHint('stop')
   const hintModel = useHint('pick-model')
   const hintEffort = useHint('pick-effort')
   const hintPermission = useHint('pick-permission')
 
   return (
     <div className="chatview">
-      <header className="cv-head">
-        <h1 className="pv">{chat.title ?? 'A new task'}</h1>
-        <p className="cv-facts">
-          {chat.status !== 'idle' && <span className={`cv-dot cv-dot--${chat.status}`} />}
-          <span className="cv-where pv">{chat.workspace}</span>
-          {gitPlace && (
-            <span className="cv-fact cv-branch pv" title={gitPlace.title}>
-              <GitBranch size={11} aria-hidden="true" /> {gitPlace.branch}
-              {gitPlace.worktree && <span className="cv-worktree"> · worktree of {gitPlace.of}</span>}
-            </span>
-          )}
-          <span className="cv-fact">{harnessText}</span>
-          {elsewhere && <span className="cv-fact">on <span className="pv">{where}</span></span>}
-          {!web && !isMobile && reachable && chat.appAccountId && (
-            <button
-              type="button"
-              className="cv-fact-btn"
-              title="Manage the App account for this chat"
-              onClick={() => setManagingHarnesses(chat.harness)}
-            >
-              <UserCircle size={13} />
-              {boundAccount?.status === 'disconnected' && 'Reconnect '}
-              <span className="pv">{boundAccount?.label ?? 'App account'}</span>
-            </button>
-          )}
-          {chat.model && (
-            <span className="cv-fact" title={chat.model}>
-              {modelDisplayName(models, chat.model)}
-            </span>
-          )}
-          {chat.effort && <span className="cv-fact">{chat.effort}</span>}
-          {chat.permissionMode && (
-            <span
-              className="cv-fact"
-              title={`The app's permission word for this chat (${harnessText}'s own spelling)`}
-            >
-              {chat.permissionMode}
-            </span>
-          )}
-          {chat.fast && <span className="cv-fact">Fast</span>}
-          {chat.costUsd > 0 && (
-            <span className="cv-fact">${chat.costUsd < 0.01 ? chat.costUsd.toFixed(4) : chat.costUsd.toFixed(2)}</span>
-          )}
-          {chat.thinkingTokens > 0 && (
-            <span className="cv-fact" title="Tokens the model spent reasoning">{chat.thinkingTokens.toLocaleString()} thinking tokens</span>
-          )}
-          {chat.approvedTools?.length > 0 && (
-            <span className="cv-fact">
-              <span className="pv">{chat.approvedTools.join(' · ')}</span> allowed for this chat
-            </span>
-          )}
-          <span className="cv-fact">{STATUS_LABEL[chat.status] ?? chat.status}</span>
-          {!web && access === 'not-machine' && (
-            <button
-              className="cv-fact-btn"
-              onClick={() => control(() => setDeviceKind(chat.executor, 'machine'))}
-              title={privacy ? 'Make it a machine: a computer that runs chats for your other devices' : `Make ${where} a machine: a computer that runs chats for your other devices`}
-            >
-              Let <span className="pv">{where}</span> run chats
-            </button>
-          )}
-          {reachable && chat.running && (
-            <>
-              <button className="cv-fact-btn" onClick={() => control(() => interruptChat(chat.id))} title={hintInterrupt('Stop the current reply; the chat stays open')}>
-                <HandPalm size={11} weight="fill" />
-                Interrupt
-              </button>
-              <button className="cv-fact-btn" onClick={() => control(() => stopChat(chat.id))} title={hintStop("End this chat's run")}>
-                <Stop size={11} weight="fill" />
-                Stop
-              </button>
-            </>
-          )}
-          {/* Resume rides the harness's own conversation (claude
-              `--resume`, codex thread/resume, ...). A chat stopped before
-              its first message never got one - the daemon would only
-              answer "nothing to resume", so the button never shows there. */}
-          {reachable && (chat.status === 'stopped' || chat.status === 'failed') && chat.resumable && (
-            <button className="cv-fact-btn" onClick={() => control(() => resumeChat(chat.id))} title="Pick this chat up again">
-              <Play size={11} weight="fill" />
-              Resume
-            </button>
-          )}
-          {/* A private chat can join Cloud - asked first, since the whole
-              transcript goes, tool output included. */}
-          {!web && !chat.executor && signedIn(cloud) && (
-            confirmSync ? (
-              <>
-                <span className="cv-fact">Copy this chat, tool output included, to your other devices?</span>
-                <button
-                  className="cv-fact-btn"
-                  onClick={() =>
-                    control(async () => {
-                      await syncChat(chat.id)
-                      setConfirmSync(false)
-                    })
-                  }
-                >
-                  <CloudArrowUp size={11} />
-                  Sync
-                </button>
-                <button className="cv-fact-btn" onClick={() => setConfirmSync(false)}>
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <button
-                className="cv-fact-btn"
-                onClick={() => setConfirmSync(true)}
-                title="Copy this chat to your other devices"
-              >
-                <CloudArrowUp size={11} />
-                Sync
-              </button>
-            )
-          )}
-          {/* Deleting a synced chat removes it from every device - asked
-              twice, in place. */}
-          {!web && chat.executor && (
-            confirmDelete ? (
-              <>
-                <button className="cv-fact-btn" onClick={() => control(() => deleteChat(chat.id))} title="Delete this chat on all your devices">
-                  <Trash size={11} />
-                  Delete everywhere
-                </button>
-                <button className="cv-fact-btn" onClick={() => setConfirmDelete(false)}>
-                  Keep
-                </button>
-              </>
-            ) : (
-              <button className="cv-fact-btn" onClick={() => setConfirmDelete(true)} title="Delete this chat">
-                <Trash size={11} />
-                Delete
-              </button>
-            )
-          )}
-        </p>
-        {chat.lastError && chat.status === 'failed' && <p className="cv-facts cv-error pv">This chat stopped with an error: {String(chat.lastError)}</p>}
-      </header>
+      <ChatHeader
+        chat={chat}
+        app={harnessText}
+        device={elsewhere ? where : null}
+        gitPlace={gitPlace}
+        access={access}
+        web={web}
+        cloudReady={cloudReady}
+        error={headerError}
+        onClearError={() => setHeaderError(null)}
+        onRename={onRename}
+        onDetails={() => setSlashDialog('status')}
+        onCopy={() => headerControl(copyConversation)}
+        onAccount={!isMobile && !web ? () => setManagingHarnesses(chat.harness) : null}
+        accountDisconnected={boundAccount?.status === 'disconnected'}
+        onSync={() => headerControl(() => syncChat(chat.id))}
+        onDelete={() => headerControl(() => deleteChat(chat.id))}
+        onMakeMachine={() => headerControl(() => setDeviceKind(chat.executor, 'machine'))}
+      />
       {/* The workers this chat's agent started: each one's state, a way
           into it, Stop. Only for a chat that has workers. */}
       <TeamBar chat={chat} canAct={reachable} />
@@ -1576,7 +1461,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
                       disabled={!reachable}
                       onClick={() => control(() => resumeQueue(chat.id))}
                     >
-                      Resume
+                      Resume queue
                     </button>
                   </>
                 ) : (
@@ -1672,9 +1557,9 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
             disabled={!alive || !reachable}
             spellCheck={false}
           />
-          <div className={`cv-foot${compact ? ' is-compact-composer' : ''}`}>
+          <div className={`cv-foot${compactControls ? ' is-compact-composer' : ''}`}>
             {attachInput.button}
-            {compact && <button type="button" className="nc-compact-model" onClick={togglePicker('model')} disabled={!canChange.model}
+            {compactControls && <button type="button" className="nc-compact-model" onClick={togglePicker('model')} disabled={!canChange.model}
               title={chat.model ? modelDisplayName(models, chat.model) : 'Model'} aria-label={`Model: ${chat.model ? modelDisplayName(models, chat.model) : 'App default'}`}>
               <HarnessMark harness={chat.harness} size={16} /><span>{chat.model ? modelDisplayName(models, chat.model) : 'Model'}</span>
             </button>}
@@ -1853,7 +1738,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
               )}
 
             </div>
-            {compact && <ComposerOptions items={[
+            {compactControls && <ComposerOptions items={[
               { label: `App: ${harnessText}`, disabled: !onChooseApp, onSelect: togglePicker('harness') },
               ...(canChange.effort && efforts.length ? [{ label: `Effort: ${chat.effort ? effortLabel(chat.effort) : 'App default'}`, onSelect: toggleEffort }] : []),
               ...((harness?.permission_modes ?? []).length ? [{ label: `Permission: ${chat.permissionMode ?? 'App default'}`, disabled: !canChange.permission || chat.running, onSelect: togglePicker('permission', 'right') }] : []),
@@ -1871,12 +1756,8 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
                 actions={attachInput.pluginActions}
                 disabled={!alive || !reachable}
               />
-              {/* The harness's own permission word for this chat, by the
-                  send button: the last thing to check before a message
-                  goes. It is start-time on every harness - the chip
-                  changes it only on a stopped chat (resume lands it); on a
-                  running one it stays the quiet fact the facts row already
-                  shows. */}
+              {/* Permissions change when the chat next starts, so a live
+                  chat can read the current word here but not change it. */}
               {(harness?.permission_modes ?? []).length > 0 &&
                 (canChange.permission && !chat.running ? (
                   <button
@@ -1938,14 +1819,17 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
                   nominal={chat.context?.window == null}
                 />
               )}
-              <button
-                className="nc-send"
-                onClick={send}
-                disabled={!canSend}
-                title={bound || (turnOpen ? `Queue (Enter) - ${hintSteer(steerLabel)}` : 'Send')}
-              >
-                <ArrowUp size={15} weight="bold" />
-              </button>
+              <ChatSendActions
+                runAction={runAction}
+                showSend={showSend}
+                canSend={canSend}
+                sendLabel={turnOpen ? 'Queue message' : 'Send message'}
+                sendHint={bound || (turnOpen ? `Queue (Enter) - ${hintSteer(steerLabel)}` : 'Send')}
+                onSend={send}
+                onInterrupt={interruptReply}
+                onEnd={endRun}
+                onResume={() => runControl(() => resumeChat(chat.id))}
+              />
             </div>
           </div>
         </div>
@@ -1953,6 +1837,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
         {(error || connection.state === 'error') && (
           <p className="cv-error-line">{error ?? connection.error}</p>
         )}
+        {runError && <p className="cv-error-line pv" role="alert">{runError}</p>}
         {slashNote && !error && <p className="cv-error-line cv-note-line">{slashNote}</p>}
         {slashDialog === 'help' && <HelpModal app={harnessText} own={ownCommands({ inChat: true, cloud: cloudReady })} commands={menus.commands} onClose={() => setSlashDialog(null)} />}
         {slashDialog === 'status' && <StatusModal chat={chat} app={harnessText}

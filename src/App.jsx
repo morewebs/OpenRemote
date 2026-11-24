@@ -1113,6 +1113,7 @@ function Shell() {
       {!STATIC_VIEWS.includes(view) &&
         (chat ? (
           <ChatView key={chat.id} chat={chat} focused={primaryFocused} onOpenPlugins={() => goView('plugins')}
+            onRename={() => openRename(chat.id)}
             onChooseApp={selection => choosePaneApp(primaryLeafId, chat.id, selection)} />
         ) : (
           <div className="cv-none">That chat is no longer in this workspace.</div>
@@ -1184,6 +1185,7 @@ function Shell() {
     const paneChat = chats[paneView]
     return paneChat ? (
       <ChatView key={paneChat.id} chat={paneChat} focused={leaf.id === layout.focus} onOpenPlugins={() => goView('plugins')} composerScope={scope} compact={paneCount(layout) > 1}
+        onRename={() => openRename(paneChat.id)}
         onChooseApp={selection => choosePaneApp(leaf.id, paneChat.id, selection)} />
     ) : (
       <div className="cv-none">That chat is no longer in this workspace.</div>
