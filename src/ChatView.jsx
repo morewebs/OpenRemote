@@ -1956,6 +1956,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
         {slashNote && !error && <p className="cv-error-line cv-note-line">{slashNote}</p>}
         {slashDialog === 'help' && <HelpModal app={harnessText} own={ownCommands({ inChat: true, cloud: cloudReady })} commands={menus.commands} onClose={() => setSlashDialog(null)} />}
         {slashDialog === 'status' && <StatusModal chat={chat} app={harnessText}
+          device={where} modelLabel={modelDisplayName(models, chat.model)}
           permissionLabel={(harness?.permission_modes ?? []).find((word) => word.w === (chat.permissionMode ?? chat.permission_mode))?.l ?? null}
           onClose={() => setSlashDialog(null)} />}
         {managingHarnesses && !web && createPortal(

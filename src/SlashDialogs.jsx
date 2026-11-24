@@ -64,11 +64,13 @@ export function HelpModal({ app, own, commands, onClose }) {
   )
 }
 
-export function StatusModal({ chat, app, permissionLabel, onClose }) {
+const PRIVATE_STATUS_ROWS = new Set(['Folder', 'Runs on', 'Allowed for this chat'])
+
+export function StatusModal({ chat, app, permissionLabel, modelLabel, device, onClose }) {
   useBack(true, onClose)
   const panelRef = useRef(null)
   useDialog(panelRef, onClose)
-  const rows = statusRows(chat, { app, permissionLabel })
+  const rows = statusRows(chat, { app, permissionLabel, modelLabel, device })
   return (
     <div
       className="dv-modal-backdrop"
@@ -87,7 +89,7 @@ export function StatusModal({ chat, app, permissionLabel, onClose }) {
           {rows.map(([label, value]) => (
             <div key={label} className="sl-status-row">
               <dt>{label}</dt>
-              <dd>{value}</dd>
+              <dd className={PRIVATE_STATUS_ROWS.has(label) ? 'pv' : undefined}>{value}</dd>
             </div>
           ))}
         </dl>

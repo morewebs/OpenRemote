@@ -149,3 +149,13 @@ test('/copy takes the newest answer, not a note or the user', () => {
   assert.equal(lastAnswer(chat), 'second')
   assert.equal(lastAnswer({ timeline: [] }), null)
 })
+
+test('chat details keep the model label, device and facts moved out of the header', () => {
+  const rows = Object.fromEntries(statusRows({
+    harness: 'codex', model: 'model-id', thinkingTokens: 1500, approvedTools: ['Read', 'Edit'],
+  }, { app: 'Codex', modelLabel: 'Model name', device: 'Work PC' }))
+  assert.equal(rows.Model, 'Model name')
+  assert.equal(rows['Runs on'], 'Work PC')
+  assert.equal(rows['Thinking tokens'], '1,500')
+  assert.equal(rows['Allowed for this chat'], 'Read, Edit')
+})

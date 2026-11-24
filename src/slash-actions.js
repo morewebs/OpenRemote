@@ -138,14 +138,15 @@ export function filterHelp(groups, query) {
 }
 
 // /status: what OpenRemote knows about this chat, as label and value rows.
-export function statusRows(chat, { app = null, permissionLabel = null } = {}) {
+export function statusRows(chat, { app = null, permissionLabel = null, modelLabel = null, device = null } = {}) {
   const rows = [['App', app ?? chat?.harness ?? 'Unknown']]
-  if (chat?.model) rows.push(['Model', chat.model])
+  if (chat?.model) rows.push(['Model', modelLabel ?? chat.model])
   if (chat?.effort) rows.push(['Effort', chat.effort])
   if (chat?.fast != null) rows.push(['Fast mode', chat.fast ? 'On' : 'Off'])
   const mode = chat?.permissionMode ?? chat?.permission_mode
   if (mode) rows.push(['Permissions', permissionLabel ?? mode])
   rows.push(['Folder', chat?.workspace ?? 'Home folder (no project)'])
+  if (device) rows.push(['Runs on', device])
   if (chat?.status) rows.push(['Status', chat.status])
   const used = chat?.context?.used
   if (used) {
@@ -153,6 +154,8 @@ export function statusRows(chat, { app = null, permissionLabel = null } = {}) {
     rows.push(['Context', window ? `${used.toLocaleString('en-US')} of ${window.toLocaleString('en-US')} tokens` : `${used.toLocaleString('en-US')} tokens`])
   }
   if (chat?.costUsd > 0) rows.push(['Cost so far', `$${chat.costUsd.toFixed(4)}`])
+  if (chat?.thinkingTokens > 0) rows.push(['Thinking tokens', chat.thinkingTokens.toLocaleString('en-US')])
+  if (chat?.approvedTools?.length) rows.push(['Allowed for this chat', chat.approvedTools.join(', ')])
   return rows
 }
 
