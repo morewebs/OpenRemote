@@ -69,12 +69,30 @@ Console:
   path on hover. Only addresses with no URL scheme are read this way;
   `javascript:`, `data:` and `file:` stay as the text they were and never link.
 
-## Not a defect
+## Conversation header (2026-11-24)
 
-The header row (title, folder, branch, app, model, effort, approval word, status,
-Interrupt, Stop, Delete) is the facts row. It showed up in the pasted transcript
-because the whole page was selected. The effort and approval words are the app's
-own, as the harness spells them.
+The old facts row showed up as a string of labels and controls when the whole
+page was selected. The header now has a title, then a single line for the
+folder, branch, App, and current state. Idle chats have no state badge. Split
+panes already name the chat in their pane bar, so they only show the metadata
+and actions. On narrow screens long names give up space before the state does.
+
+Click the title to rename in the desktop shell. Copy as Markdown copies the
+conversation instead of the page chrome. Details opens the same dialog as
+`/status`, including the model, effort, permissions, and usage. Model, effort,
+and permissions still live in the composer for changes.
+
+Run controls sit where you send messages. During an active reply, Stop
+interrupts it and holds any queued messages without ending the chat. A draft
+can still be queued with the arrow next to Stop. End run is in the menu
+beside Stop. Resume takes the place of Send only when the stopped or failed
+chat has a conversation to resume. Resume queue stays with the queue.
+The changed control eases in unless reduced motion is enabled in OpenRemote
+or the operating system.
+
+Sync to Cloud and Delete chat keep their confirmation visible if the request
+fails. Only synced chats can be deleted; private chats can still be archived
+from their existing controls.
 
 ## Left as it is
 
