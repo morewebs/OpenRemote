@@ -103,7 +103,7 @@ export function workIsLive(items, running) {
   )
 }
 
-const WAIT_LABELS = ['Untangling...', 'Thinking it through...', 'Putting it together...', 'Working it out...']
+const WAIT_LABELS = ['Untangling...', 'Following the thread...', 'Connecting the dots...', 'Finding a way in...']
 
 // Put the activity on one live work row or at the end of the rail. A reply
 // already has the reader's attention, as does an unanswered question.

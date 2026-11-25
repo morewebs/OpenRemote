@@ -13,7 +13,7 @@ test('quiet active turns distinguish App startup from waiting on its response', 
   assert.deepEqual(first, { label: 'Untangling...', waitKey: 'reply-prompt' })
   assert.deepEqual(currentActivity('running', [prompt, { ...activeStep, result: 'done' }]), first)
   assert.deepEqual(currentActivity('working', [prompt, { ...prompt, id: 'prompt-2' }]), {
-    label: 'Thinking it through...', waitKey: 'reply-prompt-2',
+    label: 'Following the thread...', waitKey: 'reply-prompt-2',
   })
 })
 
@@ -41,6 +41,7 @@ test('a reply, a decision, or an inactive or unreachable chat needs no wait line
 test('the text sweep opts in only when both motion preferences allow it', () => {
   const css = readFileSync(new URL('./chatview.css', import.meta.url), 'utf8')
   assert.match(css, /@media \(prefers-reduced-motion: no-preference\) and \(forced-colors: none\) \{\s*html:not\(\[data-reduce-motion\]\) \.cv-activity-ink\s*\{[^}]*animation: cv-activity-light/)
+  assert.match(css, /animation: cv-activity-light[^}]*\}\s*html:not\(\[data-reduce-motion\]\) \.cv-activity-note::before \{\s*animation: cv-activity-launch/)
 })
 
 test('thinking and tools collapse into one row between the messages', () => {

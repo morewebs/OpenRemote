@@ -128,14 +128,17 @@
   align-items: baseline;
   gap: 9px;
   min-width: 0;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 21px;
 }
 
 .cv-activity-ink {
+  --cv-activity-rest: color-mix(in srgb, var(--accent) 65%, var(--text-1));
+  --cv-activity-edge: color-mix(in srgb, var(--green) 64%, var(--text-1));
   min-width: 0;
   color: var(--accent);
+  color: var(--cv-activity-rest);
   overflow-wrap: anywhere;
 }
 
@@ -147,21 +150,35 @@
   font-weight: 400;
 }
 
-/* Leave plain, readable text behind when motion or text clipping isn't
-   available. The moving light rests off the letters between passes. */
+/* The rail dot kicks off a pass of light through the words. Keep the
+   punctuation, timer and layout still, so the event reads as one beat. */
 @supports (background-clip: text) {
   @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
     html:not([data-reduce-motion]) .cv-activity-ink {
       color: transparent;
-      background: linear-gradient(105deg, var(--accent) 40%, var(--text-1) 50%, var(--accent) 60%) 100% 50% / 280% 100%;
+      background: linear-gradient(100deg,
+          var(--cv-activity-rest) 38%, var(--cv-activity-edge) 46%, var(--text-1) 51%,
+          var(--cv-activity-edge) 54%, var(--cv-activity-rest) 61%) 100% 50% / 280% 100%;
       background-clip: text;
-      animation: cv-activity-light 2.3s ease-in-out infinite;
+      animation: cv-activity-light 1.95s cubic-bezier(0.32, 0, 0.24, 1) infinite;
+    }
+
+    html:not([data-reduce-motion]) .cv-activity-note::before {
+      animation: cv-activity-launch 1.95s ease-out infinite;
     }
   }
 }
 
 @keyframes cv-activity-light {
-  65%, 100% { background-position: 0% 50%; }
+  0%, 12% { background-position: 100% 50%; }
+  76%, 100% { background-position: 0% 50%; }
+}
+
+@keyframes cv-activity-launch {
+  0%, 42%, 100% { box-shadow: 0 0 0 3px var(--bg-app); }
+  12% {
+    box-shadow: 0 0 0 2px var(--bg-app), 0 0 0 4px color-mix(in srgb, var(--green) 48%, transparent);
+  }
 }
 
 .cv-agent {
