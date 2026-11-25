@@ -1,5 +1,5 @@
-// The chat shows the conversation. Thinking and tool traces are one
-// quiet row, not a log of every call. Pending decisions stay, because
+// The chat shows the conversation. Thinking gets a quiet row of its own;
+// consecutive tools share a single row. Pending decisions stay, because
 // the person has to answer them.
 
 import { browserTool, foldsResult, isBrowserTool } from './browser-tools.js'
@@ -20,9 +20,8 @@ export function toolLabel(tool) {
   return browserTool(tool.name, tool.input).label
 }
 
-/// Consecutive reasoning and tool items become one work row. Everything
-/// the person reads (their message, the reply, a note, a question that
-/// is still waiting) stays where it is.
+/// Consecutive tools become one work row. A thought, message or decision
+/// keeps its place in the conversation.
 export function quietRail(items) {
   const out = []
   let work = null
@@ -32,7 +31,7 @@ export function quietRail(items) {
     work = null
   }
   for (const item of items) {
-    if (item.kind === 'reasoning' || item.kind === 'reasoning-stream' || item.kind === 'tool') {
+    if (item.kind === 'tool') {
       if (!work) work = { kind: 'work', id: `work-${item.id}`, items: [] }
       work.items.push(item)
       continue
@@ -48,7 +47,6 @@ export function quietRail(items) {
 /// finished row names up to three tools, or counts them.
 export function workLabel(items, live) {
   const tools = items.filter((item) => item.kind === 'tool')
-  const thinking = items.some((item) => item.kind === 'reasoning' || item.kind === 'reasoning-stream')
   if (live) {
     const running = tools.find((item) => item.result == null)
     if (running && isCommandExecution(running)) {
@@ -56,10 +54,8 @@ export function workLabel(items, live) {
       return what ? `Running ${what}` : 'Running a command'
     }
     if (running) return toolLabel(running)
-    if (thinking) return 'Thinking'
     return 'Working'
   }
-  if (tools.length === 0) return 'Thought'
   const names = []
   let commands = 0
   for (const tool of tools) {
@@ -97,10 +93,19 @@ export function workStep(item) {
 }
 
 export function workIsLive(items, running) {
-  if (!running) return false
-  return items.some(
-    (item) => item.kind === 'reasoning-stream' || (item.kind === 'tool' && item.result == null),
-  )
+  return running && items.some((item) => item.kind === 'tool' && item.result == null)
+}
+
+export function reasoningLabel({ live, tokens, durationMs }) {
+  if (live) {
+    if (!Number.isInteger(tokens) || tokens <= 0) return 'Thinking...'
+    return `Thinking... \u00b7 ${tokens.toLocaleString()} ${tokens === 1 ? 'token' : 'tokens'}`
+  }
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return 'Thought'
+  const seconds = Math.floor(durationMs / 1000)
+  if (seconds === 0) return 'Thought for <1s'
+  if (seconds < 60) return `Thought for ${seconds}s`
+  return `Thought for ${Math.floor(seconds / 60)}m ${seconds % 60}s`
 }
 
 const WAIT_LABELS = ['Untangling', 'Following the thread', 'Connecting the dots', 'Finding a way in']
@@ -113,6 +118,8 @@ export function railActivity(items, status, { reachable = true } = {}) {
   let promptId = ''
   let hasReply = false
   let workId = null
+  let reasoningId = null
+  let pastWork = false
   for (let i = items.length - 1; i >= 0; i--) {
     const item = items[i]
     // An interrupted tool can be left without a result in the transcript.
@@ -123,16 +130,23 @@ export function railActivity(items, status, { reachable = true } = {}) {
     }
     if (item.kind === 'stream') return null
     if (item.kind === 'message' && item.role === 'agent') hasReply = true
-    if (!hasReply && workId == null && item.kind === 'work' && workIsLive(item.items, true)) workId = item.id
+    if (hasReply || reasoningId != null || workId != null) continue
+    if (item.kind === 'work') {
+      pastWork = true
+      if (workIsLive(item.items, true)) workId = item.id
+    } else if (item.kind === 'reasoning-stream' && !pastWork) {
+      reasoningId = item.id
+    }
   }
   if (workId != null) return { workId }
   if (phase === 'starting') return { label: 'Starting the App', waitKey: 'starting' }
-  if (hasReply) return null
+  if (hasReply && reasoningId == null) return null
   // Use the prompt instead of a ticker or random render so a turn keeps
   // its phrase across stream updates, reopening the chat, and split panes.
   let hash = 0
   for (let i = 0; i < promptId.length; i++) hash = (31 * hash + promptId.charCodeAt(i)) >>> 0
-  return { label: WAIT_LABELS[hash % WAIT_LABELS.length], waitKey: `reply-${promptId}` }
+  const wait = { label: WAIT_LABELS[hash % WAIT_LABELS.length], waitKey: `reply-${promptId}` }
+  return reasoningId == null ? wait : { ...wait, reasoningId }
 }
 
 /// One short hint for an expanded step. Never the JSON body.

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   ArrowUpRight,
-  Brain,
   Globe,
   CaretDown,
   CaretRight,
@@ -14,7 +13,7 @@ import {
 import { useConsole } from './state/console.jsx'
 import { chatAccess, deviceName, signedIn } from './cloud.js'
 import { railItems } from './state/reducer.js'
-import { quietRail, railActivity, workIsLive, workLabel, workStep } from './quiet-rail.js'
+import { quietRail, railActivity, reasoningLabel, workIsLive, workLabel, workStep } from './quiet-rail.js'
 import { browserTool, isBrowserTool } from './browser-tools.js'
 import { harnessLabel } from './harness-names.js'
 import { findModel, modelDisplayName, prettyModelName } from './model-display.js'
@@ -205,37 +204,16 @@ function ActivityFold() {
 }
 
 function ChatWait({ label }) {
-  const [elapsed, setElapsed] = useState(0)
-  useEffect(() => {
-    // This times the visible wait, not the App's runtime. Keep it local to
-    // this row so a clock tick doesn't render the rest of the transcript.
-    const start = performance.now()
-    const clock = setInterval(() => {
-      const seconds = Math.floor((performance.now() - start) / 1000)
-      if (seconds >= 5) setElapsed(seconds)
-    }, 1000)
-    return () => clearInterval(clock)
-  }, [])
   return (
-    <p className="cv-node cv-activity-note">
-      <span role="status" className="cv-activity-label">
-        {label}
-        <ActivityFold />
-      </span>
-      {elapsed > 0 && (
-        <time className="cv-activity-time" dateTime={`PT${elapsed}S`}>
-          {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')}
-        </time>
-      )}
+    <p className="cv-node cv-activity-note" role="status">
+      {label}
+      <ActivityFold />
     </p>
   )
 }
 
-/// The harness's own reasoning, dim and collapsible. The pill is the
-/// whole mark while it runs and after it settles. The words stay hidden
-/// until the reader asks - a live stream was a wall of text.
-/// One quiet row for a turn's thinking and tool calls. The conversation
-/// stays the user message and the reply. Opened, each step is its name and
+/// Nearby tool calls share a row so they don't bury the conversation.
+/// Opened, each step is its name and
 /// a hint, a browser or team tool's facts in words, and what it answered
 /// (Out, through OutRow: fields, text folded behind its size, a page read
 /// as text folded whole) - never a JSON dump of its input.
@@ -291,17 +269,17 @@ function WorkCluster({ items, active, chat }) {
   )
 }
 
-function ReasoningBlock({ text, live }) {
+function ReasoningBlock({ item, live, tokens }) {
   const [open, setOpen] = useState(false)
-  const label = live ? 'Thinking…' : 'Thought process'
+  const label = reasoningLabel({ live, tokens, durationMs: item.durationMs })
   return (
     <div className="cv-node cv-reasoning">
-      <button type="button" className="cv-reasoning-head" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <Brain size={12} />
+      <button type="button" className="cv-thought-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
         {label}
+        {open ? <CaretDown size={11} aria-hidden="true" /> : <CaretRight size={11} aria-hidden="true" />}
       </button>
       {open && (
-        <MarkdownBody text={text} live={live} className={`cv-reasoning-body pv${live ? ' live' : ''}`} />
+        <MarkdownBody text={item.text} live={live} className={`cv-reasoning-body pv${live ? ' live' : ''}`} />
       )}
     </div>
   )
@@ -1354,11 +1332,11 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
               return <WorkCluster key={item.id} items={item.items} active={activity?.workId === item.id} chat={chat} />
             }
             if (item.kind === 'reasoning' || item.kind === 'reasoning-stream') {
-              // The harness's own thinking, dim and collapsible - never
-              // mixed into the reply. Collapsed by default; the live
-              // stream shows its tail growing while it runs.
+              // A turn can report usage for more than one thought block.
+              // Show its reported total only on the current live row.
               return (
-                <ReasoningBlock key={item.id} text={item.text} live={item.kind === 'reasoning-stream'} />
+                <ReasoningBlock key={item.id} item={item} live={activity?.reasoningId === item.id}
+                  tokens={item.turn != null ? chat.thinkingTurns?.[item.turn] : null} />
               )
             }
             if (item.kind === 'stream') {

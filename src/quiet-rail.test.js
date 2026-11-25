@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { quietRail, railActivity, toolHint, workLabel, workStep } from './quiet-rail.js'
+import { quietRail, railActivity, reasoningLabel, toolHint, workLabel, workStep } from './quiet-rail.js'
 
 const prompt = { kind: 'message', id: 'prompt', role: 'user' }
 const activeStep = { kind: 'tool', id: 'step', name: 'Read', result: null }
@@ -17,11 +17,14 @@ test('quiet active turns distinguish App startup from waiting on its response', 
   })
 })
 
-test('the activity marks the latest live work in this turn, not a historical unfinished step', () => {
+test('thinking keeps a quiet row and a separate wait line until the next step', () => {
   assert.deepEqual(currentActivity('running', [activeStep, prompt]), currentActivity('running', [prompt]))
   const thinking = { kind: 'reasoning-stream', id: 'thinking' }
   const preamble = { kind: 'message', id: 'preamble', role: 'agent' }
-  assert.deepEqual(currentActivity('running', [prompt, thinking]), { workId: 'work-thinking' })
+  assert.deepEqual(currentActivity('running', [prompt, thinking]), {
+    ...currentActivity('running', [prompt]), reasoningId: 'thinking',
+  })
+  assert.equal(currentActivity('running', [prompt, thinking, { ...activeStep, result: 'done' }])?.reasoningId, undefined)
   assert.deepEqual(currentActivity('running', [prompt, thinking, preamble, activeStep]), { workId: 'work-step' })
 })
 
@@ -43,7 +46,7 @@ test('the folding ellipsis opts in only when both motion preferences allow it', 
   assert.match(css, /@media \(prefers-reduced-motion: no-preference\) and \(forced-colors: none\) \{\s*html:not\(\[data-reduce-motion\]\) \.cv-activity-fold > i\s*\{[^}]*animation: cv-activity-fold/)
 })
 
-test('thinking and tools collapse into one row between the messages', () => {
+test('thinking has its own row while consecutive tools stay grouped', () => {
   const rail = quietRail([
     { kind: 'message', id: 'u', role: 'user', text: 'who are you' },
     { kind: 'reasoning', id: 'r', text: 'long thought' },
@@ -51,11 +54,22 @@ test('thinking and tools collapse into one row between the messages', () => {
     { kind: 'tool', id: 't2', name: 'webfetch', input: { url: 'https://opencode.ai/v2/llms.txt' }, result: 'page' },
     { kind: 'message', id: 'a', role: 'assistant', text: 'I am Grok.' },
   ])
-  assert.equal(rail.length, 3)
-  assert.equal(rail[1].kind, 'work')
-  assert.equal(rail[1].items.length, 3)
-  assert.equal(workLabel(rail[1].items, false), 'skill, webfetch')
-  assert.equal(toolHint(rail[1].items[2]), 'opencode.ai/v2/llms.txt')
+  assert.equal(rail.length, 4)
+  assert.equal(rail[1].kind, 'reasoning')
+  assert.equal(rail[2].kind, 'work')
+  assert.equal(rail[2].items.length, 2)
+  assert.equal(workLabel(rail[2].items, false), 'skill, webfetch')
+  assert.equal(toolHint(rail[2].items[1]), 'opencode.ai/v2/llms.txt')
+})
+
+test('thinking copy only shows tokens and elapsed time when the App reported enough to know', () => {
+  assert.equal(reasoningLabel({ live: true, tokens: 33 }), 'Thinking... \u00b7 33 tokens')
+  assert.equal(reasoningLabel({ live: true, tokens: 1 }), 'Thinking... \u00b7 1 token')
+  assert.equal(reasoningLabel({ live: true }), 'Thinking...')
+  assert.equal(reasoningLabel({ durationMs: 3100 }), 'Thought for 3s')
+  assert.equal(reasoningLabel({ durationMs: 65900 }), 'Thought for 1m 5s')
+  assert.equal(reasoningLabel({ durationMs: 555 }), 'Thought for <1s')
+  assert.equal(reasoningLabel({ durationMs: null, tokens: 5 }), 'Thought')
 })
 
 test('a question that is still waiting stays in the thread', () => {
@@ -72,7 +86,6 @@ test('a live step names the tool that is running', () => {
     workLabel([{ kind: 'tool', name: 'webfetch', result: null }], true),
     'webfetch',
   )
-  assert.equal(workLabel([{ kind: 'reasoning-stream' }], true), 'Thinking')
 })
 
 test('an opened step: a browser step in words with its output, a page read folded', async () => {

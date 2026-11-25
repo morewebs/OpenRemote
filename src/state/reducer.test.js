@@ -314,19 +314,22 @@ test('settlement keeps distinct partial replies and never deduplicates settled m
 test('reasoning streams and settles as its own block, thinking tokens sum', () => {
   const chat = chatFromSession(session())
   // The thinking stream grows its own live item.
-  foldEvent(chat, event(2, { type: 'reasoning.delta', turn: 1, text: 'Let me ' }))
-  foldEvent(chat, event(3, { type: 'reasoning.delta', turn: 1, text: 'compute.' }))
+  foldEvent(chat, event(2, { type: 'reasoning.delta', turn: 1, at: 1000, text: 'Let me ' }))
+  foldEvent(chat, event(3, { type: 'reasoning.delta', turn: 1, at: 3100, text: 'compute.' }))
   let rail = railItems(chat)
   assert.equal(rail.length, 1)
   assert.equal(rail[0].kind, 'reasoning-stream')
   assert.equal(rail[0].text, 'Let me compute.')
 
   // The settled thinking block replaces the stream.
-  foldEvent(chat, event(4, { type: 'reasoning.added', turn: 1, text: 'Let me compute.' }))
+  const id = rail[0].id
+  foldEvent(chat, event(4, { type: 'reasoning.added', turn: 1, at: 4100, text: 'Let me compute.' }))
   rail = railItems(chat)
   assert.equal(rail.length, 1)
   assert.equal(rail[0].kind, 'reasoning')
   assert.equal(rail[0].text, 'Let me compute.')
+  assert.equal(rail[0].id, id, 'settling keeps the expanded row mounted')
+  assert.equal(rail[0].durationMs, 3100)
 
   // The reply lands unmixed, after the reasoning.
   foldEvent(chat, event(5, {
@@ -342,6 +345,20 @@ test('reasoning streams and settles as its own block, thinking tokens sum', () =
   foldEvent(chat, event(6, { type: 'thinking.tokens', tokens: 42 }))
   foldEvent(chat, event(7, { type: 'thinking.tokens', tokens: 8 }))
   assert.equal(chat.thinkingTokens, 50)
+})
+
+test('reasoning without a final block uses only reasoning timestamps, not the rest of the turn', () => {
+  const chat = chatFromSession(session({ status: 'working' }))
+  foldEvents(chat, [
+    event(1, { type: 'reasoning.delta', turn: 0, at: 1000, text: 'First ' }),
+    event(2, { type: 'reasoning.delta', turn: 0, at: 4100, text: 'thought.' }),
+    event(3, { type: 'message.delta', turn: 0, at: 5000, text: 'reply' }),
+    event(4, { type: 'turn.completed', turn: 0, at: 9000 }),
+    event(5, { type: 'reasoning.added', turn: 1, at: 10000, text: 'No live timing.' }),
+  ])
+  const [first, untimed] = railItems(chat).filter(item => item.kind === 'reasoning')
+  assert.equal(first.durationMs, 3100)
+  assert.equal(untimed.durationMs, null)
 })
 
 test('a poll merge preserves the folded transcript, its cursor, and the running totals', () => {

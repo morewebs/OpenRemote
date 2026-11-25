@@ -243,8 +243,24 @@ function retireLiveItems(chat, turn) {
       // an App can announce the turn is over before its final message arrives.
       chat.timeline[i] = { kind: 'message', id: item.id, role: 'agent', text: item.text, streamTurn: item.turn }
     } else if (item.kind === 'reasoning-stream') {
-      chat.timeline[i] = { kind: 'reasoning', id: item.id, turn: item.turn, text: item.text }
+      chat.timeline[i] = settledReasoning(item, item)
     }
+  }
+}
+
+function observedDuration(start, end) {
+  return Number.isFinite(start) && Number.isFinite(end) && end > start ? end - start : null
+}
+
+function settledReasoning(payload, preview, event) {
+  return {
+    kind: 'reasoning',
+    id: preview?.id ?? `reasoning-${event?.seq}`,
+    turn: payload.turn,
+    text: payload.text,
+    // Only the App's reasoning events define this span. An interrupt or
+    // a turn end may come long after its last thinking fragment.
+    durationMs: observedDuration(preview?.startedAt, event?.at) ?? preview?.durationMs ?? null,
   }
 }
 
@@ -443,22 +459,12 @@ export function foldEvent(chat, event) {
       break
     }
     case 'reasoning.added': {
-      // The harness's own reasoning, settled - its own block, dim and
-      // collapsible, never mixed into the reply text. Replaces the live
-      // reasoning stream of the same turn.
-      for (let i = chat.timeline.length - 1; i >= 0; i--) {
-        const item = chat.timeline[i]
-        if (item.kind === 'reasoning-stream') {
-          if (item.turn === payload.turn) chat.timeline.splice(i, 1)
-          break
-        }
-      }
-      chat.timeline.push({
-        kind: 'reasoning',
-        id: `reasoning-${event.seq}`,
-        turn: payload.turn,
-        text: payload.text,
-      })
+      // Keep the preview's position and key so an expanded thought stays
+      // open when the App sends its final wording.
+      const index = chat.timeline.findLastIndex((item) => item.kind === 'reasoning-stream' && item.turn === payload.turn)
+      const settled = settledReasoning(payload, chat.timeline[index], event)
+      if (index < 0) chat.timeline.push(settled)
+      else chat.timeline[index] = settled
       break
     }
     case 'reasoning.delta': {
@@ -466,11 +472,15 @@ export function foldEvent(chat, event) {
       // that turn; reasoning.added for the same turn replaces it whole.
       let last = chat.timeline[chat.timeline.length - 1]
       if (!last || last.kind !== 'reasoning-stream' || last.turn !== payload.turn) {
-        last = { kind: 'reasoning-stream', id: `rstream-${payload.turn}`, turn: payload.turn, text: payload.text }
+        last = {
+          kind: 'reasoning-stream', id: `rstream-${event.seq ?? chat.timeline.length}`,
+          turn: payload.turn, text: payload.text, startedAt: event.at, durationMs: null,
+        }
         chat.timeline.push(last)
         break
       }
       last.text += payload.text
+      last.durationMs = observedDuration(last.startedAt, event.at) ?? last.durationMs
       break
     }
     case 'thinking.tokens': {

@@ -124,9 +124,6 @@
 }
 
 .cv-activity-note {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
   min-width: 0;
   color: var(--text-1);
   font-size: 15px;
@@ -138,27 +135,15 @@
   top: 8.5px;
 }
 
-.cv-activity-label {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
 .cv-activity-step {
   min-width: 0;
   color: var(--text-2);
   overflow-wrap: anywhere;
 }
 
-.cv-activity-time {
-  flex: none;
-  color: var(--text-2);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  font-weight: 400;
-}
-
 /* The ellipsis folds into the same caret that follows the live reply.
-   Only the three pieces move; the words and the timer keep their place. */
+   Each piece exits into the next slot. The pieces are identical, so the
+   loop can restart without making them trace their path backwards. */
 .cv-activity-fold {
   position: relative;
   display: inline-block;
@@ -178,9 +163,29 @@
   background: currentColor;
 }
 
-.cv-activity-fold > i:nth-child(1) { left: 0; --cv-fold-to: translate(6px, -8px); }
-.cv-activity-fold > i:nth-child(2) { left: 6px; --cv-fold-to: translateY(-4px); }
-.cv-activity-fold > i:nth-child(3) { left: 12px; --cv-fold-to: translateX(-6px); }
+.cv-activity-fold > i:nth-child(1) {
+  left: 0;
+  --cv-fold-in: translate(2px, -6px);
+  --cv-fold-to: translate(6px, -8px);
+  --cv-fold-out: translate(6px, -5px);
+  --cv-fold-next: translateX(6px);
+}
+
+.cv-activity-fold > i:nth-child(2) {
+  left: 6px;
+  --cv-fold-in: translate(1px, -2px);
+  --cv-fold-to: translateY(-4px);
+  --cv-fold-out: translate(5px, -3px);
+  --cv-fold-next: translateX(6px);
+}
+
+.cv-activity-fold > i:nth-child(3) {
+  left: 12px;
+  --cv-fold-in: translate(-3px, 1px);
+  --cv-fold-to: translateX(-6px);
+  --cv-fold-out: translate(-9px, 2px);
+  --cv-fold-next: translateX(-12px);
+}
 
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
   html:not([data-reduce-motion]) .cv-activity-fold > i {
@@ -189,8 +194,11 @@
 }
 
 @keyframes cv-activity-fold {
-  0%, 15%, 100% { transform: none; }
-  42%, 65% { transform: var(--cv-fold-to); }
+  0%, 12% { transform: none; }
+  28% { transform: var(--cv-fold-in); }
+  45%, 56% { transform: var(--cv-fold-to); }
+  74% { transform: var(--cv-fold-out); }
+  92%, 100% { transform: var(--cv-fold-next); }
 }
 
 .cv-agent {
@@ -233,6 +241,31 @@
 .cv-reasoning-head:hover {
   background: var(--bg-hover);
   color: var(--text-2);
+}
+
+.cv-thought-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cv-thought-toggle svg {
+  flex: none;
+  color: var(--text-3);
+}
+
+.cv-thought-toggle:hover,
+.cv-thought-toggle:focus-visible {
+  color: var(--text-1);
 }
 
 .cv-work--active .cv-reasoning-head {
