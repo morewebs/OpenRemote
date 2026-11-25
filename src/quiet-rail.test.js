@@ -68,7 +68,7 @@ test('thinking copy only shows tokens and elapsed time when the App reported eno
   assert.equal(reasoningLabel({ live: true }), 'Thinking...')
   assert.equal(reasoningLabel({ durationMs: 3100 }), 'Thought for 3s')
   assert.equal(reasoningLabel({ durationMs: 65900 }), 'Thought for 1m 5s')
-  assert.equal(reasoningLabel({ durationMs: 555 }), 'Thought for <1s')
+  assert.equal(reasoningLabel({ durationMs: 555 }), 'Thought for 0 seconds')
   assert.equal(reasoningLabel({ durationMs: null, tokens: 5 }), 'Thought')
 })
 
