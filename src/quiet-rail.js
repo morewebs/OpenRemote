@@ -103,7 +103,6 @@ export function reasoningLabel({ live, tokens, durationMs }) {
   }
   if (!Number.isFinite(durationMs) || durationMs <= 0) return 'Thought'
   const seconds = Math.floor(durationMs / 1000)
-  if (seconds === 0) return 'Thought for 0 seconds'
   if (seconds < 60) return `Thought for ${seconds}s`
   return `Thought for ${Math.floor(seconds / 60)}m ${seconds % 60}s`
 }
