@@ -53,6 +53,8 @@ html[data-reduce-motion] .sb-mode-fade {
 }
 
 .sidebar {
+  --sb-row-height: 28px;
+  --sb-row-radius: 6px;
   --sb-action-size: 24px;
   --sb-action-icon-size: 16px;
   position: relative;
@@ -101,14 +103,14 @@ html[data-reduce-motion] .sb-mode-fade {
 }
 
 .sb-actions {
-  padding: 16px 8px 14px;
+  padding: 7px 8px 4px;
 }
 
 .mode-switch {
   position: relative;
   display: flex;
   gap: 2px;
-  margin-bottom: 14px;
+  margin-bottom: 6px;
   padding: 3px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.045);
@@ -139,7 +141,7 @@ html[data-reduce-motion] .sb-mode-fade {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 32px;
+  height: max(26px, var(--sb-action-size));
   border: 0;
   border-radius: 999px;
   background: transparent;
@@ -161,26 +163,23 @@ html[data-reduce-motion] .sb-mode-fade {
 .side-tile {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   width: 100%;
-  height: 36px;
-  padding: 0 12px;
+  height: var(--sb-row-height);
+  padding: 0 8px;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--sb-row-radius);
   background: transparent;
   color: var(--text-1);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   cursor: default;
 }
 
-.side-tile + .side-tile {
-  margin-top: 2px;
-}
-
 .side-tile svg {
-  width: 20px;
-  height: 20px;
+  flex: none;
+  width: 18px;
+  height: 18px;
   color: var(--text-2);
 }
 
@@ -244,7 +243,7 @@ button:active,
   background: transparent;
   color: var(--text-1);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: inherit;
   font-weight: 500;
 }
 
@@ -284,10 +283,10 @@ button:active,
 
 .sb-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  padding: 0 10px 12px;
-  margin-top: 8px;
+  padding: 3px 8px 6px;
 }
 
 .sb-list::-webkit-scrollbar {
@@ -304,7 +303,7 @@ button:active,
 }
 
 .section-title {
-  padding: 0 0 4px;
+  padding: 0 0 2px;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-2);
@@ -317,12 +316,11 @@ button:active,
   width: 100%;
   height: var(--sb-project-height);
   padding: 0 8px;
-  margin-top: 6px;
   border: 0;
-  border-radius: var(--radius);
+  border-radius: var(--sb-row-radius);
   background: transparent;
   color: var(--text-1);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   cursor: default;
   text-align: left;
@@ -442,7 +440,7 @@ button:active,
 }
 
 .sb-chats-title {
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 /* The group of chats waiting on a person, above Projects. It takes no space
@@ -451,8 +449,8 @@ button:active,
    count wears the accent at the two weights the pending-decision card already
    uses for amber, so no colour is invented here. */
 .sb-needs {
-  margin-bottom: 6px;
-  padding-bottom: 8px;
+  margin-bottom: 4px;
+  padding-bottom: 4px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -461,6 +459,7 @@ button:active,
   align-items: center;
   gap: 7px;
   padding-top: 2px;
+  padding-left: 8px;
 }
 
 .sb-needs-count {
@@ -479,7 +478,8 @@ button:active,
 
 .project {
   position: relative;
-  --sb-project-height: 36px;
+  margin-top: 2px;
+  --sb-project-height: var(--sb-row-height);
 }
 
 /* Chat rows inside a project have their own actions. Only the heading
@@ -519,6 +519,7 @@ button:active,
 
 @media (hover: none) {
   .sidebar {
+    --sb-row-height: 32px;
     --sb-action-size: 32px;
     --sb-action-icon-size: 20px;
   }
@@ -543,8 +544,8 @@ button:active,
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 4px 8px 8px;
-  padding: 5px 7px;
+  margin: 2px 8px 4px;
+  padding: 3px 7px;
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--text-2);
@@ -584,7 +585,7 @@ button:active,
 
 .sb-unregister {
   position: absolute;
-  top: 6px;
+  top: calc((var(--sb-project-height) - 22px) / 2);
   right: 6px;
   height: 22px;
   padding: 0 6px;
@@ -607,22 +608,32 @@ button:active,
    says why, indented under the name so it reads as the project's own state
    rather than as another section. */
 .sb-project-empty {
-  padding: 2px 10px 6px 26px;
+  padding: 2px 10px 4px 26px;
   font-size: 12px;
 }
 
 .chat-row {
   display: flex;
-  gap: 9px;
+  gap: 8px;
   align-items: center;
   width: 100%;
-  padding: 6px 10px;
+  min-height: var(--sb-row-height);
+  padding: 3px 8px;
   border: 0;
-  border-radius: var(--radius);
+  border-radius: var(--sb-row-radius);
   background: transparent;
   color: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+/* The setting can tighten the list another step without shrinking its text. */
+html[data-density='compact'] :not(.is-mobile) > .sidebar .chat-row {
+  min-height: max(var(--sb-action-size), 26px);
+}
+
+html[data-density='compact'] :not(.is-mobile) > .sidebar .chat-row .agent-avatar {
+  --avatar-size: 20px;
 }
 
 /* Since you last looked: one white-alpha tint step, below hover (4.5%) and
@@ -685,7 +696,6 @@ button:active,
 }
 
 .chat-title {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   font-size: 13px;
@@ -707,8 +717,11 @@ button:active,
   min-width: 0;
 }
 
-.chat-titles > .chat-title {
-  flex: none;
+.chat-title-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 /* The pin on a kept row: a glyph the size of the synced mark, in the title
@@ -717,7 +730,6 @@ button:active,
   display: inline-flex;
   flex: none;
   align-items: center;
-  margin-left: 6px;
   color: var(--text-3);
 }
 
@@ -726,10 +738,10 @@ button:active,
 .sb-more {
   display: block;
   width: 100%;
-  margin: 2px 0 4px;
-  padding: 5px 10px 5px 14px;
+  margin: 1px 0 2px;
+  padding: 4px 8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--sb-row-radius);
   background: none;
   color: var(--text-3);
   font: inherit;
@@ -794,7 +806,7 @@ button:active,
 }
 
 .sb-foot {
-  padding: 4px 14px;
+  padding: 2px 8px;
   border-top: 1px solid var(--line);
 }
 
@@ -812,18 +824,18 @@ button:active,
   justify-content: center;
   position: relative;
   width: 40px;
-  height: 32px;
+  height: var(--sb-row-height);
   padding: 0;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--sb-row-radius);
   background: transparent;
   color: var(--text-2);
   cursor: pointer;
 }
 
 .sb-icon-btn svg {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
 }
 
 .sb-icon-btn:hover,
@@ -908,7 +920,7 @@ button:focus-visible {
 }
 
 .sb-empty {
-  margin: 10px 14px;
+  margin: 4px 8px 6px;
   color: var(--text-3);
   font-size: 12px;
   line-height: 1.5;
@@ -1176,6 +1188,11 @@ of the list rather than as a banner that arrived from somewhere else. */
 }
 
 /* Phone touch sizes. Desktop keeps the compact rows above. */
+.app-frame.is-mobile .sidebar {
+  --sb-row-height: 48px;
+  --sb-row-radius: 12px;
+}
+
 .app-frame.is-mobile .mode-switch button {
   height: 40px;
   font-size: 15px;
@@ -1187,7 +1204,7 @@ of the list rather than as a banner that arrived from somewhere else. */
 }
 
 .app-frame.is-mobile .side-tile {
-  height: 48px;
+  padding-inline: 12px;
   font-size: 16px;
 }
 
@@ -1197,16 +1214,8 @@ of the list rather than as a banner that arrived from somewhere else. */
   height: 24px;
 }
 
-.app-frame.is-mobile .search input {
-  font-size: 16px;
-}
-
 .app-frame.is-mobile .section-title {
   font-size: 15px;
-}
-
-.app-frame.is-mobile .project {
-  --sb-project-height: 48px;
 }
 
 .app-frame.is-mobile .project-head {
@@ -1217,6 +1226,10 @@ of the list rather than as a banner that arrived from somewhere else. */
   padding: 8px 12px;
 }
 
+html[data-density='compact'] .app-frame.is-mobile .chat-row {
+  padding-block: 6px;
+}
+
 .app-frame.is-mobile .chat-title {
   font-size: 16px;
 }
@@ -1224,6 +1237,7 @@ of the list rather than as a banner that arrived from somewhere else. */
 .app-frame.is-mobile .sb-icon-btn {
   width: 48px;
   height: 48px;
+  border-radius: 10px;
 }
 
 .app-frame.is-mobile .sb-icon-btn svg {

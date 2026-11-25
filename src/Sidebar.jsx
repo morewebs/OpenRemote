@@ -1146,17 +1146,16 @@ export default function Sidebar({
         }}
         onClick={() => onSelect(row.id)}
       >
-        <AgentAvatar agent={row} size={isMobile ? 36 : 30} showAppBadge />
+        <AgentAvatar agent={row} size={isMobile ? 36 : 22} showAppBadge />
         <div className="chat-titles">
-          <span className="chat-title pv" onDoubleClick={renameOnDoubleClick(row.id)}>{row.title}</span>
-          {/* The visible mark a pinned row wears, in the title line so the
-              list scans: a pin says the row sits at the top of this list by
-              the person's own arrangement, not by its activity. */}
-          {(row.pinned || pins.includes(row.id)) && (
-            <span className="chat-pin" title="Pinned" aria-label="Pinned">
-              <PushPin size={11} weight="fill" />
-            </span>
-          )}
+          <div className="chat-title-line">
+            <span className="chat-title pv" onDoubleClick={renameOnDoubleClick(row.id)}>{row.title}</span>
+            {(row.pinned || pins.includes(row.id)) && (
+              <span className="chat-pin" title="Pinned" aria-label="Pinned">
+                <PushPin size={11} weight="fill" />
+              </span>
+            )}
+          </div>
           {/* What the harness is holding, one line, read only. The sidebar
               never answers, approves or dismisses anything: a decision is
               answered in the chat, where the harness's own words, its

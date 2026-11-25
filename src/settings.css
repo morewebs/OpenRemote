@@ -522,19 +522,6 @@ html[data-density='compact'] .stg-panel .pn-row {
   padding-bottom: 9px;
 }
 
-/* The row promises "the rows and gutters", not "the settings rows", and the
-   two lists a person reads all day sit outside this pane: the sidebar's chat
-   rows and the automations list. One selector each, so the promise holds
-   rather than the copy shrinking to fit one stylesheet. */
-html[data-density='compact'] .chat-row {
-  padding-top: 6px;
-  padding-bottom: 6px;
-}
-
-html[data-density='compact'] :not(.is-mobile) > .sidebar .chat-row .agent-avatar {
-  --avatar-size: 24px;
-}
-
 html[data-density='compact'] .am-rule {
   padding-top: 8px;
   padding-bottom: 8px;

@@ -108,18 +108,23 @@
 
 /* ---- the sidebar's Plugins group ---- */
 
+.sb-plugins {
+  margin-bottom: 4px;
+}
+
 .sb-plugins-title {
-  margin-bottom: 2px;
+  padding-left: 8px;
 }
 
 .sb-plugin-row {
   display: flex;
-  gap: 9px;
+  gap: 8px;
   align-items: center;
   width: 100%;
-  padding: 8px 10px;
+  min-height: var(--sb-row-height);
+  padding: 3px 8px;
   border: 0;
-  border-radius: var(--radius);
+  border-radius: var(--sb-row-radius);
   background: transparent;
   color: var(--text-2);
   font-size: 13px;
@@ -148,10 +153,6 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-.sb-plugins + .sb-projects-head {
-  margin-top: 14px;
 }
 
 /* ---- Settings > Plugins ---- */
