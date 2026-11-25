@@ -33,3 +33,14 @@ test('the chip and the status dialog agree on the word', () => {
   assert.match(read('slash-actions.js'), /rows\.push\(\['Effort', chat\.effort\]\)/)
   assert.match(view, /<EffortLabel text=\{effortLabel\(chat\.effort\)\} \/>/)
 })
+
+test('both composers put the effort control after the model and before the provider or App', () => {
+  for (const [file, appHook] of [['NewChat.jsx', '{harnessPicker}'], ['ChatView.jsx', 'data-picker="harness"']]) {
+    const row = read(file).split('<div className="nc-pickers">')[1]
+    assert.ok(row, file)
+    const positions = ['data-picker="model"', 'data-picker="effort"', 'className="nc-via"', appHook]
+      .map(hook => row.indexOf(hook))
+    assert.ok(positions.every((position, index) => position >= 0 && (!index || position > positions[index - 1])), file)
+    assert.ok(row.indexOf('data-picker="endpoint"') > positions[1], file)
+  }
+})

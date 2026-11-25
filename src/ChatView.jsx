@@ -1626,6 +1626,39 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
                   }
                 />
               )}
+              {canChange.effort && efforts.length > 0 && (
+                <div className="nc-effort-wrap">
+                  <button
+                    type="button"
+                    className="nc-meta"
+                    onClick={toggleEffort}
+                    aria-haspopup="dialog"
+                    aria-expanded={picker?.kind === 'effort'}
+                    data-picker="effort"
+                    title={hintEffort("The app's own effort")}
+                  >
+                    <EffortLabel text={effortLabel(chat.effort)} />
+                  </button>
+                  {(picker?.kind === 'effort' || effortLeaving) && (
+                    <EffortSlider
+                      tiers={efforts}
+                      value={chat.effort}
+                      leaving={effortLeaving}
+                      place="above"
+                      spot={(() => {
+                        const rect = composerRef.current?.querySelector('.cv-box')?.getBoundingClientRect()
+                        if (!rect || !(rect.width > 0)) return null
+                        return { left: Math.round(rect.left), top: Math.round(rect.top) }
+                      })()}
+                      fast={Boolean(chat.fast)}
+                      fastSupported={canChange.fast && harness?.fast_supported === true}
+                      onEffort={(tier) => applySettings({ effort: tier })}
+                      onFast={() => applySettings({ fast: !chat.fast })}
+                      onClose={leaveEffort}
+                    />
+                  )}
+                </div>
+              )}
               {(canChange.model ? modelItems.length > 0 : Boolean(chat.model)) && (
                 <span className="nc-via">via</span>
               )}
@@ -1711,40 +1744,6 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
                 footer={appError ? <button type="button" onClick={() => setAppAttempt(n => n + 1)}>Retry</button>
                   : !web && !isMobile && reachable ? <button type="button" onClick={() => { hidePicker(); setManagingHarnesses(true) }}>Manage apps…</button> : null}
               />}
-              {canChange.effort && efforts.length > 0 && (
-                <div className="nc-effort-wrap">
-                  <button
-                    type="button"
-                    className="nc-meta"
-                    onClick={toggleEffort}
-                    aria-haspopup="dialog"
-                    aria-expanded={picker?.kind === 'effort'}
-                    data-picker="effort"
-                    title={hintEffort("The app's own effort")}
-                  >
-                    <EffortLabel text={effortLabel(chat.effort)} />
-                  </button>
-                  {(picker?.kind === 'effort' || effortLeaving) && (
-                    <EffortSlider
-                      tiers={efforts}
-                      value={chat.effort}
-                      leaving={effortLeaving}
-                      place="above"
-                      spot={(() => {
-                        const rect = composerRef.current?.querySelector('.cv-box')?.getBoundingClientRect()
-                        if (!rect || !(rect.width > 0)) return null
-                        return { left: Math.round(rect.left), top: Math.round(rect.top) }
-                      })()}
-                      fast={Boolean(chat.fast)}
-                      fastSupported={canChange.fast && harness?.fast_supported === true}
-                      onEffort={(tier) => applySettings({ effort: tier })}
-                      onFast={() => applySettings({ fast: !chat.fast })}
-                      onClose={leaveEffort}
-                    />
-                  )}
-                </div>
-              )}
-
             </div>
             {compactControls && <ComposerOptions items={[
               { label: `App: ${harnessText}`, disabled: !onChooseApp, onSelect: togglePicker('harness') },

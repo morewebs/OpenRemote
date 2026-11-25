@@ -983,6 +983,7 @@ export default function NewChat({
     })),
     ...customItems,
   ]
+  const hasModel = modelItems.length > 0 || Boolean(resolvedDefault)
   // A captured catalog carries the moment it was captured (a harness that
   // ships its list with OpenRemote has no capture and so no age to show).
   const catalogCapturedAt = currentHarness?.models_captured_at ?? null
@@ -1740,10 +1741,9 @@ export default function NewChat({
             <HarnessMark harness={currentHarness?.id} size={16} /><span>{model ? shownModelName : defaultLabel ?? 'Model'}</span>
           </button>}
           <div className="nc-pickers">
-            {isMobile && harnessPicker}
             {modelsPending ? (
               <span className="nc-skeleton" aria-hidden="true" />
-            ) : (modelItems.length > 0 || resolvedDefault) && (
+            ) : hasModel && (
               <>
                 {modelItems.length > 0 ? (
                   <button
@@ -1814,6 +1814,44 @@ export default function NewChat({
                     }
                   />
                 )}
+              </>
+            )}
+            {model && effortTiers.length > 0 && (
+              <div className="nc-effort-wrap">
+                <button
+                  type="button"
+                  className="nc-meta"
+                  onClick={toggleEffort}
+                  aria-expanded={picker?.kind === 'effort'}
+                  data-picker="effort"
+                  title={hintEffort("The app's own effort tier")}
+                >
+                  <span className="nc-mobile-field-label">Effort</span>
+                  <EffortLabel text={isMobile && optionsOpen && !chosenEffort ? 'App default' : effortLabel(chosenEffort)} />
+                </button>
+                {(picker?.kind === 'effort' || effortLeaving) && (
+                  <EffortSlider
+                    tiers={effortTiers}
+                    value={chosenEffort}
+                    leaving={effortLeaving}
+                    place={isMobile || compact ? 'above' : 'below'}
+                    spot={(() => {
+                      const box = boxRef.current?.getBoundingClientRect()
+                      return (isMobile || compact) && box
+                        ? { left: box.left, top: box.top }
+                        : spotAtBox(box, { gap: 8 })
+                    })()}
+                    fast={fast}
+                    fastSupported={currentHarness?.fast_supported === true}
+                    onEffort={setEffort}
+                    onFast={() => setFast((v) => !v)}
+                    onClose={leaveEffort}
+                  />
+                )}
+              </div>
+            )}
+            {!modelsPending && hasModel && (
+              <>
                 {currentHarness?.custom_endpoint_supported && endpoints.length > 0 && (
                   <button
                     type="button"
@@ -1873,42 +1911,7 @@ export default function NewChat({
                 <span className="nc-via">via</span>
               </>
             )}
-            {!isMobile && harnessPicker}
-            {model && effortTiers.length > 0 && (
-              <div className="nc-effort-wrap">
-                <button
-                  type="button"
-                  className="nc-meta"
-                  onClick={toggleEffort}
-                  aria-expanded={picker?.kind === 'effort'}
-                  data-picker="effort"
-                  title={hintEffort("The app's own effort tier")}
-                >
-                  <span className="nc-mobile-field-label">Effort</span>
-                  <EffortLabel text={isMobile && optionsOpen && !chosenEffort ? 'App default' : effortLabel(chosenEffort)} />
-                </button>
-                {(picker?.kind === 'effort' || effortLeaving) && (
-                  <EffortSlider
-                    tiers={effortTiers}
-                    value={chosenEffort}
-                    leaving={effortLeaving}
-                    place={isMobile || compact ? 'above' : 'below'}
-                    spot={(() => {
-                      const box = boxRef.current?.getBoundingClientRect()
-                      return (isMobile || compact) && box
-                        ? { left: box.left, top: box.top }
-                        : spotAtBox(box, { gap: 8 })
-                    })()}
-                    fast={fast}
-                    fastSupported={currentHarness?.fast_supported === true}
-                    onEffort={setEffort}
-                    onFast={() => setFast((v) => !v)}
-                    onClose={leaveEffort}
-                  />
-                )}
-              </div>
-            )}
-
+            {harnessPicker}
             {isMobile && permissionPicker}
           </div>
           {isMobile && (
