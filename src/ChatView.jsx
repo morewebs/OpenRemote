@@ -200,6 +200,10 @@ function MarkdownBody({ text, live = false, className, tail = '' }) {
   return <p className={className} dangerouslySetInnerHTML={{ __html: html + tail }} />
 }
 
+function ActivityFold() {
+  return <span className="cv-activity-fold" aria-hidden="true"><i /><i /><i /></span>
+}
+
 function ChatWait({ label }) {
   const [elapsed, setElapsed] = useState(0)
   useEffect(() => {
@@ -214,8 +218,15 @@ function ChatWait({ label }) {
   }, [])
   return (
     <p className="cv-node cv-activity-note">
-      <span role="status" className="cv-activity-ink">{label}</span>
-      {elapsed > 0 && <span className="cv-activity-time">{elapsed}s</span>}
+      <span role="status" className="cv-activity-label">
+        {label}
+        <ActivityFold />
+      </span>
+      {elapsed > 0 && (
+        <time className="cv-activity-time" dateTime={`PT${elapsed}S`}>
+          {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')}
+        </time>
+      )}
     </p>
   )
 }
@@ -239,7 +250,10 @@ function WorkCluster({ items, active, chat }) {
   return (
     <div className={`cv-node cv-work${active ? ' cv-work--active' : ''}`}>
       {ordinary.length > 0 && <button type="button" className="cv-reasoning-head" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <span className={live ? 'cv-activity-ink pv' : undefined}>{workLabel(ordinary, live)}</span>
+        <span className={live ? 'cv-activity-step pv' : undefined}>
+          {workLabel(ordinary, live)}
+          {live && <ActivityFold />}
+        </span>
       </button>}
       {files.map(({ file, item }, i) => <FileChangeCard key={`${item.id}-${i}`} file={file} result={item.result} />)}
       {open && tools.length > 0 && (
@@ -1358,7 +1372,7 @@ export default function ChatView({ chat, onBack, focused = true, web = false, on
                   text={item.text}
                   live
                   className="cv-node cv-agent pv"
-                  tail='<span class="cv-caret"></span>'
+                  tail='<span class="cv-caret" aria-hidden="true"></span>'
                 />
               )
             }

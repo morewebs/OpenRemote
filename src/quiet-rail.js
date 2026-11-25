@@ -56,8 +56,8 @@ export function workLabel(items, live) {
       return what ? `Running ${what}` : 'Running a command'
     }
     if (running) return toolLabel(running)
-    if (thinking) return 'Thinking…'
-    return 'Working…'
+    if (thinking) return 'Thinking'
+    return 'Working'
   }
   if (tools.length === 0) return 'Thought'
   const names = []
@@ -103,7 +103,7 @@ export function workIsLive(items, running) {
   )
 }
 
-const WAIT_LABELS = ['Untangling...', 'Following the thread...', 'Connecting the dots...', 'Finding a way in...']
+const WAIT_LABELS = ['Untangling', 'Following the thread', 'Connecting the dots', 'Finding a way in']
 
 // Put the activity on one live work row or at the end of the rail. A reply
 // already has the reader's attention, as does an unanswered question.
@@ -126,7 +126,7 @@ export function railActivity(items, status, { reachable = true } = {}) {
     if (!hasReply && workId == null && item.kind === 'work' && workIsLive(item.items, true)) workId = item.id
   }
   if (workId != null) return { workId }
-  if (phase === 'starting') return { label: 'Starting the App...', waitKey: 'starting' }
+  if (phase === 'starting') return { label: 'Starting the App', waitKey: 'starting' }
   if (hasReply) return null
   // Use the prompt instead of a ticker or random render so a turn keeps
   // its phrase across stream updates, reopening the chat, and split panes.

@@ -126,19 +126,26 @@
 .cv-activity-note {
   display: flex;
   align-items: baseline;
-  gap: 9px;
+  gap: 12px;
   min-width: 0;
-  font-size: 14px;
+  color: var(--text-1);
+  font-size: 15px;
   font-weight: 600;
-  line-height: 21px;
+  line-height: 24px;
 }
 
-.cv-activity-ink {
-  --cv-activity-rest: color-mix(in srgb, var(--accent) 65%, var(--text-1));
-  --cv-activity-edge: color-mix(in srgb, var(--green) 64%, var(--text-1));
+.cv-activity-note::before {
+  top: 8.5px;
+}
+
+.cv-activity-label {
   min-width: 0;
-  color: var(--accent);
-  color: var(--cv-activity-rest);
+  overflow-wrap: anywhere;
+}
+
+.cv-activity-step {
+  min-width: 0;
+  color: var(--text-2);
   overflow-wrap: anywhere;
 }
 
@@ -146,39 +153,44 @@
   flex: none;
   color: var(--text-2);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 400;
 }
 
-/* The rail dot kicks off a pass of light through the words. Keep the
-   punctuation, timer and layout still, so the event reads as one beat. */
-@supports (background-clip: text) {
-  @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
-    html:not([data-reduce-motion]) .cv-activity-ink {
-      color: transparent;
-      background: linear-gradient(100deg,
-          var(--cv-activity-rest) 38%, var(--cv-activity-edge) 46%, var(--text-1) 51%,
-          var(--cv-activity-edge) 54%, var(--cv-activity-rest) 61%) 100% 50% / 280% 100%;
-      background-clip: text;
-      animation: cv-activity-light 1.95s cubic-bezier(0.32, 0, 0.24, 1) infinite;
-    }
+/* The ellipsis folds into the same caret that follows the live reply.
+   Only the three pieces move; the words and the timer keep their place. */
+.cv-activity-fold {
+  position: relative;
+  display: inline-block;
+  width: 16px;
+  height: 12px;
+  margin-left: 5px;
+  vertical-align: -1px;
+  color: var(--green);
+}
 
-    html:not([data-reduce-motion]) .cv-activity-note::before {
-      animation: cv-activity-launch 1.95s ease-out infinite;
-    }
+.cv-activity-fold > i {
+  position: absolute;
+  bottom: 0;
+  width: 4px;
+  height: 4px;
+  border-radius: 0.75px;
+  background: currentColor;
+}
+
+.cv-activity-fold > i:nth-child(1) { left: 0; --cv-fold-to: translate(6px, -8px); }
+.cv-activity-fold > i:nth-child(2) { left: 6px; --cv-fold-to: translateY(-4px); }
+.cv-activity-fold > i:nth-child(3) { left: 12px; --cv-fold-to: translateX(-6px); }
+
+@media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+  html:not([data-reduce-motion]) .cv-activity-fold > i {
+    animation: cv-activity-fold 1.65s cubic-bezier(0.3, 0.8, 0.3, 1) infinite;
   }
 }
 
-@keyframes cv-activity-light {
-  0%, 12% { background-position: 100% 50%; }
-  76%, 100% { background-position: 0% 50%; }
-}
-
-@keyframes cv-activity-launch {
-  0%, 42%, 100% { box-shadow: 0 0 0 3px var(--bg-app); }
-  12% {
-    box-shadow: 0 0 0 2px var(--bg-app), 0 0 0 4px color-mix(in srgb, var(--green) 48%, transparent);
-  }
+@keyframes cv-activity-fold {
+  0%, 15%, 100% { transform: none; }
+  42%, 65% { transform: var(--cv-fold-to); }
 }
 
 .cv-agent {
@@ -225,6 +237,7 @@
 
 .cv-work--active .cv-reasoning-head {
   max-width: calc(100% + 8px);
+  font-size: 12.5px;
   text-align: left;
 }
 
@@ -1033,12 +1046,21 @@ html[data-reduce-motion] .cv-stop-group > .cv-run-button {
 
 .cv-caret {
   display: inline-block;
-  width: 7px;
-  height: 1em;
-  margin-left: 1px;
-  vertical-align: text-bottom;
-  background: var(--text-2);
+  width: 4px;
+  height: 0.85em;
+  margin-left: 3px;
+  border-radius: 1px;
+  vertical-align: -0.04em;
+  background: var(--green);
   animation: cv-breathe 1s ease-in-out infinite;
+}
+
+@media (forced-colors: active) {
+  .cv-activity-fold > i,
+  .cv-caret {
+    background: CanvasText;
+    forced-color-adjust: none;
+  }
 }
 
 /* The phone's "<App> is browsing": the agent is at work, so its dot

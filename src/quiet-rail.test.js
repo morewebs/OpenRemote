@@ -8,12 +8,12 @@ const activeStep = { kind: 'tool', id: 'step', name: 'Read', result: null }
 const currentActivity = (status, items, options) => railActivity(quietRail(items), status, options)
 
 test('quiet active turns distinguish App startup from waiting on its response', () => {
-  assert.deepEqual(currentActivity('starting', []), { label: 'Starting the App...', waitKey: 'starting' })
+  assert.deepEqual(currentActivity('starting', []), { label: 'Starting the App', waitKey: 'starting' })
   const first = currentActivity('working', [prompt])
-  assert.deepEqual(first, { label: 'Untangling...', waitKey: 'reply-prompt' })
+  assert.deepEqual(first, { label: 'Untangling', waitKey: 'reply-prompt' })
   assert.deepEqual(currentActivity('running', [prompt, { ...activeStep, result: 'done' }]), first)
   assert.deepEqual(currentActivity('working', [prompt, { ...prompt, id: 'prompt-2' }]), {
-    label: 'Following the thread...', waitKey: 'reply-prompt-2',
+    label: 'Following the thread', waitKey: 'reply-prompt-2',
   })
 })
 
@@ -38,10 +38,9 @@ test('a reply, a decision, or an inactive or unreachable chat needs no wait line
   assert.equal(currentActivity('working', [prompt], { reachable: false }), null)
 })
 
-test('the text sweep opts in only when both motion preferences allow it', () => {
+test('the folding ellipsis opts in only when both motion preferences allow it', () => {
   const css = readFileSync(new URL('./chatview.css', import.meta.url), 'utf8')
-  assert.match(css, /@media \(prefers-reduced-motion: no-preference\) and \(forced-colors: none\) \{\s*html:not\(\[data-reduce-motion\]\) \.cv-activity-ink\s*\{[^}]*animation: cv-activity-light/)
-  assert.match(css, /animation: cv-activity-light[^}]*\}\s*html:not\(\[data-reduce-motion\]\) \.cv-activity-note::before \{\s*animation: cv-activity-launch/)
+  assert.match(css, /@media \(prefers-reduced-motion: no-preference\) and \(forced-colors: none\) \{\s*html:not\(\[data-reduce-motion\]\) \.cv-activity-fold > i\s*\{[^}]*animation: cv-activity-fold/)
 })
 
 test('thinking and tools collapse into one row between the messages', () => {
@@ -73,7 +72,7 @@ test('a live step names the tool that is running', () => {
     workLabel([{ kind: 'tool', name: 'webfetch', result: null }], true),
     'webfetch',
   )
-  assert.equal(workLabel([{ kind: 'reasoning-stream' }], true), 'Thinking…')
+  assert.equal(workLabel([{ kind: 'reasoning-stream' }], true), 'Thinking')
 })
 
 test('an opened step: a browser step in words with its output, a page read folded', async () => {
